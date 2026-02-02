@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Your Reading Adventure!</title>
+<link rel="stylesheet" href="css/student-playback.css">
+</head>
+<body>
+
+<div class="title-bar">
+  <a href="index.html" class="back-btn" aria-label="Back to home">&#8592; Back</a>
+  <h1>Your Reading Adventure!</h1>
+</div>
+
+<div id="word-area-wrapper">
+  <div id="word-area"></div>
+  <canvas id="character-canvas"></canvas>
+</div>
+
+<div class="playback-controls">
+  <button class="play-btn" id="playBtn" aria-label="Play">&#9654;</button>
+  <span class="progress-indicator" id="progressIndicator">0 / 0</span>
+</div>
+
+<div id="feedback-area"></div>
+
+<script type="module" src="js/student-playback.js"></script>
+</body>
+</html>

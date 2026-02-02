@@ -1,0 +1,142 @@
+/* Student Playback Page Styles */
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+  background: #F5F5F5;
+  color: #222;
+  padding: 1rem;
+}
+
+.title-bar {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.title-bar h1 {
+  font-size: 1.4rem;
+  color: #1565c0;
+}
+
+.back-btn {
+  display: inline-block;
+  padding: 0.4rem 0.8rem;
+  background: #e0e0e0;
+  color: #333;
+  text-decoration: none;
+  border-radius: 6px;
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.back-btn:hover {
+  background: #bdbdbd;
+}
+
+/* Word area wrapper: relative container for canvas overlay */
+#word-area-wrapper {
+  position: relative;
+  max-width: 700px;
+  margin: 0 auto 1rem;
+}
+
+#word-area {
+  position: relative;
+  padding: 2rem;
+  background: #fff;
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  line-height: 2.2;
+  min-height: 100px;
+}
+
+.word-span {
+  display: inline-block;
+  padding: 4px 6px;
+  margin: 2px;
+  border-radius: 4px;
+  font-size: 1.4rem;
+  transition: background 0.3s;
+  cursor: default;
+}
+
+.word-span.active {
+  background: #E3F2FD;
+}
+
+.word-span.correct-done {
+  background: #C8E6C9;
+}
+
+.word-span.error-done {
+  background: #FFCDD2;
+}
+
+#character-canvas {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+/* Controls */
+.playback-controls {
+  text-align: center;
+  margin: 1rem auto;
+  max-width: 700px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+}
+
+.play-btn {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  border: none;
+  background: #4CAF50;
+  color: #fff;
+  font-size: 1.5rem;
+  cursor: pointer;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
+  transition: background 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.play-btn:hover {
+  background: #43A047;
+}
+
+.play-btn:disabled {
+  background: #bdbdbd;
+  cursor: not-allowed;
+}
+
+.progress-indicator {
+  font-size: 1rem;
+  color: #555;
+  font-weight: 600;
+}
+
+/* Feedback area (used by Plan 03) */
+#feedback-area {
+  max-width: 700px;
+  margin: 1rem auto;
+}
+
+/* Loading / error messages */
+.playback-message {
+  text-align: center;
+  color: #999;
+  font-style: italic;
+  padding: 2rem;
+  font-size: 1.1rem;
+}
