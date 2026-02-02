@@ -1,0 +1,37 @@
+const CACHE_NAME = 'orf-v1';
+
+const SHELL = [
+  './',
+  './index.html',
+  './style.css',
+  './js/app.js',
+  './js/ui.js',
+  './js/recorder.js',
+  './js/file-handler.js',
+  './js/stt-api.js',
+  './manifest.json'
+];
+
+self.addEventListener('install', (event) => {
+  event.waitUntil(
+    caches.open(CACHE_NAME).then(c => c.addAll(SHELL))
+  );
+});
+
+self.addEventListener('activate', (event) => {
+  event.waitUntil(
+    caches.keys().then(keys =>
+      Promise.all(keys.filter(k => k !== CACHE_NAME).map(k => caches.delete(k)))
+    )
+  );
+});
+
+self.addEventListener('fetch', (event) => {
+  if (event.request.url.includes('googleapis.com')) {
+    return;
+  }
+
+  event.respondWith(
+    caches.match(event.request).then(cached => cached || fetch(event.request))
+  );
+});
