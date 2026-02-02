@@ -49,11 +49,11 @@ Plans:
   3. Accuracy percentage (correct words / total reference words) is displayed after each assessment
   4. Assessment duration is tracked with a visible timer during reading and reflected in passage-level timing
   5. Insertions (words spoken but not in reference) are identified and shown separately
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
-- [ ] 02-01: TBD
-- [ ] 02-02: TBD
+- [ ] 02-01-PLAN.md -- Text normalization, alignment engine, and metrics modules
+- [ ] 02-02-PLAN.md -- Wire pipeline and color-coded UI display
 
 ### Phase 3: Diagnostics
 **Goal**: App detects fine-grained fluency challenges beyond simple word correctness -- onset delays, pauses, self-corrections, morphological struggles, and crude prosody signals
@@ -146,7 +146,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8
 | Phase | Plans Complete | Status | Completed |
 |-------|---------------|--------|-----------|
 | 1. Foundation | 2/2 | Complete ✓ | 2026-02-02 |
-| 2. Alignment & Core Metrics | 0/TBD | Not started | - |
+| 2. Alignment & Core Metrics | 0/2 | Not started | - |
 | 3. Diagnostics | 0/TBD | Not started | - |
 | 4. OCR & Async STT | 0/TBD | Not started | - |
 | 5. Data Persistence | 0/TBD | Not started | - |
