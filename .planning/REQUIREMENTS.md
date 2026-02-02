@@ -14,11 +14,11 @@
 
 ### Diagnostics
 
-- [ ] **DIAG-01**: App detects word onset delay with tiered thresholds (<1s normal, 1.5-2s developing, >3s flag, >5s frustration)
-- [ ] **DIAG-02**: App detects long non-prosodic pauses (3s+) with extra allowance at commas/periods
-- [ ] **DIAG-03**: App detects self-corrections from repeated word/phrase patterns in transcript
-- [ ] **DIAG-04**: App infers morphological errors via low confidence scores on word suffixes
-- [ ] **DIAG-05**: App provides crude prosody proxy from pause-at-punctuation patterns
+- [x] **DIAG-01**: App detects word onset delay with tiered thresholds (<1s normal, 1.5-2s developing, >3s flag, >5s frustration)
+- [x] **DIAG-02**: App detects long non-prosodic pauses (3s+) with extra allowance at commas/periods
+- [x] **DIAG-03**: App detects self-corrections from repeated word/phrase patterns in transcript
+- [x] **DIAG-04**: App infers morphological errors via low confidence scores on word suffixes
+- [x] **DIAG-05**: App provides crude prosody proxy from pause-at-punctuation patterns
 
 ### Input
 
@@ -90,11 +90,11 @@
 | CORE-02 | Phase 2 | Complete |
 | CORE-03 | Phase 2 | Complete |
 | CORE-04 | Phase 2 | Complete |
-| DIAG-01 | Phase 3 | Pending |
-| DIAG-02 | Phase 3 | Pending |
-| DIAG-03 | Phase 3 | Pending |
-| DIAG-04 | Phase 3 | Pending |
-| DIAG-05 | Phase 3 | Pending |
+| DIAG-01 | Phase 3 | Complete |
+| DIAG-02 | Phase 3 | Complete |
+| DIAG-03 | Phase 3 | Complete |
+| DIAG-04 | Phase 3 | Complete |
+| DIAG-05 | Phase 3 | Complete |
 | INPT-01 | Phase 1 | Complete |
 | INPT-02 | Phase 4 | Pending |
 | INPT-03 | Phase 1 | Complete |

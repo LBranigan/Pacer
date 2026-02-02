@@ -5,23 +5,23 @@
 See: .planning/PROJECT.md (updated 2026-02-02)
 
 **Core value:** Accurate, word-level fluency error detection powered by Google Cloud STT -- giving teachers actionable data on exactly where and how a struggling reader breaks down.
-**Current focus:** Phase 3: Diagnostics
+**Current focus:** Phase 4: OCR & Async STT
 
 ## Current Position
 
-Phase: 3 of 8 (Diagnostics)
-Plan: 1 of 2 complete
-Status: In progress
-Last activity: 2026-02-02 -- Completed 03-01-PLAN.md
+Phase: 4 of 8 (OCR & Async STT)
+Plan: 0 of TBD complete
+Status: Not started
+Last activity: 2026-02-02 -- Completed Phase 3: Diagnostics
 
-Progress: [████░░░░░░] 31%
+Progress: [████████░░] 38%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 5
+- Total plans completed: 6
 - Average duration: 2min
-- Total execution time: 0.17 hours
+- Total execution time: 0.20 hours
 
 **By Phase:**
 
@@ -29,10 +29,10 @@ Progress: [████░░░░░░] 31%
 |-------|-------|-------|----------|
 | 01-foundation | 2/2 | 4min | 2min |
 | 02-alignment-core-metrics | 2/2 | 6min | 3min |
-| 03-diagnostics | 1/2 | 2min | 2min |
+| 03-diagnostics | 2/2 | 5min | 2.5min |
 
 **Recent Trend:**
-- Last 5 plans: 01-02 (1min), 02-01 (1min), 02-02 (5min), 03-01 (2min)
+- Last 5 plans: 02-01 (1min), 02-02 (5min), 03-01 (2min), 03-02 (3min)
 - Trend: Stable
 
 *Updated after each plan completion*
@@ -54,7 +54,7 @@ Recent decisions affecting current work:
 - Removed diff_cleanupSemantic -- it incorrectly merged correct words into substitution blocks
 - sendToSTT returns data; callback pattern avoids circular imports
 - Confidence shown as wavy underlines (raw mode) and tooltips (alignment mode)
-- 3s base pause threshold with punctuation allowance (+1.5s comma, +2s period)
+- 3s base pause threshold with punctuation allowance (600ms comma, 1200ms period)
 - First word onset delay threshold at 3s to avoid recording lead-in false positives
 - 3+ char shared prefix minimum for morphological error detection
 
@@ -71,5 +71,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-02-02
-Stopped at: Completed 03-01-PLAN.md
+Stopped at: Completed Phase 3: Diagnostics
 Resume file: None
