@@ -85,40 +85,40 @@
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| CORE-01 | — | Pending |
-| CORE-02 | — | Pending |
-| CORE-03 | — | Pending |
-| CORE-04 | — | Pending |
-| DIAG-01 | — | Pending |
-| DIAG-02 | — | Pending |
-| DIAG-03 | — | Pending |
-| DIAG-04 | — | Pending |
-| DIAG-05 | — | Pending |
-| INPT-01 | — | Pending |
-| INPT-02 | — | Pending |
-| INPT-03 | — | Pending |
-| INPT-04 | — | Pending |
-| ALGN-01 | — | Pending |
-| ALGN-02 | — | Pending |
-| ALGN-03 | — | Pending |
-| TCHR-01 | — | Pending |
-| TCHR-02 | — | Pending |
-| TCHR-03 | — | Pending |
-| TCHR-04 | — | Pending |
-| TCHR-05 | — | Pending |
-| STUD-01 | — | Pending |
-| STUD-02 | — | Pending |
-| STUD-03 | — | Pending |
-| INFR-01 | — | Pending |
-| INFR-02 | — | Pending |
-| INFR-03 | — | Pending |
-| INFR-04 | — | Pending |
+| CORE-01 | Phase 2 | Pending |
+| CORE-02 | Phase 2 | Pending |
+| CORE-03 | Phase 2 | Pending |
+| CORE-04 | Phase 2 | Pending |
+| DIAG-01 | Phase 3 | Pending |
+| DIAG-02 | Phase 3 | Pending |
+| DIAG-03 | Phase 3 | Pending |
+| DIAG-04 | Phase 3 | Pending |
+| DIAG-05 | Phase 3 | Pending |
+| INPT-01 | Phase 1 | Pending |
+| INPT-02 | Phase 4 | Pending |
+| INPT-03 | Phase 1 | Pending |
+| INPT-04 | Phase 1 | Pending |
+| ALGN-01 | Phase 2 | Pending |
+| ALGN-02 | Phase 2 | Pending |
+| ALGN-03 | Phase 2 | Pending |
+| TCHR-01 | Phase 6 | Pending |
+| TCHR-02 | Phase 6 | Pending |
+| TCHR-03 | Phase 7 | Pending |
+| TCHR-04 | Phase 7 | Pending |
+| TCHR-05 | Phase 6 | Pending |
+| STUD-01 | Phase 8 | Pending |
+| STUD-02 | Phase 8 | Pending |
+| STUD-03 | Phase 8 | Pending |
+| INFR-01 | Phase 1 | Pending |
+| INFR-02 | Phase 4 | Pending |
+| INFR-03 | Phase 5 | Pending |
+| INFR-04 | Phase 5 | Pending |
 
 **Coverage:**
 - v1 requirements: 28 total
-- Mapped to phases: 0
-- Unmapped: 28 ⚠️
+- Mapped to phases: 28
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-02-02*
-*Last updated: 2026-02-02 after initial definition*
+*Last updated: 2026-02-02 after roadmap creation*
