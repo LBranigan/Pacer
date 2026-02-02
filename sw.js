@@ -1,4 +1,4 @@
-const CACHE_NAME = 'orf-v1';
+const CACHE_NAME = 'orf-v2';
 
 const SHELL = [
   './',
@@ -9,6 +9,7 @@ const SHELL = [
   './js/recorder.js',
   './js/file-handler.js',
   './js/stt-api.js',
+  './js/ocr-api.js',
   './manifest.json'
 ];
 

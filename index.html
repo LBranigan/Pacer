@@ -20,6 +20,22 @@
 </div>
 
 <div class="section">
+  <label>Book Page OCR (optional)</label>
+  <div class="controls">
+    <label id="ocrUploadBtn" style="background:#388e3c;color:#fff;padding:0.6rem 1.4rem;border-radius:4px;font-weight:600;cursor:pointer;">
+      📷 Photograph / Upload Page
+      <input type="file" id="imageInput" accept="image/*" capture="environment" style="display:none">
+    </label>
+  </div>
+  <div id="ocrPreview" style="display:none; margin-top:0.5rem;">
+    <img id="ocrImage" style="max-width:100%; max-height:200px; border-radius:4px; margin-bottom:0.5rem;">
+    <textarea id="ocrText" rows="6" placeholder="OCR text will appear here for review..."></textarea>
+    <button id="useOcrBtn" style="margin-top:0.5rem; background:#1976d2; color:#fff; padding:0.5rem 1rem; border:none; border-radius:4px; cursor:pointer; font-weight:600;">Use as Reference Passage</button>
+  </div>
+  <div id="ocrStatus"></div>
+</div>
+
+<div class="section">
   <label for="transcript">Reference Passage (optional &mdash; for alignment comparison)</label>
   <textarea id="transcript" placeholder="Paste the passage the student will read aloud..."></textarea>
 </div>
