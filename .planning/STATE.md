@@ -5,34 +5,34 @@
 See: .planning/PROJECT.md (updated 2026-02-02)
 
 **Core value:** Accurate, word-level fluency error detection powered by Google Cloud STT -- giving teachers actionable data on exactly where and how a struggling reader breaks down.
-**Current focus:** Phase 2: Alignment & Core Metrics
+**Current focus:** Phase 3: Diagnostics
 
 ## Current Position
 
-Phase: 2 of 8 (Alignment & Core Metrics)
-Plan: 1 of 2 in current phase
-Status: In progress
-Last activity: 2026-02-02 -- Completed 02-01-PLAN.md
+Phase: 3 of 8 (Diagnostics)
+Plan: Not yet planned
+Status: Ready for planning
+Last activity: 2026-02-02 -- Completed Phase 2
 
-Progress: [██░░░░░░░░] 19%
+Progress: [███░░░░░░░] 25%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 3
+- Total plans completed: 4
 - Average duration: 2min
-- Total execution time: 0.09 hours
+- Total execution time: 0.14 hours
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
 | 01-foundation | 2/2 | 4min | 2min |
-| 02-alignment-core-metrics | 1/2 | 1min | 1min |
+| 02-alignment-core-metrics | 2/2 | 6min | 3min |
 
 **Recent Trend:**
-- Last 5 plans: 01-01 (3min), 01-02 (1min), 02-01 (1min)
-- Trend: Accelerating
+- Last 5 plans: 01-01 (3min), 01-02 (1min), 02-01 (1min), 02-02 (5min)
+- Trend: Stable
 
 *Updated after each plan completion*
 
@@ -50,6 +50,9 @@ Recent decisions affecting current work:
 - diff-match-patch loaded as global via CDN, accessed in ES modules
 - Adjacent DELETE+INSERT merged into substitutions with 1:1 pairing
 - Insertions excluded from error count per ORF standard
+- Removed diff_cleanupSemantic -- it incorrectly merged correct words into substitution blocks
+- sendToSTT returns data; callback pattern avoids circular imports
+- Confidence shown as wavy underlines (raw mode) and tooltips (alignment mode)
 
 ### Pending Todos
 
@@ -64,5 +67,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-02-02
-Stopped at: Completed 02-01-PLAN.md
+Stopped at: Completed Phase 2
 Resume file: None

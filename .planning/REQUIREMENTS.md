@@ -7,10 +7,10 @@
 
 ### Core Metrics
 
-- [ ] **CORE-01**: App calculates WCPM (words read correctly / elapsed minutes)
-- [ ] **CORE-02**: App calculates accuracy percentage (correct words / total words)
-- [ ] **CORE-03**: App classifies each word as correct, substitution, omission, or insertion via alignment
-- [ ] **CORE-04**: App tracks assessment duration with timer UI and passage-level timing
+- [x] **CORE-01**: App calculates WCPM (words read correctly / elapsed minutes)
+- [x] **CORE-02**: App calculates accuracy percentage (correct words / total words)
+- [x] **CORE-03**: App classifies each word as correct, substitution, omission, or insertion via alignment
+- [x] **CORE-04**: App tracks assessment duration with timer UI and passage-level timing
 
 ### Diagnostics
 
@@ -29,9 +29,9 @@
 
 ### Alignment
 
-- [ ] **ALGN-01**: App aligns STT transcript to reference text using diff/LCS algorithm
-- [ ] **ALGN-02**: Alignment maps each transcript word to its reference word (or marks as insertion)
-- [ ] **ALGN-03**: Alignment identifies reference words not spoken (omissions)
+- [x] **ALGN-01**: App aligns STT transcript to reference text using diff/LCS algorithm
+- [x] **ALGN-02**: Alignment maps each transcript word to its reference word (or marks as insertion)
+- [x] **ALGN-03**: Alignment identifies reference words not spoken (omissions)
 
 ### Teacher View
 
@@ -86,10 +86,10 @@
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| CORE-01 | Phase 2 | Pending |
-| CORE-02 | Phase 2 | Pending |
-| CORE-03 | Phase 2 | Pending |
-| CORE-04 | Phase 2 | Pending |
+| CORE-01 | Phase 2 | Complete |
+| CORE-02 | Phase 2 | Complete |
+| CORE-03 | Phase 2 | Complete |
+| CORE-04 | Phase 2 | Complete |
 | DIAG-01 | Phase 3 | Pending |
 | DIAG-02 | Phase 3 | Pending |
 | DIAG-03 | Phase 3 | Pending |
@@ -99,9 +99,9 @@
 | INPT-02 | Phase 4 | Pending |
 | INPT-03 | Phase 1 | Complete |
 | INPT-04 | Phase 1 | Complete |
-| ALGN-01 | Phase 2 | Pending |
-| ALGN-02 | Phase 2 | Pending |
-| ALGN-03 | Phase 2 | Pending |
+| ALGN-01 | Phase 2 | Complete |
+| ALGN-02 | Phase 2 | Complete |
+| ALGN-03 | Phase 2 | Complete |
 | TCHR-01 | Phase 6 | Pending |
 | TCHR-02 | Phase 6 | Pending |
 | TCHR-03 | Phase 7 | Pending |
