@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ORF Report</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: 'Segoe UI', system-ui, sans-serif;
+  color: #222;
+  background: #f5f5f5;
+  padding: 2rem;
+}
+
+.report {
+  max-width: 800px;
+  margin: 0 auto;
+  background: #fff;
+  padding: 2rem;
+  border-radius: 8px;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.1);
+}
+
+.no-print { margin-bottom: 1rem; }
+.no-print button, .no-print a {
+  display: inline-block;
+  padding: 0.4rem 1rem;
+  font-size: 0.9rem;
+  border-radius: 4px;
+  cursor: pointer;
+  text-decoration: none;
+  margin-right: 0.5rem;
+}
+.print-btn { background: #1565c0; color: #fff; border: none; font-weight: 600; }
+.print-btn:hover { background: #0d47a1; }
+.back-link { background: #e0e0e0; color: #333; border: 1px solid #bbb; }
+
+h1 { font-size: 1.4rem; margin-bottom: 0.25rem; }
+.report-meta { color: #666; font-size: 0.85rem; margin-bottom: 1.5rem; }
+
+h2 { font-size: 1.1rem; margin: 1.5rem 0 0.5rem; border-bottom: 2px solid #1565c0; padding-bottom: 0.25rem; }
+
+/* Trend */
+.trend-table { width: 100%; border-collapse: collapse; font-size: 0.9rem; margin-bottom: 1rem; }
+.trend-table th, .trend-table td { padding: 0.4rem 0.6rem; border: 1px solid #ddd; text-align: center; }
+.trend-table th { background: #f5f5f5; font-size: 0.8rem; color: #555; }
+.change-up { color: #2e7d32; font-weight: 600; }
+.change-down { color: #c62828; font-weight: 600; }
+.change-same { color: #757575; }
+
+.chart-img { max-width: 100%; margin: 0.5rem 0 1rem; border: 1px solid #eee; border-radius: 4px; }
+.chart-placeholder { color: #999; font-style: italic; margin: 0.5rem 0 1rem; }
+
+/* Benchmark */
+.benchmark-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; margin-bottom: 0.5rem; }
+.benchmark-table th, .benchmark-table td { padding: 0.3rem 0.5rem; border: 1px solid #ddd; text-align: center; }
+.benchmark-table th { background: #f5f5f5; font-size: 0.75rem; color: #555; }
+.risk-label { font-weight: 700; padding: 0.2rem 0.6rem; border-radius: 3px; display: inline-block; margin-top: 0.25rem; }
+.risk-at-risk { border: 2px solid #c62828; color: #c62828; }
+.risk-some-risk { border: 2px solid #f57f17; color: #f57f17; }
+.risk-on-track { border: 2px solid #2e7d32; color: #2e7d32; }
+.risk-unknown { border: 2px solid #757575; color: #757575; }
+.benchmark-note { color: #999; font-style: italic; font-size: 0.85rem; }
+
+/* Error analysis */
+.error-summary { font-size: 0.9rem; margin-bottom: 0.5rem; }
+.error-words { display: flex; flex-wrap: wrap; gap: 0.3rem; margin-top: 0.5rem; margin-bottom: 0.5rem; }
+.error-word { padding: 0.15rem 0.5rem; border-radius: 3px; font-size: 0.85rem; }
+.error-word.sub { background: #ffebee; color: #c62828; }
+.error-word.omit { background: #fff3e0; color: #e65100; }
+.error-word.ins { background: #e3f2fd; color: #1565c0; }
+
+/* History table */
+.history-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+.history-table th, .history-table td { padding: 0.35rem 0.5rem; border: 1px solid #ddd; text-align: left; }
+.history-table th { background: #f5f5f5; font-size: 0.75rem; color: #555; }
+.history-table td:nth-child(3), .history-table td:nth-child(4), .history-table td:nth-child(5),
+.history-table th:nth-child(3), .history-table th:nth-child(4), .history-table th:nth-child(5) { text-align: center; }
+
+.footer { margin-top: 2rem; padding-top: 1rem; border-top: 1px solid #ddd; font-size: 0.75rem; color: #999; text-align: center; }
+
+/* Print styles */
+@media print {
+  @page { size: letter portrait; margin: 0.75in; }
+  body { padding: 0; background: #fff; font-size: 11pt; }
+  .report { max-width: none; box-shadow: none; padding: 0; border-radius: 0; }
+  .no-print { display: none !important; }
+  table { break-inside: avoid; }
+  h2 { break-after: avoid; }
+  .risk-label { border-width: 2px; }
+  .error-word { border: 1px solid #999; }
+}
+</style>
+</head>
+<body>
+
+<div class="report">
+  <div class="no-print">
+    <button class="print-btn" onclick="window.print()">Print Report</button>
+    <a class="back-link" href="dashboard.html">Back to Dashboard</a>
+  </div>
+
+  <h1>Oral Reading Fluency Report</h1>
+  <div class="report-meta">
+    <span id="rptStudentName"></span> | <span id="rptGrade"></span> | Generated: <span id="rptDate"></span>
+  </div>
+
+  <h2>Trend Summary</h2>
+  <div id="chartArea"></div>
+  <table class="trend-table" id="trendTable">
+    <thead>
+      <tr><th></th><th>WCPM</th><th>Accuracy</th></tr>
+    </thead>
+    <tbody id="trendBody"></tbody>
+  </table>
+
+  <h2>Benchmark Comparison</h2>
+  <div id="benchmarkArea"></div>
+
+  <h2>Error Analysis (Latest Assessment)</h2>
+  <div id="errorArea"></div>
+
+  <h2>Assessment History</h2>
+  <table class="history-table">
+    <thead>
+      <tr><th>Date</th><th>Passage</th><th>WCPM</th><th>Accuracy</th><th>Errors</th></tr>
+    </thead>
+    <tbody id="historyBody"></tbody>
+  </table>
+
+  <div class="footer">
+    Generated by ReadingQuest | <span id="footerDate"></span>
+  </div>
+</div>
+
+<script type="module">
+import { getStudents, getAssessments } from './js/storage.js';
+import { getBenchmarkStatus, getSeason, HT_NORMS } from './js/benchmarks.js';
+
+document.addEventListener('DOMContentLoaded', () => {
+  const studentId = localStorage.getItem('orf_report_student');
+  if (!studentId) {
+    document.querySelector('.report').innerHTML = '<p>No student specified. Open this page from the dashboard.</p>';
+    return;
+  }
+
+  const students = getStudents();
+  const student = students.find(s => s.id === studentId);
+  if (!student) {
+    document.querySelector('.report').innerHTML = '<p>Student not found.</p>';
+    return;
+  }
+
+  const assessments = getAssessments(studentId);
+  const sorted = [...assessments].sort((a, b) => new Date(b.date) - new Date(a.date));
+  const now = new Date();
+
+  // Header
+  document.getElementById('rptStudentName').textContent = student.name;
+  document.getElementById('rptGrade').textContent = student.grade ? 'Grade ' + student.grade : 'Grade not set';
+  document.getElementById('rptDate').textContent = now.toLocaleDateString();
+  document.getElementById('footerDate').textContent = now.toLocaleDateString();
+
+  // Chart image
+  const chartArea = document.getElementById('chartArea');
+  const chartDataUrl = localStorage.getItem('orf_report_chart');
+  if (chartDataUrl) {
+    const img = document.createElement('img');
+    img.src = chartDataUrl;
+    img.alt = 'Celeration chart';
+    img.className = 'chart-img';
+    chartArea.appendChild(img);
+  } else {
+    chartArea.innerHTML = '<p class="chart-placeholder">Chart image not available.</p>';
+  }
+
+  // Trend summary
+  const trendBody = document.getElementById('trendBody');
+  if (sorted.length >= 1) {
+    const latest = sorted[0];
+    const prev = sorted.length >= 2 ? sorted[1] : null;
+
+    function changeCell(cur, prev, suffix) {
+      if (cur == null) return '<td>--</td>';
+      if (!prev || prev == null) return '<td>--</td>';
+      const diff = cur - prev;
+      if (diff > 0) return '<td class="change-up">+' + diff + suffix + '</td>';
+      if (diff < 0) return '<td class="change-down">' + diff + suffix + '</td>';
+      return '<td class="change-same">0' + suffix + '</td>';
+    }
+
+    let html = '<tr><td><strong>Latest</strong></td><td>' + (latest.wcpm != null ? latest.wcpm : '--') + '</td><td>' + (latest.accuracy != null ? latest.accuracy + '%' : '--') + '</td></tr>';
+    if (prev) {
+      html += '<tr><td><strong>Previous</strong></td><td>' + (prev.wcpm != null ? prev.wcpm : '--') + '</td><td>' + (prev.accuracy != null ? prev.accuracy + '%' : '--') + '</td></tr>';
+      html += '<tr><td><strong>Change</strong></td>' + changeCell(latest.wcpm, prev.wcpm, '') + changeCell(latest.accuracy, prev.accuracy, '%') + '</tr>';
+    }
+    trendBody.innerHTML = html;
+  } else {
+    trendBody.innerHTML = '<tr><td colspan="3">No assessments available.</td></tr>';
+  }
+
+  // Benchmark comparison
+  const benchmarkArea = document.getElementById('benchmarkArea');
+  if (!student.grade) {
+    benchmarkArea.innerHTML = '<p class="benchmark-note">Grade not set — benchmarks unavailable.</p>';
+  } else if (sorted.length === 0) {
+    benchmarkArea.innerHTML = '<p class="benchmark-note">No assessments to compare.</p>';
+  } else {
+    const latest = sorted[0];
+    const wcpm = latest.wcpm || 0;
+    const season = getSeason(latest.date);
+    const result = getBenchmarkStatus(wcpm, student.grade, season);
+
+    if (!result.norms) {
+      benchmarkArea.innerHTML = '<p class="benchmark-note">No norms available for Grade ' + student.grade + ' ' + season + '.</p>';
+    } else {
+      const n = result.norms;
+      let html = '<table class="benchmark-table"><thead><tr><th>Student WCPM</th><th>Grade</th><th>Season</th><th>10th</th><th>25th</th><th>50th</th><th>75th</th><th>90th</th></tr></thead>';
+      html += '<tbody><tr><td><strong>' + wcpm + '</strong></td><td>' + student.grade + '</td><td>' + season + '</td>';
+      html += '<td>' + n.p10 + '</td><td>' + n.p25 + '</td><td>' + n.p50 + '</td><td>' + n.p75 + '</td><td>' + n.p90 + '</td></tr></tbody></table>';
+      const riskClass = 'risk-' + result.status;
+      html += '<span class="risk-label ' + riskClass + '">' + result.label + '</span>';
+      benchmarkArea.innerHTML = html;
+    }
+  }
+
+  // Error analysis (latest)
+  const errorArea = document.getElementById('errorArea');
+  if (sorted.length === 0) {
+    errorArea.innerHTML = '<p class="benchmark-note">No assessments available.</p>';
+  } else {
+    const latest = sorted[0];
+    const eb = latest.errorBreakdown;
+    if (!eb) {
+      errorArea.innerHTML = '<p class="benchmark-note">Error breakdown not available for latest assessment.</p>';
+    } else {
+      let html = '<p class="error-summary">Substitutions: <strong>' + (eb.substitutions || 0) + '</strong> | Omissions: <strong>' + (eb.omissions || 0) + '</strong> | Insertions: <strong>' + (eb.insertions || 0) + '</strong></p>';
+
+      if (eb.details && eb.details.length > 0) {
+        const shown = eb.details.slice(0, 15);
+        html += '<div class="error-words">';
+        for (const d of shown) {
+          if (d.type === 'substitution') {
+            html += '<span class="error-word sub" title="Expected: ' + esc(d.ref) + '">' + esc(d.hyp) + ' (for ' + esc(d.ref) + ')</span>';
+          } else if (d.type === 'omission') {
+            html += '<span class="error-word omit">omitted: ' + esc(d.ref) + '</span>';
+          } else if (d.type === 'insertion') {
+            html += '<span class="error-word ins">inserted: ' + esc(d.hyp) + '</span>';
+          }
+        }
+        html += '</div>';
+        if (eb.details.length > 15) {
+          html += '<p class="benchmark-note">(' + (eb.details.length - 15) + ' more errors not shown)</p>';
+        }
+      }
+      errorArea.innerHTML = html;
+    }
+  }
+
+  // Assessment history
+  const historyBody = document.getElementById('historyBody');
+  if (sorted.length === 0) {
+    historyBody.innerHTML = '<tr><td colspan="5">No assessments recorded.</td></tr>';
+  } else {
+    let html = '';
+    for (const a of sorted) {
+      const date = new Date(a.date).toLocaleDateString();
+      const passage = a.passagePreview ? esc(a.passagePreview.substring(0, 30)) + (a.passagePreview.length > 30 ? '...' : '') : '--';
+      const wcpm = a.wcpm != null ? a.wcpm : '--';
+      const acc = a.accuracy != null ? a.accuracy + '%' : '--';
+      const errs = a.errors != null ? a.errors : '--';
+      html += '<tr><td>' + date + '</td><td>' + passage + '</td><td>' + wcpm + '</td><td>' + acc + '</td><td>' + errs + '</td></tr>';
+    }
+    historyBody.innerHTML = html;
+  }
+});
+
+function esc(str) {
+  const d = document.createElement('span');
+  d.textContent = str || '';
+  return d.innerHTML;
+}
+</script>
+</body>
+</html>
