@@ -6,7 +6,7 @@ import { deleteAudioBlobsForStudent } from './audio-store.js';
 const STORAGE_KEY = 'orf_data';
 
 function defaultData() {
-  return { version: 2, students: [], assessments: [] };
+  return { version: 3, students: [], assessments: [] };
 }
 
 function migrate(data) {
@@ -23,6 +23,14 @@ function migrate(data) {
       if (a.audioRef === undefined) a.audioRef = null;
     }
     data.version = 2;
+  }
+
+  // v2 -> v3: add grade field to students
+  if (data.version === 2) {
+    for (const s of data.students) {
+      s.grade = s.grade || null;
+    }
+    data.version = 3;
   }
 
   return data;
@@ -49,13 +57,22 @@ export function getStudents() {
   return load().students;
 }
 
-export function addStudent(name) {
+export function addStudent(name, grade = null) {
   const trimmed = (name || '').trim();
   if (!trimmed) return null;
   const data = load();
   const id = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
-  const student = { id, name: trimmed, createdAt: new Date().toISOString() };
+  const student = { id, name: trimmed, grade: grade, createdAt: new Date().toISOString() };
   data.students.push(student);
+  save(data);
+  return student;
+}
+
+export function updateStudentGrade(studentId, grade) {
+  const data = load();
+  const student = data.students.find(s => s.id === studentId);
+  if (!student) return null;
+  student.grade = (grade >= 1 && grade <= 6) ? grade : null;
   save(data);
   return student;
 }
