@@ -3,7 +3,7 @@ import { initFileHandler, setOnComplete as fileHandlerSetOnComplete } from './fi
 import { sendToSTT } from './stt-api.js';
 import { alignWords } from './alignment.js';
 import { computeWCPM, computeAccuracy } from './metrics.js';
-import { setStatus, displayResults, displayAlignmentResults } from './ui.js';
+import { setStatus, displayResults, displayAlignmentResults, showAudioPlayback } from './ui.js';
 
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('./sw.js')
@@ -12,6 +12,7 @@ if ('serviceWorker' in navigator) {
 }
 
 async function processAssessment(blob, encoding, elapsedSeconds) {
+  showAudioPlayback(blob);
   const data = await sendToSTT(blob, encoding);
 
   if (!data || !data.results) {
@@ -38,15 +39,26 @@ async function processAssessment(blob, encoding, elapsedSeconds) {
     }
   }
 
+  // Build lookup: normalized hyp word -> queue of STT metadata
+  const sttLookup = new Map();
+  for (const w of transcriptWords) {
+    const norm = w.word.toLowerCase().replace(/^[^\w'-]+|[^\w'-]+$/g, '');
+    if (!sttLookup.has(norm)) sttLookup.set(norm, []);
+    sttLookup.get(norm).push(w);
+  }
+
   const alignment = alignWords(referenceText, transcriptWords);
   const wcpm = (elapsedSeconds != null && elapsedSeconds > 0)
     ? computeWCPM(alignment, elapsedSeconds)
     : null;
   const accuracy = computeAccuracy(alignment);
 
-  displayAlignmentResults(alignment, wcpm, accuracy);
+  displayAlignmentResults(alignment, wcpm, accuracy, sttLookup);
   setStatus('Done.');
 }
+
+// Auto-fill API key for dev/testing
+document.getElementById('apiKey').value = 'AIzaSyCTx4rS7zxwRZqNseWcFJAaAgEH5HA50xA';
 
 initRecorder();
 initFileHandler();

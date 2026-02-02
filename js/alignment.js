@@ -47,7 +47,6 @@ export function alignWords(referenceText, transcriptWords) {
   // eslint-disable-next-line no-undef
   const dmp = new diff_match_patch();
   const diffs = dmp.diff_main(refEncoded, hypEncoded);
-  dmp.diff_cleanupSemantic(diffs);
 
   // Build reverse map: char -> word
   const charToWord = new Map();

@@ -58,7 +58,7 @@ export function displayResults(data) {
  * @param {{wcpm: number, correctCount: number, elapsedSeconds: number}|null} wcpm
  * @param {{accuracy: number, correctCount: number, totalRefWords: number, substitutions: number, omissions: number, insertions: number}} accuracy
  */
-export function displayAlignmentResults(alignment, wcpm, accuracy) {
+export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup) {
   const wordsDiv = document.getElementById('resultWords');
   const plainDiv = document.getElementById('resultPlain');
   const jsonDiv = document.getElementById('resultJson');
@@ -98,10 +98,27 @@ export function displayAlignmentResults(alignment, wcpm, accuracy) {
     const span = document.createElement('span');
     span.className = 'word word-' + item.type;
     span.textContent = item.ref || '';
+
+    // Build tooltip with STT metadata
+    const hypKey = item.hyp;
+    let sttInfo = '';
+    if (hypKey && sttLookup) {
+      const queue = sttLookup.get(hypKey);
+      if (queue && queue.length > 0) {
+        const meta = queue.shift();
+        const conf = meta.confidence != null ? (meta.confidence * 100).toFixed(1) + '%' : '—';
+        const start = parseFloat(meta.startTime?.replace('s', '')) || 0;
+        const end = parseFloat(meta.endTime?.replace('s', '')) || 0;
+        sttInfo = `\nConfidence: ${conf}  |  ${start.toFixed(2)}s – ${end.toFixed(2)}s`;
+      }
+    }
+
     if (item.type === 'substitution') {
-      span.title = 'Expected: ' + item.ref + ', Said: ' + item.hyp;
+      span.title = 'Expected: ' + item.ref + ', Said: ' + item.hyp + sttInfo;
     } else if (item.type === 'omission') {
       span.title = 'Omitted (not read)';
+    } else {
+      span.title = item.ref + sttInfo;
     }
     wordsDiv.appendChild(span);
     wordsDiv.appendChild(document.createTextNode(' '));
@@ -120,6 +137,16 @@ export function displayAlignmentResults(alignment, wcpm, accuracy) {
       const span = document.createElement('span');
       span.className = 'word word-insertion';
       span.textContent = ins.hyp;
+      if (ins.hyp && sttLookup) {
+        const queue = sttLookup.get(ins.hyp);
+        if (queue && queue.length > 0) {
+          const meta = queue.shift();
+          const conf = meta.confidence != null ? (meta.confidence * 100).toFixed(1) + '%' : '—';
+          const start = parseFloat(meta.startTime?.replace('s', '')) || 0;
+          const end = parseFloat(meta.endTime?.replace('s', '')) || 0;
+          span.title = ins.hyp + `\nConfidence: ${conf}  |  ${start.toFixed(2)}s – ${end.toFixed(2)}s`;
+        }
+      }
       insertSection.appendChild(span);
       insertSection.appendChild(document.createTextNode(' '));
     }
@@ -128,4 +155,23 @@ export function displayAlignmentResults(alignment, wcpm, accuracy) {
 
   // JSON details
   jsonDiv.textContent = JSON.stringify({ alignment, wcpm, accuracy }, null, 2);
+}
+
+/**
+ * Show an audio playback control for the recorded/uploaded blob.
+ * @param {Blob} blob
+ */
+export function showAudioPlayback(blob) {
+  let container = document.getElementById('audioPlayback');
+  if (!container) {
+    container = document.createElement('div');
+    container.id = 'audioPlayback';
+    container.style.marginTop = '1rem';
+    document.getElementById('resultWords').parentNode.insertBefore(container, document.getElementById('resultWords'));
+  }
+  container.innerHTML = '';
+  const audio = document.createElement('audio');
+  audio.controls = true;
+  audio.src = URL.createObjectURL(blob);
+  container.appendChild(audio);
 }
