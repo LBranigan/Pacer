@@ -5,33 +5,33 @@
 See: .planning/PROJECT.md (updated 2026-02-02)
 
 **Core value:** Accurate, word-level fluency error detection powered by Google Cloud STT -- giving teachers actionable data on exactly where and how a struggling reader breaks down.
-**Current focus:** Phase 1: Foundation
+**Current focus:** Phase 2: Error Detection
 
 ## Current Position
 
 Phase: 1 of 8 (Foundation)
-Plan: 1 of 2 in current phase
-Status: In progress
-Last activity: 2026-02-02 -- Completed 01-01-PLAN.md
+Plan: 2 of 2 in current phase
+Status: Phase complete
+Last activity: 2026-02-02 -- Completed 01-02-PLAN.md
 
-Progress: [█░░░░░░░░░] ~6%
+Progress: [██░░░░░░░░] ~12%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 1
-- Average duration: 3min
-- Total execution time: 0.05 hours
+- Total plans completed: 2
+- Average duration: 2min
+- Total execution time: 0.07 hours
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
-| 01-foundation | 1/2 | 3min | 3min |
+| 01-foundation | 2/2 | 4min | 2min |
 
 **Recent Trend:**
-- Last 5 plans: 01-01 (3min)
-- Trend: N/A (first plan)
+- Last 5 plans: 01-01 (3min), 01-02 (1min)
+- Trend: Accelerating
 
 *Updated after each plan completion*
 
@@ -44,6 +44,8 @@ Recent decisions affecting current work:
 
 - Option A for sendToSTT: handles full flow (status + display) internally, matching original monolith pattern
 - orf_assessment.html kept as reference alongside new modular structure
+- Cache-first for app shell, network passthrough for googleapis.com API calls
+- SW cache versioning via CACHE_NAME constant
 
 ### Pending Todos
 
@@ -58,5 +60,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-02-02
-Stopped at: Completed 01-01-PLAN.md
+Stopped at: Completed 01-02-PLAN.md (Phase 1 complete)
 Resume file: None
