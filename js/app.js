@@ -3,10 +3,11 @@ import { initFileHandler, setOnComplete as fileHandlerSetOnComplete } from './fi
 import { sendToSTT, sendToAsyncSTT, sendChunkedSTT } from './stt-api.js';
 import { alignWords } from './alignment.js';
 import { computeWCPM, computeAccuracy } from './metrics.js';
-import { setStatus, displayResults, displayAlignmentResults, showAudioPlayback } from './ui.js';
+import { setStatus, displayResults, displayAlignmentResults, showAudioPlayback, renderStudentSelector, renderHistory } from './ui.js';
 import { runDiagnostics } from './diagnostics.js';
 import { extractTextFromImage } from './ocr-api.js';
 import { trimPassageToAttempted } from './passage-trimmer.js';
+import { getStudents, addStudent, deleteStudent, saveAssessment, getAssessments } from './storage.js';
 
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('./sw.js')
@@ -19,13 +20,23 @@ const appState = {
   audioBlob: null,
   audioEncoding: null,
   elapsedSeconds: null,
-  referenceIsFromOCR: false
+  referenceIsFromOCR: false,
+  selectedStudentId: null
 };
 
 const analyzeBtn = document.getElementById('analyzeBtn');
 
 function updateAnalyzeBtn() {
   analyzeBtn.disabled = !appState.audioBlob;
+}
+
+function refreshStudentUI() {
+  renderStudentSelector(getStudents(), appState.selectedStudentId);
+  if (appState.selectedStudentId) {
+    renderHistory(getAssessments(appState.selectedStudentId));
+  } else {
+    renderHistory(null);
+  }
 }
 
 async function runAnalysis() {
@@ -111,7 +122,22 @@ async function runAnalysis() {
 
   const diagnostics = runDiagnostics(transcriptWords, alignment, referenceText, sttLookup);
   displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, diagnostics, transcriptWords);
-  setStatus('Done.');
+
+  if (appState.selectedStudentId) {
+    saveAssessment(appState.selectedStudentId, {
+      wcpm: wcpm ? wcpm.wcpm : null,
+      accuracy: accuracy.accuracy,
+      totalWords: accuracy.totalRefWords,
+      errors: accuracy.substitutions + accuracy.omissions,
+      duration: appState.elapsedSeconds,
+      passagePreview: referenceText.slice(0, 60)
+    });
+    refreshStudentUI();
+    setStatus('Done (saved).');
+  } else {
+    setStatus('Done.');
+  }
+
   analyzeBtn.disabled = false;
 }
 
@@ -146,6 +172,34 @@ analyzeBtn.addEventListener('click', runAnalysis);
 // Track reference text origin
 document.getElementById('transcript').addEventListener('input', () => {
   appState.referenceIsFromOCR = false;
+});
+
+// --- Student selector wiring ---
+document.getElementById('studentSelect').addEventListener('change', (e) => {
+  const value = e.target.value;
+  appState.selectedStudentId = value ? value : null;
+  refreshStudentUI();
+});
+
+document.getElementById('addStudentBtn').addEventListener('click', () => {
+  const input = document.getElementById('newStudentName');
+  const name = input.value.trim();
+  if (name) {
+    const student = addStudent(name);
+    input.value = '';
+    appState.selectedStudentId = student.id;
+    refreshStudentUI();
+  }
+});
+
+document.getElementById('deleteStudentBtn').addEventListener('click', () => {
+  if (appState.selectedStudentId) {
+    if (confirm('Delete this student and all their assessments?')) {
+      deleteStudent(appState.selectedStudentId);
+      appState.selectedStudentId = null;
+      refreshStudentUI();
+    }
+  }
 });
 
 // --- OCR wiring ---
@@ -191,3 +245,6 @@ if (useOcrBtn) {
     ocrStatus.textContent = 'Reference passage updated.';
   });
 }
+
+// Initialize student selector on page load
+refreshStudentUI();
