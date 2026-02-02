@@ -53,6 +53,7 @@
 - [ ] **INFR-02**: Async STT endpoint (longrunningrecognize) for passages >60 seconds
 - [ ] **INFR-03**: Assessment data persisted in localStorage with student profiles
 - [ ] **INFR-04**: Assessment history with per-student progress tracking
+- [ ] **INFR-05**: App is a Progressive Web App (manifest.json, service worker, installable on devices)
 
 ## v2 Requirements
 
@@ -113,10 +114,11 @@
 | INFR-02 | Phase 4 | Pending |
 | INFR-03 | Phase 5 | Pending |
 | INFR-04 | Phase 5 | Pending |
+| INFR-05 | Phase 1 | Pending |
 
 **Coverage:**
-- v1 requirements: 28 total
-- Mapped to phases: 28
+- v1 requirements: 29 total
+- Mapped to phases: 29
 - Unmapped: 0
 
 ---
