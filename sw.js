@@ -1,4 +1,4 @@
-const CACHE_NAME = 'orf-v11';
+const CACHE_NAME = 'orf-v12';
 
 const SHELL = [
   './',
@@ -20,6 +20,7 @@ const SHELL = [
   './js/diagnostics.js',
   './js/celeration-chart.js',
   './js/audio-playback.js',
+  './js/benchmarks.js',
   './js/dashboard.js',
   './manifest.json'
 ];

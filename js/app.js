@@ -201,10 +201,13 @@ document.getElementById('studentSelect').addEventListener('change', (e) => {
 
 document.getElementById('addStudentBtn').addEventListener('click', () => {
   const input = document.getElementById('newStudentName');
+  const gradeSelect = document.getElementById('newStudentGrade');
   const name = input.value.trim();
   if (name) {
-    const student = addStudent(name);
+    const gradeVal = gradeSelect.value ? parseInt(gradeSelect.value, 10) : null;
+    const student = addStudent(name, gradeVal);
     input.value = '';
+    gradeSelect.value = '';
     appState.selectedStudentId = student.id;
     refreshStudentUI();
   }
