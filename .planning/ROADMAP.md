@@ -79,10 +79,11 @@ Plans:
   1. Teacher can photograph or upload a book page image and the app extracts readable text via Google Vision OCR
   2. Extracted OCR text can be reviewed and edited before use as the reference passage
   3. Audio recordings longer than 60 seconds are processed via the async longrunningrecognize endpoint without error
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
-- [ ] 04-01: TBD
+- [ ] 04-01-PLAN.md — Google Vision OCR: image upload, text extraction, editable preview, use as reference passage
+- [ ] 04-02-PLAN.md — Async STT: longrunningrecognize with polling, chunked sync fallback, duration-based routing
 
 ### Phase 5: Data Persistence
 **Goal**: Assessment data persists across sessions with student profiles and history
@@ -148,7 +149,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8
 | 1. Foundation | 2/2 | Complete ✓ | 2026-02-02 |
 | 2. Alignment & Core Metrics | 2/2 | Complete ✓ | 2026-02-02 |
 | 3. Diagnostics | 2/2 | Complete ✓ | 2026-02-02 |
-| 4. OCR & Async STT | 0/TBD | Not started | - |
+| 4. OCR & Async STT | 0/2 | Not started | - |
 | 5. Data Persistence | 0/TBD | Not started | - |
 | 6. Teacher Dashboard | 0/TBD | Not started | - |
 | 7. Teacher Reporting & Benchmarks | 0/TBD | Not started | - |
