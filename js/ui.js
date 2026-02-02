@@ -25,8 +25,8 @@ export function displayResults(data) {
         allWords.push(w);
         const span = document.createElement('span');
         span.className = 'word ' + (w.confidence >= 0.9 ? 'high' : w.confidence >= 0.7 ? 'mid' : 'low');
-        const start = parseFloat(w.startTime?.replace('s','')) || 0;
-        const end = parseFloat(w.endTime?.replace('s','')) || 0;
+        const start = parseSttTime(w.startTime);
+        const end = parseSttTime(w.endTime);
         span.title = `Confidence: ${(w.confidence * 100).toFixed(1)}%  |  ${start.toFixed(2)}s – ${end.toFixed(2)}s`;
         span.textContent = w.word;
         wordsDiv.appendChild(span);
@@ -58,6 +58,15 @@ export function displayResults(data) {
  * @param {{wcpm: number, correctCount: number, elapsedSeconds: number}|null} wcpm
  * @param {{accuracy: number, correctCount: number, totalRefWords: number, substitutions: number, omissions: number, insertions: number}} accuracy
  */
+function parseSttTime(t) {
+  if (typeof t === 'number') return t;
+  if (!t) return 0;
+  if (typeof t === 'object' && t.seconds !== undefined) {
+    return Number(t.seconds || 0) + (Number(t.nanos || 0) / 1e9);
+  }
+  return parseFloat(String(t).replace('s', '')) || 0;
+}
+
 export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, diagnostics, transcriptWords) {
   const wordsDiv = document.getElementById('resultWords');
   const plainDiv = document.getElementById('resultPlain');
@@ -137,8 +146,8 @@ export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, di
       if (queue && queue.length > 0) {
         const meta = queue.shift();
         const conf = meta.confidence != null ? (meta.confidence * 100).toFixed(1) + '%' : '—';
-        const start = parseFloat(meta.startTime?.replace('s', '')) || 0;
-        const end = parseFloat(meta.endTime?.replace('s', '')) || 0;
+        const start = parseSttTime(meta.startTime);
+        const end = parseSttTime(meta.endTime);
         sttInfo = `\nConfidence: ${conf}  |  ${start.toFixed(2)}s – ${end.toFixed(2)}s`;
       }
     }
@@ -238,8 +247,8 @@ export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, di
 
   // Build STT words array with parsed times
   const sttWords = (transcriptWords || []).map(w => {
-    const start = parseFloat(w.startTime?.replace('s', '')) || 0;
-    const end = parseFloat(w.endTime?.replace('s', '')) || 0;
+    const start = parseSttTime(w.startTime);
+    const end = parseSttTime(w.endTime);
     return {
       word: w.word,
       startTime: start,

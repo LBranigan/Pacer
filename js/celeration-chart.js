@@ -171,14 +171,12 @@ export function createChart(canvasEl, options = {}) {
         if (!wrapper) return;
         const dpr = window.devicePixelRatio || 1;
         const w = wrapper.clientWidth;
-        const h = wrapper.clientHeight || 450;
+        const cssH = state.canvas.clientHeight || 450;
         const targetW = Math.round(w * dpr);
-        const targetH = Math.round(h * dpr);
+        const targetH = Math.round(cssH * dpr);
         if (state.canvas.width === targetW && state.canvas.height === targetH) return;
         state.canvas.width = targetW;
         state.canvas.height = targetH;
-        state.canvas.style.width = w + 'px';
-        state.canvas.style.height = h + 'px';
         state.ctx.scale(dpr, dpr);
     }
 

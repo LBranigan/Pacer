@@ -131,7 +131,7 @@ if (assessments.length > 0) {
     const calendarDay = Math.floor((new Date(a.date).getTime() - firstDate) / 86400000);
     const correctPerMinute = a.wcpm || 0;
     const errorsPerMinute = (a.duration && a.duration > 0) ? (a.errors || 0) / (a.duration / 60) : 0;
-    return { calendarDay, correctPerMinute, errorsPerMinute };
+    return { celeration: { calendarDay, correctPerMinute, errorsPerMinute, date: a.date } };
   });
   chart.setData([{ name: student ? student.name : 'Student', id: studentId, assessments: chartAssessments }]);
 }

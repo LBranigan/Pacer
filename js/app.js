@@ -2,6 +2,7 @@ import { initRecorder, setOnComplete as recorderSetOnComplete } from './recorder
 import { initFileHandler, setOnComplete as fileHandlerSetOnComplete } from './file-handler.js';
 import { sendToSTT, sendToAsyncSTT, sendChunkedSTT } from './stt-api.js';
 import { alignWords } from './alignment.js';
+import { getCanonical } from './word-equivalences.js';
 import { computeWCPM, computeAccuracy } from './metrics.js';
 import { setStatus, displayResults, displayAlignmentResults, showAudioPlayback, renderStudentSelector, renderHistory } from './ui.js';
 import { runDiagnostics } from './diagnostics.js';
@@ -111,7 +112,7 @@ async function runAnalysis() {
   // Build lookup: normalized hyp word -> queue of STT metadata
   const sttLookup = new Map();
   for (const w of transcriptWords) {
-    const norm = w.word.toLowerCase().replace(/^[^\w'-]+|[^\w'-]+$/g, '');
+    const norm = getCanonical(w.word.toLowerCase().replace(/^[^\w'-]+|[^\w'-]+$/g, ''));
     if (!sttLookup.has(norm)) sttLookup.set(norm, []);
     sttLookup.get(norm).push(w);
   }

@@ -6,6 +6,8 @@
 
 import { getAudioBlob } from './audio-store.js';
 
+const DISFLUENCIES = new Set(['um', 'uh', 'uh-huh', 'mm', 'hmm', 'er', 'ah']);
+
 /**
  * Parse STT timestamp string like "1.200s" to seconds number.
  * @param {string} t
@@ -153,9 +155,12 @@ export function createSyncedPlayback(containerEl) {
       return;
     }
 
-    // STT words index (only spoken words have timestamps)
+    // Filter disfluencies to match what alignWords uses
     let sttIdx = 0;
-    const stt = sttWords || [];
+    const stt = (sttWords || []).filter(w => {
+      const norm = (w.word || '').toLowerCase().replace(/^[^\w'-]+|[^\w'-]+$/g, '');
+      return norm.length > 0 && !DISFLUENCIES.has(norm);
+    });
 
     for (const entry of alignment) {
       const span = document.createElement('span');
@@ -196,10 +201,11 @@ export function createSyncedPlayback(containerEl) {
 
   function play() {
     if (!audioEl.src) return;
-    audioEl.play();
+    audioEl.play().then(() => {
+      if (!animFrameId) animFrameId = requestAnimationFrame(syncLoop);
+    }).catch(() => {});
     isPlaying = true;
     playBtn.textContent = 'Pause';
-    if (!animFrameId) animFrameId = requestAnimationFrame(syncLoop);
   }
 
   function pause() {

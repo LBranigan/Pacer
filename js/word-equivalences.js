@@ -49,6 +49,7 @@ const EQUIVALENCE_GROUPS = [
   ["i'll", 'i will'],
   ["i've", 'i have'],
   ["i'd", 'i would', 'i had'],
+  ["we'd", 'we would', 'we had'],
   ["we're", 'we are'],
   ["we've", 'we have'],
   ["we'll", 'we will'],

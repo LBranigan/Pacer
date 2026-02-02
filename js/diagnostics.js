@@ -242,11 +242,14 @@ export function detectMorphologicalErrors(alignment, sttLookup) {
         }
 
         if (shared >= 3) {
-          // Look up confidence from sttLookup
-          const sttWord = sttLookup instanceof Map
-            ? sttLookup.get(hypIndex)
-            : (sttLookup && sttLookup[hypIndex]);
-          const confidence = sttWord ? (sttWord.confidence ?? 1) : 1;
+          // Look up confidence from sttLookup (keyed by canonical word string)
+          let confidence = 1;
+          if (sttLookup instanceof Map) {
+            const queue = sttLookup.get(hyp);
+            if (queue && queue.length > 0) {
+              confidence = queue[0].confidence ?? 1;
+            }
+          }
 
           if (confidence < 0.8) {
             results.push({

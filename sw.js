@@ -1,4 +1,4 @@
-const CACHE_NAME = 'orf-v4';
+const CACHE_NAME = 'orf-v11';
 
 const SHELL = [
   './',
@@ -41,6 +41,14 @@ self.addEventListener('activate', (event) => {
 
 self.addEventListener('fetch', (event) => {
   if (event.request.url.includes('googleapis.com')) {
+    return;
+  }
+
+  // Let navigate requests (new windows, page loads) go to network first
+  if (event.request.mode === 'navigate') {
+    event.respondWith(
+      fetch(event.request).catch(() => caches.match(event.request))
+    );
     return;
   }
 
