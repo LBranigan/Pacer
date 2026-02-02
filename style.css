@@ -97,3 +97,18 @@ button { padding: 0.6rem 1.4rem; border: none; border-radius: 4px; font-size: 1r
 .error-omissions li { background: #ffcdd2; color: #c62828; padding: 0.15rem 0.5rem; border-radius: 3px; font-size: 0.85rem; }
 .error-insertions li { background: #bbdefb; color: #1565c0; padding: 0.15rem 0.5rem; border-radius: 3px; font-size: 0.85rem; }
 .error-detail { color: #999; font-style: italic; }
+
+/* Audio playback */
+.playback-controls { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.75rem; }
+.playback-play-btn { background: #1976d2; color: #fff; padding: 0.4rem 1rem; border: none; border-radius: 4px; font-weight: 600; cursor: pointer; min-width: 70px; }
+.playback-progress { flex: 1; cursor: pointer; }
+.playback-time { font-size: 0.85rem; color: #555; font-variant-numeric: tabular-nums; min-width: 90px; text-align: right; }
+.playback-words { line-height: 2; padding: 0.5rem 0; }
+.playback-word { display: inline-block; padding: 2px 6px; margin: 2px; border-radius: 12px; font-size: 0.95rem; transition: background-color 0.1s; }
+.playback-word.correct { background: #e8f5e9; color: #2e7d32; }
+.playback-word.substitution { background: #ffebee; color: #c62828; }
+.playback-word.omission { background: #fff3e0; color: #e65100; text-decoration: line-through; }
+.playback-word.insertion { background: #e3f2fd; color: #1565c0; }
+.playback-word.speaking { background: #fff176; color: #222; box-shadow: 0 0 0 2px #fdd835; }
+.playback-no-audio { color: #999; font-style: italic; margin: 0.5rem 0; }
+#audioPlaybackArea { margin-top: 1rem; }

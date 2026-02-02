@@ -16,6 +16,7 @@ import { createSyncedPlayback } from './audio-playback.js';
 export function initDashboard(getAssessmentsFn, getStudentsFn) {
   let chart = null;
   let currentStudentId = null;
+  let playback = null;
   const dashboardSection = document.getElementById('dashboardSection');
   const historySection = document.getElementById('historySection');
   const canvas = document.getElementById('celerationCanvas');
