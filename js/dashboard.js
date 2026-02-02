@@ -5,6 +5,7 @@
  */
 
 import { createChart } from './celeration-chart.js';
+import { createSyncedPlayback } from './audio-playback.js';
 
 /**
  * Initialize the dashboard controller.
@@ -15,6 +16,7 @@ import { createChart } from './celeration-chart.js';
 export function initDashboard(getAssessmentsFn, getStudentsFn) {
   let chart = null;
   let currentStudentId = null;
+  let playback = null;
 
   const dashboardSection = document.getElementById('dashboardSection');
   const historySection = document.getElementById('historySection');
@@ -109,6 +111,7 @@ export function initDashboard(getAssessmentsFn, getStudentsFn) {
         assessmentList.querySelectorAll('.assessment-card').forEach(c => c.classList.remove('active'));
         card.classList.add('active');
         renderErrorBreakdown(a);
+        renderAudioPlayback(a);
       });
 
       assessmentList.appendChild(card);
@@ -180,6 +183,41 @@ export function initDashboard(getAssessmentsFn, getStudentsFn) {
     }
   }
 
+  function destroyPlayback() {
+    if (playback) {
+      playback.destroy();
+      playback = null;
+    }
+  }
+
+  function renderAudioPlayback(assessment) {
+    destroyPlayback();
+
+    let area = document.getElementById('audioPlaybackArea');
+    if (!area) {
+      area = document.createElement('div');
+      area.id = 'audioPlaybackArea';
+      errorBreakdown.parentNode.insertBefore(area, errorBreakdown.nextSibling);
+    }
+    area.innerHTML = '';
+
+    if (!assessment.audioRef) {
+      area.innerHTML = '<p class="playback-no-audio">Audio not recorded for this assessment.</p>';
+      return;
+    }
+
+    const heading = document.createElement('h4');
+    heading.textContent = 'Play Audio';
+    heading.style.marginBottom = '0.5rem';
+    area.appendChild(heading);
+
+    const playerDiv = document.createElement('div');
+    area.appendChild(playerDiv);
+
+    playback = createSyncedPlayback(playerDiv);
+    playback.load(assessment.audioRef, assessment.sttWords || [], assessment.alignment || []);
+  }
+
   function esc(str) {
     const d = document.createElement('div');
     d.textContent = str || '';
@@ -218,6 +256,7 @@ export function initDashboard(getAssessmentsFn, getStudentsFn) {
   function hide() {
     dashboardSection.style.display = 'none';
     historySection.style.display = 'block';
+    destroyPlayback();
     if (chart) {
       chart.destroy();
       chart = null;
