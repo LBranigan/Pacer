@@ -10,27 +10,28 @@ See: .planning/PROJECT.md (updated 2026-02-02)
 ## Current Position
 
 Phase: 2 of 8 (Alignment & Core Metrics)
-Plan: 0 of TBD in current phase
-Status: Ready to plan
-Last activity: 2026-02-02 -- Phase 1 Foundation complete, verified ✓
+Plan: 1 of 2 in current phase
+Status: In progress
+Last activity: 2026-02-02 -- Completed 02-01-PLAN.md
 
-Progress: [█░░░░░░░░░] 12%
+Progress: [██░░░░░░░░] 19%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 2
+- Total plans completed: 3
 - Average duration: 2min
-- Total execution time: 0.07 hours
+- Total execution time: 0.09 hours
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
 | 01-foundation | 2/2 | 4min | 2min |
+| 02-alignment-core-metrics | 1/2 | 1min | 1min |
 
 **Recent Trend:**
-- Last 5 plans: 01-01 (3min), 01-02 (1min)
+- Last 5 plans: 01-01 (3min), 01-02 (1min), 02-01 (1min)
 - Trend: Accelerating
 
 *Updated after each plan completion*
@@ -46,6 +47,9 @@ Recent decisions affecting current work:
 - orf_assessment.html kept as reference alongside new modular structure
 - Cache-first for app shell, network passthrough for googleapis.com API calls
 - SW cache versioning via CACHE_NAME constant
+- diff-match-patch loaded as global via CDN, accessed in ES modules
+- Adjacent DELETE+INSERT merged into substitutions with 1:1 pairing
+- Insertions excluded from error count per ORF standard
 
 ### Pending Todos
 
@@ -60,5 +64,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-02-02
-Stopped at: Completed 01-02-PLAN.md (Phase 1 complete)
+Stopped at: Completed 02-01-PLAN.md
 Resume file: None
