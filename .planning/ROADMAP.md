@@ -108,11 +108,13 @@ Plans:
   2. Embedded Standard Celeration Chart renders student WCPM and errors/min over time on semi-logarithmic canvas (ported from standalone celeration chart project)
   3. Chart auto-populates from localStorage assessments — no JSON import needed
   4. Teacher can play back student audio with word-by-word highlighting synced to STT timestamps
-**Plans**: TBD
+**Plans**: 4 plans
 
 Plans:
-- [ ] 06-01: TBD
-- [ ] 06-02: TBD
+- [ ] 06-01-PLAN.md — Extend storage schema to v2 with rich assessment data and IndexedDB audio
+- [ ] 06-02-PLAN.md — Port standalone celeration chart as ES module
+- [ ] 06-03-PLAN.md — Dashboard UI with error breakdown and chart integration
+- [ ] 06-04-PLAN.md — Word-synced audio playback for teacher review
 
 ### Phase 7: Teacher Reporting & Benchmarks
 **Goal**: Teachers can generate formal reports for RTI meetings and see how students compare to grade-level norms
@@ -153,6 +155,6 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8
 | 3. Diagnostics | 2/2 | Complete ✓ | 2026-02-02 |
 | 4. OCR & Async STT | 2/2 | Complete ✓ | 2026-02-02 |
 | 5. Data Persistence | 2/2 | Complete ✓ | 2026-02-02 |
-| 6. Teacher Dashboard | 0/TBD | Not started | - |
+| 6. Teacher Dashboard | 4/4 | Complete ✓ | 2026-02-02 |
 | 7. Teacher Reporting & Benchmarks | 0/TBD | Not started | - |
 | 8. Student Experience | 0/TBD | Not started | - |
