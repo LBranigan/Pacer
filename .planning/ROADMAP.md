@@ -123,10 +123,12 @@ Plans:
 **Success Criteria** (what must be TRUE):
   1. Teacher can generate a printable RTI report with student trend data, error breakdown, and assessment history
   2. Hasbrouck-Tindal benchmark norms are displayed alongside student scores with "on track" / "at risk" indicators
-**Plans**: TBD
+**Plans**: 3 plans
 
 Plans:
-- [ ] 07-01: TBD
+- [ ] 07-01-PLAN.md — Benchmarks module, storage v3 migration (grade field), student creation UI
+- [ ] 07-02-PLAN.md — Dashboard benchmark indicators, grade selector, report button
+- [ ] 07-03-PLAN.md — Printable RTI report page with chart snapshot
 
 ### Phase 8: Student Experience
 **Goal**: Students see a gamified, animated playback of their reading with a character that reacts to their performance
