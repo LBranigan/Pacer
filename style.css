@@ -44,3 +44,17 @@ button { padding: 0.6rem 1.4rem; border: none; border-radius: 4px; font-size: 1r
 
 #analyzeBtn { background: #d32f2f; color: #fff; font-size: 1.1rem; padding: 0.7rem 2rem; }
 #analyzeBtn:disabled { background: #999; cursor: not-allowed; }
+
+/* Student selector bar */
+.student-bar { }
+.student-controls { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; margin-top: 0.25rem; }
+#studentSelect { flex: 1; min-width: 140px; padding: 0.5rem; border: 1px solid #ccc; border-radius: 4px; font-size: 0.95rem; }
+#newStudentName { flex: 1; min-width: 120px; }
+#addStudentBtn { background: #388e3c; color: #fff; }
+#deleteStudentBtn { background: #c62828; color: #fff; }
+
+/* History table */
+#historySection table { width: 100%; border-collapse: collapse; font-size: 0.9rem; margin-top: 0.5rem; }
+#historySection th, #historySection td { padding: 0.4rem 0.6rem; border-bottom: 1px solid #e0e0e0; text-align: left; }
+#historySection th { background: #f5f5f5; font-weight: 600; font-size: 0.8rem; color: #555; }
+#historySection tr:hover { background: #fafafa; }

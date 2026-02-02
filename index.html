@@ -11,7 +11,7 @@
 </head>
 <body>
 
-<div id="version" style="text-align:right;font-size:0.75rem;color:#999;">v 2026-02-02 21:15</div>
+<div id="version" style="text-align:right;font-size:0.75rem;color:#999;">v 2026-02-02 21:25</div>
 <h1>Oral Reading Fluency Assessment</h1>
 <p class="subtitle">Google Cloud Speech-to-Text &mdash; Raw Verbatim Transcription</p>
 
@@ -39,6 +39,16 @@
 <div class="section">
   <label for="transcript">Reference Passage (optional &mdash; for alignment comparison)</label>
   <textarea id="transcript" placeholder="Paste the passage the student will read aloud..."></textarea>
+</div>
+
+<div class="section student-bar">
+  <label>Student</label>
+  <div class="student-controls">
+    <select id="studentSelect"><option value="">-- No student --</option></select>
+    <input type="text" id="newStudentName" placeholder="New student name">
+    <button id="addStudentBtn">+ Add</button>
+    <button id="deleteStudentBtn" style="background:#c62828;color:#fff;">Delete</button>
+  </div>
 </div>
 
 <div class="section">
@@ -72,6 +82,11 @@
   <div class="result-box" id="resultPlain"></div>
   <label style="margin-top:1rem;">Details (JSON)</label>
   <div class="result-box" id="resultJson"></div>
+</div>
+
+<div id="historySection" class="section" style="display:none;">
+  <label>Assessment History</label>
+  <div id="historyList"></div>
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/diff_match_patch/20121119/diff_match_patch.js"></script>
