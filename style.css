@@ -58,3 +58,42 @@ button { padding: 0.6rem 1.4rem; border: none; border-radius: 4px; font-size: 1r
 #historySection th, #historySection td { padding: 0.4rem 0.6rem; border-bottom: 1px solid #e0e0e0; text-align: left; }
 #historySection th { background: #f5f5f5; font-weight: 600; font-size: 0.8rem; color: #555; }
 #historySection tr:hover { background: #fafafa; }
+
+/* Dashboard */
+.dashboard { padding: 1.25rem; }
+.dashboard-chart { margin-bottom: 1.5rem; }
+.dashboard-chart canvas { width: 100%; height: 400px; display: block; }
+.chart-controls { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; margin-bottom: 0.75rem; font-size: 0.85rem; }
+.zoom-btn { padding: 0.3rem 0.7rem; font-size: 0.8rem; background: #e0e0e0; color: #333; border: 1px solid #bbb; border-radius: 3px; cursor: pointer; font-weight: 600; }
+.zoom-btn.active { background: #1565c0; color: #fff; border-color: #1565c0; }
+.metric-toggle { display: inline-flex; align-items: center; gap: 0.25rem; font-weight: 400; font-size: 0.85rem; margin-bottom: 0; cursor: pointer; }
+.metric-toggle input { cursor: pointer; }
+
+/* Assessment cards */
+.dashboard-assessments { display: flex; flex-direction: column; gap: 0.5rem; margin-bottom: 1rem; max-height: 300px; overflow-y: auto; }
+.assessment-card { background: #fafafa; border: 1px solid #ddd; border-radius: 6px; padding: 0.75rem 1rem; cursor: pointer; transition: border-color 0.15s, box-shadow 0.15s; }
+.assessment-card:hover { border-color: #1565c0; box-shadow: 0 1px 4px rgba(21,101,192,0.15); }
+.assessment-card.active { border-color: #1565c0; background: #e3f2fd; box-shadow: 0 1px 4px rgba(21,101,192,0.2); }
+.card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.25rem; }
+.card-date { font-weight: 600; color: #333; }
+.card-wcpm { background: #1565c0; color: #fff; padding: 0.15rem 0.5rem; border-radius: 3px; font-size: 0.8rem; font-weight: 700; }
+.card-stats { font-size: 0.8rem; color: #666; display: flex; justify-content: space-between; }
+.card-errors { font-family: 'Consolas', monospace; }
+.dashboard-empty { color: #999; font-style: italic; padding: 1rem 0; }
+
+/* Error breakdown */
+.error-breakdown { background: #fafafa; border: 1px solid #ddd; border-radius: 6px; padding: 1rem; }
+.error-section { margin-bottom: 1rem; }
+.error-section:last-child { margin-bottom: 0; }
+.error-section h4 { font-size: 0.9rem; margin-bottom: 0.5rem; }
+.error-substitutions h4 { color: #e65100; }
+.error-omissions h4 { color: #c62828; }
+.error-insertions h4 { color: #1565c0; }
+.error-section table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+.error-section th, .error-section td { padding: 0.25rem 0.5rem; border-bottom: 1px solid #eee; text-align: left; }
+.error-section th { font-size: 0.75rem; color: #888; }
+.error-section .arrow { text-align: center; color: #e65100; font-weight: 700; }
+.error-section ul { list-style: none; display: flex; flex-wrap: wrap; gap: 0.4rem; }
+.error-omissions li { background: #ffcdd2; color: #c62828; padding: 0.15rem 0.5rem; border-radius: 3px; font-size: 0.85rem; }
+.error-insertions li { background: #bbdefb; color: #1565c0; padding: 0.15rem 0.5rem; border-radius: 3px; font-size: 0.85rem; }
+.error-detail { color: #999; font-style: italic; }

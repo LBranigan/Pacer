@@ -86,7 +86,31 @@
 
 <div id="historySection" class="section" style="display:none;">
   <label>Assessment History</label>
+  <button id="viewDashboardBtn" style="float:right;background:#1565c0;color:#fff;padding:0.4rem 1rem;font-size:0.85rem;border:none;border-radius:4px;cursor:pointer;font-weight:600;">Dashboard</button>
   <div id="historyList"></div>
+</div>
+
+<div id="dashboardSection" class="section dashboard" style="display:none;">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;">
+    <label style="margin:0;font-size:1.1rem;">Student Dashboard</label>
+    <button id="dashboardBackBtn" style="background:#666;color:#fff;padding:0.4rem 1rem;font-size:0.85rem;border:none;border-radius:4px;cursor:pointer;font-weight:600;">Back to History</button>
+  </div>
+  <div class="dashboard-chart">
+    <div class="chart-controls">
+      <span style="font-weight:600;margin-right:0.5rem;">Zoom:</span>
+      <button data-zoom="7" class="zoom-btn">1W</button>
+      <button data-zoom="30" class="zoom-btn">1M</button>
+      <button data-zoom="90" class="zoom-btn">3M</button>
+      <button data-zoom="140" class="zoom-btn active">Full</button>
+      <span style="margin-left:1rem;font-weight:600;">Show:</span>
+      <label class="metric-toggle"><input type="checkbox" data-metric="correctPerMinute" checked> Correct/Min</label>
+      <label class="metric-toggle"><input type="checkbox" data-metric="errorsPerMinute" checked> Errors/Min</label>
+      <label class="metric-toggle"><input type="checkbox" id="celerationLineToggle"> Celeration Lines</label>
+    </div>
+    <canvas id="celerationCanvas"></canvas>
+  </div>
+  <div id="dashboardAssessments" class="dashboard-assessments"></div>
+  <div id="errorBreakdown" class="error-breakdown"></div>
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/diff_match_patch/20121119/diff_match_patch.js"></script>
