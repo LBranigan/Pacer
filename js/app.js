@@ -33,6 +33,23 @@ function updateAnalyzeBtn() {
   analyzeBtn.disabled = !appState.audioBlob;
 }
 
+function showPlaybackButton(studentId, assessmentId) {
+  // Remove any existing playback button
+  const existing = document.getElementById('playbackAdventureBtn');
+  if (existing) existing.remove();
+
+  const btn = document.createElement('button');
+  btn.id = 'playbackAdventureBtn';
+  btn.textContent = 'Watch Your Reading Adventure!';
+  btn.style.cssText = 'margin:0.5rem 0;padding:0.6rem 1.2rem;background:#7b1fa2;color:#fff;border:none;border-radius:8px;font-size:1rem;font-weight:600;cursor:pointer;';
+  btn.addEventListener('click', () => {
+    window.open(`student-playback.html?student=${encodeURIComponent(studentId)}&assessment=${encodeURIComponent(assessmentId)}`, '_blank');
+  });
+
+  // Insert after analyze button
+  analyzeBtn.parentNode.insertBefore(btn, analyzeBtn.nextSibling);
+}
+
 function refreshStudentUI() {
   renderStudentSelector(getStudents(), appState.selectedStudentId);
   if (appState.selectedStudentId) {
@@ -152,6 +169,11 @@ async function runAnalysis() {
     });
     refreshStudentUI();
     setStatus('Done (saved).');
+
+    // Show student playback button if audio exists
+    if (appState.audioBlob) {
+      showPlaybackButton(appState.selectedStudentId, assessmentId);
+    }
   } else {
     setStatus('Done.');
   }
