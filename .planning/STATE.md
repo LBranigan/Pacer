@@ -5,7 +5,7 @@
 See: .planning/PROJECT.md (updated 2026-02-02)
 
 **Core value:** Accurate, word-level fluency error detection powered by Google Cloud STT -- giving teachers actionable data on exactly where and how a struggling reader breaks down.
-**Current focus:** Phase 5: Data Persistence
+**Current focus:** Phase 5 complete. Next: Phase 6: Teacher Dashboard
 
 ## Current Position
 

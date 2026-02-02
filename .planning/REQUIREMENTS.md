@@ -51,8 +51,8 @@
 
 - [ ] **INFR-01**: Codebase modularized into ES modules (alignment, scoring, ui, api, etc.)
 - [ ] **INFR-02**: Async STT endpoint (longrunningrecognize) for passages >60 seconds
-- [ ] **INFR-03**: Assessment data persisted in localStorage with student profiles
-- [ ] **INFR-04**: Assessment history with per-student progress tracking
+- [x] **INFR-03**: Assessment data persisted in localStorage with student profiles
+- [x] **INFR-04**: Assessment history with per-student progress tracking
 - [ ] **INFR-05**: App is a Progressive Web App (manifest.json, service worker, installable on devices)
 
 ## v2 Requirements
@@ -112,8 +112,8 @@
 | STUD-03 | Phase 8 | Pending |
 | INFR-01 | Phase 1 | Complete |
 | INFR-02 | Phase 4 | Complete |
-| INFR-03 | Phase 5 | Pending |
-| INFR-04 | Phase 5 | Pending |
+| INFR-03 | Phase 5 | Complete |
+| INFR-04 | Phase 5 | Complete |
 | INFR-05 | Phase 1 | Complete |
 
 **Coverage:**
