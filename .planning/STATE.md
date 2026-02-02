@@ -5,23 +5,23 @@
 See: .planning/PROJECT.md (updated 2026-02-02)
 
 **Core value:** Accurate, word-level fluency error detection powered by Google Cloud STT -- giving teachers actionable data on exactly where and how a struggling reader breaks down.
-**Current focus:** Phase 5 complete. Next: Phase 6: Teacher Dashboard
+**Current focus:** Phase 6: Teacher Dashboard in progress
 
 ## Current Position
 
-Phase: 5 of 8 (Data Persistence)
-Plan: 2 of 2 complete
-Status: Phase complete
-Last activity: 2026-02-02 -- Completed 05-02-PLAN.md
+Phase: 6 of 8 (Teacher Dashboard)
+Plan: 1 of 4 complete
+Status: In progress
+Last activity: 2026-02-02 -- Completed 06-01-PLAN.md
 
-Progress: [████████████] 60%
+Progress: [██████████████] 65%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 8
+- Total plans completed: 9
 - Average duration: 2min
-- Total execution time: 0.25 hours
+- Total execution time: 0.28 hours
 
 **By Phase:**
 
@@ -31,9 +31,10 @@ Progress: [████████████] 60%
 | 02-alignment-core-metrics | 2/2 | 6min | 3min |
 | 03-diagnostics | 2/2 | 5min | 2.5min |
 | 05-data-persistence | 2/2 | 3min | 1.5min |
+| 06-teacher-dashboard | 1/4 | 2min | 2min |
 
 **Recent Trend:**
-- Last 5 plans: 03-01 (2min), 03-02 (3min), 05-01 (1min), 05-02 (2min)
+- Last 5 plans: 03-02 (3min), 05-01 (1min), 05-02 (2min), 06-01 (2min)
 - Trend: Stable
 
 *Updated after each plan completion*
@@ -62,6 +63,8 @@ Recent decisions affecting current work:
 - Auto-save after analysis only when student selected - explicit opt-in model
 - Status message shows '(saved)' suffix for user feedback on persistence
 - Cascade delete for student removal - confirms before removing student and all assessments
+- Assessment ID generated in app.js, shared as key between localStorage and IndexedDB
+- Audio blobs stored as raw Blob objects in IndexedDB (no encoding)
 
 ### Pending Todos
 
@@ -75,6 +78,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-02-02 21:31:15 UTC
-Stopped at: Completed 05-02-PLAN.md (Phase 5 complete)
+Last session: 2026-02-02
+Stopped at: Completed 06-01-PLAN.md
 Resume file: None
