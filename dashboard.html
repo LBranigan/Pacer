@@ -66,11 +66,47 @@ h1 { font-size: 1.3rem; margin-bottom: 1rem; }
 .playback-word.speaking { background: #fff176; color: #222; box-shadow: 0 0 0 2px #fdd835; }
 .playback-no-audio { color: #999; font-style: italic; margin: 0.5rem 0; }
 #audioPlaybackArea { margin-top: 1rem; }
+
+/* Grade selector & report button */
+.student-controls { display: flex; align-items: center; gap: 1rem; margin-bottom: 1rem; flex-wrap: wrap; }
+.student-controls select { padding: 0.3rem 0.5rem; font-size: 0.85rem; border-radius: 4px; border: 1px solid #bbb; }
+.report-btn { background: #1565c0; color: #fff; border: none; padding: 0.4rem 1rem; border-radius: 4px; font-weight: 600; cursor: pointer; font-size: 0.85rem; }
+.report-btn:hover { background: #0d47a1; }
+
+/* Benchmark bar */
+.benchmark-section { background: #fff; border-radius: 8px; padding: 1rem; margin-bottom: 1rem; box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
+.benchmark-bar { height: 24px; display: flex; border-radius: 4px; overflow: hidden; width: 100%; position: relative; }
+.benchmark-zone { height: 100%; }
+.benchmark-zone.at-risk { background: #ffcdd2; }
+.benchmark-zone.some-risk { background: #fff9c4; }
+.benchmark-zone.on-track { background: #c8e6c9; }
+.benchmark-marker { position: absolute; top: 0; width: 3px; height: 100%; background: #222; border-radius: 1px; transform: translateX(-50%); }
+.benchmark-label { font-weight: 600; margin-top: 4px; font-size: 0.85rem; }
+.benchmark-empty { color: #999; font-style: italic; font-size: 0.85rem; }
 </style>
 </head>
 <body>
 
 <h1>Dashboard: <span id="studentName" class="student-name"></span></h1>
+
+<div class="student-controls">
+  <label>Grade:
+    <select id="gradeSelect">
+      <option value="" disabled selected>Set Grade</option>
+      <option value="1">Grade 1</option>
+      <option value="2">Grade 2</option>
+      <option value="3">Grade 3</option>
+      <option value="4">Grade 4</option>
+      <option value="5">Grade 5</option>
+      <option value="6">Grade 6</option>
+    </select>
+  </label>
+  <button class="report-btn" id="generateReportBtn">Generate Report</button>
+</div>
+
+<div class="benchmark-section" id="benchmarkSection">
+  <p class="benchmark-empty">Set student grade to see benchmarks</p>
+</div>
 
 <div class="chart-area">
   <div class="chart-controls">
@@ -100,7 +136,8 @@ h1 { font-size: 1.3rem; margin-bottom: 1rem; }
 <script type="module">
 import { createChart } from './js/celeration-chart.js';
 import { createSyncedPlayback } from './js/audio-playback.js';
-import { getStudents, getAssessments } from './js/storage.js';
+import { getStudents, getAssessments, updateStudentGrade } from './js/storage.js';
+import { getBenchmarkStatus, getSeason, HT_NORMS } from './js/benchmarks.js';
 
 // Read student ID from localStorage (set by main app before opening this window)
 const studentId = localStorage.getItem('orf_dashboard_student');
@@ -114,6 +151,71 @@ const student = students.find(s => s.id === studentId);
 document.getElementById('studentName').textContent = student ? student.name : 'Unknown';
 
 const assessments = getAssessments(studentId);
+
+// --- Grade selector ---
+const gradeSelect = document.getElementById('gradeSelect');
+if (student && student.grade) {
+  gradeSelect.value = String(student.grade);
+}
+gradeSelect.addEventListener('change', () => {
+  const grade = parseInt(gradeSelect.value, 10);
+  updateStudentGrade(studentId, grade);
+  renderBenchmark(grade);
+});
+
+// --- Generate Report button ---
+document.getElementById('generateReportBtn').addEventListener('click', () => {
+  localStorage.setItem('orf_report_student', studentId);
+  window.open('report.html', '_blank');
+});
+
+// --- Benchmark display ---
+const benchmarkSection = document.getElementById('benchmarkSection');
+
+function renderBenchmark(grade) {
+  benchmarkSection.innerHTML = '';
+  if (!grade) {
+    benchmarkSection.innerHTML = '<p class="benchmark-empty">Set student grade to see benchmarks</p>';
+    return;
+  }
+  if (!assessments.length) {
+    benchmarkSection.innerHTML = '<p class="benchmark-empty">Complete an assessment to see benchmarks</p>';
+    return;
+  }
+  // Use latest assessment
+  const sorted = [...assessments].sort((a, b) => new Date(b.date) - new Date(a.date));
+  const latest = sorted[0];
+  const wcpm = latest.wcpm || 0;
+  const season = getSeason(latest.date);
+  const result = getBenchmarkStatus(wcpm, grade, season);
+
+  if (!result.norms) {
+    benchmarkSection.innerHTML = '<p class="benchmark-empty">No norms available for Grade ' + grade + ' ' + season + '</p>';
+    return;
+  }
+
+  const norms = result.norms;
+  // Bar zones: at-risk = 0 to p25, some-risk = p25 to p50, on-track = p50 to p90+buffer
+  const maxVal = norms.p90 * 1.15;
+  const atRiskPct = (norms.p25 / maxVal) * 100;
+  const someRiskPct = ((norms.p50 - norms.p25) / maxVal) * 100;
+  const onTrackPct = 100 - atRiskPct - someRiskPct;
+  const markerPct = Math.min((wcpm / maxVal) * 100, 100);
+
+  benchmarkSection.innerHTML =
+    '<div class="benchmark-bar">' +
+      '<div class="benchmark-zone at-risk" style="width:' + atRiskPct + '%"></div>' +
+      '<div class="benchmark-zone some-risk" style="width:' + someRiskPct + '%"></div>' +
+      '<div class="benchmark-zone on-track" style="width:' + onTrackPct + '%"></div>' +
+      '<div class="benchmark-marker" style="left:' + markerPct + '%"></div>' +
+    '</div>' +
+    '<div class="benchmark-label" style="color:' + result.color + '">' +
+      result.label + ' (' + wcpm + ' WCPM, 50th %ile = ' + norms.p50 + ')' +
+    '</div>';
+}
+
+renderBenchmark(student ? student.grade : null);
+
 const canvas = document.getElementById('celerationCanvas');
 const cardList = document.getElementById('assessmentCards');
 const errorBreakdown = document.getElementById('errorBreakdown');
