@@ -65,11 +65,11 @@ Plans:
   3. Self-corrections are identified from repeated-word patterns and shown as a separate category (not counted as errors)
   4. Words with low suffix confidence are flagged as possible morphological errors
   5. A crude prosody proxy is computed from pause-at-punctuation patterns and displayed alongside other metrics
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
-- [ ] 03-01: TBD
-- [ ] 03-02: TBD
+- [ ] 03-01-PLAN.md -- Diagnostics computation module (all five analyzers)
+- [ ] 03-02-PLAN.md -- Wire diagnostics into pipeline and render in UI
 
 ### Phase 4: OCR & Async STT
 **Goal**: Teachers can photograph a book page to extract reference text, and passages longer than 60 seconds are handled via async STT
