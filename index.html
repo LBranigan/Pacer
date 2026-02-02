@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#d32f2f">
+<title>Oral Reading Fluency Assessment</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<h1>Oral Reading Fluency Assessment</h1>
+<p class="subtitle">Google Cloud Speech-to-Text &mdash; Raw Verbatim Transcription</p>
+
+<div class="section">
+  <label for="apiKey">Google Cloud API Key</label>
+  <input type="text" id="apiKey" placeholder="Enter your GCP API key (Speech-to-Text API must be enabled)">
+</div>
+
+<div class="section">
+  <label for="transcript">Reference Passage (optional &mdash; for future comparison)</label>
+  <textarea id="transcript" placeholder="Paste the passage the student will read aloud..."></textarea>
+</div>
+
+<div class="section">
+  <label>Audio Input</label>
+  <div class="controls">
+    <button id="recordBtn">Record</button>
+    <span class="timer" id="timer">0:00</span>
+    <label id="uploadBtn" style="background:#1976d2;color:#fff;padding:0.6rem 1.4rem;border-radius:4px;font-weight:600;cursor:pointer;">
+      Upload WAV
+      <input type="file" id="fileInput" accept=".wav,.flac,.ogg,.mp3,.webm" style="display:none">
+    </label>
+  </div>
+  <div id="status"></div>
+</div>
+
+<div class="section">
+  <label>Raw Verbatim Transcript</label>
+  <div class="legend">
+    Confidence: <span class="high">High (&ge;0.9)</span> <span class="mid">Medium (0.7-0.9)</span> <span class="low">Low (&lt;0.7)</span>
+  </div>
+  <div class="result-box" id="resultWords">Awaiting audio...</div>
+  <label style="margin-top:1rem;">Plain Text</label>
+  <div class="result-box" id="resultPlain"></div>
+  <label style="margin-top:1rem;">Word Details (JSON)</label>
+  <div class="result-box" id="resultJson"></div>
+</div>
+
+<script type="module" src="js/app.js"></script>
+</body>
+</html>
