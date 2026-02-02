@@ -9,12 +9,19 @@ export function initDashboard() {
 
   function show(studentId) {
     if (!studentId) return;
-    // Store studentId where the popup can read it reliably
+    // Store studentId where the popup can read it
     localStorage.setItem('orf_dashboard_student', studentId);
+
+    // Build absolute URL to dashboard.html relative to current page
+    const base = window.location.href.replace(/[^/]*$/, '');
+    const url = base + 'dashboard.html';
+
     if (dashboardWindow && !dashboardWindow.closed) {
-      dashboardWindow.close();
+      dashboardWindow.location.href = url;
+      dashboardWindow.focus();
+    } else {
+      dashboardWindow = window.open(url, 'orf_dashboard', 'width=1100,height=800');
     }
-    dashboardWindow = window.open('dashboard.html', '_blank', 'width=1100,height=800');
   }
 
   function hide() {
