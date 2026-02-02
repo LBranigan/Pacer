@@ -9,6 +9,7 @@ import { extractTextFromImage } from './ocr-api.js';
 import { trimPassageToAttempted } from './passage-trimmer.js';
 import { getStudents, addStudent, deleteStudent, saveAssessment, getAssessments } from './storage.js';
 import { saveAudioBlob } from './audio-store.js';
+import { initDashboard } from './dashboard.js';
 
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('./sw.js')
@@ -149,6 +150,9 @@ async function runAnalysis() {
       audioRef: appState.audioBlob ? assessmentId : null
     });
     refreshStudentUI();
+    if (dashboard.isVisible()) {
+      dashboard.show(appState.selectedStudentId);
+    }
     setStatus('Done (saved).');
   } else {
     setStatus('Done.');
@@ -264,3 +268,12 @@ if (useOcrBtn) {
 
 // Initialize student selector on page load
 refreshStudentUI();
+
+// --- Dashboard wiring ---
+const dashboard = initDashboard(getAssessments, getStudents);
+
+document.getElementById('viewDashboardBtn').addEventListener('click', () => {
+  if (appState.selectedStudentId) {
+    dashboard.show(appState.selectedStudentId);
+  }
+});

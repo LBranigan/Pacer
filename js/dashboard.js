@@ -5,6 +5,7 @@
  */
 
 import { createChart } from './celeration-chart.js';
+import { createSyncedPlayback } from './audio-playback.js';
 
 /**
  * Initialize the dashboard controller.
@@ -15,7 +16,6 @@ import { createChart } from './celeration-chart.js';
 export function initDashboard(getAssessmentsFn, getStudentsFn) {
   let chart = null;
   let currentStudentId = null;
-
   const dashboardSection = document.getElementById('dashboardSection');
   const historySection = document.getElementById('historySection');
   const canvas = document.getElementById('celerationCanvas');
@@ -218,6 +218,7 @@ export function initDashboard(getAssessmentsFn, getStudentsFn) {
   function hide() {
     dashboardSection.style.display = 'none';
     historySection.style.display = 'block';
+    destroyPlayback();
     if (chart) {
       chart.destroy();
       chart = null;
