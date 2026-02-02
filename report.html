@@ -119,8 +119,11 @@ h2 { font-size: 1.1rem; margin: 1.5rem 0 0.5rem; border-bottom: 2px solid #1565c
   <h2>Benchmark Comparison</h2>
   <div id="benchmarkArea"></div>
 
-  <h2>Error Analysis (Latest Assessment)</h2>
+  <h2>Error Analysis (Average per 60s)</h2>
   <div id="errorArea"></div>
+
+  <h2>Patterns</h2>
+  <div id="patternsArea"></div>
 
   <h2>Assessment History</h2>
   <table class="history-table">
@@ -226,36 +229,104 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
-  // Error analysis (latest)
+  // Error analysis (average across all assessments, normalized to 60s)
   const errorArea = document.getElementById('errorArea');
   if (sorted.length === 0) {
     errorArea.innerHTML = '<p class="benchmark-note">No assessments available.</p>';
   } else {
-    const latest = sorted[0];
-    const eb = latest.errorBreakdown;
-    if (!eb) {
-      errorArea.innerHTML = '<p class="benchmark-note">Error breakdown not available for latest assessment.</p>';
+    let totalSubs = 0, totalOmit = 0, totalIns = 0, count = 0;
+    for (const a of sorted) {
+      const eb = a.errorBreakdown;
+      if (!eb) continue;
+      const dur = (a.duration && a.duration > 0) ? a.duration : 60;
+      const scale = 60 / dur;
+      totalSubs += (eb.substitutions || 0) * scale;
+      totalOmit += (eb.omissions || 0) * scale;
+      totalIns += (eb.insertions || 0) * scale;
+      count++;
+    }
+    if (count === 0) {
+      errorArea.innerHTML = '<p class="benchmark-note">Error breakdown not available.</p>';
     } else {
-      let html = '<p class="error-summary">Substitutions: <strong>' + (eb.substitutions || 0) + '</strong> | Omissions: <strong>' + (eb.omissions || 0) + '</strong> | Insertions: <strong>' + (eb.insertions || 0) + '</strong></p>';
+      const avgSubs = (totalSubs / count).toFixed(1);
+      const avgOmit = (totalOmit / count).toFixed(1);
+      const avgIns = (totalIns / count).toFixed(1);
+      const avgTotal = (parseFloat(avgSubs) + parseFloat(avgOmit) + parseFloat(avgIns)).toFixed(1);
+      let html = '<p class="error-summary">Avg per 60s across ' + count + ' assessment(s):</p>';
+      html += '<p class="error-summary">Substitutions: <strong>' + avgSubs + '</strong> | Omissions: <strong>' + avgOmit + '</strong> | Insertions: <strong>' + avgIns + '</strong> | Total: <strong>' + avgTotal + '</strong></p>';
+      errorArea.innerHTML = html;
+    }
+  }
 
-      if (eb.details && eb.details.length > 0) {
-        const shown = eb.details.slice(0, 15);
-        html += '<div class="error-words">';
-        for (const d of shown) {
-          if (d.type === 'substitution') {
-            html += '<span class="error-word sub" title="Expected: ' + esc(d.ref) + '">' + esc(d.hyp) + ' (for ' + esc(d.ref) + ')</span>';
-          } else if (d.type === 'omission') {
-            html += '<span class="error-word omit">omitted: ' + esc(d.ref) + '</span>';
-          } else if (d.type === 'insertion') {
-            html += '<span class="error-word ins">inserted: ' + esc(d.hyp) + '</span>';
+  // Patterns analysis (across all assessments)
+  const patternsArea = document.getElementById('patternsArea');
+  if (sorted.length === 0) {
+    patternsArea.innerHTML = '<p class="benchmark-note">No assessments available.</p>';
+  } else {
+    const patterns = [];
+    let morphCount = 0, pauseCount = 0, selfCorrCount = 0, onsetCount = 0;
+    let totalAssessments = sorted.length;
+    const subWords = {};
+    const omitWords = {};
+
+    for (const a of sorted) {
+      // Diagnostics-based patterns
+      if (a.diagnostics) {
+        if (a.diagnostics.morphologicalErrors && a.diagnostics.morphologicalErrors.length > 0) morphCount++;
+        if (a.diagnostics.longPauses && a.diagnostics.longPauses.length > 0) pauseCount++;
+        if (a.diagnostics.selfCorrections && a.diagnostics.selfCorrections.length > 0) selfCorrCount++;
+        if (a.diagnostics.onsetDelays && a.diagnostics.onsetDelays.length > 0) onsetCount++;
+      }
+      // Error word frequency
+      const eb = a.errorBreakdown;
+      if (eb && eb.details) {
+        for (const d of eb.details) {
+          if (d.type === 'substitution' && d.ref) {
+            subWords[d.ref.toLowerCase()] = (subWords[d.ref.toLowerCase()] || 0) + 1;
+          }
+          if (d.type === 'omission' && d.ref) {
+            omitWords[d.ref.toLowerCase()] = (omitWords[d.ref.toLowerCase()] || 0) + 1;
           }
         }
-        html += '</div>';
-        if (eb.details.length > 15) {
-          html += '<p class="benchmark-note">(' + (eb.details.length - 15) + ' more errors not shown)</p>';
-        }
       }
-      errorArea.innerHTML = html;
+    }
+
+    if (morphCount > 0) {
+      const pct = Math.round((morphCount / totalAssessments) * 100);
+      patterns.push('Morphological errors detected in ' + morphCount + '/' + totalAssessments + ' assessments (' + pct + '%) — student may struggle with word endings/suffixes');
+    }
+    if (pauseCount > 0) {
+      const pct = Math.round((pauseCount / totalAssessments) * 100);
+      patterns.push('Long pauses (3s+) present in ' + pauseCount + '/' + totalAssessments + ' assessments (' + pct + '%) — may indicate decoding difficulty or comprehension delays');
+    }
+    if (selfCorrCount > 0) {
+      const pct = Math.round((selfCorrCount / totalAssessments) * 100);
+      patterns.push('Self-corrections observed in ' + selfCorrCount + '/' + totalAssessments + ' assessments (' + pct + '%) — positive sign of monitoring');
+    }
+    if (onsetCount > 0) {
+      const pct = Math.round((onsetCount / totalAssessments) * 100);
+      patterns.push('Onset delays in ' + onsetCount + '/' + totalAssessments + ' assessments (' + pct + '%) — slow to begin reading words');
+    }
+
+    // Frequently missed words
+    const freqSubs = Object.entries(subWords).filter(([,c]) => c >= 2).sort((a,b) => b[1] - a[1]).slice(0, 5);
+    const freqOmit = Object.entries(omitWords).filter(([,c]) => c >= 2).sort((a,b) => b[1] - a[1]).slice(0, 5);
+    if (freqSubs.length > 0) {
+      patterns.push('Frequently substituted words: ' + freqSubs.map(([w,c]) => '"' + w + '" (' + c + 'x)').join(', '));
+    }
+    if (freqOmit.length > 0) {
+      patterns.push('Frequently omitted words: ' + freqOmit.map(([w,c]) => '"' + w + '" (' + c + 'x)').join(', '));
+    }
+
+    if (patterns.length === 0) {
+      patternsArea.innerHTML = '<p class="benchmark-note">Not enough data to identify patterns yet.</p>';
+    } else {
+      let html = '<ul style="margin:0.5rem 0;padding-left:1.2rem;font-size:0.9rem;line-height:1.6;">';
+      for (const p of patterns) {
+        html += '<li>' + esc(p) + '</li>';
+      }
+      html += '</ul>';
+      patternsArea.innerHTML = html;
     }
   }
 

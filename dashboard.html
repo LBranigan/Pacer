@@ -236,9 +236,8 @@ let playback = null;
 if (assessments.length > 0) {
   chart = createChart(canvas);
   const sorted = [...assessments].sort((a, b) => new Date(a.date) - new Date(b.date));
-  const firstDate = new Date(sorted[0].date).getTime();
-  const chartAssessments = sorted.map(a => {
-    const calendarDay = Math.floor((new Date(a.date).getTime() - firstDate) / 86400000);
+  const chartAssessments = sorted.map((a, i) => {
+    const calendarDay = i; // Use assessment index instead of calendar days (debug mode)
     const correctPerMinute = a.wcpm || 0;
     const errorsPerMinute = (a.duration && a.duration > 0) ? (a.errors || 0) / (a.duration / 60) : 0;
     return { celeration: { calendarDay, correctPerMinute, errorsPerMinute, date: a.date } };
