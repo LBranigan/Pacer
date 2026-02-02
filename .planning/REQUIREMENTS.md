@@ -37,8 +37,8 @@
 
 - [ ] **TCHR-01**: Teacher dashboard shows assessment results with error breakdown
 - [ ] **TCHR-02**: Teacher dashboard shows progress trends over time per student
-- [ ] **TCHR-03**: Teacher can generate formal RTI reports (printable, with trend data)
-- [ ] **TCHR-04**: Teacher can view Hasbrouck-Tindal benchmark norms and "on track" indicators
+- [x] **TCHR-03**: Teacher can generate formal RTI reports (printable, with trend data)
+- [x] **TCHR-04**: Teacher can view Hasbrouck-Tindal benchmark norms and "on track" indicators
 - [ ] **TCHR-05**: Audio playback synced to word highlighting for teacher review
 
 ### Student View
@@ -104,8 +104,8 @@
 | ALGN-03 | Phase 2 | Complete |
 | TCHR-01 | Phase 6 | Pending |
 | TCHR-02 | Phase 6 | Pending |
-| TCHR-03 | Phase 7 | Pending |
-| TCHR-04 | Phase 7 | Pending |
+| TCHR-03 | Phase 7 | Complete |
+| TCHR-04 | Phase 7 | Complete |
 | TCHR-05 | Phase 6 | Pending |
 | STUD-01 | Phase 8 | Pending |
 | STUD-02 | Phase 8 | Pending |
