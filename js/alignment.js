@@ -4,6 +4,7 @@
  */
 
 import { normalizeText, filterDisfluencies } from './text-normalize.js';
+import { getCanonical } from './word-equivalences.js';
 
 /* diff-match-patch constants */
 const DIFF_DELETE = -1;
@@ -33,10 +34,11 @@ export function alignWords(referenceText, transcriptWords) {
   function encode(words) {
     let encoded = '';
     for (const w of words) {
-      if (!wordMap.has(w)) {
-        wordMap.set(w, String.fromCharCode(nextChar++));
+      const canon = getCanonical(w);
+      if (!wordMap.has(canon)) {
+        wordMap.set(canon, String.fromCharCode(nextChar++));
       }
-      encoded += wordMap.get(w);
+      encoded += wordMap.get(canon);
     }
     return encoded;
   }

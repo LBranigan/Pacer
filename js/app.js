@@ -6,6 +6,7 @@ import { computeWCPM, computeAccuracy } from './metrics.js';
 import { setStatus, displayResults, displayAlignmentResults, showAudioPlayback } from './ui.js';
 import { runDiagnostics } from './diagnostics.js';
 import { extractTextFromImage } from './ocr-api.js';
+import { trimPassageToAttempted } from './passage-trimmer.js';
 
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('./sw.js')
@@ -13,20 +14,43 @@ if ('serviceWorker' in navigator) {
     .catch(err => console.warn('SW registration failed:', err));
 }
 
-async function processAssessment(blob, encoding, elapsedSeconds) {
-  showAudioPlayback(blob);
-  const data = await sendToSTT(blob, encoding);
+// --- App state ---
+const appState = {
+  audioBlob: null,
+  audioEncoding: null,
+  elapsedSeconds: null,
+  referenceIsFromOCR: false
+};
 
-  if (!data || !data.results) {
-    displayResults(data || {});
+const analyzeBtn = document.getElementById('analyzeBtn');
+
+function updateAnalyzeBtn() {
+  analyzeBtn.disabled = !appState.audioBlob;
+}
+
+async function runAnalysis() {
+  if (!appState.audioBlob) {
+    setStatus('No audio recorded or uploaded.');
     return;
   }
 
-  const referenceText = document.getElementById('transcript').value.trim();
+  analyzeBtn.disabled = true;
+  setStatus('Sending audio to STT...');
+
+  const data = await sendToSTT(appState.audioBlob, appState.audioEncoding);
+
+  if (!data || !data.results) {
+    displayResults(data || {});
+    analyzeBtn.disabled = false;
+    return;
+  }
+
+  let referenceText = document.getElementById('transcript').value.trim();
 
   if (!referenceText) {
     displayResults(data);
     setStatus('Done (no reference passage for alignment).');
+    analyzeBtn.disabled = false;
     return;
   }
 
@@ -41,6 +65,17 @@ async function processAssessment(blob, encoding, elapsedSeconds) {
     }
   }
 
+  // Trim OCR passage to attempted range
+  if (appState.referenceIsFromOCR && transcriptWords.length > 0) {
+    const trimmed = trimPassageToAttempted(referenceText, transcriptWords);
+    const origCount = referenceText.split(/\s+/).length;
+    const trimCount = trimmed.split(/\s+/).length;
+    if (trimCount < origCount) {
+      setStatus(`Trimmed passage from ${origCount} to ${trimCount} words.`);
+    }
+    referenceText = trimmed;
+  }
+
   // Build lookup: normalized hyp word -> queue of STT metadata
   const sttLookup = new Map();
   for (const w of transcriptWords) {
@@ -50,14 +85,15 @@ async function processAssessment(blob, encoding, elapsedSeconds) {
   }
 
   const alignment = alignWords(referenceText, transcriptWords);
-  const wcpm = (elapsedSeconds != null && elapsedSeconds > 0)
-    ? computeWCPM(alignment, elapsedSeconds)
+  const wcpm = (appState.elapsedSeconds != null && appState.elapsedSeconds > 0)
+    ? computeWCPM(alignment, appState.elapsedSeconds)
     : null;
   const accuracy = computeAccuracy(alignment);
 
   const diagnostics = runDiagnostics(transcriptWords, alignment, referenceText, sttLookup);
-  displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, diagnostics);
+  displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, diagnostics, transcriptWords);
   setStatus('Done.');
+  analyzeBtn.disabled = false;
 }
 
 // Auto-fill API key for dev/testing
@@ -66,8 +102,32 @@ document.getElementById('apiKey').value = 'AIzaSyCTx4rS7zxwRZqNseWcFJAaAgEH5HA50
 initRecorder();
 initFileHandler();
 
-recorderSetOnComplete((blob, enc, secs) => processAssessment(blob, enc, secs));
-fileHandlerSetOnComplete((blob, enc) => processAssessment(blob, enc, null));
+// Store audio on record/upload, don't process yet
+recorderSetOnComplete((blob, enc, secs) => {
+  appState.audioBlob = blob;
+  appState.audioEncoding = enc;
+  appState.elapsedSeconds = secs;
+  showAudioPlayback(blob);
+  setStatus('Audio ready. Click Analyze to process.');
+  updateAnalyzeBtn();
+});
+
+fileHandlerSetOnComplete((blob, enc) => {
+  appState.audioBlob = blob;
+  appState.audioEncoding = enc;
+  appState.elapsedSeconds = null;
+  showAudioPlayback(blob);
+  setStatus('File loaded. Click Analyze to process.');
+  updateAnalyzeBtn();
+});
+
+// Analyze button
+analyzeBtn.addEventListener('click', runAnalysis);
+
+// Track reference text origin
+document.getElementById('transcript').addEventListener('input', () => {
+  appState.referenceIsFromOCR = false;
+});
 
 // --- OCR wiring ---
 const imageInput = document.getElementById('imageInput');
@@ -108,6 +168,7 @@ if (imageInput) {
 if (useOcrBtn) {
   useOcrBtn.addEventListener('click', () => {
     document.getElementById('transcript').value = ocrText.value;
+    appState.referenceIsFromOCR = true;
     ocrStatus.textContent = 'Reference passage updated.';
   });
 }

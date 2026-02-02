@@ -10,6 +10,8 @@ const SHELL = [
   './js/file-handler.js',
   './js/stt-api.js',
   './js/ocr-api.js',
+  './js/passage-trimmer.js',
+  './js/word-equivalences.js',
   './manifest.json'
 ];
 

@@ -58,7 +58,7 @@ export function displayResults(data) {
  * @param {{wcpm: number, correctCount: number, elapsedSeconds: number}|null} wcpm
  * @param {{accuracy: number, correctCount: number, totalRefWords: number, substitutions: number, omissions: number, insertions: number}} accuracy
  */
-export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, diagnostics) {
+export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, diagnostics, transcriptWords) {
   const wordsDiv = document.getElementById('resultWords');
   const plainDiv = document.getElementById('resultPlain');
   const jsonDiv = document.getElementById('resultJson');
@@ -234,8 +234,56 @@ export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, di
     wordsDiv.appendChild(scSection);
   }
 
-  // JSON details
-  jsonDiv.textContent = JSON.stringify({ alignment, wcpm, accuracy }, null, 2);
+  // JSON details — per-word timestamps from raw STT, all inter-word gaps
+
+  // Build STT words array with parsed times
+  const sttWords = (transcriptWords || []).map(w => {
+    const start = parseFloat(w.startTime?.replace('s', '')) || 0;
+    const end = parseFloat(w.endTime?.replace('s', '')) || 0;
+    return {
+      word: w.word,
+      startTime: start,
+      endTime: end,
+      confidence: w.confidence != null ? Math.round(w.confidence * 1000) / 1000 : null
+    };
+  });
+
+  // Compute ALL inter-word gaps (between every consecutive STT word pair)
+  const allGaps = [];
+  for (let g = 1; g < sttWords.length; g++) {
+    const gap = +(sttWords[g].startTime - sttWords[g - 1].endTime).toFixed(3);
+    allGaps.push({
+      afterWord: sttWords[g - 1].word,
+      beforeWord: sttWords[g].word,
+      afterIndex: g - 1,
+      gap,
+      fromTime: +sttWords[g - 1].endTime.toFixed(3),
+      toTime: +sttWords[g].startTime.toFixed(3)
+    });
+  }
+
+  // Enrich alignment with timestamps by walking hyp words through STT in order
+  let sttIdx = 0;
+  const enrichedAlignment = alignment.map(item => {
+    const entry = { ...item };
+    if (item.hyp && sttIdx < sttWords.length) {
+      const sw = sttWords[sttIdx];
+      entry.startTime = sw.startTime;
+      entry.endTime = sw.endTime;
+      entry.confidence = sw.confidence;
+      sttIdx++;
+    }
+    return entry;
+  });
+
+  jsonDiv.textContent = JSON.stringify({
+    alignment: enrichedAlignment,
+    sttWords,
+    allGaps,
+    wcpm,
+    accuracy,
+    diagnostics: diagnostics || null
+  }, null, 2);
 }
 
 /**
