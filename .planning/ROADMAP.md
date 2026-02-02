@@ -93,10 +93,11 @@ Plans:
   1. Teacher can create and select student profiles stored in localStorage
   2. Completed assessments are saved and persist across browser sessions
   3. Assessment history is viewable per student, showing all past assessments with dates and scores
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
-- [ ] 05-01: TBD
+- [ ] 05-01-PLAN.md — Storage module and HTML/CSS scaffolding for student profiles and history
+- [ ] 05-02-PLAN.md — Wire storage into app, auto-save assessments, render history
 
 ### Phase 6: Teacher Dashboard
 **Goal**: Teachers can review assessment results in detail, track student progress over time, and replay audio synced to words
@@ -150,7 +151,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8
 | 2. Alignment & Core Metrics | 2/2 | Complete ✓ | 2026-02-02 |
 | 3. Diagnostics | 2/2 | Complete ✓ | 2026-02-02 |
 | 4. OCR & Async STT | 2/2 | Complete ✓ | 2026-02-02 |
-| 5. Data Persistence | 0/TBD | Not started | - |
+| 5. Data Persistence | 0/2 | Not started | - |
 | 6. Teacher Dashboard | 0/TBD | Not started | - |
 | 7. Teacher Reporting & Benchmarks | 0/TBD | Not started | - |
 | 8. Student Experience | 0/TBD | Not started | - |
