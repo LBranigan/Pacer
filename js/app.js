@@ -150,9 +150,6 @@ async function runAnalysis() {
       audioRef: appState.audioBlob ? assessmentId : null
     });
     refreshStudentUI();
-    if (dashboard.isVisible()) {
-      dashboard.show(appState.selectedStudentId);
-    }
     setStatus('Done (saved).');
   } else {
     setStatus('Done.');
@@ -270,7 +267,7 @@ if (useOcrBtn) {
 refreshStudentUI();
 
 // --- Dashboard wiring ---
-const dashboard = initDashboard(getAssessments, getStudents);
+const dashboard = initDashboard();
 
 document.getElementById('viewDashboardBtn').addEventListener('click', () => {
   if (appState.selectedStudentId) {

@@ -1,8 +1,9 @@
-const CACHE_NAME = 'orf-v3';
+const CACHE_NAME = 'orf-v4';
 
 const SHELL = [
   './',
   './index.html',
+  './dashboard.html',
   './style.css',
   './js/app.js',
   './js/ui.js',
@@ -13,9 +14,13 @@ const SHELL = [
   './js/passage-trimmer.js',
   './js/word-equivalences.js',
   './js/storage.js',
+  './js/audio-store.js',
   './js/alignment.js',
   './js/metrics.js',
   './js/diagnostics.js',
+  './js/celeration-chart.js',
+  './js/audio-playback.js',
+  './js/dashboard.js',
   './manifest.json'
 ];
 
