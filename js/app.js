@@ -8,6 +8,7 @@ import { runDiagnostics } from './diagnostics.js';
 import { extractTextFromImage } from './ocr-api.js';
 import { trimPassageToAttempted } from './passage-trimmer.js';
 import { getStudents, addStudent, deleteStudent, saveAssessment, getAssessments } from './storage.js';
+import { saveAudioBlob } from './audio-store.js';
 
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('./sw.js')
@@ -124,13 +125,28 @@ async function runAnalysis() {
   displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, diagnostics, transcriptWords);
 
   if (appState.selectedStudentId) {
+    const errorBreakdown = {
+      substitutions: accuracy.substitutions,
+      omissions: accuracy.omissions,
+      insertions: accuracy.insertions,
+      details: alignment.filter(w => w.type !== 'correct')
+    };
+    const assessmentId = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+    if (appState.audioBlob) {
+      await saveAudioBlob(assessmentId, appState.audioBlob);
+    }
     saveAssessment(appState.selectedStudentId, {
+      _id: assessmentId,
       wcpm: wcpm ? wcpm.wcpm : null,
       accuracy: accuracy.accuracy,
       totalWords: accuracy.totalRefWords,
       errors: accuracy.substitutions + accuracy.omissions,
       duration: appState.elapsedSeconds,
-      passagePreview: referenceText.slice(0, 60)
+      passagePreview: referenceText.slice(0, 60),
+      errorBreakdown,
+      alignment,
+      sttWords: transcriptWords,
+      audioRef: appState.audioBlob ? assessmentId : null
     });
     refreshStudentUI();
     setStatus('Done (saved).');
@@ -192,10 +208,10 @@ document.getElementById('addStudentBtn').addEventListener('click', () => {
   }
 });
 
-document.getElementById('deleteStudentBtn').addEventListener('click', () => {
+document.getElementById('deleteStudentBtn').addEventListener('click', async () => {
   if (appState.selectedStudentId) {
     if (confirm('Delete this student and all their assessments?')) {
-      deleteStudent(appState.selectedStudentId);
+      await deleteStudent(appState.selectedStudentId);
       appState.selectedStudentId = null;
       refreshStudentUI();
     }
