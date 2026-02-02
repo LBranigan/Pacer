@@ -10,18 +10,18 @@ See: .planning/PROJECT.md (updated 2026-02-02)
 ## Current Position
 
 Phase: 3 of 8 (Diagnostics)
-Plan: Not yet planned
-Status: Ready for planning
-Last activity: 2026-02-02 -- Completed Phase 2
+Plan: 1 of 2 complete
+Status: In progress
+Last activity: 2026-02-02 -- Completed 03-01-PLAN.md
 
-Progress: [███░░░░░░░] 25%
+Progress: [████░░░░░░] 31%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 4
+- Total plans completed: 5
 - Average duration: 2min
-- Total execution time: 0.14 hours
+- Total execution time: 0.17 hours
 
 **By Phase:**
 
@@ -29,9 +29,10 @@ Progress: [███░░░░░░░] 25%
 |-------|-------|-------|----------|
 | 01-foundation | 2/2 | 4min | 2min |
 | 02-alignment-core-metrics | 2/2 | 6min | 3min |
+| 03-diagnostics | 1/2 | 2min | 2min |
 
 **Recent Trend:**
-- Last 5 plans: 01-01 (3min), 01-02 (1min), 02-01 (1min), 02-02 (5min)
+- Last 5 plans: 01-02 (1min), 02-01 (1min), 02-02 (5min), 03-01 (2min)
 - Trend: Stable
 
 *Updated after each plan completion*
@@ -53,6 +54,9 @@ Recent decisions affecting current work:
 - Removed diff_cleanupSemantic -- it incorrectly merged correct words into substitution blocks
 - sendToSTT returns data; callback pattern avoids circular imports
 - Confidence shown as wavy underlines (raw mode) and tooltips (alignment mode)
+- 3s base pause threshold with punctuation allowance (+1.5s comma, +2s period)
+- First word onset delay threshold at 3s to avoid recording lead-in false positives
+- 3+ char shared prefix minimum for morphological error detection
 
 ### Pending Todos
 
@@ -67,5 +71,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-02-02
-Stopped at: Completed Phase 2
+Stopped at: Completed 03-01-PLAN.md
 Resume file: None
