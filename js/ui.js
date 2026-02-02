@@ -304,3 +304,61 @@ export function showAudioPlayback(blob) {
   audio.src = URL.createObjectURL(blob);
   container.appendChild(audio);
 }
+
+/**
+ * Render student selector dropdown.
+ * @param {Array<{id: string, name: string}>} students
+ * @param {string|null} selectedId
+ */
+export function renderStudentSelector(students, selectedId) {
+  const select = document.getElementById('studentSelect');
+  // Clear all options except first default option
+  while (select.options.length > 1) {
+    select.remove(1);
+  }
+  // Add student options
+  for (const student of students) {
+    const option = document.createElement('option');
+    option.value = student.id;
+    option.textContent = student.name;
+    if (student.id === selectedId) {
+      option.selected = true;
+    }
+    select.appendChild(option);
+  }
+}
+
+/**
+ * Render assessment history for selected student.
+ * @param {Array<{date: string, wcpm: number|null, accuracy: number|null, passagePreview: string|null}>|null} assessments
+ */
+export function renderHistory(assessments) {
+  const historySection = document.getElementById('historySection');
+  const historyList = document.getElementById('historyList');
+
+  if (!assessments) {
+    // No student selected
+    historySection.style.display = 'none';
+    historyList.textContent = 'No student selected.';
+    return;
+  }
+
+  historySection.style.display = 'block';
+
+  if (assessments.length === 0) {
+    historyList.textContent = 'No assessments yet.';
+    return;
+  }
+
+  // Build table
+  let tableHTML = '<table><thead><tr><th>Date</th><th>Passage</th><th>WCPM</th><th>Accuracy</th></tr></thead><tbody>';
+  for (const a of assessments) {
+    const date = new Date(a.date).toLocaleDateString();
+    const passage = a.passagePreview ? a.passagePreview.slice(0, 30) + '...' : 'N/A';
+    const wcpm = a.wcpm != null ? a.wcpm : 'N/A';
+    const accuracy = a.accuracy != null ? a.accuracy + '%' : 'N/A';
+    tableHTML += `<tr><td>${date}</td><td>${passage}</td><td>${wcpm}</td><td>${accuracy}</td></tr>`;
+  }
+  tableHTML += '</tbody></table>';
+  historyList.innerHTML = tableHTML;
+}
