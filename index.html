@@ -20,7 +20,7 @@
 </div>
 
 <div class="section">
-  <label for="transcript">Reference Passage (optional &mdash; for future comparison)</label>
+  <label for="transcript">Reference Passage (optional &mdash; for alignment comparison)</label>
   <textarea id="transcript" placeholder="Paste the passage the student will read aloud..."></textarea>
 </div>
 
@@ -38,14 +38,17 @@
 </div>
 
 <div class="section">
-  <label>Raw Verbatim Transcript</label>
+  <label>Alignment Results</label>
   <div class="legend">
-    Confidence: <span class="high">High (&ge;0.9)</span> <span class="mid">Medium (0.7-0.9)</span> <span class="low">Low (&lt;0.7)</span>
+    <span class="word-correct">Correct</span>
+    <span class="word-substitution">Substitution</span>
+    <span class="word-omission">Omission</span>
+    <span class="word-insertion">Insertion</span>
   </div>
   <div class="result-box" id="resultWords">Awaiting audio...</div>
-  <label style="margin-top:1rem;">Plain Text</label>
+  <label style="margin-top:1rem;">Metrics</label>
   <div class="result-box" id="resultPlain"></div>
-  <label style="margin-top:1rem;">Word Details (JSON)</label>
+  <label style="margin-top:1rem;">Details (JSON)</label>
   <div class="result-box" id="resultJson"></div>
 </div>
 
