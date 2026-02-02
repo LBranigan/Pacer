@@ -72,7 +72,7 @@ export function updateStudentGrade(studentId, grade) {
   const data = load();
   const student = data.students.find(s => s.id === studentId);
   if (!student) return null;
-  student.grade = (grade >= 1 && grade <= 6) ? grade : null;
+  student.grade = (grade >= 1 && grade <= 12) ? grade : null;
   save(data);
   return student;
 }
