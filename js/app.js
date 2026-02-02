@@ -1,6 +1,6 @@
 import { initRecorder, setOnComplete as recorderSetOnComplete } from './recorder.js';
 import { initFileHandler, setOnComplete as fileHandlerSetOnComplete } from './file-handler.js';
-import { sendToSTT } from './stt-api.js';
+import { sendToSTT, sendToAsyncSTT, sendChunkedSTT } from './stt-api.js';
 import { alignWords } from './alignment.js';
 import { computeWCPM, computeAccuracy } from './metrics.js';
 import { setStatus, displayResults, displayAlignmentResults, showAudioPlayback } from './ui.js';
@@ -35,9 +35,28 @@ async function runAnalysis() {
   }
 
   analyzeBtn.disabled = true;
-  setStatus('Sending audio to STT...');
 
-  const data = await sendToSTT(appState.audioBlob, appState.audioEncoding);
+  let data;
+  if (appState.elapsedSeconds != null && appState.elapsedSeconds > 55) {
+    setStatus('Processing long recording via async STT...');
+    try {
+      data = await sendToAsyncSTT(appState.audioBlob, appState.audioEncoding, (pct) => {
+        setStatus(`Processing long recording... ${pct}%`);
+      });
+    } catch (err) {
+      if (err.code === 'INLINE_REJECTED') {
+        setStatus('Async STT unavailable for inline audio. Using chunked processing...');
+        data = await sendChunkedSTT(appState.audioBlob, appState.audioEncoding);
+      } else {
+        setStatus('Async STT error: ' + err.message);
+        analyzeBtn.disabled = false;
+        return;
+      }
+    }
+  } else {
+    setStatus('Sending audio to STT...');
+    data = await sendToSTT(appState.audioBlob, appState.audioEncoding);
+  }
 
   if (!data || !data.results) {
     displayResults(data || {});
