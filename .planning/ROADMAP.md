@@ -24,19 +24,20 @@ Decimal phases appear between their surrounding integers in numeric order.
 ## Phase Details
 
 ### Phase 1: Foundation
-**Goal**: Existing monolithic HTML app is modularized into ES modules with manual text input working as a reference passage source
+**Goal**: Existing monolithic HTML app is modularized into ES modules with manual text input working as a reference passage source. App is a PWA installable on classroom devices.
 **Depends on**: Nothing (first phase)
-**Requirements**: INFR-01, INPT-01, INPT-03, INPT-04
+**Requirements**: INFR-01, INFR-05, INPT-01, INPT-03, INPT-04
 **Success Criteria** (what must be TRUE):
   1. Codebase is split into ES modules (alignment, scoring, ui, api, data-store) importable from a single HTML entry point
+  5. App is a PWA with manifest.json and service worker, installable on classroom devices
   2. Teacher can type or paste a reference passage into a text input area
   3. Student audio can be captured via browser microphone and transcribed via Google Cloud STT (existing functionality preserved)
   4. Audio file upload with format detection works (existing functionality preserved)
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
-- [ ] 01-01: TBD
-- [ ] 01-02: TBD
+- [ ] 01-01-PLAN.md -- Modularize monolith into ES modules with extracted CSS
+- [ ] 01-02-PLAN.md -- Add PWA support (manifest, service worker, icons)
 
 ### Phase 2: Alignment & Core Metrics
 **Goal**: App aligns STT transcript against reference text and computes core fluency metrics (WCPM, accuracy, word classification)
@@ -144,7 +145,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8
 
 | Phase | Plans Complete | Status | Completed |
 |-------|---------------|--------|-----------|
-| 1. Foundation | 0/TBD | Not started | - |
+| 1. Foundation | 0/2 | Planned | - |
 | 2. Alignment & Core Metrics | 0/TBD | Not started | - |
 | 3. Diagnostics | 0/TBD | Not started | - |
 | 4. OCR & Async STT | 0/TBD | Not started | - |
