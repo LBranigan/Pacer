@@ -5,23 +5,23 @@
 See: .planning/PROJECT.md (updated 2026-02-02)
 
 **Core value:** Accurate, word-level fluency error detection powered by Google Cloud STT -- giving teachers actionable data on exactly where and how a struggling reader breaks down.
-**Current focus:** Phase 6: Teacher Dashboard in progress
+**Current focus:** Phase 7: Teacher Reporting & Benchmarks in progress
 
 ## Current Position
 
-Phase: 6 of 8 (Teacher Dashboard)
-Plan: 4 of 4 complete
-Status: Phase complete
-Last activity: 2026-02-02 -- Completed 06-04-PLAN.md
+Phase: 7 of 8 (Teacher Reporting & Benchmarks)
+Plan: 1 of 3 complete
+Status: In progress
+Last activity: 2026-02-02 -- Completed 07-01-PLAN.md
 
-Progress: [██████████████████████] 85%
+Progress: [████████████████████████] 87%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 12
+- Total plans completed: 13
 - Average duration: 2min
-- Total execution time: 0.37 hours
+- Total execution time: 0.40 hours
 
 **By Phase:**
 
@@ -32,9 +32,10 @@ Progress: [██████████████████████] 8
 | 03-diagnostics | 2/2 | 5min | 2.5min |
 | 05-data-persistence | 2/2 | 3min | 1.5min |
 | 06-teacher-dashboard | 4/4 | 10min | 2.5min |
+| 07-teacher-reporting-benchmarks | 1/3 | 2min | 2min |
 
 **Recent Trend:**
-- Last 5 plans: 05-02 (2min), 06-01 (2min), 06-02 (2min), 06-03 (3min), 06-04 (3min)
+- Last 5 plans: 06-02 (2min), 06-03 (3min), 06-04 (3min), 07-01 (2min)
 - Trend: Stable
 
 *Updated after each plan completion*
@@ -65,6 +66,8 @@ Recent decisions affecting current work:
 - Cascade delete for student removal - confirms before removing student and all assessments
 - Assessment ID generated in app.js, shared as key between localStorage and IndexedDB
 - Audio blobs stored as raw Blob objects in IndexedDB (no encoding)
+- Grade 1 fall returns 'unknown' from benchmarks (HT 2017 has no grade 1 fall norms)
+- Grade stored as integer or null in student profile
 
 ### Pending Todos
 
@@ -75,9 +78,10 @@ None yet.
 - Research flags child speech WER (0.30-0.78) as fundamental risk. Phase 1 should validate STT accuracy with target population audio early.
 - Dialect bias in ASR (WER 0.35 for Black speakers vs 0.19 for white) must be designed into error taxonomy from Phase 2, not bolted on later.
 - STT timestamp precision needs empirical validation before building timing-dependent features (Phase 3 diagnostics).
+- HT 2017 norms values are from training data and need manual verification against published source before shipping.
 
 ## Session Continuity
 
 Last session: 2026-02-02
-Stopped at: Completed 06-04-PLAN.md (checkpoint: human-verify pending)
+Stopped at: Completed 07-01-PLAN.md
 Resume file: None
