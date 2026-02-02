@@ -99,14 +99,15 @@ Plans:
 - [ ] 05-01-PLAN.md — Storage module and HTML/CSS scaffolding for student profiles and history
 - [ ] 05-02-PLAN.md — Wire storage into app, auto-save assessments, render history
 
-### Phase 6: Teacher Dashboard
-**Goal**: Teachers can review assessment results in detail, track student progress over time, and replay audio synced to words
+### Phase 6: Teacher Dashboard & Standard Celeration Chart
+**Goal**: Teachers can view assessment results, track student progress on an embedded Standard Celeration Chart (semi-log canvas), and replay audio synced to words
 **Depends on**: Phase 2, Phase 5
 **Requirements**: TCHR-01, TCHR-02, TCHR-05
 **Success Criteria** (what must be TRUE):
   1. Teacher dashboard displays assessment results with full error breakdown (substitutions, omissions, insertions, counts, and locations)
-  2. Teacher can view progress trends over time per student (WCPM and accuracy plotted across assessments)
-  3. Teacher can play back student audio with word-by-word highlighting synced to STT timestamps
+  2. Embedded Standard Celeration Chart renders student WCPM and errors/min over time on semi-logarithmic canvas (ported from standalone celeration chart project)
+  3. Chart auto-populates from localStorage assessments — no JSON import needed
+  4. Teacher can play back student audio with word-by-word highlighting synced to STT timestamps
 **Plans**: TBD
 
 Plans:
