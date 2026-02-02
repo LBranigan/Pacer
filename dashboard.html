@@ -102,10 +102,10 @@ import { createChart } from './js/celeration-chart.js';
 import { createSyncedPlayback } from './js/audio-playback.js';
 import { getStudents, getAssessments } from './js/storage.js';
 
-const params = new URLSearchParams(window.location.search);
-const studentId = params.get('student');
+// Read student ID from localStorage (set by main app before opening this window)
+const studentId = localStorage.getItem('orf_dashboard_student');
 if (!studentId) {
-  document.body.innerHTML = '<p>No student specified.</p>';
+  document.body.innerHTML = '<p>No student specified. Please click Dashboard from the main app.</p>';
   throw new Error('Missing student param');
 }
 

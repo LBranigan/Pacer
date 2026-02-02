@@ -9,13 +9,12 @@ export function initDashboard() {
 
   function show(studentId) {
     if (!studentId) return;
-    const url = 'dashboard.html?student=' + encodeURIComponent(studentId);
+    // Store studentId where the popup can read it reliably
+    localStorage.setItem('orf_dashboard_student', studentId);
     if (dashboardWindow && !dashboardWindow.closed) {
-      dashboardWindow.location.href = url;
-      dashboardWindow.focus();
-    } else {
-      dashboardWindow = window.open(url, 'dashboard', 'width=1100,height=800');
+      dashboardWindow.close();
     }
+    dashboardWindow = window.open('dashboard.html', '_blank', 'width=1100,height=800');
   }
 
   function hide() {

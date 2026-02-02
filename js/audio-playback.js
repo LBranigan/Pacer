@@ -14,7 +14,12 @@ import { getAudioBlob } from './audio-store.js';
 function parseTime(t) {
   if (typeof t === 'number') return t;
   if (!t) return 0;
-  return parseFloat(String(t).replace('s', ''));
+  // Handle protobuf Duration object {seconds: "1", nanos: 200000000}
+  if (typeof t === 'object' && t.seconds !== undefined) {
+    return Number(t.seconds || 0) + (Number(t.nanos || 0) / 1e9);
+  }
+  // Handle string like "1.200s"
+  return parseFloat(String(t).replace('s', '')) || 0;
 }
 
 /**
