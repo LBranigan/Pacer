@@ -6,7 +6,8 @@
 
 import { SpriteAnimator } from './sprite-animator.js';
 import { getAudioBlob } from './audio-store.js';
-import { getAssessment } from './storage.js';
+import { getAssessment, getAssessments, saveGamification } from './storage.js';
+import { computeScore } from './gamification.js';
 
 const DISFLUENCIES = new Set(['um', 'uh', 'uh-huh', 'mm', 'hmm', 'er', 'ah']);
 
@@ -175,6 +176,100 @@ function initStudentPlayback() {
   }
 
   loadAudio();
+
+  // Gamification feedback on playback complete
+  document.addEventListener('playback-complete', () => {
+    const pastAssessments = getAssessments(studentId).filter(a => a.id !== assessmentId && a.gamification);
+    const pastScores = pastAssessments.map(a => a.gamification.totalPoints);
+    const score = computeScore(alignment, pastScores);
+    saveGamification(assessmentId, score);
+    showFeedback(score);
+  });
+
+  function showFeedback(score) {
+    const feedbackArea = document.getElementById('feedback-area');
+    const progressVal = score.progress !== null ? Math.round(score.progress * 50) : 0;
+    const progressPct = score.progress !== null ? Math.min(Math.round(score.progress * 100), 200) : 0;
+
+    // SVG progress ring
+    const radius = 40;
+    const circ = 2 * Math.PI * radius;
+    const offset = circ - (progressPct / 200) * circ;
+
+    feedbackArea.innerHTML = `
+      <div class="feedback-panel">
+        <h2 class="feedback-title">Great Job!</h2>
+        <div class="feedback-stats">
+          <div class="score-display">
+            <span class="score-label">Score</span>
+            <span class="score-value" id="scoreCounter">0</span>
+          </div>
+          <div class="streak-badge">
+            <span class="streak-icon">&#x1F525;</span>
+            <span class="streak-value">${score.bestStreak}</span>
+            <span class="streak-label">Best Streak</span>
+          </div>
+          <div class="level-display">
+            <span class="level-label">Level</span>
+            <span class="level-value">${score.level}</span>
+          </div>
+        </div>
+        <div class="progress-ring-wrapper">
+          <svg class="progress-ring" width="100" height="100" viewBox="0 0 100 100">
+            <circle class="progress-ring-bg" cx="50" cy="50" r="${radius}" />
+            <circle class="progress-ring-fill" cx="50" cy="50" r="${radius}"
+              stroke-dasharray="${circ}" stroke-dashoffset="${circ}"
+              data-target-offset="${offset}" />
+          </svg>
+          <span class="progress-ring-text">${score.progress !== null ? (progressPct >= 100 ? 'Improving!' : 'Keep going!') : 'First try!'}</span>
+        </div>
+        <div class="feedback-detail">
+          ${score.wordsCorrect} / ${score.wordsTotal} words correct
+          ${score.bonus > 0 ? ` &middot; +${score.bonus} streak bonus` : ''}
+        </div>
+        <div class="feedback-actions">
+          <button class="feedback-btn play-again-btn" id="playAgainBtn">Play Again</button>
+          <a href="index.html" class="feedback-btn back-home-btn">Back</a>
+        </div>
+      </div>
+    `;
+
+    // Animate score count-up
+    const counter = document.getElementById('scoreCounter');
+    animateCount(counter, 0, score.totalPoints, 1200);
+
+    // Animate progress ring
+    const fillCircle = feedbackArea.querySelector('.progress-ring-fill');
+    requestAnimationFrame(() => {
+      fillCircle.style.strokeDashoffset = offset;
+    });
+
+    // Play Again button
+    document.getElementById('playAgainBtn').addEventListener('click', () => {
+      feedbackArea.innerHTML = '';
+      if (audioEl) {
+        audioEl.currentTime = 0;
+        // Reset word styles
+        for (const w of wordSequence) {
+          w.el.classList.remove('active', 'correct-done', 'error-done');
+        }
+        currentWordIdx = -1;
+        progressEl.textContent = '0 / ' + wordSequence.length;
+        playBtn.click();
+      }
+    });
+  }
+
+  function animateCount(el, from, to, duration) {
+    const start = performance.now();
+    function step(now) {
+      const elapsed = now - start;
+      const t = Math.min(elapsed / duration, 1);
+      el.textContent = Math.round(from + (to - from) * t);
+      if (t < 1) requestAnimationFrame(step);
+    }
+    requestAnimationFrame(step);
+  }
 
   // Animation loop
   function animationLoop() {

@@ -132,6 +132,142 @@ body {
   margin: 1rem auto;
 }
 
+/* Feedback panel */
+.feedback-panel {
+  background: #fff;
+  border-radius: 16px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+  padding: 2rem;
+  text-align: center;
+  animation: fadeInUp 0.5s ease-out;
+}
+
+@keyframes fadeInUp {
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.feedback-title {
+  font-size: 1.6rem;
+  color: #4CAF50;
+  margin-bottom: 1.2rem;
+}
+
+.feedback-stats {
+  display: flex;
+  justify-content: center;
+  gap: 2rem;
+  margin-bottom: 1.5rem;
+  flex-wrap: wrap;
+}
+
+.score-display, .streak-badge, .level-display {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.score-label, .streak-label, .level-label {
+  font-size: 0.8rem;
+  color: #888;
+  text-transform: uppercase;
+  font-weight: 600;
+}
+
+.score-value {
+  font-size: 2.4rem;
+  font-weight: 700;
+  color: #1565c0;
+}
+
+.streak-icon {
+  font-size: 1.6rem;
+}
+
+.streak-value {
+  font-size: 2rem;
+  font-weight: 700;
+  color: #e65100;
+}
+
+.level-value {
+  font-size: 2rem;
+  font-weight: 700;
+  color: #7b1fa2;
+}
+
+.progress-ring-wrapper {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.progress-ring-bg {
+  fill: none;
+  stroke: #e0e0e0;
+  stroke-width: 6;
+}
+
+.progress-ring-fill {
+  fill: none;
+  stroke: #4CAF50;
+  stroke-width: 6;
+  stroke-linecap: round;
+  transform: rotate(-90deg);
+  transform-origin: 50% 50%;
+  transition: stroke-dashoffset 1.5s ease-out;
+}
+
+.progress-ring-text {
+  font-size: 0.9rem;
+  color: #555;
+  font-weight: 600;
+}
+
+.feedback-detail {
+  font-size: 0.95rem;
+  color: #666;
+  margin-bottom: 1.2rem;
+}
+
+.feedback-actions {
+  display: flex;
+  justify-content: center;
+  gap: 1rem;
+}
+
+.feedback-btn {
+  padding: 0.6rem 1.4rem;
+  border-radius: 8px;
+  border: none;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  text-decoration: none;
+  display: inline-block;
+}
+
+.play-again-btn {
+  background: #4CAF50;
+  color: #fff;
+}
+
+.play-again-btn:hover {
+  background: #43A047;
+}
+
+.back-home-btn {
+  background: #e0e0e0;
+  color: #333;
+}
+
+.back-home-btn:hover {
+  background: #bdbdbd;
+}
+
 /* Loading / error messages */
 .playback-message {
   text-align: center;

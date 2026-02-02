@@ -6,7 +6,7 @@ import { deleteAudioBlobsForStudent } from './audio-store.js';
 const STORAGE_KEY = 'orf_data';
 
 function defaultData() {
-  return { version: 3, students: [], assessments: [] };
+  return { version: 4, students: [], assessments: [] };
 }
 
 function migrate(data) {
@@ -31,6 +31,14 @@ function migrate(data) {
       s.grade = s.grade || null;
     }
     data.version = 3;
+  }
+
+  // v3 -> v4: add gamification field to assessments
+  if (data.version === 3) {
+    for (const a of data.assessments) {
+      if (a.gamification === undefined) a.gamification = null;
+    }
+    data.version = 4;
   }
 
   return data;
@@ -104,7 +112,8 @@ export function saveAssessment(studentId, results) {
     errorBreakdown: results.errorBreakdown ?? null,
     alignment: results.alignment ?? null,
     sttWords: results.sttWords ?? null,
-    audioRef: results.audioRef ?? null
+    audioRef: results.audioRef ?? null,
+    gamification: results.gamification ?? null
   };
   data.assessments.push(assessment);
   save(data);
@@ -117,4 +126,13 @@ export function getAssessments(studentId) {
 
 export function getAssessment(assessmentId) {
   return load().assessments.find(a => a.id === assessmentId) || null;
+}
+
+export function saveGamification(assessmentId, scoreData) {
+  const data = load();
+  const assessment = data.assessments.find(a => a.id === assessmentId);
+  if (!assessment) return null;
+  assessment.gamification = scoreData;
+  save(data);
+  return assessment;
 }
