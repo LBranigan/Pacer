@@ -1,5 +1,8 @@
-import { sendToSTT } from './stt-api.js';
 import { setStatus } from './ui.js';
+
+let onComplete = null;
+
+export function setOnComplete(fn) { onComplete = fn; }
 
 function handleFile(e) {
   const file = e.target.files[0];
@@ -8,7 +11,7 @@ function handleFile(e) {
   const encodingMap = { wav: 'LINEAR16', flac: 'FLAC', ogg: 'OGG_OPUS', webm: 'WEBM_OPUS', mp3: 'MP3' };
   const encoding = encodingMap[ext] || 'ENCODING_UNSPECIFIED';
   setStatus('Uploading ' + file.name + '...');
-  sendToSTT(file, encoding);
+  if (onComplete) onComplete(file, encoding, null);
 }
 
 export function initFileHandler() {

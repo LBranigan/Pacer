@@ -1,7 +1,9 @@
-import { sendToSTT } from './stt-api.js';
 import { setStatus } from './ui.js';
 
 let mediaRecorder, audioChunks = [], recording = false, timerInterval, seconds = 0;
+let onComplete = null;
+
+export function setOnComplete(fn) { onComplete = fn; }
 
 function toggleRecord() {
   recording ? stopRecording() : startRecording();
@@ -16,7 +18,7 @@ async function startRecording() {
     mediaRecorder.onstop = () => {
       stream.getTracks().forEach(t => t.stop());
       const blob = new Blob(audioChunks, { type: 'audio/webm' });
-      sendToSTT(blob, 'WEBM_OPUS');
+      if (onComplete) onComplete(blob, 'WEBM_OPUS', seconds);
     };
     mediaRecorder.start();
     recording = true;

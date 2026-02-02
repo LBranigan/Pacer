@@ -1,4 +1,4 @@
-import { setStatus, displayResults } from './ui.js';
+import { setStatus } from './ui.js';
 
 function blobToBase64(blob) {
   return new Promise((resolve) => {
@@ -10,7 +10,7 @@ function blobToBase64(blob) {
 
 export async function sendToSTT(blob, encoding) {
   const apiKey = document.getElementById('apiKey').value.trim();
-  if (!apiKey) { setStatus('Please enter your API key.'); return; }
+  if (!apiKey) { setStatus('Please enter your API key.'); return null; }
 
   setStatus('Sending to Google Cloud STT...');
   const base64 = await blobToBase64(blob);
@@ -47,10 +47,10 @@ export async function sendToSTT(blob, encoding) {
       { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }
     );
     const data = await resp.json();
-    if (data.error) { setStatus('API Error: ' + data.error.message); return; }
-    displayResults(data);
-    setStatus('Done.');
+    if (data.error) { setStatus('API Error: ' + data.error.message); return null; }
+    return data;
   } catch (e) {
     setStatus('Request failed: ' + e.message);
+    return null;
   }
 }
