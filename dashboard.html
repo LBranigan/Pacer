@@ -166,6 +166,10 @@ gradeSelect.addEventListener('change', () => {
 // --- Generate Report button ---
 document.getElementById('generateReportBtn').addEventListener('click', () => {
   localStorage.setItem('orf_report_student', studentId);
+  const cvs = document.querySelector('canvas');
+  if (cvs) {
+    try { localStorage.setItem('orf_report_chart', cvs.toDataURL('image/png')); } catch (e) { /* ignore */ }
+  }
   window.open('report.html', '_blank');
 });
 
