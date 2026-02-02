@@ -4,6 +4,7 @@ import { sendToSTT } from './stt-api.js';
 import { alignWords } from './alignment.js';
 import { computeWCPM, computeAccuracy } from './metrics.js';
 import { setStatus, displayResults, displayAlignmentResults, showAudioPlayback } from './ui.js';
+import { runDiagnostics } from './diagnostics.js';
 
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('./sw.js')
@@ -53,7 +54,8 @@ async function processAssessment(blob, encoding, elapsedSeconds) {
     : null;
   const accuracy = computeAccuracy(alignment);
 
-  displayAlignmentResults(alignment, wcpm, accuracy, sttLookup);
+  const diagnostics = runDiagnostics(transcriptWords, alignment, referenceText, sttLookup);
+  displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, diagnostics);
   setStatus('Done.');
 }
 

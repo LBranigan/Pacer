@@ -58,7 +58,7 @@ export function displayResults(data) {
  * @param {{wcpm: number, correctCount: number, elapsedSeconds: number}|null} wcpm
  * @param {{accuracy: number, correctCount: number, totalRefWords: number, substitutions: number, omissions: number, insertions: number}} accuracy
  */
-export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup) {
+export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, diagnostics) {
   const wordsDiv = document.getElementById('resultWords');
   const plainDiv = document.getElementById('resultPlain');
   const jsonDiv = document.getElementById('resultJson');
@@ -86,10 +86,40 @@ export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup) {
     accuracy.insertions + ' insertions</span>';
   metricsBar.appendChild(errBox);
 
+  if (diagnostics && diagnostics.prosodyProxy) {
+    const prosBox = document.createElement('div');
+    prosBox.className = 'metric-box';
+    prosBox.innerHTML = '<span class="metric-value">' + diagnostics.prosodyProxy.ratio + '</span><span class="metric-label">Prosody</span>';
+    metricsBar.appendChild(prosBox);
+  }
+
   plainDiv.appendChild(metricsBar);
+
+  // Build diagnostic lookup structures
+  const onsetDelayMap = new Map(); // hypIndex -> {gap, severity}
+  const longPauseMap = new Map(); // afterHypIndex -> gap
+  const morphErrorSet = new Set(); // "ref|hyp" lowercase pairs
+  if (diagnostics) {
+    if (diagnostics.onsetDelays) {
+      for (const d of diagnostics.onsetDelays) {
+        onsetDelayMap.set(d.wordIndex, d);
+      }
+    }
+    if (diagnostics.longPauses) {
+      for (const p of diagnostics.longPauses) {
+        longPauseMap.set(p.afterWordIndex, p);
+      }
+    }
+    if (diagnostics.morphologicalErrors) {
+      for (const m of diagnostics.morphologicalErrors) {
+        morphErrorSet.add((m.ref || '').toLowerCase() + '|' + (m.hyp || '').toLowerCase());
+      }
+    }
+  }
 
   // Render reference words color-coded
   const insertions = [];
+  let hypIndex = 0;
   for (const item of alignment) {
     if (item.type === 'insertion') {
       insertions.push(item);
@@ -115,13 +145,44 @@ export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup) {
 
     if (item.type === 'substitution') {
       span.title = 'Expected: ' + item.ref + ', Said: ' + item.hyp + sttInfo;
+      // Morphological error overlay
+      const morphKey = (item.ref || '').toLowerCase() + '|' + (item.hyp || '').toLowerCase();
+      if (morphErrorSet.has(morphKey)) {
+        span.classList.add('word-morphological');
+        span.title += '\n(Morphological error)';
+      }
     } else if (item.type === 'omission') {
       span.title = 'Omitted (not read)';
     } else {
       span.title = item.ref + sttInfo;
     }
+
+    // Onset delay overlay (for items that have a hyp word)
+    const currentHypIndex = (item.type !== 'omission') ? hypIndex : null;
+    if (currentHypIndex !== null && onsetDelayMap.has(currentHypIndex)) {
+      const delay = onsetDelayMap.get(currentHypIndex);
+      span.classList.add('word-onset-' + delay.severity);
+      span.title += '\nOnset delay: ' + delay.gap + 's (' + delay.severity + ')';
+    }
+
+    // Insert pause indicator before this word if previous hyp word had a long pause
+    if (currentHypIndex !== null && currentHypIndex > 0 && longPauseMap.has(currentHypIndex - 1)) {
+      const pause = longPauseMap.get(currentHypIndex - 1);
+      const pauseSpan = document.createElement('span');
+      pauseSpan.className = 'pause-indicator';
+      pauseSpan.title = 'Pause: ' + pause.gap + 's';
+      pauseSpan.textContent = '[' + pause.gap + 's]';
+      wordsDiv.appendChild(pauseSpan);
+      wordsDiv.appendChild(document.createTextNode(' '));
+    }
+
     wordsDiv.appendChild(span);
     wordsDiv.appendChild(document.createTextNode(' '));
+
+    // Advance hypIndex for non-omission items
+    if (item.type !== 'omission') {
+      hypIndex++;
+    }
   }
 
   // Insertions section
@@ -151,6 +212,26 @@ export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup) {
       insertSection.appendChild(document.createTextNode(' '));
     }
     wordsDiv.appendChild(insertSection);
+  }
+
+  // Self-corrections section
+  if (diagnostics && diagnostics.selfCorrections && diagnostics.selfCorrections.length > 0) {
+    const scSection = document.createElement('div');
+    scSection.style.marginTop = '1rem';
+    const scLabel = document.createElement('div');
+    scLabel.style.fontWeight = '600';
+    scLabel.style.marginBottom = '0.25rem';
+    scLabel.textContent = 'Self-corrections (not counted as errors):';
+    scSection.appendChild(scLabel);
+    for (const sc of diagnostics.selfCorrections) {
+      const span = document.createElement('span');
+      span.className = 'word word-self-correction';
+      span.textContent = sc.words + (sc.count > 1 ? ' x' + sc.count : '');
+      span.title = sc.type + ' at position ' + sc.startIndex;
+      scSection.appendChild(span);
+      scSection.appendChild(document.createTextNode(' '));
+    }
+    wordsDiv.appendChild(scSection);
   }
 
   // JSON details
