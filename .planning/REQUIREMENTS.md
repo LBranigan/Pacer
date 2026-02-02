@@ -96,7 +96,7 @@
 | DIAG-04 | Phase 3 | Complete |
 | DIAG-05 | Phase 3 | Complete |
 | INPT-01 | Phase 1 | Complete |
-| INPT-02 | Phase 4 | Pending |
+| INPT-02 | Phase 4 | Complete |
 | INPT-03 | Phase 1 | Complete |
 | INPT-04 | Phase 1 | Complete |
 | ALGN-01 | Phase 2 | Complete |
@@ -111,7 +111,7 @@
 | STUD-02 | Phase 8 | Pending |
 | STUD-03 | Phase 8 | Pending |
 | INFR-01 | Phase 1 | Complete |
-| INFR-02 | Phase 4 | Pending |
+| INFR-02 | Phase 4 | Complete |
 | INFR-03 | Phase 5 | Pending |
 | INFR-04 | Phase 5 | Pending |
 | INFR-05 | Phase 1 | Complete |

@@ -5,16 +5,16 @@
 See: .planning/PROJECT.md (updated 2026-02-02)
 
 **Core value:** Accurate, word-level fluency error detection powered by Google Cloud STT -- giving teachers actionable data on exactly where and how a struggling reader breaks down.
-**Current focus:** Phase 4: OCR & Async STT
+**Current focus:** Phase 5: Data Persistence
 
 ## Current Position
 
-Phase: 4 of 8 (OCR & Async STT)
+Phase: 5 of 8 (Data Persistence)
 Plan: 0 of TBD complete
 Status: Not started
-Last activity: 2026-02-02 -- Completed Phase 3: Diagnostics
+Last activity: 2026-02-02 -- Completed Phase 4: OCR & Async STT
 
-Progress: [████████░░] 38%
+Progress: [█████████░] 50%
 
 ## Performance Metrics
 
@@ -71,5 +71,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-02-02
-Stopped at: Completed Phase 3: Diagnostics
+Stopped at: Completed Phase 4: OCR & Async STT
 Resume file: None
