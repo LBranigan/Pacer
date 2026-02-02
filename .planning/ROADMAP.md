@@ -12,7 +12,7 @@ ReadingQuest delivers automated oral reading fluency assessment by building up f
 
 Decimal phases appear between their surrounding integers in numeric order.
 
-- [ ] **Phase 1: Foundation** - Modularize monolith, establish input pipeline
+- [x] **Phase 1: Foundation** - Modularize monolith, establish input pipeline ✓
 - [ ] **Phase 2: Alignment & Core Metrics** - Transcript-to-reference alignment, WCPM, accuracy, word classification
 - [ ] **Phase 3: Diagnostics** - Onset delay, pauses, self-corrections, morphological errors, prosody proxy
 - [ ] **Phase 4: OCR & Async STT** - Google Vision OCR for book pages, long passage support
@@ -145,7 +145,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8
 
 | Phase | Plans Complete | Status | Completed |
 |-------|---------------|--------|-----------|
-| 1. Foundation | 0/2 | Planned | - |
+| 1. Foundation | 2/2 | Complete ✓ | 2026-02-02 |
 | 2. Alignment & Core Metrics | 0/TBD | Not started | - |
 | 3. Diagnostics | 0/TBD | Not started | - |
 | 4. OCR & Async STT | 0/TBD | Not started | - |

@@ -5,16 +5,16 @@
 See: .planning/PROJECT.md (updated 2026-02-02)
 
 **Core value:** Accurate, word-level fluency error detection powered by Google Cloud STT -- giving teachers actionable data on exactly where and how a struggling reader breaks down.
-**Current focus:** Phase 2: Error Detection
+**Current focus:** Phase 2: Alignment & Core Metrics
 
 ## Current Position
 
-Phase: 1 of 8 (Foundation)
-Plan: 2 of 2 in current phase
-Status: Phase complete
-Last activity: 2026-02-02 -- Completed 01-02-PLAN.md
+Phase: 2 of 8 (Alignment & Core Metrics)
+Plan: 0 of TBD in current phase
+Status: Ready to plan
+Last activity: 2026-02-02 -- Phase 1 Foundation complete, verified ✓
 
-Progress: [██░░░░░░░░] ~12%
+Progress: [█░░░░░░░░░] 12%
 
 ## Performance Metrics
 

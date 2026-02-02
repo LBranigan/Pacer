@@ -95,10 +95,10 @@
 | DIAG-03 | Phase 3 | Pending |
 | DIAG-04 | Phase 3 | Pending |
 | DIAG-05 | Phase 3 | Pending |
-| INPT-01 | Phase 1 | Pending |
+| INPT-01 | Phase 1 | Complete |
 | INPT-02 | Phase 4 | Pending |
-| INPT-03 | Phase 1 | Pending |
-| INPT-04 | Phase 1 | Pending |
+| INPT-03 | Phase 1 | Complete |
+| INPT-04 | Phase 1 | Complete |
 | ALGN-01 | Phase 2 | Pending |
 | ALGN-02 | Phase 2 | Pending |
 | ALGN-03 | Phase 2 | Pending |
@@ -110,11 +110,11 @@
 | STUD-01 | Phase 8 | Pending |
 | STUD-02 | Phase 8 | Pending |
 | STUD-03 | Phase 8 | Pending |
-| INFR-01 | Phase 1 | Pending |
+| INFR-01 | Phase 1 | Complete |
 | INFR-02 | Phase 4 | Pending |
 | INFR-03 | Phase 5 | Pending |
 | INFR-04 | Phase 5 | Pending |
-| INFR-05 | Phase 1 | Pending |
+| INFR-05 | Phase 1 | Complete |
 
 **Coverage:**
 - v1 requirements: 29 total
