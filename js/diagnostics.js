@@ -111,7 +111,7 @@ export function detectLongPauses(transcriptWords, referenceText, alignment) {
     const refIdx = hypToRef.get(i);
     if (refIdx !== undefined && punctMap.has(refIdx)) {
       punctuationType = punctMap.get(refIdx);
-      threshold += punctuationType === 'comma' ? 1.5 : 2;
+      threshold += punctuationType === 'comma' ? 0.6 : 1.2;
     }
 
     if (gap > threshold) {
