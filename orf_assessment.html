@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Oral Reading Fluency Assessment</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Segoe UI', system-ui, sans-serif; background: #f5f5f5; color: #222; padding: 2rem; max-width: 900px; margin: 0 auto; }
+  h1 { margin-bottom: 0.5rem; }
+  .subtitle { color: #666; margin-bottom: 1.5rem; }
+  label { font-weight: 600; display: block; margin-bottom: 0.25rem; }
+  input[type=text], textarea { width: 100%; padding: 0.5rem; border: 1px solid #ccc; border-radius: 4px; font-size: 0.95rem; font-family: inherit; }
+  textarea { min-height: 100px; resize: vertical; }
+  .section { background: #fff; border-radius: 8px; padding: 1.25rem; margin-bottom: 1rem; box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
+  button { padding: 0.6rem 1.4rem; border: none; border-radius: 4px; font-size: 1rem; cursor: pointer; font-weight: 600; }
+  #recordBtn { background: #d32f2f; color: #fff; }
+  #recordBtn.recording { background: #b71c1c; animation: pulse 1s infinite; }
+  #recordBtn:disabled { background: #999; }
+  @keyframes pulse { 0%,100% { opacity:1; } 50% { opacity:0.6; } }
+  #uploadBtn { background: #1976d2; color: #fff; margin-left: 0.5rem; }
+  #status { margin-top: 0.75rem; font-style: italic; color: #555; }
+  .result-box { background: #fafafa; border: 1px solid #ddd; border-radius: 4px; padding: 1rem; margin-top: 0.75rem; white-space: pre-wrap; font-family: 'Consolas', monospace; font-size: 0.9rem; max-height: 400px; overflow-y: auto; }
+  .word { display: inline-block; margin: 2px; padding: 2px 4px; border-radius: 3px; cursor: default; }
+  .word.high { background: #c8e6c9; }
+  .word.mid { background: #fff9c4; }
+  .word.low { background: #ffcdd2; }
+  .legend { display: flex; gap: 1rem; margin-top: 0.5rem; font-size: 0.85rem; }
+  .legend span { padding: 2px 8px; border-radius: 3px; }
+  .controls { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
+  .timer { font-variant-numeric: tabular-nums; font-size: 1.1rem; font-weight: 600; color: #d32f2f; min-width: 3rem; }
+</style>
+</head>
+<body>
+
+<h1>Oral Reading Fluency Assessment</h1>
+<p class="subtitle">Google Cloud Speech-to-Text &mdash; Raw Verbatim Transcription</p>
+
+<div class="section">
+  <label for="apiKey">Google Cloud API Key</label>
+  <input type="text" id="apiKey" placeholder="Enter your GCP API key (Speech-to-Text API must be enabled)">
+</div>
+
+<div class="section">
+  <label for="transcript">Reference Passage (optional &mdash; for future comparison)</label>
+  <textarea id="transcript" placeholder="Paste the passage the student will read aloud..."></textarea>
+</div>
+
+<div class="section">
+  <label>Audio Input</label>
+  <div class="controls">
+    <button id="recordBtn" onclick="toggleRecord()">Record</button>
+    <span class="timer" id="timer">0:00</span>
+    <label id="uploadBtn" style="background:#1976d2;color:#fff;padding:0.6rem 1.4rem;border-radius:4px;font-weight:600;cursor:pointer;">
+      Upload WAV
+      <input type="file" id="fileInput" accept=".wav,.flac,.ogg,.mp3,.webm" style="display:none" onchange="handleFile(event)">
+    </label>
+  </div>
+  <div id="status"></div>
+</div>
+
+<div class="section">
+  <label>Raw Verbatim Transcript</label>
+  <div class="legend">
+    Confidence: <span class="high">High (&ge;0.9)</span> <span class="mid">Medium (0.7-0.9)</span> <span class="low">Low (&lt;0.7)</span>
+  </div>
+  <div class="result-box" id="resultWords">Awaiting audio...</div>
+  <label style="margin-top:1rem;">Plain Text</label>
+  <div class="result-box" id="resultPlain"></div>
+  <label style="margin-top:1rem;">Word Details (JSON)</label>
+  <div class="result-box" id="resultJson"></div>
+</div>
+
+<script>
+let mediaRecorder, audioChunks = [], recording = false, timerInterval, seconds = 0;
+
+function setStatus(msg) { document.getElementById('status').textContent = msg; }
+
+function toggleRecord() {
+  recording ? stopRecording() : startRecording();
+}
+
+async function startRecording() {
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    audioChunks = [];
+    mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm;codecs=opus' });
+    mediaRecorder.ondataavailable = e => { if (e.data.size > 0) audioChunks.push(e.data); };
+    mediaRecorder.onstop = () => {
+      stream.getTracks().forEach(t => t.stop());
+      const blob = new Blob(audioChunks, { type: 'audio/webm' });
+      sendToSTT(blob, 'WEBM_OPUS');
+    };
+    mediaRecorder.start();
+    recording = true;
+    seconds = 0;
+    document.getElementById('recordBtn').textContent = 'Stop';
+    document.getElementById('recordBtn').classList.add('recording');
+    timerInterval = setInterval(() => {
+      seconds++;
+      const m = Math.floor(seconds / 60), s = seconds % 60;
+      document.getElementById('timer').textContent = m + ':' + String(s).padStart(2, '0');
+    }, 1000);
+    setStatus('Recording...');
+  } catch (e) {
+    setStatus('Microphone access denied: ' + e.message);
+  }
+}
+
+function stopRecording() {
+  mediaRecorder.stop();
+  recording = false;
+  clearInterval(timerInterval);
+  document.getElementById('recordBtn').textContent = 'Record';
+  document.getElementById('recordBtn').classList.remove('recording');
+  setStatus('Processing...');
+}
+
+function handleFile(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  const ext = file.name.split('.').pop().toLowerCase();
+  const encodingMap = { wav: 'LINEAR16', flac: 'FLAC', ogg: 'OGG_OPUS', webm: 'WEBM_OPUS', mp3: 'MP3' };
+  const encoding = encodingMap[ext] || 'ENCODING_UNSPECIFIED';
+  setStatus('Uploading ' + file.name + '...');
+  sendToSTT(file, encoding);
+}
+
+async function sendToSTT(blob, encoding) {
+  const apiKey = document.getElementById('apiKey').value.trim();
+  if (!apiKey) { setStatus('Please enter your API key.'); return; }
+
+  setStatus('Sending to Google Cloud STT...');
+  const base64 = await blobToBase64(blob);
+
+  // Build speech contexts from reference passage to boost recognition of expected words
+  const passageText = document.getElementById('transcript').value.trim();
+  const speechContexts = [];
+  if (passageText) {
+    const words = [...new Set(passageText.toLowerCase().replace(/[^a-z'\s-]/g, '').split(/\s+/).filter(Boolean))];
+    if (words.length > 0) {
+      speechContexts.push({ phrases: words, boost: 5 });
+    }
+  }
+
+  const body = {
+    config: {
+      encoding: encoding,
+      languageCode: 'en-US',
+      model: 'latest_long',
+      useEnhanced: true,
+      enableAutomaticPunctuation: false,
+      enableSpokenPunctuation: false,
+      enableWordTimeOffsets: true,
+      enableWordConfidence: true,
+      maxAlternatives: 2,
+      speechContexts: speechContexts
+    },
+    audio: { content: base64 }
+  };
+
+  try {
+    const resp = await fetch(
+      'https://speech.googleapis.com/v1/speech:recognize?key=' + encodeURIComponent(apiKey),
+      { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }
+    );
+    const data = await resp.json();
+    if (data.error) { setStatus('API Error: ' + data.error.message); return; }
+    displayResults(data);
+    setStatus('Done.');
+  } catch (e) {
+    setStatus('Request failed: ' + e.message);
+  }
+}
+
+function blobToBase64(blob) {
+  return new Promise((resolve) => {
+    const reader = new FileReader();
+    reader.onloadend = () => resolve(reader.result.split(',')[1]);
+    reader.readAsDataURL(blob);
+  });
+}
+
+function displayResults(data) {
+  const wordsDiv = document.getElementById('resultWords');
+  const plainDiv = document.getElementById('resultPlain');
+  const jsonDiv = document.getElementById('resultJson');
+  wordsDiv.innerHTML = ''; plainDiv.textContent = ''; jsonDiv.textContent = '';
+
+  if (!data.results || data.results.length === 0) {
+    wordsDiv.textContent = 'No speech detected.';
+    return;
+  }
+
+  const allWords = [];
+  const plainParts = [];
+
+  data.results.forEach(result => {
+    const alt = result.alternatives[0];
+    if (!alt) return;
+    plainParts.push(alt.transcript);
+    if (alt.words) {
+      alt.words.forEach(w => {
+        allWords.push(w);
+        const span = document.createElement('span');
+        span.className = 'word ' + (w.confidence >= 0.9 ? 'high' : w.confidence >= 0.7 ? 'mid' : 'low');
+        const start = parseFloat(w.startTime?.replace('s','')) || 0;
+        const end = parseFloat(w.endTime?.replace('s','')) || 0;
+        span.title = `Confidence: ${(w.confidence * 100).toFixed(1)}%  |  ${start.toFixed(2)}s – ${end.toFixed(2)}s`;
+        span.textContent = w.word;
+        wordsDiv.appendChild(span);
+        wordsDiv.appendChild(document.createTextNode(' '));
+      });
+    }
+  });
+
+  plainDiv.textContent = plainParts.join(' ');
+
+  // Collect alternatives for display
+  const altTranscripts = [];
+  data.results.forEach(result => {
+    if (result.alternatives && result.alternatives.length > 1) {
+      for (let i = 1; i < result.alternatives.length; i++) {
+        altTranscripts.push(result.alternatives[i].transcript);
+      }
+    }
+  });
+
+  const jsonOutput = { words: allWords };
+  if (altTranscripts.length > 0) jsonOutput.alternativeTranscripts = altTranscripts;
+  jsonDiv.textContent = JSON.stringify(jsonOutput, null, 2);
+}
+</script>
+</body>
+</html>
