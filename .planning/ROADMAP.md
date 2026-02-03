@@ -52,7 +52,7 @@ Plans:
 ### Phase 12: VAD Integration
 **Goal**: Detect hallucinations by checking for actual speech during `latest_only` words
 **Depends on**: Phase 11
-**Requirements**: VAD-01, VAD-02, VAD-03, VAD-04, VAD-05, VAD-06
+**Requirements**: VAD-01, VAD-02, VAD-03, VAD-04, VAD-05, VAD-06, VAD-07
 **Architecture Decision**: VAD runs as "Post-Process Safety Valve" — NOT during live recording:
   - Record: Just record audio (low CPU, Chromebook-safe)
   - Stop: User clicks "Stop"
@@ -63,16 +63,16 @@ Plans:
   1. Silero VAD runs in browser via ONNX runtime (no backend required)
   2. VAD processes the COMPLETED audio file, not live during recording
   3. Words that are `latest_only + IN REFERENCE` but have no speech overlap are flagged as `vad_ghost_in_reference`
-  4. Dedicated "Calibrate Microphone" button measures 1.5s of ambient noise
+  4. Dedicated "Calibrate Microphone" button measures 2s of ambient noise
   5. Calibration determines optimal VAD threshold (0.15-0.60) and displays noise level (Low/Moderate/High)
-  6. UI shows calibrated threshold value
-**Plans**: TBD
+  6. UI shows calibrated threshold value with slider and presets
+**Plans**: 4 plans (3 waves)
 
 Plans:
-- [ ] 12-01: ONNX runtime + Silero VAD setup
-- [ ] 12-02: Post-process VAD pipeline (run on completed recording)
-- [ ] 12-03: Ghost buster detection logic
-- [ ] 12-04: VAD calibration system
+- [ ] 12-01-PLAN.md — ONNX runtime + Silero VAD setup (Wave 1)
+- [ ] 12-02-PLAN.md — Ghost detection logic (Wave 2)
+- [ ] 12-03-PLAN.md — App integration with VAD flow (Wave 3)
+- [ ] 12-04-PLAN.md — Calibration system + Settings UI (Wave 2)
 
 ### Phase 13: Confidence Classification
 **Goal**: Apply asymmetric trust policy based on reference presence and model agreement
@@ -150,7 +150,7 @@ Plans:
 |-------|----------------|--------|-----------|
 | 10. Configuration | 1/1 | Complete | 2026-02-03 |
 | 11. Ensemble Core | 3/3 | Complete | 2026-02-03 |
-| 12. VAD Integration | 0/4 | Not started | - |
+| 12. VAD Integration | 0/4 | Ready | - |
 | 13. Confidence Classification | 0/2 | Not started | - |
 | 14. Disfluency Detection | 0/3 | Not started | - |
 | 15. Safety Checks | 0/3 | Not started | - |
