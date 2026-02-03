@@ -15,13 +15,35 @@
 </head>
 <body>
 
-<div id="version" style="text-align:right;font-size:0.75rem;color:#999;">v 2026-02-03 21:52</div>
+<div id="version" style="text-align:right;font-size:0.75rem;color:#999;">v 2026-02-03 21:53</div>
 <h1>Oral Reading Fluency Assessment</h1>
 <p class="subtitle">Google Cloud Speech-to-Text &mdash; Raw Verbatim Transcription</p>
 
 <div class="section">
   <label for="apiKey">Google Cloud API Key</label>
   <input type="text" id="apiKey" placeholder="Enter your GCP API key (Speech-to-Text API must be enabled)">
+</div>
+
+<div class="section" id="vadSettingsSection">
+  <label>Ghost Detection Settings</label>
+  <div class="vad-settings">
+    <div class="vad-calibration">
+      <button id="vadCalibrateBtn" title="Record 2 seconds of ambient noise to optimize detection">Calibrate Microphone</button>
+      <span id="vadCalibrationStatus">Not calibrated (using default)</span>
+    </div>
+    <div class="vad-threshold">
+      <label for="vadThresholdSlider">Detection Threshold: <span id="vadThresholdValue">0.375</span></label>
+      <input type="range" id="vadThresholdSlider" min="0.15" max="0.60" step="0.01" value="0.375">
+      <div class="vad-presets">
+        <button class="vad-preset" data-threshold="0.20">Quiet Room</button>
+        <button class="vad-preset" data-threshold="0.375">Normal</button>
+        <button class="vad-preset" data-threshold="0.50">Noisy</button>
+      </div>
+    </div>
+    <div class="vad-info" id="vadNoiseInfo" style="display:none;">
+      <!-- Shown after calibration: "Noise Level: Low (0.20)" -->
+    </div>
+  </div>
 </div>
 
 <div class="section">
