@@ -10,14 +10,14 @@ See: .planning/PROJECT.md (updated 2026-02-03)
 ## Current Position
 
 Phase: 14 - Disfluency Detection (In Progress)
-Plan: 01 of 04 complete
-Status: Plan 14-01 complete, ready for 14-02
-Last activity: 2026-02-03 — Completed 14-01-PLAN.md
+Plan: 02 of 04 complete
+Status: Plan 14-02 complete, ready for 14-03
+Last activity: 2026-02-03 — Completed 14-02-PLAN.md
 
-Progress: [█████████████████████░░░░░░░░░] 75% (12/16 v1.1 plans)
+Progress: [██████████████████████░░░░░░░░] 81% (13/16 v1.1 plans)
 
 Phases remaining: 3 (Phases 14-16)
-Plans completed in v1.1: 12
+Plans completed in v1.1: 13
 
 ## Performance Metrics
 
@@ -70,6 +70,9 @@ See PROJECT.md Key Decisions table.
 - 2s gap threshold for stutter event grouping (14-01)
 - Reuse parseTime from diagnostics.js (14-01)
 - Count-First, Duration-Override severity model (14-01)
+- Check order enforces highest severity wins (14-02)
+- Short fragments (1-3 chars) use prefix matching (14-02)
+- Long fragments (4+ chars) require exact or long prefix (14-02)
 
 ### Pending Todos
 
@@ -84,5 +87,5 @@ None.
 ## Session Continuity
 
 Last session: 2026-02-03
-Stopped at: Completed 14-01-PLAN.md
-Resume with: `/gsd:execute-plan 14-02`
+Stopped at: Completed 14-02-PLAN.md
+Resume with: `/gsd:execute-plan 14-03`
