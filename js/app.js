@@ -152,6 +152,39 @@ async function runAnalysis() {
       agreementRate: ensembleStats.agreementRate
     });
 
+    // VAD processing for ghost detection (Phase 12)
+    let vadResult = { segments: [], durationMs: 0, error: 'VAD not initialized' };
+    let ghostResult = { ghostCount: 0, hasGhostSequence: false, vadError: null, ghostIndices: [] };
+
+    if (vadProcessor.isLoaded) {
+      setStatus('Running ghost detection...');
+      vadResult = await vadProcessor.processAudio(appState.audioBlob);
+
+      addStage('vad_processing', {
+        segmentCount: vadResult.segments.length,
+        durationMs: vadResult.durationMs,
+        error: vadResult.error
+      });
+
+      // Run ghost detection on merged words
+      const referenceText = document.getElementById('transcript').value.trim();
+      ghostResult = flagGhostWords(mergedWords, vadResult, referenceText, vadResult.durationMs);
+
+      addStage('ghost_detection', {
+        ghostCount: ghostResult.ghostCount,
+        hasGhostSequence: ghostResult.hasGhostSequence,
+        vadError: ghostResult.vadError,
+        ghostIndices: ghostResult.ghostIndices
+      });
+
+      if (ghostResult.ghostCount > 0) {
+        console.log(`[ORF] Ghost detection: ${ghostResult.ghostCount} potential hallucinations flagged`);
+      }
+    } else {
+      addWarning('VAD not loaded', { error: vadProcessor.loadError });
+      console.warn('[ORF] VAD not loaded, skipping ghost detection:', vadProcessor.loadError);
+    }
+
     // Convert merged words to STT response format for compatibility
     // (existing code expects data.results structure)
     data = {
@@ -164,6 +197,13 @@ async function runAnalysis() {
       _ensemble: {
         raw: ensembleResult,
         stats: ensembleStats
+      },
+      _vad: {
+        segments: vadResult.segments,
+        durationMs: vadResult.durationMs,
+        ghostCount: ghostResult.ghostCount,
+        hasGhostSequence: ghostResult.hasGhostSequence,
+        error: vadResult.error || ghostResult.vadError
       }
     };
   }
