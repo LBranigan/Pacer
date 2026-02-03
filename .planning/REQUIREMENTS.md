@@ -16,10 +16,10 @@ Requirements for the ASR Ensemble milestone. Each maps to roadmap phases.
 
 ### Confidence Classification
 
-- [ ] **CONF-01**: Asymmetric trust policy classifies `latest_only` words based on reference presence
-- [ ] **CONF-02**: Words in reference + `latest_only` are trusted (stronger model caught quiet speech)
-- [ ] **CONF-03**: Words NOT in reference + `latest_only` are distrusted (hallucination risk)
-- [ ] **CONF-04**: Confidence thresholds use research-backed values (0.93 high, 0.70 low)
+- [x] **CONF-01**: Asymmetric trust policy classifies `latest_only` words based on reference presence
+- [x] **CONF-02**: Words in reference + `latest_only` are trusted (stronger model caught quiet speech)
+- [x] **CONF-03**: Words NOT in reference + `latest_only` are distrusted (hallucination risk)
+- [x] **CONF-04**: Confidence thresholds use research-backed values (0.93 high, 0.70 low)
 
 ### VAD Integration
 
@@ -109,10 +109,10 @@ Which phases cover which requirements. Updated during roadmap creation.
 | VAD-05 | Phase 12 | Complete |
 | VAD-06 | Phase 12 | Complete |
 | VAD-07 | Phase 12 | Complete |
-| CONF-01 | Phase 13 | Pending |
-| CONF-02 | Phase 13 | Pending |
-| CONF-03 | Phase 13 | Pending |
-| CONF-04 | Phase 13 | Pending |
+| CONF-01 | Phase 13 | Complete |
+| CONF-02 | Phase 13 | Complete |
+| CONF-03 | Phase 13 | Complete |
+| CONF-04 | Phase 13 | Complete |
 | DIS-01 | Phase 14 | Pending |
 | DIS-02 | Phase 14 | Pending |
 | DIS-03 | Phase 14 | Pending |

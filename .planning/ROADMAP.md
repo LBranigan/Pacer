@@ -86,9 +86,9 @@ Plans:
 **Plans**: 3 plans (3 waves)
 
 Plans:
-- [ ] 13-01-PLAN.md — Word equivalences extension + confidence config (Wave 1)
-- [ ] 13-02-PLAN.md — Confidence classifier core (Wave 2)
-- [ ] 13-03-PLAN.md — App integration with classification flow (Wave 3)
+- [x] 13-01-PLAN.md — Word equivalences extension + confidence config (Wave 1)
+- [x] 13-02-PLAN.md — Confidence classifier core (Wave 2)
+- [x] 13-03-PLAN.md — App integration with classification flow (Wave 3)
 
 ### Phase 14: Disfluency Detection
 **Goal**: Detect stutters and reading disfluencies as a separate signal from confidence
@@ -152,7 +152,7 @@ Plans:
 | 10. Configuration | 1/1 | Complete | 2026-02-03 |
 | 11. Ensemble Core | 3/3 | Complete | 2026-02-03 |
 | 12. VAD Integration | 4/4 | Complete | 2026-02-03 |
-| 13. Confidence Classification | 0/3 | Not started | - |
+| 13. Confidence Classification | 3/3 | Complete | 2026-02-03 |
 | 14. Disfluency Detection | 0/3 | Not started | - |
 | 15. Safety Checks | 0/3 | Not started | - |
 | 16. UI Enhancements | 0/4 | Not started | - |
