@@ -18,7 +18,7 @@ import { vadProcessor } from './vad-processor.js';
 import { flagGhostWords } from './ghost-detector.js';
 
 // Code version for cache verification
-const CODE_VERSION = 'v33-2026-02-03';
+const CODE_VERSION = 'v34-2026-02-03';
 console.log('[ORF] Code version:', CODE_VERSION);
 
 if ('serviceWorker' in navigator) {
@@ -548,7 +548,8 @@ async function runAnalysis() {
       sttWords: transcriptWords,
       audioRef: appState.audioBlob ? assessmentId : null,
       nlAnnotations,
-      _ensemble: data._ensemble || null  // Preserves ensemble debug data
+      _ensemble: data._ensemble || null,  // Preserves ensemble debug data
+      _vad: data._vad || null  // Preserves VAD ghost detection data
     });
     refreshStudentUI();
     setStatus('Done (saved).');
@@ -566,7 +567,8 @@ async function runAnalysis() {
       accuracy: accuracy.accuracy,
       totalWords: accuracy.totalRefWords,
       errors: accuracy.substitutions + accuracy.omissions,
-      forgiven: accuracy.forgiven
+      forgiven: accuracy.forgiven,
+      ghostCount: data._vad?.ghostCount || 0
     });
   } else {
     setStatus('Done.');
