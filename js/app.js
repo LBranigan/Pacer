@@ -1,6 +1,7 @@
 import { initRecorder, setOnComplete as recorderSetOnComplete } from './recorder.js';
 import { initFileHandler, setOnComplete as fileHandlerSetOnComplete } from './file-handler.js';
-import { sendToSTT, sendToAsyncSTT, sendChunkedSTT } from './stt-api.js';
+import { sendToSTT, sendToAsyncSTT, sendChunkedSTT, sendEnsembleSTT } from './stt-api.js';
+import { mergeEnsembleResults, extractWordsFromSTT, computeEnsembleStats } from './ensemble-merger.js';
 import { alignWords } from './alignment.js';
 import { getCanonical } from './word-equivalences.js';
 import { computeWCPM, computeAccuracy } from './metrics.js';
@@ -119,8 +120,50 @@ async function runAnalysis() {
       }
     }
   } else {
-    setStatus('Sending audio to STT...');
-    data = await sendToSTT(appState.audioBlob, appState.audioEncoding);
+    setStatus('Running ensemble STT analysis...');
+    const ensembleResult = await sendEnsembleSTT(appState.audioBlob, appState.audioEncoding);
+
+    // Log ensemble result for debugging
+    addStage('ensemble_raw', {
+      hasLatestLong: !!ensembleResult.latestLong,
+      hasDefault: !!ensembleResult.default,
+      errors: ensembleResult.errors
+    });
+
+    // Check for complete failure
+    if (!ensembleResult.latestLong && !ensembleResult.default) {
+      setStatus('Both STT models failed. Check API key.');
+      analyzeBtn.disabled = false;
+      finalizeDebugLog({ error: 'Both STT models failed', details: ensembleResult.errors });
+      return;
+    }
+
+    // Merge results using temporal word association
+    const mergedWords = mergeEnsembleResults(ensembleResult);
+    const ensembleStats = computeEnsembleStats(mergedWords);
+
+    addStage('ensemble_merged', {
+      totalWords: ensembleStats.totalWords,
+      both: ensembleStats.both,
+      latestOnly: ensembleStats.latestOnly,
+      defaultOnly: ensembleStats.defaultOnly,
+      agreementRate: ensembleStats.agreementRate
+    });
+
+    // Convert merged words to STT response format for compatibility
+    // (existing code expects data.results structure)
+    data = {
+      results: [{
+        alternatives: [{
+          words: mergedWords,
+          transcript: mergedWords.map(w => w.word).join(' ')
+        }]
+      }],
+      _ensemble: {
+        raw: ensembleResult,
+        stats: ensembleStats
+      }
+    };
   }
 
   if (!data || !data.results) {
@@ -462,7 +505,8 @@ async function runAnalysis() {
       alignment,
       sttWords: transcriptWords,
       audioRef: appState.audioBlob ? assessmentId : null,
-      nlAnnotations
+      nlAnnotations,
+      _ensemble: data._ensemble || null  // Preserves ensemble debug data
     });
     refreshStudentUI();
     setStatus('Done (saved).');
