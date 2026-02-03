@@ -171,3 +171,70 @@ export function classifyWordConfidence(word, referenceSet) {
     _flags: flags.length > 0 ? flags : undefined
   };
 }
+
+/**
+ * Classify all words and return new array with classification properties.
+ * Does NOT mutate input array.
+ *
+ * @param {Array} mergedWords - Words from ensemble-merger with source tags
+ * @param {string} referenceText - Reference passage text
+ * @returns {Array} New array with confidence, trustLevel, _flags added to each word
+ */
+export function classifyAllWords(mergedWords, referenceText) {
+  if (!mergedWords || mergedWords.length === 0) {
+    return [];
+  }
+
+  const referenceSet = buildReferenceSet(referenceText);
+
+  return mergedWords.map(word => {
+    const classification = classifyWordConfidence(word, referenceSet);
+
+    return {
+      ...word,
+      confidence: classification.confidence,
+      trustLevel: classification.trustLevel,
+      _flags: classification._flags
+    };
+  });
+}
+
+/**
+ * Filter out ghost words (confidence === 0.0) from classified array.
+ * Call this AFTER classifyAllWords, BEFORE alignment.
+ *
+ * @param {Array} classifiedWords - Words with trustLevel property
+ * @returns {Array} Words with trustLevel !== 'ghost'
+ */
+export function filterGhosts(classifiedWords) {
+  return classifiedWords.filter(w => w.trustLevel !== TRUST_LEVELS.GHOST);
+}
+
+/**
+ * Compute classification statistics.
+ * @param {Array} classifiedWords
+ * @returns {object} Stats object
+ */
+export function computeClassificationStats(classifiedWords) {
+  const stats = {
+    total: classifiedWords.length,
+    high: 0,
+    medium: 0,
+    low: 0,
+    ghost: 0,
+    possibleInsertions: 0
+  };
+
+  for (const w of classifiedWords) {
+    if (w.trustLevel === TRUST_LEVELS.HIGH) stats.high++;
+    else if (w.trustLevel === TRUST_LEVELS.MEDIUM) stats.medium++;
+    else if (w.trustLevel === TRUST_LEVELS.LOW) stats.low++;
+    else if (w.trustLevel === TRUST_LEVELS.GHOST) stats.ghost++;
+
+    if (w._flags?.includes(CONFIDENCE_FLAGS.POSSIBLE_INSERTION)) {
+      stats.possibleInsertions++;
+    }
+  }
+
+  return stats;
+}
