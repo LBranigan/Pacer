@@ -100,12 +100,12 @@ Plans:
   3. Significant disfluency is flagged when maxPause >= 0.5s OR totalDuration >= 2.0s
   4. Orphaned stutter fragments (<=3 chars, <=2s gap, startsWith match) are merged into their target word
   5. Confidence and disfluency remain independent signals (not combined into single score)
-**Plans**: TBD
+**Plans**: 3 plans (3 waves)
 
 Plans:
-- [ ] 14-01: Stutter metrics calculation
-- [ ] 14-02: Disfluency severity classification
-- [ ] 14-03: Orphaned stutter fragment merger
+- [ ] 14-01-PLAN.md — Stutter metrics calculation (Wave 1)
+- [ ] 14-02-PLAN.md — Disfluency severity classification (Wave 2)
+- [ ] 14-03-PLAN.md — Fragment merger and app integration (Wave 3)
 
 ### Phase 15: Safety Checks
 **Goal**: Flag physically impossible or suspicious ASR outputs
@@ -153,7 +153,7 @@ Plans:
 | 11. Ensemble Core | 3/3 | Complete | 2026-02-03 |
 | 12. VAD Integration | 4/4 | Complete | 2026-02-03 |
 | 13. Confidence Classification | 3/3 | Complete | 2026-02-03 |
-| 14. Disfluency Detection | 0/3 | Not started | - |
+| 14. Disfluency Detection | 0/3 | Planned | - |
 | 15. Safety Checks | 0/3 | Not started | - |
 | 16. UI Enhancements | 0/4 | Not started | - |
 
