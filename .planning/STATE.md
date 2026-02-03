@@ -10,14 +10,14 @@ See: .planning/PROJECT.md (updated 2026-02-03)
 ## Current Position
 
 Phase: 10 - Configuration
-Plan: —
-Status: Roadmap complete, awaiting plan-phase
-Last activity: 2026-02-03 — Roadmap created for v1.1
+Plan: 01 of 1
+Status: Plan complete
+Last activity: 2026-02-03 — Completed 10-01-PLAN.md (Tiered Speech Context Boosting)
 
-Progress: [░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░] 0%
+Progress: [###...........................] ~5%
 
 Phases remaining: 7 (Phases 10-16)
-Requirements remaining: 31
+Plans completed in v1.1: 1
 
 ## Performance Metrics
 
@@ -26,9 +26,10 @@ Requirements remaining: 31
 - Average duration: 2min
 - Total execution time: ~0.7 hours
 
-**v1.1 Projected:**
-- Estimated plans: 19
-- Estimated execution: ~0.6 hours (based on v1.0 velocity)
+**v1.1 Velocity:**
+- Plans completed: 1
+- Average duration: 3min
+- Total execution time: 3min
 
 ## Accumulated Context
 
@@ -41,6 +42,9 @@ See PROJECT.md Key Decisions table.
 - Silero VAD for hallucination detection (not universal filter)
 - Separate disfluency signal from confidence (clinical nuance)
 - `default` model as ensemble partner (Whisper has 40% hallucination rate)
+- Proper nouns boost=5, uncommon words (8+ chars) boost=3, common words boost=0 for latest_long
+- Default model uses lower boost (3/2) to reduce phantom insertions
+- maxAlternatives reduced from 2 to 1 (alternatives unreliable without confidence)
 
 ### Pending Todos
 
@@ -55,6 +59,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-02-03
-Stopped at: Roadmap created for v1.1 milestone
-Resume with: `/gsd:plan-phase 10`
+Last session: 2026-02-03 20:45
+Stopped at: Completed 10-01-PLAN.md (Tiered Speech Context Boosting)
+Resume with: `/gsd:plan-phase 11` or `/gsd:execute-phase 10` (if more plans exist)
