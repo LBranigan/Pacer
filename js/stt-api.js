@@ -1,5 +1,61 @@
 import { setStatus } from './ui.js';
 
+/**
+ * Build tiered speech contexts for phrase boosting.
+ * @param {string} passageText - The reference passage
+ * @param {object} options - { properNounBoost, uncommonBoost } explicit boost values
+ * @returns {Array} speechContexts array for STT config
+ */
+function buildSpeechContexts(passageText, options = {}) {
+  // Explicit boost values per model (no formula derivation)
+  // latest_long: { properNounBoost: 5, uncommonBoost: 3 }
+  // default:     { properNounBoost: 3, uncommonBoost: 2 }
+  const { properNounBoost = 5, uncommonBoost = 3 } = options;
+  if (!passageText) return [];
+
+  const originalWords = passageText.split(/\s+/);
+  const normalized = passageText.toLowerCase().replace(/[^a-z'\s-]/g, '').split(/\s+/).filter(Boolean);
+
+  const properNouns = [];
+  const uncommonWords = [];
+  // Common words get NO boost - ASR already knows them
+
+  for (let i = 0; i < originalWords.length; i++) {
+    const orig = originalWords[i];
+    const norm = normalized[i];
+    if (!norm) continue;
+
+    // Proper nouns: capitalized and not at sentence start
+    // Check if previous word ended with sentence-ending punctuation
+    const prevWord = i > 0 ? originalWords[i - 1] : '';
+    const afterSentenceEnd = /[.!?]$/.test(prevWord);
+
+    if (/^[A-Z]/.test(orig) && i > 0 && !afterSentenceEnd) {
+      properNouns.push(norm);
+    } else if (norm.length >= 8) {
+      // Long words are likely domain-specific
+      uncommonWords.push(norm);
+    }
+    // Common words: skip boosting entirely
+  }
+
+  const contexts = [];
+
+  // Proper nouns: highest boost
+  if (properNouns.length > 0) {
+    contexts.push({ phrases: [...new Set(properNouns)], boost: properNounBoost });
+  }
+
+  // Uncommon words: medium boost
+  if (uncommonWords.length > 0) {
+    contexts.push({ phrases: [...new Set(uncommonWords)], boost: uncommonBoost });
+  }
+
+  // Common words: no boost (omitted entirely)
+
+  return contexts;
+}
+
 function blobToBase64(blob) {
   return new Promise((resolve) => {
     const reader = new FileReader();
