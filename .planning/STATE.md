@@ -10,14 +10,14 @@ See: .planning/PROJECT.md (updated 2026-02-03)
 ## Current Position
 
 Phase: 13 - Confidence Classification
-Plan: 01 of 03
+Plan: 02 of 03
 Status: In progress
-Last activity: 2026-02-03 — Completed 13-01-PLAN.md
+Last activity: 2026-02-03 — Completed 13-02-PLAN.md
 
-Progress: [████████████████░░░░░░░░░░░░░░] 56% (9/16 v1.1 plans)
+Progress: [██████████████████░░░░░░░░░░░░] 62% (10/16 v1.1 plans)
 
 Phases remaining: 4 (Phases 13-16)
-Plans completed in v1.1: 9
+Plans completed in v1.1: 10
 
 ## Performance Metrics
 
@@ -27,9 +27,9 @@ Plans completed in v1.1: 9
 - Total execution time: ~0.7 hours
 
 **v1.1 Velocity:**
-- Plans completed: 9
+- Plans completed: 10
 - Average duration: 2.5min
-- Total execution time: ~25min
+- Total execution time: ~27min
 
 ## Accumulated Context
 
@@ -62,6 +62,8 @@ See PROJECT.md Key Decisions table.
 - Ghost detection on merged words, _vad field persisted in saved assessments (12-03)
 - Full number coverage 21-99 with hyphenated and concatenated forms (13-01)
 - Confidence thresholds: HIGH=0.93, MEDIUM=0.70, VALID_MUMBLE=0.85, HALLUCINATION_RISK=0.50 (13-01)
+- Asymmetric trust: latest_only+ref=0.85, latest_only+noref=0.50+flag (13-02)
+- VAD ghost override: confidence 0.0, trustLevel 'ghost' (highest priority) (13-02)
 
 ### Pending Todos
 
@@ -76,5 +78,5 @@ None.
 ## Session Continuity
 
 Last session: 2026-02-03
-Stopped at: Completed 13-01-PLAN.md
-Resume with: `/gsd:execute-phase 13` (continue with 13-02)
+Stopped at: Completed 13-02-PLAN.md
+Resume with: `/gsd:execute-phase 13` (continue with 13-03)
