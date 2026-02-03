@@ -95,9 +95,9 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| CFG-01 | Phase 10 | Pending |
-| CFG-02 | Phase 10 | Pending |
-| CFG-03 | Phase 10 | Pending |
+| CFG-01 | Phase 10 | Complete |
+| CFG-02 | Phase 10 | Complete |
+| CFG-03 | Phase 10 | Complete |
 | ENS-01 | Phase 11 | Pending |
 | ENS-02 | Phase 11 | Pending |
 | ENS-03 | Phase 11 | Pending |

@@ -31,7 +31,7 @@ v1.0 shipped with 24 ES modules, teacher dashboard with Standard Celeration Char
 **Plans**: TBD
 
 Plans:
-- [ ] 10-01: Update speech context boosting configuration
+- [x] 10-01: Tiered speech context boosting ✓
 
 ### Phase 11: Ensemble Core
 **Goal**: Run two STT models in parallel with temporal word association
@@ -148,7 +148,7 @@ Plans:
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 10. Configuration | 0/1 | Not started | - |
+| 10. Configuration | 1/1 | ✓ Complete | 2026-02-03 |
 | 11. Ensemble Core | 0/3 | Not started | - |
 | 12. VAD Integration | 0/4 | Not started | - |
 | 13. Confidence Classification | 0/2 | Not started | - |
