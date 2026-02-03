@@ -14,6 +14,7 @@ import { getStudents, addStudent, deleteStudent, saveAssessment, getAssessments 
 import { saveAudioBlob } from './audio-store.js';
 import { initDashboard } from './dashboard.js';
 import { initDebugLog, addStage, addWarning, addError, finalizeDebugLog, saveDebugLog } from './debug-logger.js';
+import { vadProcessor } from './vad-processor.js';
 
 // Code version for cache verification
 const CODE_VERSION = 'v33-2026-02-03';
@@ -658,3 +659,70 @@ document.getElementById('viewDashboardBtn').addEventListener('click', () => {
     dashboard.show(appState.selectedStudentId);
   }
 });
+
+// --- VAD Settings UI wiring (Phase 12) ---
+const vadCalibrateBtn = document.getElementById('vadCalibrateBtn');
+const vadCalibrationStatus = document.getElementById('vadCalibrationStatus');
+const vadThresholdSlider = document.getElementById('vadThresholdSlider');
+const vadThresholdValue = document.getElementById('vadThresholdValue');
+const vadNoiseInfo = document.getElementById('vadNoiseInfo');
+const vadPresetBtns = document.querySelectorAll('.vad-preset');
+
+// Calibrate button
+if (vadCalibrateBtn) {
+  vadCalibrateBtn.addEventListener('click', async () => {
+    vadCalibrateBtn.disabled = true;
+    vadCalibrationStatus.textContent = 'Calibrating...';
+
+    const result = await vadProcessor.calibrateMicrophone();
+
+    if (result.error) {
+      vadCalibrationStatus.textContent = `Error: ${result.error}`;
+    } else {
+      vadCalibrationStatus.textContent = `Calibrated. Noise level: ${result.noiseLevel}`;
+      vadThresholdSlider.value = result.threshold;
+      vadThresholdValue.textContent = result.threshold.toFixed(2);
+
+      // Show noise info per CONTEXT.md format: "Noise Level: Low (0.20)"
+      vadNoiseInfo.style.display = 'block';
+      vadNoiseInfo.textContent = `Noise Level: ${result.noiseLevel} (${result.threshold.toFixed(2)})`;
+      vadNoiseInfo.className = 'vad-info' + (result.noiseLevel === 'High' ? ' high-noise' : '');
+
+      // Per CONTEXT.md: subtle note for high noise
+      if (result.noiseLevel === 'High') {
+        vadNoiseInfo.innerHTML += '<br><small>Higher background noise detected</small>';
+      }
+    }
+
+    vadCalibrateBtn.disabled = false;
+  });
+}
+
+// Threshold slider
+if (vadThresholdSlider) {
+  vadThresholdSlider.addEventListener('input', () => {
+    const value = parseFloat(vadThresholdSlider.value);
+    vadThresholdValue.textContent = value.toFixed(2);
+    vadProcessor.setThreshold(value);
+    // Per CONTEXT.md: "Calibration overrides manual" - mark as not calibrated when manually changed
+    vadCalibrationStatus.textContent = `Manual: ${value.toFixed(2)}`;
+    vadProcessor.isCalibrated = false;
+  });
+}
+
+// Preset buttons
+if (vadPresetBtns) {
+  vadPresetBtns.forEach(btn => {
+    btn.addEventListener('click', () => {
+      const threshold = parseFloat(btn.dataset.threshold);
+      vadThresholdSlider.value = threshold;
+      vadThresholdValue.textContent = threshold.toFixed(2);
+      vadProcessor.setThreshold(threshold);
+      vadCalibrationStatus.textContent = `Preset: ${btn.textContent}`;
+      vadProcessor.isCalibrated = false;
+    });
+  });
+}
+
+// Note: Per CONTEXT.md "Persistence: Reset each session - threshold resets to default on page reload"
+// No persistence needed - the default behavior handles this naturally
