@@ -9,12 +9,15 @@ See: .planning/PROJECT.md (updated 2026-02-03)
 
 ## Current Position
 
-Phase: Defining requirements
+Phase: 10 - Configuration
 Plan: —
-Status: Milestone v1.1 started
-Last activity: 2026-02-03 — Milestone v1.1 initialization
+Status: Roadmap complete, awaiting plan-phase
+Last activity: 2026-02-03 — Roadmap created for v1.1
 
 Progress: [░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░] 0%
+
+Phases remaining: 7 (Phases 10-16)
+Requirements remaining: 31
 
 ## Performance Metrics
 
@@ -23,11 +26,21 @@ Progress: [░░░░░░░░░░░░░░░░░░░░░░░
 - Average duration: 2min
 - Total execution time: ~0.7 hours
 
+**v1.1 Projected:**
+- Estimated plans: 19
+- Estimated execution: ~0.6 hours (based on v1.0 velocity)
+
 ## Accumulated Context
 
 ### Decisions
 
 See PROJECT.md Key Decisions table.
+
+**v1.1 Decisions:**
+- Temporal word association over text-based alignment (stutters break text matching)
+- Silero VAD for hallucination detection (not universal filter)
+- Separate disfluency signal from confidence (clinical nuance)
+- `default` model as ensemble partner (Whisper has 40% hallucination rate)
 
 ### Pending Todos
 
@@ -43,5 +56,5 @@ None.
 ## Session Continuity
 
 Last session: 2026-02-03
-Stopped at: Defining v1.1 requirements
-Resume file: None
+Stopped at: Roadmap created for v1.1 milestone
+Resume with: `/gsd:plan-phase 10`
