@@ -6,7 +6,7 @@
  */
 
 import { parseTime } from './diagnostics.js';
-import { DISFLUENCY_THRESHOLDS } from './disfluency-config.js';
+import { DISFLUENCY_THRESHOLDS, SEVERITY_LEVELS } from './disfluency-config.js';
 
 /**
  * Group consecutive words within MAX_STUTTER_GAP_SEC into potential stutter events.
@@ -85,4 +85,47 @@ export function computeDisfluencyMetrics(attemptWords) {
     totalDuration: Math.round((lastEnd - firstStart) * 100) / 100,
     maxPause: pauses.length > 0 ? Math.round(Math.max(...pauses) * 100) / 100 : 0
   };
+}
+
+/**
+ * Calculate disfluency severity using "Count-First, Duration-Override" model.
+ * Per CONTEXT.md algorithm:
+ *   - 5+ attempts OR totalDuration >= 2.0s -> significant
+ *   - maxPause >= 0.5s AND attempts >= 2 -> moderate (duration override)
+ *   - 3-4 attempts -> moderate
+ *   - 2 attempts -> minor
+ *   - 1 attempt -> none (clean read)
+ *
+ * @param {number} attempts - Number of stutter attempts (1 = clean read)
+ * @param {number} totalDuration - Total time from first attempt to word end (seconds)
+ * @param {number} maxPause - Longest pause between attempts (seconds)
+ * @returns {string} Severity level: 'none' | 'minor' | 'moderate' | 'significant'
+ */
+export function calculateSeverity(attempts, totalDuration = 0, maxPause = 0) {
+  // Default to 'none' for clean reads
+  if (attempts <= 1) return SEVERITY_LEVELS.NONE;
+
+  // Check significant thresholds first (highest priority)
+  if (attempts >= DISFLUENCY_THRESHOLDS.SIGNIFICANT_ATTEMPTS ||
+      totalDuration >= DISFLUENCY_THRESHOLDS.SIGNIFICANT_DURATION_SEC) {
+    return SEVERITY_LEVELS.SIGNIFICANT;
+  }
+
+  // Duration override: long pause with multiple attempts escalates to moderate
+  if (maxPause >= DISFLUENCY_THRESHOLDS.MODERATE_PAUSE_SEC && attempts >= 2) {
+    return SEVERITY_LEVELS.MODERATE;
+  }
+
+  // Moderate by attempt count
+  if (attempts >= DISFLUENCY_THRESHOLDS.MODERATE_ATTEMPTS) {
+    return SEVERITY_LEVELS.MODERATE;
+  }
+
+  // Minor: exactly 2 attempts ("the double take")
+  if (attempts === DISFLUENCY_THRESHOLDS.MINOR_ATTEMPTS) {
+    return SEVERITY_LEVELS.MINOR;
+  }
+
+  // Fallback (should not reach here, but be safe)
+  return SEVERITY_LEVELS.NONE;
 }
