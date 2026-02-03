@@ -10,14 +10,14 @@ See: .planning/PROJECT.md (updated 2026-02-03)
 ## Current Position
 
 Phase: 14 - Disfluency Detection (In Progress)
-Plan: 02 of 04 complete
-Status: Plan 14-02 complete, ready for 14-03
-Last activity: 2026-02-03 — Completed 14-02-PLAN.md
+Plan: 03 of 04 complete
+Status: Plan 14-03 complete, ready for 14-04
+Last activity: 2026-02-03 — Completed 14-03-PLAN.md
 
-Progress: [██████████████████████░░░░░░░░] 81% (13/16 v1.1 plans)
+Progress: [████████████████████████░░░░░░] 88% (14/16 v1.1 plans)
 
 Phases remaining: 3 (Phases 14-16)
-Plans completed in v1.1: 13
+Plans completed in v1.1: 14
 
 ## Performance Metrics
 
@@ -27,9 +27,9 @@ Plans completed in v1.1: 13
 - Total execution time: ~0.7 hours
 
 **v1.1 Velocity:**
-- Plans completed: 12
+- Plans completed: 14
 - Average duration: 2.5min
-- Total execution time: ~32min
+- Total execution time: ~35min
 
 ## Accumulated Context
 
@@ -73,6 +73,10 @@ See PROJECT.md Key Decisions table.
 - Check order enforces highest severity wins (14-02)
 - Short fragments (1-3 chars) use prefix matching (14-02)
 - Long fragments (4+ chars) require exact or long prefix (14-02)
+- Fragments REMOVED from main array, stored in target's _disfluency.fragments (14-03)
+- Nearest word wins for fragment matching by time proximity (14-03)
+- Full word repetitions count as stutter attempts (14-03)
+- _disfluency field persisted in saved assessments (14-03)
 
 ### Pending Todos
 
@@ -87,5 +91,5 @@ None.
 ## Session Continuity
 
 Last session: 2026-02-03
-Stopped at: Completed 14-02-PLAN.md
-Resume with: `/gsd:execute-plan 14-03`
+Stopped at: Completed 14-03-PLAN.md
+Resume with: `/gsd:execute-plan 14-04`
