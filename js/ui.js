@@ -2,6 +2,68 @@ export function setStatus(msg) {
   document.getElementById('status').textContent = msg;
 }
 
+// Friendly labels for POS tags
+const POS_LABELS = {
+  NOUN: 'Noun',
+  VERB: 'Verb',
+  ADJ: 'Adjective',
+  ADV: 'Adverb',
+  PRON: 'Pronoun',
+  DET: 'Determiner',
+  ADP: 'Preposition',
+  CONJ: 'Conjunction',
+  NUM: 'Number',
+  PRT: 'Particle',
+  PUNCT: 'Punctuation',
+  X: 'Other',
+  AFFIX: 'Affix',
+  UNKNOWN: 'Unknown'
+};
+
+// Friendly labels for entity types
+const ENTITY_LABELS = {
+  PERSON: 'Person',
+  LOCATION: 'Place',
+  ORGANIZATION: 'Organization',
+  EVENT: 'Event',
+  WORK_OF_ART: 'Work of Art',
+  CONSUMER_GOOD: 'Product',
+  OTHER: 'Named Entity',
+  UNKNOWN: 'Entity'
+};
+
+// Friendly labels for word tiers
+const TIER_LABELS = {
+  proper: 'Proper Name',
+  academic: 'Academic Word',
+  sight: 'Sight Word',
+  function: 'Function Word'
+};
+
+/**
+ * Build a user-friendly NL annotation string for tooltip display.
+ */
+function buildNLTooltip(nl) {
+  if (!nl) return null;
+  const lines = [];
+
+  // Word type (POS)
+  const posLabel = POS_LABELS[nl.pos] || nl.pos;
+  lines.push(posLabel);
+
+  // Entity type if present
+  if (nl.entityType && nl.entityType !== 'OTHER') {
+    const entityLabel = ENTITY_LABELS[nl.entityType] || nl.entityType;
+    lines.push('📍 ' + entityLabel);
+  }
+
+  // Tier
+  const tierLabel = TIER_LABELS[nl.tier] || nl.tier;
+  lines.push('📚 ' + tierLabel);
+
+  return lines.join('\n');
+}
+
 export function displayResults(data) {
   const wordsDiv = document.getElementById('resultWords');
   const plainDiv = document.getElementById('resultPlain');
@@ -126,20 +188,49 @@ export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, di
 
   plainDiv.appendChild(metricsBar);
 
+  // Build mapping from STT word index to alignment hypIndex (for rendering)
+  // STT indexes include insertions, but UI hypIndex skips insertions
+  const sttToHypIndex = new Map();
+  let sttIdx = 0;
+  let renderHypIdx = 0;
+  for (const item of alignment) {
+    if (item.type === 'insertion') {
+      sttIdx++;
+      continue;
+    }
+    if (item.type !== 'omission') {
+      sttToHypIndex.set(sttIdx, renderHypIdx);
+      sttIdx++;
+      renderHypIdx++;
+    }
+  }
+
   // Build diagnostic lookup structures
-  const onsetDelayMap = new Map(); // hypIndex -> {gap, severity}
-  const longPauseMap = new Map(); // afterHypIndex -> gap
+  const onsetDelayMap = new Map(); // hypIndex -> {gap, threshold, punctuationType}
+  const longPauseMap = new Map(); // afterHypIndex -> {gap}
   const morphErrorSet = new Set(); // "ref|hyp" lowercase pairs
   if (diagnostics) {
     if (diagnostics.onsetDelays) {
       for (const d of diagnostics.onsetDelays) {
-        onsetDelayMap.set(d.wordIndex, d);
+        // Convert STT wordIndex to render hypIndex
+        const hypIdx = sttToHypIndex.get(d.wordIndex);
+        if (hypIdx !== undefined) {
+          onsetDelayMap.set(hypIdx, d);
+        }
       }
     }
     if (diagnostics.longPauses) {
+      console.log('[UI Debug] Long pauses from diagnostics:', diagnostics.longPauses);
+      console.log('[UI Debug] sttToHypIndex map:', [...sttToHypIndex.entries()]);
       for (const p of diagnostics.longPauses) {
-        longPauseMap.set(p.afterWordIndex, p);
+        // Convert STT afterWordIndex to render hypIndex
+        const hypIdx = sttToHypIndex.get(p.afterWordIndex);
+        console.log('[UI Debug] Pause afterWordIndex:', p.afterWordIndex, '-> hypIdx:', hypIdx);
+        if (hypIdx !== undefined) {
+          longPauseMap.set(hypIdx, p);
+        }
       }
+      console.log('[UI Debug] longPauseMap:', [...longPauseMap.entries()]);
     }
     if (diagnostics.morphologicalErrors) {
       for (const m of diagnostics.morphologicalErrors) {
@@ -174,10 +265,10 @@ export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, di
       }
     }
 
-    // NL tier class and tooltip
+    // NL tier class and tooltip info
     if (item.nl) {
       span.classList.add('word-tier-' + item.nl.tier);
-      sttInfo += '\nPOS: ' + item.nl.pos + (item.nl.entityType ? ' | Entity: ' + item.nl.entityType : '') + ' | Tier: ' + item.nl.tier;
+      sttInfo += '\n' + buildNLTooltip(item.nl);
     }
 
     // Healed word indicator
@@ -188,35 +279,63 @@ export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, di
 
     if (item.type === 'substitution') {
       span.title = 'Expected: ' + item.ref + ', Said: ' + item.hyp + sttInfo;
-      // Morphological error overlay
-      const morphKey = (item.ref || '').toLowerCase() + '|' + (item.hyp || '').toLowerCase();
-      if (morphErrorSet.has(morphKey)) {
-        span.classList.add('word-morphological');
-        span.title += '\n(Morphological error)';
+      // Proper noun forgiveness indicator (phonetic proximity check passed)
+      // Check this FIRST - forgiven words should NOT be marked as morphological errors
+      if (item.forgiven) {
+        span.classList.add('word-forgiven');
+        const ratioText = item.phoneticRatio ? ' (' + item.phoneticRatio + '% similar)' : '';
+        const combinedText = item.combinedPronunciation ? '\nStudent said: "' + item.combinedPronunciation + '"' : '';
+        span.title += '\n✓ Forgiven: proper name' + ratioText + combinedText + ' — vocabulary gap, not decoding error';
+      } else {
+        // Morphological error overlay (only for non-forgiven substitutions)
+        const morphKey = (item.ref || '').toLowerCase() + '|' + (item.hyp || '').toLowerCase();
+        if (morphErrorSet.has(morphKey)) {
+          span.classList.add('word-morphological');
+          span.title += '\n(Morphological error)';
+        }
       }
     } else if (item.type === 'omission') {
       span.title = 'Omitted (not read)';
+    } else if (item.type === 'self-correction') {
+      span.textContent = item.hyp || '';
+      span.title = '"' + item.hyp + '" (self-correction)' + sttInfo;
     } else {
       span.title = item.ref + sttInfo;
     }
 
-    // Onset delay overlay (for items that have a hyp word)
+    // Hesitation overlay (for items that have a hyp word)
     const currentHypIndex = (item.type !== 'omission') ? hypIndex : null;
     if (currentHypIndex !== null && onsetDelayMap.has(currentHypIndex)) {
       const delay = onsetDelayMap.get(currentHypIndex);
-      span.classList.add('word-onset-' + delay.severity);
-      span.title += '\nOnset delay: ' + delay.gap + 's (' + delay.severity + ')';
+      span.classList.add('word-hesitation');
+      const gapMs = Math.round(delay.gap * 1000);
+      const threshMs = Math.round(delay.threshold * 1000);
+      let hesitationNote = '\nHesitation: ' + gapMs + 'ms';
+      if (delay.punctuationType === 'period') {
+        hesitationNote += ' (threshold ' + threshMs + 'ms after sentence end)';
+      } else if (delay.punctuationType === 'comma') {
+        hesitationNote += ' (threshold ' + threshMs + 'ms after comma)';
+      } else {
+        hesitationNote += ' (threshold ' + threshMs + 'ms)';
+      }
+      span.title += hesitationNote;
     }
 
     // Insert pause indicator before this word if previous hyp word had a long pause
-    if (currentHypIndex !== null && currentHypIndex > 0 && longPauseMap.has(currentHypIndex - 1)) {
-      const pause = longPauseMap.get(currentHypIndex - 1);
-      const pauseSpan = document.createElement('span');
-      pauseSpan.className = 'pause-indicator';
-      pauseSpan.title = 'Pause: ' + pause.gap + 's';
-      pauseSpan.textContent = '[' + pause.gap + 's]';
-      wordsDiv.appendChild(pauseSpan);
-      wordsDiv.appendChild(document.createTextNode(' '));
+    if (currentHypIndex !== null && currentHypIndex > 0) {
+      const hasPause = longPauseMap.has(currentHypIndex - 1);
+      console.log('[UI Debug] Checking pause before word:', item.ref, 'currentHypIndex:', currentHypIndex, 'checking key:', currentHypIndex - 1, 'found:', hasPause);
+      if (hasPause) {
+        const pause = longPauseMap.get(currentHypIndex - 1);
+        const pauseSpan = document.createElement('span');
+        pauseSpan.className = 'pause-indicator';
+        const pauseMs = Math.round(pause.gap * 1000);
+        pauseSpan.title = 'Long pause: ' + pauseMs + 'ms (error: >= 3000ms)';
+        pauseSpan.textContent = '[' + pause.gap + 's]';
+        wordsDiv.appendChild(pauseSpan);
+        wordsDiv.appendChild(document.createTextNode(' '));
+        console.log('[UI Debug] ✓ Inserted pause indicator:', pause.gap, 's before', item.ref);
+      }
     }
 
     wordsDiv.appendChild(span);
@@ -228,8 +347,9 @@ export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, di
     }
   }
 
-  // Insertions section
-  if (insertions.length > 0) {
+  // Insertions section (excluding those that are part of forgiven proper noun pronunciations)
+  const regularInsertions = insertions.filter(ins => !ins.partOfForgiven);
+  if (regularInsertions.length > 0) {
     const insertSection = document.createElement('div');
     insertSection.style.marginTop = '1rem';
     const insertLabel = document.createElement('div');
@@ -237,7 +357,7 @@ export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, di
     insertLabel.style.marginBottom = '0.25rem';
     insertLabel.textContent = 'Inserted words (not in passage):';
     insertSection.appendChild(insertLabel);
-    for (const ins of insertions) {
+    for (const ins of regularInsertions) {
       const span = document.createElement('span');
       span.className = 'word word-insertion';
       span.textContent = ins.hyp;
@@ -307,15 +427,15 @@ export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, di
   }
 
   // Enrich alignment with timestamps by walking hyp words through STT in order
-  let sttIdx = 0;
+  let enrichIdx = 0;
   const enrichedAlignment = alignment.map(item => {
     const entry = { ...item };
-    if (item.hyp && sttIdx < sttWords.length) {
-      const sw = sttWords[sttIdx];
+    if (item.hyp && enrichIdx < sttWords.length) {
+      const sw = sttWords[enrichIdx];
       entry.startTime = sw.startTime;
       entry.endTime = sw.endTime;
       entry.confidence = sw.confidence;
-      sttIdx++;
+      enrichIdx++;
     }
     return entry;
   });

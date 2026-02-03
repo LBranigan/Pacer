@@ -4,12 +4,35 @@
  * @module student-playback
  */
 
-import { SpriteAnimator } from './sprite-animator.js';
+import { EffectEngine } from './effect-engine.js';
 import { getAudioBlob } from './audio-store.js';
 import { getAssessment, getAssessments, saveGamification } from './storage.js';
 import { computeScore } from './gamification.js';
 
 const DISFLUENCIES = new Set(['um', 'uh', 'uh-huh', 'mm', 'hmm', 'er', 'ah']);
+
+function getWordRect(el, canvas) {
+  const wr = el.getBoundingClientRect();
+  const cr = canvas.getBoundingClientRect();
+  return { x: wr.left - cr.left, y: wr.top - cr.top, w: wr.width, h: wr.height };
+}
+
+function applyDecryptEffect(el) {
+  const text = el.textContent;
+  el.innerHTML = '';
+  el.classList.add('decrypting');
+  for (let i = 0; i < text.length; i++) {
+    const span = document.createElement('span');
+    span.className = 'char';
+    span.textContent = text[i];
+    span.style.animationDelay = `${i * 0.05}s`;
+    el.appendChild(span);
+  }
+  setTimeout(() => {
+    el.classList.remove('decrypting');
+    el.textContent = text;
+  }, text.length * 50 + 400);
+}
 
 /**
  * Parse STT timestamp to seconds.
@@ -28,14 +51,17 @@ function parseTime(t) {
  * Initialize the student playback page.
  */
 function initStudentPlayback() {
-  const params = new URLSearchParams(window.location.search);
-  const studentId = params.get('student');
-  const assessmentId = params.get('assessment');
+  // Apply selected theme
+  const theme = localStorage.getItem('orf_playback_theme') || 'cyber';
+  document.body.setAttribute('data-theme', theme);
+
+  // Read params from localStorage (same pattern as dashboard)
+  const studentId = localStorage.getItem('orf_playback_student');
+  const assessmentId = localStorage.getItem('orf_playback_assessment');
 
   const wordArea = document.getElementById('word-area');
   const canvas = document.getElementById('character-canvas');
   const playBtn = document.getElementById('playBtn');
-  const progressEl = document.getElementById('progressIndicator');
 
   if (!studentId || !assessmentId) {
     wordArea.innerHTML = '<p class="playback-message">Missing student or assessment parameter.</p>';
@@ -109,20 +135,22 @@ function initStudentPlayback() {
     const span = document.createElement('span');
     span.className = 'word-span';
     span.textContent = word.text;
+    span.setAttribute('data-text', word.text);
     wordArea.appendChild(span);
     word.el = span;
   }
 
-  progressEl.textContent = '0 / ' + wordSequence.length;
+
 
   // Set up canvas
   const ctx = canvas.getContext('2d');
-  let animator = new SpriteAnimator(ctx, { size: 36 });
+  let effectEngine = new EffectEngine(ctx, { theme });
 
   function sizeCanvas() {
     const rect = wordArea.getBoundingClientRect();
     canvas.width = rect.width;
     canvas.height = rect.height;
+    effectEngine.resize();
   }
   sizeCanvas();
 
@@ -170,7 +198,7 @@ function initStudentPlayback() {
           w.el.classList.add('error-done');
         }
       }
-      progressEl.textContent = wordSequence.length + ' / ' + wordSequence.length;
+
       document.dispatchEvent(new CustomEvent('playback-complete'));
     });
   }
@@ -188,60 +216,21 @@ function initStudentPlayback() {
 
   function showFeedback(score) {
     const feedbackArea = document.getElementById('feedback-area');
-    const progressVal = score.progress !== null ? Math.round(score.progress * 50) : 0;
-    const progressPct = score.progress !== null ? Math.min(Math.round(score.progress * 100), 200) : 0;
-
-    // SVG progress ring
-    const radius = 40;
-    const circ = 2 * Math.PI * radius;
-    const offset = circ - (progressPct / 200) * circ;
-
     feedbackArea.innerHTML = `
       <div class="feedback-panel">
-        <h2 class="feedback-title">Great Job!</h2>
-        <div class="feedback-stats">
-          <div class="score-display">
-            <span class="score-label">Score</span>
-            <span class="score-value" id="scoreCounter">0</span>
-          </div>
-          <div class="streak-badge">
-            <span class="streak-icon">&#x1F525;</span>
-            <span class="streak-value">${score.bestStreak}</span>
-            <span class="streak-label">Best Streak</span>
-          </div>
-          <div class="level-display">
-            <span class="level-label">Level</span>
-            <span class="level-value">${score.level}</span>
-          </div>
-        </div>
-        <div class="progress-ring-wrapper">
-          <svg class="progress-ring" width="100" height="100" viewBox="0 0 100 100">
-            <circle class="progress-ring-bg" cx="50" cy="50" r="${radius}" />
-            <circle class="progress-ring-fill" cx="50" cy="50" r="${radius}"
-              stroke-dasharray="${circ}" stroke-dashoffset="${circ}"
-              data-target-offset="${offset}" />
-          </svg>
-          <span class="progress-ring-text">${score.progress !== null ? (progressPct >= 100 ? 'Improving!' : 'Keep going!') : 'First try!'}</span>
-        </div>
-        <div class="feedback-detail">
-          ${score.wordsCorrect} / ${score.wordsTotal} words correct
-          ${score.bonus > 0 ? ` &middot; +${score.bonus} streak bonus` : ''}
-        </div>
+        <div class="feedback-score">${score.wordsCorrect} / ${score.wordsTotal} correct</div>
         <div class="feedback-actions">
           <button class="feedback-btn play-again-btn" id="playAgainBtn">Play Again</button>
-          <a href="index.html" class="feedback-btn back-home-btn">Back</a>
+          <button class="feedback-btn back-home-btn" id="backBtn">Back</button>
         </div>
       </div>
     `;
 
-    // Animate score count-up
-    const counter = document.getElementById('scoreCounter');
-    animateCount(counter, 0, score.totalPoints, 1200);
-
-    // Animate progress ring
-    const fillCircle = feedbackArea.querySelector('.progress-ring-fill');
-    requestAnimationFrame(() => {
-      fillCircle.style.strokeDashoffset = offset;
+    // Back button — close popup window, fall back to index.html
+    document.getElementById('backBtn').addEventListener('click', () => {
+      window.close();
+      // If window.close() is blocked (not opened via script), navigate instead
+      window.location.href = 'index.html';
     });
 
     // Play Again button
@@ -251,25 +240,16 @@ function initStudentPlayback() {
         audioEl.currentTime = 0;
         // Reset word styles
         for (const w of wordSequence) {
-          w.el.classList.remove('active', 'correct-done', 'error-done');
+          w.el.classList.remove('active', 'correct-done', 'error-done', 'decrypting');
+          w.el.textContent = w.text;
         }
         currentWordIdx = -1;
-        progressEl.textContent = '0 / ' + wordSequence.length;
+      
         playBtn.click();
       }
     });
   }
 
-  function animateCount(el, from, to, duration) {
-    const start = performance.now();
-    function step(now) {
-      const elapsed = now - start;
-      const t = Math.min(elapsed / duration, 1);
-      el.textContent = Math.round(from + (to - from) * t);
-      if (t < 1) requestAnimationFrame(step);
-    }
-    requestAnimationFrame(step);
-  }
 
   // Animation loop
   function animationLoop() {
@@ -281,6 +261,7 @@ function initStudentPlayback() {
     const ct = audioEl.currentTime;
     sizeCanvas();
     ctx.clearRect(0, 0, canvas.width, canvas.height);
+    effectEngine.drawBackgroundScanlines();
 
     // Find current word: whose startTime <= ct < endTime
     let newIdx = -1;
@@ -330,45 +311,47 @@ function initStudentPlayback() {
             w.el.classList.add('error-done');
           }
         } else if (i === currentWordIdx) {
-          w.el.classList.add('active');
+          if (!w.el.classList.contains('active')) {
+            w.el.classList.add('active');
+            applyDecryptEffect(w.el);
+          }
         }
       }
 
-      progressEl.textContent = (currentWordIdx + 1) + ' / ' + wordSequence.length;
 
-      // Position character above current word
-      const wordRect = cw.el.getBoundingClientRect();
-      const canvasRect = canvas.getBoundingClientRect();
-      const charX = wordRect.left - canvasRect.left + wordRect.width / 2;
-      const charY = wordRect.top - canvasRect.top - 10;
-
-      // Determine animation state
+      // Get word rect relative to canvas
+      const wr = getWordRect(cw.el, canvas);
       const isError = cw.type !== 'correct';
       const wordDuration = cw.endTime - cw.startTime;
+      const wordProgress = wordDuration > 0 ? Math.min((ct - cw.startTime) / wordDuration, 1) : 0.5;
 
-      // Check for gap battle
+      // Check for gap
       const nextSpoken = wordSequence.slice(currentWordIdx + 1).find(nw => nw.startTime > 0);
       const inGap = nextSpoken && ct >= cw.endTime && (nextSpoken.startTime - cw.endTime) > 1.5;
 
       if (isError || inGap) {
-        // Battle animation
         let battlePhase;
         if (inGap) {
-          const gapStart = cw.endTime;
-          const gapEnd = nextSpoken.startTime;
-          battlePhase = Math.min((ct - gapStart) / (gapEnd - gapStart), 1);
+          battlePhase = Math.min((ct - cw.endTime) / (nextSpoken.startTime - cw.endTime), 1);
         } else {
           battlePhase = wordDuration > 0 ? Math.min((ct - cw.startTime) / (wordDuration * 1.5), 1) : 0.5;
         }
-        animator.drawBattle(charX, charY, battlePhase);
-      } else if (wordDuration > 0) {
-        // Hop animation
-        const hopPhase = wordDuration > 0 ? ((ct - cw.startTime) / wordDuration) % 1 : 0;
-        animator.drawHop(charX, charY, hopPhase);
+        effectEngine.drawErrorGlitch(wr, battlePhase);
+        effectEngine.drawScanLine(wr, wordProgress, true);
       } else {
-        animator.drawIdle(charX, charY);
+        if (wordProgress < 0.3) {
+          effectEngine.drawGridSweep(wr, wordProgress / 0.3);
+        }
+        if (wordProgress >= 0.3 && wordProgress <= 0.8) {
+          effectEngine.drawScanLine(wr, (wordProgress - 0.3) / 0.5);
+        }
       }
+
+      effectEngine.updateNeonTrail(wr);
     }
+
+    effectEngine.update(0.016);
+    effectEngine.render();
 
     animFrameId = requestAnimationFrame(animationLoop);
   }

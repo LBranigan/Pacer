@@ -6,6 +6,59 @@
 import { normalizeText, filterDisfluencies } from './text-normalize.js';
 import { getCanonical } from './word-equivalences.js';
 
+/**
+ * Post-process alignment to detect compound words split by ASR.
+ * E.g., reference "hotdog" transcribed as "hot" + "dog" should be marked correct.
+ *
+ * Pattern: substitution(ref=X, hyp=A) followed by insertion(hyp=B) where A+B = X
+ */
+function mergeCompoundWords(alignment) {
+  const result = [];
+  let i = 0;
+
+  while (i < alignment.length) {
+    const current = alignment[i];
+
+    // Look for substitution followed by one or more insertions
+    if (current.type === 'substitution' && current.ref && current.hyp) {
+      const refCanon = getCanonical(current.ref);
+      let combined = current.hyp;
+      let insertionsConsumed = 0;
+
+      // Try combining with following insertions
+      for (let j = i + 1; j < alignment.length && alignment[j].type === 'insertion'; j++) {
+        combined += alignment[j].hyp;
+        insertionsConsumed++;
+
+        // Check if combined matches reference
+        if (getCanonical(combined) === refCanon) {
+          // Found compound word match
+          result.push({
+            ref: current.ref,
+            hyp: combined,
+            type: 'correct',
+            compound: true,
+            parts: [current.hyp, ...alignment.slice(i + 1, i + 1 + insertionsConsumed).map(a => a.hyp)]
+          });
+          i += 1 + insertionsConsumed;
+          break;
+        }
+      }
+
+      // If no compound match found, keep original
+      if (i < alignment.length && alignment[i] === current) {
+        result.push(current);
+        i++;
+      }
+    } else {
+      result.push(current);
+      i++;
+    }
+  }
+
+  return result;
+}
+
 /* diff-match-patch constants */
 const DIFF_DELETE = -1;
 const DIFF_INSERT = 1;
@@ -104,5 +157,6 @@ export function alignWords(referenceText, transcriptWords) {
     }
   }
 
-  return result;
+  // Merge compound words split by ASR (e.g., "hotdog" → "hot" + "dog")
+  return mergeCompoundWords(result);
 }

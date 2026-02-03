@@ -52,38 +52,59 @@ export function buildHypToRefMap(alignment) {
   return map;
 }
 
-// ── DIAG-01: Onset Delays ───────────────────────────────────────────
+// ── DIAG-01: Onset Delays (Hesitations) ─────────────────────────────
 
 /**
- * Detect inter-word gaps indicating onset delays.
- * Returns array of { wordIndex, word, gap, severity }.
+ * Detect inter-word gaps indicating hesitations.
+ * Flags gaps between 500ms-3000ms as hesitations (not errors).
+ * Punctuation adjusts the threshold:
+ *   - After period/!/?: threshold is 1200ms
+ *   - After comma: threshold is 800ms
+ *   - Otherwise: threshold is 500ms
+ * Returns array of { wordIndex, word, gap, threshold, punctuationType }.
  */
-export function detectOnsetDelays(transcriptWords) {
+export function detectOnsetDelays(transcriptWords, referenceText, alignment) {
   const results = [];
+
+  // Build punctuation map and hyp->ref map for threshold adjustments
+  const punctMap = referenceText ? getPunctuationPositions(referenceText) : new Map();
+  const hypToRef = alignment ? buildHypToRefMap(alignment) : new Map();
+
   for (let i = 0; i < transcriptWords.length; i++) {
     const w = transcriptWords[i];
     const start = parseTime(w.startTime);
     let gap;
+
+    // Skip first word entirely - no hesitation detection
+    // (timer will be aligned to first word start, so no "delay" is possible)
     if (i === 0) {
-      gap = start;
-      // First word: only flag if >= 3s to avoid recording lead-in
-      if (gap < 3) continue;
-    } else {
-      const prevEnd = parseTime(transcriptWords[i - 1].endTime);
-      gap = start - prevEnd;
+      continue;
     }
 
-    let severity = null;
-    if (gap >= 5) severity = 'frustration';
-    else if (gap >= 3) severity = 'flag';
-    else if (gap >= 1.5) severity = 'developing';
+    const prevEnd = parseTime(transcriptWords[i - 1].endTime);
+    gap = start - prevEnd;
 
-    if (severity) {
+    // Determine threshold based on punctuation after previous word
+    let threshold = 0.5; // 500ms default
+    let punctuationType = null;
+    const prevRefIdx = hypToRef.get(i - 1);
+    if (prevRefIdx !== undefined && punctMap.has(prevRefIdx)) {
+      punctuationType = punctMap.get(prevRefIdx);
+      if (punctuationType === 'period') {
+        threshold = 1.2; // 1200ms after sentence-ending punctuation
+      } else if (punctuationType === 'comma') {
+        threshold = 0.8; // 800ms after comma
+      }
+    }
+
+    // Flag hesitations: gap >= threshold AND gap < 3s (3s+ handled by long pause)
+    if (gap >= threshold && gap < 3) {
       results.push({
         wordIndex: i,
         word: w.word,
-        gap: Math.round(gap * 10) / 10,
-        severity
+        gap: Math.round(gap * 1000) / 1000,
+        threshold,
+        punctuationType
       });
     }
   }
@@ -93,12 +114,11 @@ export function detectOnsetDelays(transcriptWords) {
 // ── DIAG-02: Long Pauses ────────────────────────────────────────────
 
 /**
- * Detect pauses >= 3s (with punctuation allowance) between words.
- * Returns array of { afterWordIndex, gap, threshold, punctuationType }.
+ * Detect pauses >= 3s between words.
+ * Any pause of 3 seconds or longer is flagged as an error.
+ * Returns array of { afterWordIndex, gap }.
  */
-export function detectLongPauses(transcriptWords, referenceText, alignment) {
-  const punctMap = getPunctuationPositions(referenceText);
-  const hypToRef = buildHypToRefMap(alignment);
+export function detectLongPauses(transcriptWords) {
   const results = [];
 
   for (let i = 0; i < transcriptWords.length - 1; i++) {
@@ -106,20 +126,10 @@ export function detectLongPauses(transcriptWords, referenceText, alignment) {
     const nextStart = parseTime(transcriptWords[i + 1].startTime);
     const gap = nextStart - end;
 
-    let threshold = 3;
-    let punctuationType = null;
-    const refIdx = hypToRef.get(i);
-    if (refIdx !== undefined && punctMap.has(refIdx)) {
-      punctuationType = punctMap.get(refIdx);
-      threshold += punctuationType === 'comma' ? 0.6 : 1.2;
-    }
-
-    if (gap > threshold) {
+    if (gap >= 3) {
       results.push({
         afterWordIndex: i,
-        gap: Math.round(gap * 10) / 10,
-        threshold,
-        punctuationType
+        gap: Math.round(gap * 10) / 10
       });
     }
   }
@@ -344,8 +354,8 @@ export function computeTierBreakdown(alignment) {
  */
 export function runDiagnostics(transcriptWords, alignment, referenceText, sttLookup) {
   return {
-    onsetDelays: detectOnsetDelays(transcriptWords),
-    longPauses: detectLongPauses(transcriptWords, referenceText, alignment),
+    onsetDelays: detectOnsetDelays(transcriptWords, referenceText, alignment),
+    longPauses: detectLongPauses(transcriptWords),
     selfCorrections: detectSelfCorrections(transcriptWords, alignment),
     morphologicalErrors: detectMorphologicalErrors(alignment, sttLookup),
     prosodyProxy: computeProsodyProxy(transcriptWords, referenceText, alignment)

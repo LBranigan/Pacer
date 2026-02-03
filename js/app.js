@@ -12,6 +12,11 @@ import { analyzePassageText, levenshteinRatio } from './nl-api.js';
 import { getStudents, addStudent, deleteStudent, saveAssessment, getAssessments } from './storage.js';
 import { saveAudioBlob } from './audio-store.js';
 import { initDashboard } from './dashboard.js';
+import { initDebugLog, addStage, addWarning, addError, finalizeDebugLog, saveDebugLog } from './debug-logger.js';
+
+// Code version for cache verification
+const CODE_VERSION = 'v33-2026-02-03';
+console.log('[ORF] Code version:', CODE_VERSION);
 
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('./sw.js')
@@ -85,6 +90,10 @@ function refreshStudentUI() {
 }
 
 async function runAnalysis() {
+  // Initialize debug logging for this assessment
+  initDebugLog();
+  addStage('start', { codeVersion: CODE_VERSION, timestamp: new Date().toISOString() });
+
   if (!appState.audioBlob) {
     setStatus('No audio recorded or uploaded.');
     return;
@@ -115,10 +124,17 @@ async function runAnalysis() {
   }
 
   if (!data || !data.results) {
+    addError('STT returned no results', { data });
     displayResults(data || {});
     analyzeBtn.disabled = false;
+    finalizeDebugLog({ error: 'No STT results' });
     return;
   }
+
+  addStage('stt_response', {
+    resultsCount: data.results.length,
+    totalWords: data.results.reduce((sum, r) => sum + (r.alternatives?.[0]?.words?.length || 0), 0)
+  });
 
   let referenceText = document.getElementById('transcript').value.trim();
 
@@ -140,6 +156,35 @@ async function runAnalysis() {
     }
   }
 
+  // Log STT words with timestamps for debugging pause detection
+  addStage('stt_words', {
+    count: transcriptWords.length,
+    words: transcriptWords.map((w, idx) => ({
+      idx,
+      word: w.word,
+      start: w.startTime,
+      end: w.endTime,
+      confidence: w.confidence
+    })),
+    gaps: transcriptWords.slice(1).map((w, idx) => {
+      const prev = transcriptWords[idx];
+      const prevEnd = parseFloat(prev.endTime?.replace('s', '') || '0');
+      const currStart = parseFloat(w.startTime?.replace('s', '') || '0');
+      return {
+        afterWord: prev.word,
+        beforeWord: w.word,
+        gap: Math.round((currStart - prevEnd) * 1000) / 1000,
+        sttIndex: idx + 1
+      };
+    }).filter(g => g.gap >= 0.5)
+  });
+
+  addStage('reference_text', {
+    text: referenceText,
+    wordCount: referenceText.split(/\s+/).length,
+    isFromOCR: appState.referenceIsFromOCR
+  });
+
   // Trim OCR passage to attempted range
   if (appState.referenceIsFromOCR && transcriptWords.length > 0) {
     const trimmed = trimPassageToAttempted(referenceText, transcriptWords);
@@ -157,6 +202,11 @@ async function runAnalysis() {
   if (apiKey) {
     setStatus('Analyzing passage text...');
     nlAnnotations = await analyzePassageText(referenceText, apiKey);
+    addStage('nl_annotations', {
+      hasAnnotations: !!nlAnnotations,
+      count: nlAnnotations?.length || 0,
+      properNouns: nlAnnotations?.filter(a => a?.isProperNoun).map(a => a.word) || []
+    });
   }
 
   // Build lookup: normalized hyp word -> queue of STT metadata
@@ -169,8 +219,34 @@ async function runAnalysis() {
 
   const alignment = alignWords(referenceText, transcriptWords);
 
+  addStage('alignment', {
+    totalEntries: alignment.length,
+    correct: alignment.filter(a => a.type === 'correct').length,
+    substitutions: alignment.filter(a => a.type === 'substitution').length,
+    omissions: alignment.filter(a => a.type === 'omission').length,
+    insertions: alignment.filter(a => a.type === 'insertion').length
+  });
+
   // Run diagnostics first so we can heal self-corrections
   const diagnostics = runDiagnostics(transcriptWords, alignment, referenceText, sttLookup);
+
+  addStage('diagnostics', {
+    longPauses: diagnostics.longPauses?.length || 0,
+    longPauseDetails: diagnostics.longPauses?.map(p => ({
+      afterWordIndex: p.afterWordIndex,
+      afterWord: transcriptWords[p.afterWordIndex]?.word || '?',
+      beforeWord: transcriptWords[p.afterWordIndex + 1]?.word || '?',
+      gap: p.gap
+    })) || [],
+    hesitations: diagnostics.onsetDelays?.length || 0,
+    hesitationDetails: diagnostics.onsetDelays?.map(d => ({
+      wordIndex: d.wordIndex,
+      word: d.word,
+      gap: d.gap,
+      threshold: d.threshold
+    })) || [],
+    selfCorrections: diagnostics.selfCorrections?.length || 0
+  });
 
   // Reclassify alignment entries that are part of self-corrections
   // (e.g. repeated "ran" should not count as an insertion)
@@ -219,24 +295,148 @@ async function runAnalysis() {
       refWordIndex++;
     }
 
-    // ASR healing: forgive proper noun substitutions with high similarity
-    for (const entry of alignment) {
-      if (entry.type === 'substitution' && entry.nl && entry.nl.isProperNoun) {
-        const ratio = levenshteinRatio(entry.ref, entry.hyp);
-        if (ratio > 0.5) {
-          entry.originalHyp = entry.hyp;
-          entry.healed = true;
-          entry.type = 'correct';
+    // Build capitalization map from original reference text as fallback for proper noun detection
+    // (NL API may miss proper nouns without sufficient context)
+    const refWordsOriginal = referenceText.trim().split(/\s+/);
+    const isCapitalized = (word, index) => {
+      if (!word || word.length === 0) return false;
+      const firstChar = word.charAt(0);
+      if (firstChar !== firstChar.toUpperCase()) return false;
+      // Check if it's at sentence start (after . ! ? or first word)
+      if (index === 0) return false;
+      const prevWord = refWordsOriginal[index - 1];
+      if (prevWord && /[.!?]$/.test(prevWord)) return false;
+      return true;
+    };
+
+    // Mark proper noun errors as forgiven if phonetically close
+    // (student decoded correctly but doesn't know accepted pronunciation - vocabulary gap, not decoding failure)
+    // Also handles split pronunciations like "her-my-own" for "Hermione"
+    const forgivenessLog = [];
+    let refIdx = 0;
+    for (let i = 0; i < alignment.length; i++) {
+      const entry = alignment[i];
+      if (entry.type === 'insertion') continue;
+
+      if (entry.type === 'substitution') {
+        // Check if proper noun via NL API OR via capitalization heuristic
+        const isProperViaNL = entry.nl && entry.nl.isProperNoun;
+        const isProperViaCaps = isCapitalized(refWordsOriginal[refIdx], refIdx);
+
+        const logEntry = {
+          refWord: entry.ref,
+          hypWord: entry.hyp,
+          refIdx,
+          isProperViaNL,
+          isProperViaCaps,
+          nlData: entry.nl
+        };
+
+        if (isProperViaNL || isProperViaCaps) {
+          // Try combining with following insertions to find best phonetic match
+          // (handles "her" + "my" + "own" = "hermyown" for "Hermione")
+          let bestRatio = levenshteinRatio(entry.ref, entry.hyp);
+          let bestCombined = entry.hyp;
+          let bestInsertionsUsed = 0;
+
+          // Check all possible combinations with following insertions
+          let combined = entry.hyp;
+          const combinationAttempts = [{ combined: entry.hyp, ratio: bestRatio, insertions: 0 }];
+          for (let j = i + 1; j < alignment.length && alignment[j].type === 'insertion'; j++) {
+            combined += alignment[j].hyp;
+            const insertionCount = j - i;
+            const newRatio = levenshteinRatio(entry.ref, combined);
+            combinationAttempts.push({ combined, ratio: newRatio, insertions: insertionCount });
+            if (newRatio > bestRatio) {
+              bestRatio = newRatio;
+              bestCombined = combined;
+              bestInsertionsUsed = insertionCount;
+            }
+          }
+
+          logEntry.combinationAttempts = combinationAttempts;
+          logEntry.bestRatio = bestRatio;
+          logEntry.bestCombined = bestCombined;
+          logEntry.bestInsertionsUsed = bestInsertionsUsed;
+          logEntry.threshold = 0.4;
+          logEntry.meetsThreshold = bestRatio >= 0.4;
+
+          if (bestRatio >= 0.4) {
+            entry.forgiven = true;
+            entry.phoneticRatio = Math.round(bestRatio * 100);
+            entry.properNounSource = isProperViaNL ? 'NL API' : 'capitalization';
+            logEntry.forgiven = true;
+            if (bestInsertionsUsed > 0) {
+              entry.combinedPronunciation = bestCombined;
+              // Also mark the insertions as part of the forgiven pronunciation
+              for (let j = 1; j <= bestInsertionsUsed; j++) {
+                if (alignment[i + j]) {
+                  alignment[i + j].partOfForgiven = true;
+                }
+              }
+            }
+          }
         }
+        forgivenessLog.push(logEntry);
       }
+      refIdx++;
+      // Omissions of proper nouns are NOT forgiven - student didn't attempt the word
     }
+
+    addStage('proper_noun_forgiveness', {
+      totalSubstitutions: forgivenessLog.length,
+      properNounsFound: forgivenessLog.filter(l => l.isProperViaNL || l.isProperViaCaps).length,
+      forgiven: forgivenessLog.filter(l => l.forgiven).length,
+      details: forgivenessLog
+    });
   }
 
-  const wcpm = (appState.elapsedSeconds != null && appState.elapsedSeconds > 0)
-    ? computeWCPM(alignment, appState.elapsedSeconds)
+  // Calculate effective reading time: first word start = t=0
+  // This gives the student a full 60 seconds from when they start speaking
+  let effectiveElapsedSeconds = appState.elapsedSeconds;
+  if (transcriptWords.length > 0) {
+    const parseTime = (t) => parseFloat(String(t).replace('s', '')) || 0;
+    const firstWordStart = parseTime(transcriptWords[0].startTime);
+    const lastWordEnd = parseTime(transcriptWords[transcriptWords.length - 1].endTime);
+    const readingDuration = lastWordEnd - firstWordStart;
+
+    // Use the actual reading duration (first word to last word)
+    // Cap at 60 seconds for standard ORF assessment
+    effectiveElapsedSeconds = Math.min(readingDuration, 60);
+
+    addStage('timing_adjustment', {
+      recordingElapsed: appState.elapsedSeconds,
+      firstWordStart,
+      lastWordEnd,
+      readingDuration: Math.round(readingDuration * 100) / 100,
+      effectiveElapsed: Math.round(effectiveElapsedSeconds * 100) / 100
+    });
+  }
+
+  const wcpm = (effectiveElapsedSeconds != null && effectiveElapsedSeconds > 0)
+    ? computeWCPM(alignment, effectiveElapsedSeconds)
     : null;
   const accuracy = computeAccuracy(alignment, { forgivenessEnabled: !!nlAnnotations });
   const tierBreakdown = nlAnnotations ? computeTierBreakdown(alignment) : null;
+
+  addStage('metrics_computed', {
+    wcpm: wcpm?.wcpm || null,
+    accuracy: accuracy.accuracy,
+    totalRefWords: accuracy.totalRefWords,
+    substitutions: accuracy.substitutions,
+    omissions: accuracy.omissions,
+    insertions: accuracy.insertions,
+    forgiven: accuracy.forgiven,
+    forgivenessEnabled: accuracy.forgivenessEnabled,
+    alignmentSummary: alignment.map(a => ({
+      ref: a.ref,
+      hyp: a.hyp,
+      type: a.type,
+      forgiven: a.forgiven,
+      partOfForgiven: a.partOfForgiven
+    }))
+  });
+
   displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, diagnostics, transcriptWords, tierBreakdown);
 
   if (appState.selectedStudentId) {
@@ -256,7 +456,7 @@ async function runAnalysis() {
       accuracy: accuracy.accuracy,
       totalWords: accuracy.totalRefWords,
       errors: accuracy.substitutions + accuracy.omissions,
-      duration: appState.elapsedSeconds,
+      duration: effectiveElapsedSeconds,
       passagePreview: referenceText.slice(0, 60),
       errorBreakdown,
       alignment,
@@ -271,8 +471,25 @@ async function runAnalysis() {
     if (appState.audioBlob) {
       showPlaybackButton(appState.selectedStudentId, assessmentId);
     }
+
+    // Finalize and auto-save debug log
+    finalizeDebugLog({
+      studentId: appState.selectedStudentId,
+      assessmentId,
+      wcpm: wcpm?.wcpm || null,
+      accuracy: accuracy.accuracy,
+      totalWords: accuracy.totalRefWords,
+      errors: accuracy.substitutions + accuracy.omissions,
+      forgiven: accuracy.forgiven
+    });
   } else {
     setStatus('Done.');
+    // Finalize debug log without assessment save
+    finalizeDebugLog({
+      noStudent: true,
+      wcpm: wcpm?.wcpm || null,
+      accuracy: accuracy.accuracy
+    });
   }
 
   analyzeBtn.disabled = false;

@@ -29,18 +29,25 @@ export function computeAccuracy(alignmentResult, options = {}) {
     switch (w.type) {
       case 'correct':
         correctCount++;
-        if (w.healed) forgiven++;
         break;
       case 'substitution':
-        // Proper noun forgiveness: count as correct if enabled
-        if (options.forgivenessEnabled && w.nl && w.nl.isProperNoun) {
+        // Proper noun forgiveness: count as correct if flagged as forgiven
+        if (w.forgiven) {
           correctCount++;
           forgiven++;
         } else {
           substitutions++;
         }
         break;
-      case 'omission': omissions++; break;
+      case 'omission':
+        // Proper noun forgiveness for omissions too
+        if (w.forgiven) {
+          correctCount++;
+          forgiven++;
+        } else {
+          omissions++;
+        }
+        break;
       case 'insertion': insertions++; break;
     }
   }
