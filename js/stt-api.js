@@ -65,6 +65,29 @@ function blobToBase64(blob) {
 }
 
 /**
+ * Raw STT API call (internal helper).
+ * @param {string} base64 - Base64 encoded audio
+ * @param {object} config - STT config object
+ * @param {string} apiKey - Google Cloud API key
+ * @returns {Promise<object>} STT response JSON
+ */
+async function fetchSTTRaw(base64, config, apiKey) {
+  const resp = await fetch(
+    'https://speech.googleapis.com/v1/speech:recognize?key=' + encodeURIComponent(apiKey),
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ config, audio: { content: base64 } })
+    }
+  );
+  const data = await resp.json();
+  if (data.error) {
+    throw new Error(data.error.message || 'STT API error');
+  }
+  return data;
+}
+
+/**
  * Build STT config object shared by sync and async paths.
  * Uses latest_long model with tiered phrase boosting.
  */
@@ -252,5 +275,45 @@ export function getDefaultModelConfig(encoding, passageText) {
     enableWordConfidence: true,
     maxAlternatives: 1,
     speechContexts: buildSpeechContexts(passageText, { properNounBoost: 3, uncommonBoost: 2 })
+  };
+}
+
+/**
+ * Send audio to both latest_long and default models in parallel.
+ * Uses Promise.allSettled to ensure both results are returned even if one fails.
+ * @param {Blob} blob - Audio blob
+ * @param {string} encoding - Audio encoding (e.g., 'WEBM_OPUS')
+ * @returns {Promise<object>} Object with latestLong, default, and errors properties
+ */
+export async function sendEnsembleSTT(blob, encoding) {
+  const apiKey = document.getElementById('apiKey').value.trim();
+  if (!apiKey) {
+    return {
+      latestLong: null,
+      default: null,
+      errors: { api: 'No API key' }
+    };
+  }
+
+  const passageText = document.getElementById('transcript').value.trim();
+  const base64 = await blobToBase64(blob);
+
+  // Build configs for both models
+  const latestConfig = buildSTTConfig(encoding);
+  const defaultConfig = getDefaultModelConfig(encoding, passageText);
+
+  // Fire both API calls in parallel
+  const [latestResult, defaultResult] = await Promise.allSettled([
+    fetchSTTRaw(base64, latestConfig, apiKey),
+    fetchSTTRaw(base64, defaultConfig, apiKey)
+  ]);
+
+  return {
+    latestLong: latestResult.status === 'fulfilled' ? latestResult.value : null,
+    default: defaultResult.status === 'fulfilled' ? defaultResult.value : null,
+    errors: {
+      latestLong: latestResult.status === 'rejected' ? latestResult.reason?.message : null,
+      default: defaultResult.status === 'rejected' ? defaultResult.reason?.message : null
+    }
   };
 }
