@@ -9,15 +9,15 @@ See: .planning/PROJECT.md (updated 2026-02-03)
 
 ## Current Position
 
-Phase: 13 - Confidence Classification ✓ COMPLETE
-Plan: —
-Status: Phase 13 verified, ready for Phase 14
-Last activity: 2026-02-03 — Phase 13 complete
+Phase: 14 - Disfluency Detection (In Progress)
+Plan: 01 of 04 complete
+Status: Plan 14-01 complete, ready for 14-02
+Last activity: 2026-02-03 — Completed 14-01-PLAN.md
 
-Progress: [████████████████████░░░░░░░░░░] 68% (11/16 v1.1 plans)
+Progress: [█████████████████████░░░░░░░░░] 75% (12/16 v1.1 plans)
 
 Phases remaining: 3 (Phases 14-16)
-Plans completed in v1.1: 11
+Plans completed in v1.1: 12
 
 ## Performance Metrics
 
@@ -27,9 +27,9 @@ Plans completed in v1.1: 11
 - Total execution time: ~0.7 hours
 
 **v1.1 Velocity:**
-- Plans completed: 11
+- Plans completed: 12
 - Average duration: 2.5min
-- Total execution time: ~30min
+- Total execution time: ~32min
 
 ## Accumulated Context
 
@@ -67,6 +67,9 @@ See PROJECT.md Key Decisions table.
 - Classification pipeline: Classify -> Filter ghosts -> Align (13-03)
 - Ghost words filtered via data structure modification before alignment (13-03)
 - _classification field persisted in saved assessments (13-03)
+- 2s gap threshold for stutter event grouping (14-01)
+- Reuse parseTime from diagnostics.js (14-01)
+- Count-First, Duration-Override severity model (14-01)
 
 ### Pending Todos
 
@@ -81,5 +84,5 @@ None.
 ## Session Continuity
 
 Last session: 2026-02-03
-Stopped at: Phase 13 complete
-Resume with: `/gsd:discuss-phase 14`
+Stopped at: Completed 14-01-PLAN.md
+Resume with: `/gsd:execute-plan 14-02`
