@@ -276,6 +276,7 @@ async function runAnalysis() {
   }
 
   // Log STT words with timestamps for debugging pause detection
+  // NOTE: After Phase 13, transcriptWords excludes ghost words (filtered before alignment)
   addStage('stt_words', {
     count: transcriptWords.length,
     words: transcriptWords.map((w, idx) => ({
@@ -283,7 +284,9 @@ async function runAnalysis() {
       word: w.word,
       start: w.startTime,
       end: w.endTime,
-      confidence: w.confidence
+      confidence: w.confidence,
+      trustLevel: w.trustLevel,  // Phase 13: trust classification
+      _flags: w._flags  // Phase 13: possible_insertion, etc.
     })),
     gaps: transcriptWords.slice(1).map((w, idx) => {
       const prev = transcriptWords[idx];
