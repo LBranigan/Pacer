@@ -9,10 +9,10 @@ Requirements for the ASR Ensemble milestone. Each maps to roadmap phases.
 
 ### Ensemble Core
 
-- [ ] **ENS-01**: System calls both `latest_long` and `default` STT models in parallel
-- [ ] **ENS-02**: Temporal word association maps words by time overlap (not text equality)
-- [ ] **ENS-03**: 50ms asymmetric jitter buffer handles CTC vs Conformer timestamp drift
-- [ ] **ENS-04**: Merged transcript preserves `_debug` data showing both model results
+- [x] **ENS-01**: System calls both `latest_long` and `default` STT models in parallel
+- [x] **ENS-02**: Temporal word association maps words by time overlap (not text equality)
+- [x] **ENS-03**: 50ms asymmetric jitter buffer handles CTC vs Conformer timestamp drift
+- [x] **ENS-04**: Merged transcript preserves `_debug` data showing both model results
 
 ### Confidence Classification
 
@@ -98,10 +98,10 @@ Which phases cover which requirements. Updated during roadmap creation.
 | CFG-01 | Phase 10 | Complete |
 | CFG-02 | Phase 10 | Complete |
 | CFG-03 | Phase 10 | Complete |
-| ENS-01 | Phase 11 | Pending |
-| ENS-02 | Phase 11 | Pending |
-| ENS-03 | Phase 11 | Pending |
-| ENS-04 | Phase 11 | Pending |
+| ENS-01 | Phase 11 | Complete |
+| ENS-02 | Phase 11 | Complete |
+| ENS-03 | Phase 11 | Complete |
+| ENS-04 | Phase 11 | Complete |
 | VAD-01 | Phase 12 | Pending |
 | VAD-02 | Phase 12 | Pending |
 | VAD-03 | Phase 12 | Pending |

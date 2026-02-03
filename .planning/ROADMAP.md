@@ -45,9 +45,9 @@ Plans:
 **Plans**: 3 plans (2 waves)
 
 Plans:
-- [ ] 11-01-PLAN.md — Parallel model API calls (Wave 1)
-- [ ] 11-02-PLAN.md — Temporal word association algorithm (Wave 1)
-- [ ] 11-03-PLAN.md — Transcript merger with app.js integration (Wave 2)
+- [x] 11-01-PLAN.md — Parallel model API calls (Wave 1)
+- [x] 11-02-PLAN.md — Temporal word association algorithm (Wave 1)
+- [x] 11-03-PLAN.md — Transcript merger with app.js integration (Wave 2)
 
 ### Phase 12: VAD Integration
 **Goal**: Detect hallucinations by checking for actual speech during `latest_only` words
@@ -149,7 +149,7 @@ Plans:
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 10. Configuration | 1/1 | Complete | 2026-02-03 |
-| 11. Ensemble Core | 0/3 | Planned | - |
+| 11. Ensemble Core | 3/3 | Complete | 2026-02-03 |
 | 12. VAD Integration | 0/4 | Not started | - |
 | 13. Confidence Classification | 0/2 | Not started | - |
 | 14. Disfluency Detection | 0/3 | Not started | - |
