@@ -148,3 +148,30 @@ export function mergeEnsembleResults(ensembleResult) {
 
   return merged;
 }
+
+/**
+ * Compute statistics about the ensemble merge.
+ * @param {Array} mergedWords - Result from mergeEnsembleResults
+ * @returns {object} Statistics object
+ */
+export function computeEnsembleStats(mergedWords) {
+  const stats = {
+    totalWords: mergedWords.length,
+    both: 0,
+    latestOnly: 0,
+    defaultOnly: 0,
+    agreementRate: 0
+  };
+
+  for (const w of mergedWords) {
+    if (w.source === 'both') stats.both++;
+    else if (w.source === 'latest_only') stats.latestOnly++;
+    else if (w.source === 'default_only') stats.defaultOnly++;
+  }
+
+  stats.agreementRate = stats.totalWords > 0
+    ? Math.round((stats.both / stats.totalWords) * 100)
+    : 0;
+
+  return stats;
+}
