@@ -17,6 +17,7 @@ import { initDebugLog, addStage, addWarning, addError, finalizeDebugLog, saveDeb
 import { vadProcessor } from './vad-processor.js';
 import { flagGhostWords } from './ghost-detector.js';
 import { classifyAllWords, filterGhosts, computeClassificationStats } from './confidence-classifier.js';
+import { detectDisfluencies } from './disfluency-detector.js';
 
 // Code version for cache verification
 const CODE_VERSION = 'v34-2026-02-03';
@@ -212,15 +213,35 @@ async function runAnalysis() {
       console.log(`[ORF] ${classificationStats.possibleInsertions} possible insertions flagged (not filtered)`);
     }
 
+    // Disfluency detection (Phase 14)
+    // Pipeline: Classify -> Filter ghosts -> Detect disfluencies -> Align
+    setStatus('Detecting disfluencies...');
+    const disfluencyResult = detectDisfluencies(wordsForAlignment);
+    const wordsWithDisfluency = disfluencyResult.words;
+
+    addStage('disfluency_detection', {
+      wordsProcessed: wordsForAlignment.length,
+      wordsAfter: wordsWithDisfluency.length,
+      fragmentsRemoved: disfluencyResult.fragmentsRemoved,
+      summary: disfluencyResult.summary
+    });
+
+    if (disfluencyResult.fragmentsRemoved > 0) {
+      console.log(`[ORF] Disfluency: ${disfluencyResult.fragmentsRemoved} fragments merged`);
+    }
+    if (disfluencyResult.summary.totalWordsWithDisfluency > 0) {
+      console.log(`[ORF] Disfluency: ${disfluencyResult.summary.totalWordsWithDisfluency} words with stutter events`);
+    }
+
     // Convert merged words to STT response format for compatibility
     // (existing code expects data.results structure)
-    // NOTE: Use wordsForAlignment (ghosts removed) for alignment
+    // NOTE: Use wordsWithDisfluency (ghosts removed, fragments merged) for alignment
     // but preserve all words in _classification for debugging
     data = {
       results: [{
         alternatives: [{
-          words: wordsForAlignment,  // FILTERED words for alignment (ghosts excluded)
-          transcript: wordsForAlignment.map(w => w.word).join(' ')
+          words: wordsWithDisfluency,  // Words with disfluency data (fragments removed)
+          transcript: wordsWithDisfluency.map(w => w.word).join(' ')
         }]
       }],
       _ensemble: {
@@ -238,6 +259,10 @@ async function runAnalysis() {
         stats: classificationStats,
         allWords: classifiedWords,  // Keep ALL words (including ghosts) for debugging
         filteredCount: classifiedWords.length - wordsForAlignment.length
+      },
+      _disfluency: {
+        summary: disfluencyResult.summary,
+        fragmentsRemoved: disfluencyResult.fragmentsRemoved
       }
     };
   }
@@ -587,7 +612,8 @@ async function runAnalysis() {
       nlAnnotations,
       _ensemble: data._ensemble || null,  // Preserves ensemble debug data
       _vad: data._vad || null,  // Preserves VAD ghost detection data
-      _classification: data._classification || null  // Preserves confidence classification data
+      _classification: data._classification || null,  // Preserves confidence classification data
+      _disfluency: data._disfluency || null  // Preserves disfluency detection data
     });
     refreshStudentUI();
     setStatus('Done (saved).');
