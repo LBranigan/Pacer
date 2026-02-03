@@ -186,13 +186,41 @@ async function runAnalysis() {
       console.warn('[ORF] VAD not loaded, skipping ghost detection:', vadProcessor.loadError);
     }
 
+    // Confidence classification (Phase 13)
+    // Pipeline: Classify -> Filter ghosts -> Align
+    setStatus('Classifying word confidence...');
+    const referenceText = document.getElementById('transcript').value.trim();
+    const classifiedWords = classifyAllWords(mergedWords, referenceText);
+    const classificationStats = computeClassificationStats(classifiedWords);
+
+    addStage('confidence_classification', {
+      total: classificationStats.total,
+      high: classificationStats.high,
+      medium: classificationStats.medium,
+      low: classificationStats.low,
+      ghost: classificationStats.ghost,
+      possibleInsertions: classificationStats.possibleInsertions
+    });
+
+    // Filter ghost words BEFORE alignment (confidence === 0.0)
+    const wordsForAlignment = filterGhosts(classifiedWords);
+
+    if (classificationStats.ghost > 0) {
+      console.log(`[ORF] Filtered ${classificationStats.ghost} ghost words before alignment`);
+    }
+    if (classificationStats.possibleInsertions > 0) {
+      console.log(`[ORF] ${classificationStats.possibleInsertions} possible insertions flagged (not filtered)`);
+    }
+
     // Convert merged words to STT response format for compatibility
     // (existing code expects data.results structure)
+    // NOTE: Use wordsForAlignment (ghosts removed) for alignment
+    // but preserve all words in _classification for debugging
     data = {
       results: [{
         alternatives: [{
-          words: mergedWords,
-          transcript: mergedWords.map(w => w.word).join(' ')
+          words: wordsForAlignment,  // FILTERED words for alignment (ghosts excluded)
+          transcript: wordsForAlignment.map(w => w.word).join(' ')
         }]
       }],
       _ensemble: {
@@ -205,6 +233,11 @@ async function runAnalysis() {
         ghostCount: ghostResult.ghostCount,
         hasGhostSequence: ghostResult.hasGhostSequence,
         error: vadResult.error || ghostResult.vadError
+      },
+      _classification: {
+        stats: classificationStats,
+        allWords: classifiedWords,  // Keep ALL words (including ghosts) for debugging
+        filteredCount: classifiedWords.length - wordsForAlignment.length
       }
     };
   }
@@ -550,7 +583,8 @@ async function runAnalysis() {
       audioRef: appState.audioBlob ? assessmentId : null,
       nlAnnotations,
       _ensemble: data._ensemble || null,  // Preserves ensemble debug data
-      _vad: data._vad || null  // Preserves VAD ghost detection data
+      _vad: data._vad || null,  // Preserves VAD ghost detection data
+      _classification: data._classification || null  // Preserves confidence classification data
     });
     refreshStudentUI();
     setStatus('Done (saved).');
