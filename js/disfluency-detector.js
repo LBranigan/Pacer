@@ -129,3 +129,39 @@ export function calculateSeverity(attempts, totalDuration = 0, maxPause = 0) {
   // Fallback (should not reach here, but be safe)
   return SEVERITY_LEVELS.NONE;
 }
+
+/**
+ * Check if a fragment word should be merged into a target word.
+ * Per CONTEXT.md merge eligibility rules:
+ *   - First char must match
+ *   - Short fragments (1-3 chars): must match prefix of target
+ *   - Long fragments (4+ chars): must be exact match OR long prefix match
+ *
+ * This distinguishes stutters from substitutions:
+ *   - "p" before "please" -> stutter (merge)
+ *   - "beauti" before "beautiful" -> stutter (merge, long prefix)
+ *   - "sat" before "sit" -> substitution (no merge, 3+ chars, not exact)
+ *
+ * @param {string} fragment - The potential fragment word
+ * @param {string} target - The potential target word
+ * @returns {boolean} True if fragment should merge into target
+ */
+export function isMergeEligible(fragment, target) {
+  if (!fragment || !target) return false;
+
+  const f = fragment.toLowerCase();
+  const t = target.toLowerCase();
+
+  // First char must match
+  if (!t.startsWith(f.charAt(0))) return false;
+
+  // Short fragments (1-3 chars): must match prefix of target
+  if (f.length <= DISFLUENCY_THRESHOLDS.SHORT_FRAGMENT_MAX_CHARS) {
+    return t.startsWith(f);
+  }
+
+  // Long fragments (4+ chars): must be exact match OR long prefix match
+  // Exact match handles full word repetitions: "ball" before "ball"
+  // Long prefix handles partial: "beauti" before "beautiful"
+  return (f === t) || (t.startsWith(f) && f.length >= DISFLUENCY_THRESHOLDS.LONG_PREFIX_MIN_CHARS);
+}
