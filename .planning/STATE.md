@@ -9,15 +9,15 @@ See: .planning/PROJECT.md (updated 2026-02-03)
 
 ## Current Position
 
-Phase: 12 - VAD Integration (1/4 plans complete)
-Plan: 01 of 4
+Phase: 12 - VAD Integration (2/4 plans complete)
+Plan: 02 of 4
 Status: In progress
-Last activity: 2026-02-03 — Completed 12-01-PLAN.md
+Last activity: 2026-02-03 — Completed 12-02-PLAN.md
 
-Progress: [█████████░░░░░░░░░░░░░░░░░░░░░] 31% (5/16 v1.1 plans)
+Progress: [██████████░░░░░░░░░░░░░░░░░░░░] 38% (6/16 v1.1 plans)
 
 Phases remaining: 5 (Phases 12-16)
-Plans completed in v1.1: 5
+Plans completed in v1.1: 6
 
 ## Performance Metrics
 
@@ -27,9 +27,9 @@ Plans completed in v1.1: 5
 - Total execution time: ~0.7 hours
 
 **v1.1 Velocity:**
-- Plans completed: 5
+- Plans completed: 6
 - Average duration: 3min
-- Total execution time: 15min
+- Total execution time: 17min
 
 ## Accumulated Context
 
@@ -52,6 +52,10 @@ See PROJECT.md Key Decisions table.
 - Ensemble data preserved in _ensemble field for debugging and future UI display
 - NonRealTimeVAD for post-process audio analysis (not MicVAD for live)
 - CDN loading for ONNX/vad-web (no bundler required)
+- Ghost detection: 50ms overlap for normal words, 30ms for short words (<200ms)
+- 300ms edge tolerance - words at audio boundaries not flagged as ghosts
+- Only flag latest_only words that ARE in reference text
+- 5+ consecutive ghosts triggers hasGhostSequence for UI escalation
 
 ### Pending Todos
 
@@ -66,5 +70,5 @@ None.
 ## Session Continuity
 
 Last session: 2026-02-03
-Stopped at: Completed 12-01-PLAN.md
-Resume with: `/gsd:execute-phase` for 12-02-PLAN.md
+Stopped at: Completed 12-02-PLAN.md
+Resume with: `/gsd:execute-phase` for 12-03-PLAN.md
