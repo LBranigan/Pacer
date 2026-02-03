@@ -23,13 +23,13 @@ Requirements for the ASR Ensemble milestone. Each maps to roadmap phases.
 
 ### VAD Integration
 
-- [ ] **VAD-01**: Silero VAD runs in browser via ONNX runtime
-- [ ] **VAD-02**: VAD processes COMPLETED audio file (post-record, during upload spinner) — NOT live during recording (Chromebook-safe)
-- [ ] **VAD-03**: VAD "Ghost Buster" checks `latest_only + IN REFERENCE` words for 50ms speech overlap
-- [ ] **VAD-04**: Words with no speech overlap are flagged as `vad_ghost_in_reference`
-- [ ] **VAD-05**: Dedicated "Calibrate Microphone" button measures 1.5s ambient noise
-- [ ] **VAD-06**: Calibration finds optimal threshold (0.15-0.60 range) for environment
-- [ ] **VAD-07**: UI shows calibrated threshold and noise level (Low/Moderate/High)
+- [x] **VAD-01**: Silero VAD runs in browser via ONNX runtime
+- [x] **VAD-02**: VAD processes COMPLETED audio file (post-record, during upload spinner) — NOT live during recording (Chromebook-safe)
+- [x] **VAD-03**: VAD "Ghost Buster" checks `latest_only + IN REFERENCE` words for 50ms speech overlap
+- [x] **VAD-04**: Words with no speech overlap are flagged as `vad_ghost_in_reference`
+- [x] **VAD-05**: Dedicated "Calibrate Microphone" button measures 2s ambient noise
+- [x] **VAD-06**: Calibration finds optimal threshold (0.15-0.60 range) for environment
+- [x] **VAD-07**: UI shows calibrated threshold and noise level (Low/Moderate/High)
 
 ### Disfluency Detection
 
@@ -102,13 +102,13 @@ Which phases cover which requirements. Updated during roadmap creation.
 | ENS-02 | Phase 11 | Complete |
 | ENS-03 | Phase 11 | Complete |
 | ENS-04 | Phase 11 | Complete |
-| VAD-01 | Phase 12 | Pending |
-| VAD-02 | Phase 12 | Pending |
-| VAD-03 | Phase 12 | Pending |
-| VAD-04 | Phase 12 | Pending |
-| VAD-05 | Phase 12 | Pending |
-| VAD-06 | Phase 12 | Pending |
-| VAD-07 | Phase 12 | Pending |
+| VAD-01 | Phase 12 | Complete |
+| VAD-02 | Phase 12 | Complete |
+| VAD-03 | Phase 12 | Complete |
+| VAD-04 | Phase 12 | Complete |
+| VAD-05 | Phase 12 | Complete |
+| VAD-06 | Phase 12 | Complete |
+| VAD-07 | Phase 12 | Complete |
 | CONF-01 | Phase 13 | Pending |
 | CONF-02 | Phase 13 | Pending |
 | CONF-03 | Phase 13 | Pending |

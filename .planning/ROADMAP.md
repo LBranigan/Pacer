@@ -69,10 +69,10 @@ Plans:
 **Plans**: 4 plans (3 waves)
 
 Plans:
-- [ ] 12-01-PLAN.md — ONNX runtime + Silero VAD setup (Wave 1)
-- [ ] 12-02-PLAN.md — Ghost detection logic (Wave 2)
-- [ ] 12-03-PLAN.md — App integration with VAD flow (Wave 3)
-- [ ] 12-04-PLAN.md — Calibration system + Settings UI (Wave 2)
+- [x] 12-01-PLAN.md — ONNX runtime + Silero VAD setup (Wave 1)
+- [x] 12-02-PLAN.md — Ghost detection logic (Wave 2)
+- [x] 12-03-PLAN.md — App integration with VAD flow (Wave 3)
+- [x] 12-04-PLAN.md — Calibration system + Settings UI (Wave 2)
 
 ### Phase 13: Confidence Classification
 **Goal**: Apply asymmetric trust policy based on reference presence and model agreement
@@ -150,7 +150,7 @@ Plans:
 |-------|----------------|--------|-----------|
 | 10. Configuration | 1/1 | Complete | 2026-02-03 |
 | 11. Ensemble Core | 3/3 | Complete | 2026-02-03 |
-| 12. VAD Integration | 0/4 | Ready | - |
+| 12. VAD Integration | 4/4 | Complete | 2026-02-03 |
 | 13. Confidence Classification | 0/2 | Not started | - |
 | 14. Disfluency Detection | 0/3 | Not started | - |
 | 15. Safety Checks | 0/3 | Not started | - |
