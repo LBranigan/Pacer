@@ -9,15 +9,15 @@ See: .planning/PROJECT.md (updated 2026-02-03)
 
 ## Current Position
 
-Phase: 12 - VAD Integration (2/4 plans complete)
-Plan: 02 of 4
+Phase: 12 - VAD Integration (3/4 plans complete)
+Plan: 04 of 4
 Status: In progress
-Last activity: 2026-02-03 — Completed 12-02-PLAN.md
+Last activity: 2026-02-03 — Completed 12-04-PLAN.md
 
-Progress: [██████████░░░░░░░░░░░░░░░░░░░░] 38% (6/16 v1.1 plans)
+Progress: [███████████░░░░░░░░░░░░░░░░░░░] 44% (7/16 v1.1 plans)
 
 Phases remaining: 5 (Phases 12-16)
-Plans completed in v1.1: 6
+Plans completed in v1.1: 7
 
 ## Performance Metrics
 
@@ -27,9 +27,9 @@ Plans completed in v1.1: 6
 - Total execution time: ~0.7 hours
 
 **v1.1 Velocity:**
-- Plans completed: 6
+- Plans completed: 7
 - Average duration: 3min
-- Total execution time: 17min
+- Total execution time: 19min
 
 ## Accumulated Context
 
@@ -56,6 +56,8 @@ See PROJECT.md Key Decisions table.
 - 300ms edge tolerance - words at audio boundaries not flagged as ghosts
 - Only flag latest_only words that ARE in reference text
 - 5+ consecutive ghosts triggers hasGhostSequence for UI escalation
+- Calibration: 2s recording, noise classification (Low/Moderate/High), threshold 0.15-0.60
+- No calibration persistence - threshold resets to default (0.375) on page reload
 
 ### Pending Todos
 
@@ -70,5 +72,5 @@ None.
 ## Session Continuity
 
 Last session: 2026-02-03
-Stopped at: Completed 12-02-PLAN.md
+Stopped at: Completed 12-04-PLAN.md
 Resume with: `/gsd:execute-phase` for 12-03-PLAN.md
