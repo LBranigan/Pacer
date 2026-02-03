@@ -6,7 +6,7 @@ import { deleteAudioBlobsForStudent } from './audio-store.js';
 const STORAGE_KEY = 'orf_data';
 
 function defaultData() {
-  return { version: 4, students: [], assessments: [] };
+  return { version: 5, students: [], assessments: [] };
 }
 
 function migrate(data) {
@@ -39,6 +39,14 @@ function migrate(data) {
       if (a.gamification === undefined) a.gamification = null;
     }
     data.version = 4;
+  }
+
+  // v4 -> v5: add nlAnnotations field to assessments
+  if (data.version === 4) {
+    for (const a of data.assessments) {
+      if (a.nlAnnotations === undefined) a.nlAnnotations = null;
+    }
+    data.version = 5;
   }
 
   return data;
@@ -113,7 +121,8 @@ export function saveAssessment(studentId, results) {
     alignment: results.alignment ?? null,
     sttWords: results.sttWords ?? null,
     audioRef: results.audioRef ?? null,
-    gamification: results.gamification ?? null
+    gamification: results.gamification ?? null,
+    nlAnnotations: results.nlAnnotations ?? null
   };
   data.assessments.push(assessment);
   save(data);

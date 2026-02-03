@@ -5,23 +5,23 @@
 See: .planning/PROJECT.md (updated 2026-02-02)
 
 **Core value:** Accurate, word-level fluency error detection powered by Google Cloud STT -- giving teachers actionable data on exactly where and how a struggling reader breaks down.
-**Current focus:** Phase 8 in progress
+**Current focus:** All 9 phases complete
 
 ## Current Position
 
-Phase: 8 of 8 (Student Experience)
-Plan: 2 of 3 complete
-Status: In progress
-Last activity: 2026-02-02 -- Completed 08-02-PLAN.md
+Phase: 9 of 9 (NL API Integration)
+Plan: 1 of 1 complete
+Status: Complete
+Last activity: 2026-02-03 -- Completed NL API integration (POS tagging, entity recognition, word tiers, proper noun forgiveness, ASR healing)
 
-Progress: [█████████████████████████████] 97%
+Progress: [██████████████████████████████] 100%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 17
+- Total plans completed: 18
 - Average duration: 2min
-- Total execution time: 0.50 hours
+- Total execution time: 0.53 hours
 
 **By Phase:**
 
@@ -33,11 +33,7 @@ Progress: [███████████████████████
 | 05-data-persistence | 2/2 | 3min | 1.5min |
 | 06-teacher-dashboard | 4/4 | 10min | 2.5min |
 | 07-teacher-reporting-benchmarks | 3/3 | 7min | 2.3min |
-| 08-student-experience | 2/3 | 4min | 2min |
-
-**Recent Trend:**
-- Last 5 plans: 07-01 (2min), 07-02 (2min), 07-03 (2min), 08-01 (2min), 08-02 (2min)
-- Trend: Stable
+| 08-student-experience | 3/3 | 6min | 2min |
 
 *Updated after each plan completion*
 
@@ -46,33 +42,10 @@ Progress: [███████████████████████
 ### Decisions
 
 Decisions are logged in PROJECT.md Key Decisions table.
-Recent decisions affecting current work:
-
-- Option A for sendToSTT: handles full flow (status + display) internally, matching original monolith pattern
-- orf_assessment.html kept as reference alongside new modular structure
-- Cache-first for app shell, network passthrough for googleapis.com API calls
-- SW cache versioning via CACHE_NAME constant
-- diff-match-patch loaded as global via CDN, accessed in ES modules
-- Adjacent DELETE+INSERT merged into substitutions with 1:1 pairing
-- Insertions excluded from error count per ORF standard
-- Removed diff_cleanupSemantic -- it incorrectly merged correct words into substitution blocks
-- sendToSTT returns data; callback pattern avoids circular imports
-- Confidence shown as wavy underlines (raw mode) and tooltips (alignment mode)
-- 3s base pause threshold with punctuation allowance (600ms comma, 1200ms period)
-- First word onset delay threshold at 3s to avoid recording lead-in false positives
-- 3+ char shared prefix minimum for morphological error detection
-- Single orf_data localStorage key with version field for migration path
-- Auto-save after analysis only when student selected - explicit opt-in model
-- Status message shows '(saved)' suffix for user feedback on persistence
-- Cascade delete for student removal - confirms before removing student and all assessments
-- Assessment ID generated in app.js, shared as key between localStorage and IndexedDB
-- Audio blobs stored as raw Blob objects in IndexedDB (no encoding)
-- Grade 1 fall returns 'unknown' from benchmarks (HT 2017 has no grade 1 fall norms)
-- Grade stored as integer or null in student profile
 
 ### Pending Todos
 
-None yet.
+None.
 
 ### Blockers/Concerns
 
@@ -83,6 +56,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-02-02
-Stopped at: Completed 08-02-PLAN.md
+Last session: 2026-02-03
+Stopped at: All phases complete — NL API integration added as Phase 9
 Resume file: None

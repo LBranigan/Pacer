@@ -19,7 +19,8 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [ ] **Phase 5: Data Persistence** - localStorage student profiles and assessment history
 - [ ] **Phase 6: Teacher Dashboard** - Assessment results, progress trends, synced audio playback
 - [ ] **Phase 7: Teacher Reporting & Benchmarks** - RTI reports, Hasbrouck-Tindal norms
-- [ ] **Phase 8: Student Experience** - Animated playback with character, battles, gamification
+- [x] **Phase 8: Student Experience** - Animated playback with character, battles, gamification ✓
+- [x] **Phase 9: NL API Integration** - POS tagging, entity recognition, word tiers, proper noun forgiveness, ASR healing ✓
 
 ## Phase Details
 
@@ -138,11 +139,26 @@ Plans:
   1. After assessment, student can watch an animated character hop word-by-word across the highlighted passage in sync with their audio
   2. At words where the student struggled (errors, long delays), the character visibly battles an enemy or obstacle
   3. Student receives gamified feedback: points earned, streaks for consecutive correct words, and a progress ring showing improvement over past attempts
-**Plans**: TBD
+**Plans**: 3 plans
 
 Plans:
-- [ ] 08-01: TBD
-- [ ] 08-02: TBD
+- [ ] 08-01-PLAN.md — Pure logic modules: gamification scoring and sprite animator
+- [ ] 08-02-PLAN.md — Student playback page with audio-synced character animation
+- [ ] 08-03-PLAN.md — Gamified feedback UI, storage v4, entry point wiring
+
+### Phase 9: NL API Integration
+**Goal**: Enrich each reference word with NL-derived annotations (POS, entity type, word tier) to enable proper noun forgiveness, ASR healing, and tier-based error classification
+**Depends on**: Phase 2, Phase 3
+**Requirements**: Proper noun forgiveness, word tier classification (sight/academic/proper/function), ASR healing for named entities
+**Success Criteria** (what must be TRUE):
+  1. Each reference word is annotated with POS tag, entity type, and word tier via Google Cloud NL API
+  2. Proper noun substitutions with >50% similarity are auto-healed (reclassified as correct)
+  3. Accuracy metric reflects forgiveness count for proper nouns
+  4. Tier breakdown (sight/academic/proper/function) displayed in results
+  5. Word tooltips show NL annotation data (POS, entity, tier)
+  6. NL results cached in sessionStorage to avoid duplicate API calls
+  7. Storage v5 migration adds nlAnnotations field
+**Plans**: 1 plan (implemented directly)
 
 ## Progress
 
@@ -159,4 +175,5 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8
 | 5. Data Persistence | 2/2 | Complete ✓ | 2026-02-02 |
 | 6. Teacher Dashboard | 4/4 | Complete ✓ | 2026-02-02 |
 | 7. Teacher Reporting & Benchmarks | 3/3 | Complete ✓ | 2026-02-02 |
-| 8. Student Experience | 0/TBD | Not started | - |
+| 8. Student Experience | 3/3 | Complete ✓ | 2026-02-02 |
+| 9. NL API Integration | 1/1 | Complete ✓ | 2026-02-03 |

@@ -5,9 +5,10 @@ import { alignWords } from './alignment.js';
 import { getCanonical } from './word-equivalences.js';
 import { computeWCPM, computeAccuracy } from './metrics.js';
 import { setStatus, displayResults, displayAlignmentResults, showAudioPlayback, renderStudentSelector, renderHistory } from './ui.js';
-import { runDiagnostics } from './diagnostics.js';
+import { runDiagnostics, computeTierBreakdown } from './diagnostics.js';
 import { extractTextFromImage } from './ocr-api.js';
 import { trimPassageToAttempted } from './passage-trimmer.js';
+import { analyzePassageText, levenshteinRatio } from './nl-api.js';
 import { getStudents, addStudent, deleteStudent, saveAssessment, getAssessments } from './storage.js';
 import { saveAudioBlob } from './audio-store.js';
 import { initDashboard } from './dashboard.js';
@@ -34,20 +35,44 @@ function updateAnalyzeBtn() {
 }
 
 function showPlaybackButton(studentId, assessmentId) {
-  // Remove any existing playback button
+  // Remove any existing playback button / theme selector
   const existing = document.getElementById('playbackAdventureBtn');
   if (existing) existing.remove();
+  const existingSel = document.getElementById('playbackThemeSelect');
+  if (existingSel) existingSel.remove();
 
   const btn = document.createElement('button');
   btn.id = 'playbackAdventureBtn';
   btn.textContent = 'Watch Your Reading Adventure!';
   btn.style.cssText = 'margin:0.5rem 0;padding:0.6rem 1.2rem;background:#7b1fa2;color:#fff;border:none;border-radius:8px;font-size:1rem;font-weight:600;cursor:pointer;';
   btn.addEventListener('click', () => {
-    window.open(`student-playback.html?student=${encodeURIComponent(studentId)}&assessment=${encodeURIComponent(assessmentId)}`, '_blank');
+    localStorage.setItem('orf_playback_student', studentId);
+    localStorage.setItem('orf_playback_assessment', assessmentId);
+    const base = window.location.href.replace(/[^/]*$/, '');
+    const url = base + 'playback.html';
+    window.open(url, 'orf_playback', 'width=900,height=700');
+  });
+
+  // Theme dropdown
+  const sel = document.createElement('select');
+  sel.id = 'playbackThemeSelect';
+  sel.style.cssText = 'margin:0.5rem 0 0.5rem 0.5rem;padding:0.5rem 0.8rem;border-radius:8px;border:1px solid #666;background:#2a2a2a;color:#fff;font-size:0.9rem;cursor:pointer;';
+  const themes = [['cyber', 'Cyber'], ['glitch', 'Glitch']];
+  const saved = localStorage.getItem('orf_playback_theme') || 'cyber';
+  for (const [val, label] of themes) {
+    const opt = document.createElement('option');
+    opt.value = val;
+    opt.textContent = label;
+    if (val === saved) opt.selected = true;
+    sel.appendChild(opt);
+  }
+  sel.addEventListener('change', () => {
+    localStorage.setItem('orf_playback_theme', sel.value);
   });
 
   // Insert after analyze button
   analyzeBtn.parentNode.insertBefore(btn, analyzeBtn.nextSibling);
+  btn.insertAdjacentElement('afterend', sel);
 }
 
 function refreshStudentUI() {
@@ -126,6 +151,14 @@ async function runAnalysis() {
     referenceText = trimmed;
   }
 
+  // Analyze passage text with NL API
+  let nlAnnotations = null;
+  const apiKey = document.getElementById('apiKey').value.trim();
+  if (apiKey) {
+    setStatus('Analyzing passage text...');
+    nlAnnotations = await analyzePassageText(referenceText, apiKey);
+  }
+
   // Build lookup: normalized hyp word -> queue of STT metadata
   const sttLookup = new Map();
   for (const w of transcriptWords) {
@@ -135,13 +168,76 @@ async function runAnalysis() {
   }
 
   const alignment = alignWords(referenceText, transcriptWords);
+
+  // Run diagnostics first so we can heal self-corrections
+  const diagnostics = runDiagnostics(transcriptWords, alignment, referenceText, sttLookup);
+
+  // Reclassify alignment entries that are part of self-corrections
+  // (e.g. repeated "ran" should not count as an insertion)
+  if (diagnostics.selfCorrections && diagnostics.selfCorrections.length > 0) {
+    // Collect all STT hyp indices that are repeat extras
+    const scHypIndices = new Set();
+    for (const sc of diagnostics.selfCorrections) {
+      // startIndex is the first occurrence in STT; repeats are startIndex+1..startIndex+count-1
+      // For word-repeat of count 2: index startIndex+1 is the extra
+      // For phrase-repeat of count 2: indices startIndex+2, startIndex+3 are extras
+      if (sc.type === 'word-repeat') {
+        for (let k = sc.startIndex + 1; k < sc.startIndex + sc.count; k++) {
+          scHypIndices.add(k);
+        }
+      } else if (sc.type === 'phrase-repeat') {
+        // phrase has 2 words repeated, extras start at startIndex + 2
+        scHypIndices.add(sc.startIndex + 2);
+        scHypIndices.add(sc.startIndex + 3);
+      }
+    }
+
+    // Walk alignment to map each entry to its hyp index, reclassify matches
+    let hypIdx = 0;
+    for (const entry of alignment) {
+      if (entry.type === 'insertion') {
+        if (scHypIndices.has(hypIdx)) {
+          entry.type = 'self-correction';
+        }
+        hypIdx++;
+      } else if (entry.type === 'omission') {
+        // no hyp word consumed
+      } else {
+        hypIdx++;
+      }
+    }
+  }
+
+  // Map NL annotations onto alignment entries
+  if (nlAnnotations) {
+    let refWordIndex = 0;
+    for (const entry of alignment) {
+      if (entry.type === 'insertion') continue;
+      if (refWordIndex < nlAnnotations.length) {
+        entry.nl = nlAnnotations[refWordIndex];
+      }
+      refWordIndex++;
+    }
+
+    // ASR healing: forgive proper noun substitutions with high similarity
+    for (const entry of alignment) {
+      if (entry.type === 'substitution' && entry.nl && entry.nl.isProperNoun) {
+        const ratio = levenshteinRatio(entry.ref, entry.hyp);
+        if (ratio > 0.5) {
+          entry.originalHyp = entry.hyp;
+          entry.healed = true;
+          entry.type = 'correct';
+        }
+      }
+    }
+  }
+
   const wcpm = (appState.elapsedSeconds != null && appState.elapsedSeconds > 0)
     ? computeWCPM(alignment, appState.elapsedSeconds)
     : null;
-  const accuracy = computeAccuracy(alignment);
-
-  const diagnostics = runDiagnostics(transcriptWords, alignment, referenceText, sttLookup);
-  displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, diagnostics, transcriptWords);
+  const accuracy = computeAccuracy(alignment, { forgivenessEnabled: !!nlAnnotations });
+  const tierBreakdown = nlAnnotations ? computeTierBreakdown(alignment) : null;
+  displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, diagnostics, transcriptWords, tierBreakdown);
 
   if (appState.selectedStudentId) {
     const errorBreakdown = {
@@ -165,7 +261,8 @@ async function runAnalysis() {
       errorBreakdown,
       alignment,
       sttWords: transcriptWords,
-      audioRef: appState.audioBlob ? assessmentId : null
+      audioRef: appState.audioBlob ? assessmentId : null,
+      nlAnnotations
     });
     refreshStudentUI();
     setStatus('Done (saved).');

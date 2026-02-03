@@ -129,6 +129,39 @@ POST https://speech.googleapis.com/v1/speech:recognize?key=YOUR_KEY
 
 ---
 
+## Google Cloud Natural Language API Settings
+
+The app also calls the NL API to annotate each reference word with linguistic metadata. Two endpoints are used:
+
+### analyzeSyntax
+```
+POST https://language.googleapis.com/v1/documents:analyzeSyntax?key=KEY
+```
+Returns per-token POS tags (NOUN, VERB, ADJ, DET, PRON, etc.), proper noun flag, and lemma. Used for word tier classification and proper noun detection.
+
+### analyzeEntities
+```
+POST https://language.googleapis.com/v1/documents:analyzeEntities?key=KEY
+```
+Returns named entities (PERSON, LOCATION, ORGANIZATION, WORK_OF_ART, EVENT) with text offset mentions. Used to identify proper nouns that POS tagging alone might miss.
+
+### Word Tier Classification
+
+Each reference word is classified into one of four tiers based on NL API results:
+
+| Tier | Criteria | Purpose |
+|------|----------|---------|
+| `proper` | POS proper flag or entity type is PERSON/LOCATION/ORGANIZATION/WORK_OF_ART/EVENT | ASR healing and forgiveness — proper nouns are often mispronounced or misrecognized |
+| `sight` | Word is in Dolch/Fry top-220 high-frequency list | Identifies basic sight word errors for RTI targeting |
+| `academic` | NOUN/VERB/ADJ/ADV that isn't sight or proper | Content words indicating vocabulary/decoding challenges |
+| `function` | DET, PRON, CONJ, ADP, etc. | Function words (determiners, prepositions, etc.) |
+
+### ASR Healing
+
+Proper noun substitutions with >50% Levenshtein similarity are automatically reclassified as correct ("healed"). This reduces false errors caused by STT misrecognizing names like "Hermione" → "herminy".
+
+---
+
 ## Design Decisions & Notes
 
 **Why `latest_long` over other models?**

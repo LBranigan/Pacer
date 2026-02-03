@@ -67,7 +67,7 @@ function parseSttTime(t) {
   return parseFloat(String(t).replace('s', '')) || 0;
 }
 
-export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, diagnostics, transcriptWords) {
+export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, diagnostics, transcriptWords, tierBreakdown) {
   const wordsDiv = document.getElementById('resultWords');
   const plainDiv = document.getElementById('resultPlain');
   const jsonDiv = document.getElementById('resultJson');
@@ -84,7 +84,8 @@ export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, di
 
   const accBox = document.createElement('div');
   accBox.className = 'metric-box';
-  accBox.innerHTML = '<span class="metric-value">' + accuracy.accuracy + '%</span><span class="metric-label">Accuracy</span>';
+  const forgivenNote = accuracy.forgiven > 0 ? ' (' + accuracy.forgiven + ' proper noun' + (accuracy.forgiven > 1 ? 's' : '') + ' forgiven)' : '';
+  accBox.innerHTML = '<span class="metric-value">' + accuracy.accuracy + '%</span><span class="metric-label">Accuracy' + forgivenNote + '</span>';
   metricsBar.appendChild(accBox);
 
   const errBox = document.createElement('div');
@@ -100,6 +101,27 @@ export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, di
     prosBox.className = 'metric-box';
     prosBox.innerHTML = '<span class="metric-value">' + diagnostics.prosodyProxy.ratio + '</span><span class="metric-label">Prosody</span>';
     metricsBar.appendChild(prosBox);
+  }
+
+  // Tier breakdown row
+  if (tierBreakdown) {
+    const tierRow = document.createElement('div');
+    tierRow.className = 'tier-breakdown';
+    for (const [tier, data] of Object.entries(tierBreakdown)) {
+      const total = data.correct + data.errors;
+      if (total === 0) continue;
+      const pct = Math.round((data.correct / total) * 100);
+      const label = tier.charAt(0).toUpperCase() + tier.slice(1);
+      const span = document.createElement('span');
+      span.className = 'tier-item';
+      if (tier === 'proper' && accuracy.forgiven > 0) {
+        span.textContent = label + ': ' + data.correct + '/' + total + ' (forgiven)';
+      } else {
+        span.textContent = label + ': ' + data.correct + '/' + total + ' (' + pct + '%)';
+      }
+      tierRow.appendChild(span);
+    }
+    metricsBar.appendChild(tierRow);
   }
 
   plainDiv.appendChild(metricsBar);
@@ -150,6 +172,18 @@ export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, di
         const end = parseSttTime(meta.endTime);
         sttInfo = `\nConfidence: ${conf}  |  ${start.toFixed(2)}s – ${end.toFixed(2)}s`;
       }
+    }
+
+    // NL tier class and tooltip
+    if (item.nl) {
+      span.classList.add('word-tier-' + item.nl.tier);
+      sttInfo += '\nPOS: ' + item.nl.pos + (item.nl.entityType ? ' | Entity: ' + item.nl.entityType : '') + ' | Tier: ' + item.nl.tier;
+    }
+
+    // Healed word indicator
+    if (item.healed) {
+      span.classList.add('word-healed');
+      sttInfo += '\n(Healed: STT said "' + item.originalHyp + '")';
     }
 
     if (item.type === 'substitution') {
@@ -235,7 +269,8 @@ export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, di
     for (const sc of diagnostics.selfCorrections) {
       const span = document.createElement('span');
       span.className = 'word word-self-correction';
-      span.textContent = sc.words + (sc.count > 1 ? ' x' + sc.count : '');
+      const repeats = sc.type === 'phrase-repeat' ? sc.count / 2 : sc.count - 1;
+      span.textContent = sc.words + (repeats > 1 ? ' (repeated ' + repeats + 'x)' : ' (repeated)');
       span.title = sc.type + ' at position ' + sc.startIndex;
       scSection.appendChild(span);
       scSection.appendChild(document.createTextNode(' '));

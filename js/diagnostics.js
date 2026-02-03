@@ -311,6 +311,32 @@ export function computeProsodyProxy(transcriptWords, referenceText, alignment) {
   };
 }
 
+// ── DIAG-06: Tier Breakdown ──────────────────────────────────────────
+
+/**
+ * Compute error breakdown by word tier (sight/academic/proper/function).
+ * Only counts entries with .nl data, skips insertions.
+ */
+export function computeTierBreakdown(alignment) {
+  const tiers = {
+    sight: { correct: 0, errors: 0 },
+    academic: { correct: 0, errors: 0 },
+    proper: { correct: 0, errors: 0 },
+    function: { correct: 0, errors: 0 }
+  };
+  for (const entry of alignment) {
+    if (entry.type === 'insertion' || !entry.nl) continue;
+    const tier = entry.nl.tier || 'function';
+    if (!tiers[tier]) continue;
+    if (entry.type === 'correct') {
+      tiers[tier].correct++;
+    } else if (entry.type === 'substitution' || entry.type === 'omission') {
+      tiers[tier].errors++;
+    }
+  }
+  return tiers;
+}
+
 // ── Orchestrator ────────────────────────────────────────────────────
 
 /**

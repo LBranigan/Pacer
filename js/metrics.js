@@ -23,12 +23,23 @@ export function computeWCPM(alignmentResult, elapsedSeconds) {
  * @param {Array<{type: string}>} alignmentResult - From alignWords()
  * @returns {{ accuracy: number, correctCount: number, totalRefWords: number, substitutions: number, omissions: number, insertions: number }}
  */
-export function computeAccuracy(alignmentResult) {
-  let correctCount = 0, substitutions = 0, omissions = 0, insertions = 0;
+export function computeAccuracy(alignmentResult, options = {}) {
+  let correctCount = 0, substitutions = 0, omissions = 0, insertions = 0, forgiven = 0;
   for (const w of alignmentResult) {
     switch (w.type) {
-      case 'correct': correctCount++; break;
-      case 'substitution': substitutions++; break;
+      case 'correct':
+        correctCount++;
+        if (w.healed) forgiven++;
+        break;
+      case 'substitution':
+        // Proper noun forgiveness: count as correct if enabled
+        if (options.forgivenessEnabled && w.nl && w.nl.isProperNoun) {
+          correctCount++;
+          forgiven++;
+        } else {
+          substitutions++;
+        }
+        break;
       case 'omission': omissions++; break;
       case 'insertion': insertions++; break;
     }
@@ -37,5 +48,5 @@ export function computeAccuracy(alignmentResult) {
   const accuracy = totalRefWords === 0
     ? 0
     : Math.round((correctCount / totalRefWords) * 1000) / 10;
-  return { accuracy, correctCount, totalRefWords, substitutions, omissions, insertions };
+  return { accuracy, correctCount, totalRefWords, substitutions, omissions, insertions, forgiven };
 }

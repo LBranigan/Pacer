@@ -59,6 +59,7 @@ Accurate, word-level fluency error detection powered by Google Cloud STT — giv
 ## Constraints
 
 - **API**: Google Cloud STT v1 (sync endpoint, ~60s limit) — must add async for longer passages
+- **API**: Google Cloud Natural Language API v1 for POS tagging, entity recognition, and word tier classification
 - **Storage**: localStorage for assessment data (~5MB limit, single browser)
 - **Architecture**: Client-side only, no backend — API key entered by teacher
 - **OCR**: Google Vision API for book page photos
@@ -73,6 +74,7 @@ Accurate, word-level fluency error detection powered by Google Cloud STT — giv
 | In-browser animation for student playback | Simpler than video rendering, sufficient for classroom use | — Pending |
 | Core metrics first, prosody later | WCPM/accuracy/error classification provides immediate teacher value; prosody is lower accuracy | — Pending |
 | Confidence-score approach for morphological errors | STT autocorrects suffixes but reports low confidence — usable signal | — Pending |
+| NL API for word-level annotation | POS tags + entity types enable proper noun forgiveness, word tier classification, and ASR healing — reduces false errors on names | Implemented 2026-02-03 |
 
 ---
-*Last updated: 2026-02-02 after initialization*
+*Last updated: 2026-02-03 after NL API integration*

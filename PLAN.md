@@ -73,12 +73,46 @@ All settings documented in detail in **`SETTINGS.md`**. Summary:
 
 ---
 
+### Phase 6: Google Cloud Natural Language API Integration (2026-02-03)
+- [x] **Created `js/nl-api.js`** — Calls Google Cloud NL API (`analyzeSyntax` + `analyzeEntities`) to label each reference word with POS tag, entity type, and word tier (sight/academic/proper/function). Results cached in sessionStorage.
+- [x] **Proper noun ASR healing** — Substitutions on proper nouns with >50% Levenshtein similarity are reclassified as correct (healed), reducing false errors on names like "Hermione"
+- [x] **Proper noun forgiveness in metrics** — `computeAccuracy()` gains optional forgiveness mode; forgiven proper nouns counted as correct with `forgiven` counter
+- [x] **Tier breakdown diagnostics** — New `computeTierBreakdown()` in diagnostics.js computes per-tier (sight/academic/proper/function) correct/error rates
+- [x] **UI enhancements** — Word tier CSS classes (purple dotted underline for proper nouns), healed word indicator (green dashed underline), NL info in tooltips (POS/entity/tier), tier breakdown row in metrics bar
+- [x] **Storage v5 migration** — Added `nlAnnotations` field to assessment persistence
+- [x] **Service worker** — Added `nl-api.js` to cache, bumped to `orf-v21`
+
 ## File Structure
 ```
 Googstt/
 ├── PLAN.md                 ← this file (project status & roadmap)
 ├── SETTINGS.md             ← all STT settings with explanations
-└── orf_assessment.html     ← the app (single file, double-click to run)
+├── index.html              ← main app entry point
+├── js/
+│   ├── app.js              ← main pipeline orchestrator
+│   ├── nl-api.js           ← Google Cloud NL API integration (NEW)
+│   ├── alignment.js        ← transcript-to-reference alignment
+│   ├── metrics.js          ← WCPM, accuracy computation
+│   ├── diagnostics.js      ← fluency diagnostics + tier breakdown
+│   ├── ui.js               ← result display and rendering
+│   ├── storage.js          ← localStorage persistence (v5)
+│   ├── stt-api.js          ← Google Cloud STT API calls
+│   ├── ocr-api.js          ← Google Vision OCR
+│   ├── recorder.js         ← audio recording
+│   ├── file-handler.js     ← audio file upload
+│   ├── word-equivalences.js← word normalization
+│   ├── passage-trimmer.js  ← OCR passage trimming
+│   ├── audio-store.js      ← IndexedDB audio blob storage
+│   ├── dashboard.js        ← teacher dashboard
+│   ├── celeration-chart.js ← Standard Celeration Chart
+│   ├── benchmarks.js       ← Hasbrouck-Tindal norms
+│   ├── audio-playback.js   ← teacher audio playback
+│   ├── student-playback.js ← student animated playback
+│   ├── gamification.js     ← gamification scoring
+│   └── effect-engine.js    ← animation effects
+├── style.css               ← all styles
+├── sw.js                   ← service worker (v21)
+└── manifest.json           ← PWA manifest
 ```
 
 ## Prerequisites

@@ -1,4 +1,4 @@
-const CACHE_NAME = 'orf-v14';
+const CACHE_NAME = 'orf-v21';
 
 const SHELL = [
   './',
@@ -24,11 +24,12 @@ const SHELL = [
   './js/dashboard.js',
   './report.html',
   './manifest.json',
-  './student-playback.html',
+  './playback.html',
   './css/student-playback.css',
   './js/student-playback.js',
   './js/gamification.js',
-  './js/sprite-animator.js'
+  './js/effect-engine.js',
+  './js/nl-api.js'
 ];
 
 self.addEventListener('install', (event) => {
