@@ -66,16 +66,10 @@ function blobToBase64(blob) {
 
 /**
  * Build STT config object shared by sync and async paths.
+ * Uses latest_long model with tiered phrase boosting.
  */
 function buildSTTConfig(encoding) {
   const passageText = document.getElementById('transcript').value.trim();
-  const speechContexts = [];
-  if (passageText) {
-    const words = [...new Set(passageText.toLowerCase().replace(/[^a-z'\s-]/g, '').split(/\s+/).filter(Boolean))];
-    if (words.length > 0) {
-      speechContexts.push({ phrases: words, boost: 5 });
-    }
-  }
 
   return {
     encoding: encoding,
@@ -86,8 +80,8 @@ function buildSTTConfig(encoding) {
     enableSpokenPunctuation: false,
     enableWordTimeOffsets: true,
     enableWordConfidence: true,
-    maxAlternatives: 2,
-    speechContexts: speechContexts
+    maxAlternatives: 1,
+    speechContexts: buildSpeechContexts(passageText, { properNounBoost: 5, uncommonBoost: 3 })
   };
 }
 
