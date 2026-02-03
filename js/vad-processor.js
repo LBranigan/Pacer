@@ -27,6 +27,8 @@ class VADProcessor {
     this.isLoaded = false;
     this.loadError = null;
     this.threshold = VAD_THRESHOLD_DEFAULT;
+    this.noiseLevel = null;      // Set after calibration: 'Low', 'Moderate', 'High'
+    this.isCalibrated = false;   // True after successful calibration
   }
 
   /**
@@ -142,6 +144,115 @@ class VADProcessor {
    */
   getThreshold() {
     return this.threshold;
+  }
+
+  /**
+   * Calibrate microphone by recording 2 seconds of ambient noise.
+   * Measures noise floor and sets threshold above it.
+   * @returns {Promise<{threshold: number, noiseLevel: string, error: string|null}>}
+   */
+  async calibrateMicrophone() {
+    const CALIBRATION_DURATION_MS = 2000;  // Per CONTEXT.md: 2 seconds
+
+    try {
+      // Request microphone access
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+
+      // Record ambient noise
+      const mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
+      const chunks = [];
+
+      mediaRecorder.ondataavailable = (e) => chunks.push(e.data);
+
+      const recordingPromise = new Promise((resolve) => {
+        mediaRecorder.onstop = () => {
+          stream.getTracks().forEach(t => t.stop());
+          resolve(new Blob(chunks, { type: 'audio/webm' }));
+        };
+      });
+
+      mediaRecorder.start();
+      await new Promise(r => setTimeout(r, CALIBRATION_DURATION_MS));
+      mediaRecorder.stop();
+
+      const silenceBlob = await recordingPromise;
+
+      // Process silence to estimate noise floor
+      const audioContext = new AudioContext({ sampleRate: 16000 });
+      const arrayBuffer = await silenceBlob.arrayBuffer();
+      const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
+      const audioData = audioBuffer.getChannelData(0);
+
+      // Use a very low threshold to detect any "speech-like" noise
+      const testVad = await vad.NonRealTimeVAD.new({
+        positiveSpeechThreshold: 0.05,  // Very low to catch noise
+        negativeSpeechThreshold: 0.02,
+        minSpeechMs: 20
+      });
+
+      // Count how many segments are detected during "silence"
+      // More segments = noisier environment
+      let segmentCount = 0;
+      let totalSegmentDuration = 0;
+      for await (const { start, end } of testVad.run(audioData, audioBuffer.sampleRate)) {
+        segmentCount++;
+        totalSegmentDuration += (end - start);
+      }
+
+      await audioContext.close();
+
+      // Estimate noise level based on false positive detection
+      // During 2 seconds of silence, we expect 0 segments in quiet environment
+      const noiseRatio = totalSegmentDuration / CALIBRATION_DURATION_MS;
+
+      let noiseLevel, calibratedThreshold;
+      if (noiseRatio < 0.05 && segmentCount <= 1) {
+        noiseLevel = 'Low';
+        calibratedThreshold = 0.20;  // Can use lower threshold
+      } else if (noiseRatio < 0.15 && segmentCount <= 3) {
+        noiseLevel = 'Moderate';
+        calibratedThreshold = 0.35;  // Default range
+      } else {
+        noiseLevel = 'High';
+        calibratedThreshold = 0.50;  // Need higher threshold
+      }
+
+      // Clamp to valid range
+      calibratedThreshold = Math.max(VAD_THRESHOLD_MIN, Math.min(VAD_THRESHOLD_MAX, calibratedThreshold));
+
+      // Apply the calibrated threshold
+      this.threshold = calibratedThreshold;
+      this.noiseLevel = noiseLevel;
+      this.isCalibrated = true;
+
+      console.log(`[VAD] Calibrated: threshold=${calibratedThreshold.toFixed(2)}, noise=${noiseLevel}`);
+
+      return {
+        threshold: calibratedThreshold,
+        noiseLevel: noiseLevel,
+        error: null
+      };
+
+    } catch (err) {
+      console.error('[VAD] Calibration failed:', err);
+      return {
+        threshold: this.threshold,
+        noiseLevel: 'Unknown',
+        error: err.message
+      };
+    }
+  }
+
+  /**
+   * Get current calibration status.
+   * @returns {{threshold: number, noiseLevel: string, isCalibrated: boolean}}
+   */
+  getCalibrationStatus() {
+    return {
+      threshold: this.threshold,
+      noiseLevel: this.noiseLevel || 'Default',
+      isCalibrated: this.isCalibrated || false
+    };
   }
 }
 
