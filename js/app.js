@@ -15,6 +15,7 @@ import { saveAudioBlob } from './audio-store.js';
 import { initDashboard } from './dashboard.js';
 import { initDebugLog, addStage, addWarning, addError, finalizeDebugLog, saveDebugLog } from './debug-logger.js';
 import { vadProcessor } from './vad-processor.js';
+import { flagGhostWords } from './ghost-detector.js';
 
 // Code version for cache verification
 const CODE_VERSION = 'v33-2026-02-03';
@@ -545,6 +546,15 @@ document.getElementById('apiKey').value = 'AIzaSyCTx4rS7zxwRZqNseWcFJAaAgEH5HA50
 
 initRecorder();
 initFileHandler();
+
+// Initialize VAD for ghost detection (Phase 12)
+vadProcessor.init().then(() => {
+  if (vadProcessor.isLoaded) {
+    console.log('[ORF] VAD initialized for ghost detection');
+  } else {
+    console.warn('[ORF] VAD failed to load:', vadProcessor.loadError);
+  }
+});
 
 // Store audio on record/upload, don't process yet
 recorderSetOnComplete((blob, enc, secs) => {
