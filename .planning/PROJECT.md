@@ -8,7 +8,25 @@ A browser-based oral reading fluency (ORF) assessment tool for middle school RTI
 
 Accurate, word-level fluency error detection powered by Google Cloud STT — giving teachers actionable data on exactly where and how a struggling reader breaks down, without manual running record marking.
 
-## Current State (v1.0 shipped 2026-02-03)
+## Current Milestone: v1.1 — ASR Ensemble
+
+**Goal:** Improve ASR accuracy and reliability using a two-model ensemble (`latest_long` + `default`) with VAD-based hallucination detection.
+
+**Problem solved:** The `latest_long` model has unreliable confidence scores (Google docs explicitly state they are "not truly confidence scores"). This limits the accuracy of error classification and makes it impossible to distinguish between genuine reading errors and ASR uncertainty.
+
+**Target features:**
+- Two-model ensemble (temporal word association, not text alignment)
+- Asymmetric trust policy (reference-aware confidence classification)
+- Silero VAD "Ghost Buster" (detect hallucinations in silence)
+- Separate disfluency detection layer (confidence ≠ fluency)
+- Safety checks (rate anomaly detection, uncorroborated sequence flagging)
+- VAD calibration system with dedicated UI
+- Enhanced word tooltips showing both model results
+
+## Previous State (v1.0 shipped 2026-02-03)
+
+<details>
+<summary>v1.0 shipped features</summary>
 
 **Shipped features:**
 - ES module architecture (24 modules) with PWA support
@@ -27,6 +45,8 @@ Accurate, word-level fluency error detection powered by Google Cloud STT — giv
 **Known limitations:**
 - Benchmark norms only available for grades 1-6 (HT 2017 published range)
 - Local-first architecture (no user accounts, single browser)
+
+</details>
 
 ## Requirements
 
@@ -59,7 +79,18 @@ Accurate, word-level fluency error detection powered by Google Cloud STT — giv
 - ✓ PWA with offline shell caching — v1.0
 - ✓ NL API integration for proper noun forgiveness and word tier classification — v1.0
 
-### Active (v1.1+)
+### Active (v1.1)
+
+- [ ] Two-model ensemble (`latest_long` + `default`) with parallel API calls
+- [ ] Temporal word association (time-based, not text-based alignment)
+- [ ] Asymmetric trust policy (reference-aware confidence classification)
+- [ ] Silero VAD integration for hallucination detection
+- [ ] VAD calibration system with dedicated UI
+- [ ] Separate disfluency detection layer (stutter severity classification)
+- [ ] Safety checks (rate anomaly, uncorroborated sequence detection)
+- [ ] Enhanced UI (word tooltips, disfluency badges, WCPM ranges)
+
+### Future (v1.2+)
 
 - [ ] Full prosody scoring from audio waveform analysis (NAEP-aligned)
 - [ ] Backend server with secure API key management
@@ -106,4 +137,4 @@ Accurate, word-level fluency error detection powered by Google Cloud STT — giv
 | Standard Celeration Chart | Industry-standard progress monitoring visualization for RTI | ✓ Implemented v1.0 |
 
 ---
-*Last updated: 2026-02-03 after v1.0 milestone*
+*Last updated: 2026-02-03 after v1.1 milestone started*
