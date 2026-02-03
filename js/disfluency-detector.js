@@ -165,3 +165,208 @@ export function isMergeEligible(fragment, target) {
   // Long prefix handles partial: "beauti" before "beautiful"
   return (f === t) || (t.startsWith(f) && f.length >= DISFLUENCY_THRESHOLDS.LONG_PREFIX_MIN_CHARS);
 }
+
+/**
+ * Find the best target word for a fragment within a group.
+ * Per CONTEXT.md: "Nearest word wins" - prefer closest by time.
+ *
+ * @param {object} fragment - The fragment word
+ * @param {Array} candidates - Potential target words after the fragment
+ * @returns {object|null} Best target word or null if no match
+ */
+function findBestTarget(fragment, candidates) {
+  if (!candidates || candidates.length === 0) return null;
+
+  // Candidates are already sorted by time (from the group)
+  // Find first eligible target (nearest by time)
+  for (const candidate of candidates) {
+    if (isMergeEligible(fragment.word, candidate.word)) {
+      return candidate;
+    }
+  }
+  return null;
+}
+
+/**
+ * Process a group of temporally-close words to detect stutters.
+ * Identifies fragments, merges them into targets, computes metrics.
+ *
+ * @param {Array} group - Words within 2s gap of each other
+ * @returns {object} { processedWords, fragmentsRemoved }
+ */
+function processStutterGroup(group) {
+  if (group.length === 0) return { processedWords: [], fragmentsRemoved: 0 };
+  if (group.length === 1) {
+    // Single word - no stuttering, just add default disfluency props
+    const word = { ...group[0], attempts: 1, severity: SEVERITY_LEVELS.NONE };
+    return { processedWords: [word], fragmentsRemoved: 0 };
+  }
+
+  // Track which indices are fragments to be removed
+  const fragmentIndices = new Set();
+  // Map from target index to its fragments
+  const targetFragments = new Map();
+
+  // Forward scan: for each word, check if it's a fragment of a later word
+  for (let i = 0; i < group.length - 1; i++) {
+    if (fragmentIndices.has(i)) continue; // Already marked as fragment
+
+    const current = group[i];
+    const candidates = group.slice(i + 1);
+    const target = findBestTarget(current, candidates);
+
+    if (target) {
+      const targetIdx = group.indexOf(target);
+
+      // Current word is a fragment - mark for removal
+      fragmentIndices.add(i);
+
+      // Add to target's fragment list
+      if (!targetFragments.has(targetIdx)) {
+        targetFragments.set(targetIdx, []);
+      }
+      targetFragments.get(targetIdx).push({
+        word: current.word,
+        startTime: current.startTime,
+        endTime: current.endTime
+      });
+    }
+  }
+
+  // Also check for full word repetitions (exact matches)
+  // e.g., "ball ball ball" - all but last are fragments
+  for (let i = 0; i < group.length - 1; i++) {
+    if (fragmentIndices.has(i)) continue;
+
+    const current = group[i];
+    const currentLower = (current.word || '').toLowerCase();
+
+    // Look for later exact match
+    for (let j = i + 1; j < group.length; j++) {
+      const candidate = group[j];
+      if ((candidate.word || '').toLowerCase() === currentLower) {
+        // This is a repetition - mark current as fragment of later occurrence
+        fragmentIndices.add(i);
+        if (!targetFragments.has(j)) {
+          targetFragments.set(j, []);
+        }
+        targetFragments.get(j).push({
+          word: current.word,
+          startTime: current.startTime,
+          endTime: current.endTime
+        });
+        break; // Move to next word
+      }
+    }
+  }
+
+  // Build processed words array (excluding fragments)
+  const processedWords = [];
+  for (let i = 0; i < group.length; i++) {
+    if (fragmentIndices.has(i)) continue; // Skip fragments
+
+    const word = { ...group[i] };
+    const fragments = targetFragments.get(i) || [];
+
+    // Compute metrics including fragments + this word
+    const allAttempts = [...fragments, { word: word.word, startTime: word.startTime, endTime: word.endTime }];
+    const attempts = allAttempts.length;
+
+    if (attempts >= 2) {
+      // Compute full metrics
+      const metrics = computeDisfluencyMetrics(allAttempts.map((f) => ({
+        word: f.word,
+        startTime: f.startTime,
+        endTime: f.endTime
+      })));
+
+      word.attempts = attempts;
+      word.severity = calculateSeverity(attempts, metrics?.totalDuration || 0, metrics?.maxPause || 0);
+      word._disfluency = {
+        maxPause: metrics?.maxPause || 0,
+        totalDuration: metrics?.totalDuration || 0,
+        fragments: fragments
+      };
+    } else {
+      // Clean read
+      word.attempts = 1;
+      word.severity = SEVERITY_LEVELS.NONE;
+      // No _disfluency object for clean reads
+    }
+
+    processedWords.push(word);
+  }
+
+  return {
+    processedWords,
+    fragmentsRemoved: fragmentIndices.size
+  };
+}
+
+/**
+ * Compute document-level disfluency summary.
+ *
+ * @param {Array} words - Processed words with severity
+ * @returns {object} Summary counts by severity
+ */
+function computeDisfluencySummary(words) {
+  const summary = {
+    none: 0,
+    minor: 0,
+    moderate: 0,
+    significant: 0,
+    totalWordsWithDisfluency: 0
+  };
+
+  for (const word of words) {
+    const sev = word.severity || SEVERITY_LEVELS.NONE;
+    summary[sev] = (summary[sev] || 0) + 1;
+
+    if (sev !== SEVERITY_LEVELS.NONE) {
+      summary.totalWordsWithDisfluency++;
+    }
+  }
+
+  return summary;
+}
+
+/**
+ * Main disfluency detection function.
+ * Processes words to detect stutters, merge fragments, and classify severity.
+ *
+ * Pipeline order: Call AFTER filterGhosts(), BEFORE alignment.
+ *
+ * @param {Array} words - Classified words (from filterGhosts output)
+ * @returns {object} { words: processedWords, summary: _disfluencySummary, fragmentsRemoved }
+ */
+export function detectDisfluencies(words) {
+  if (!words || words.length === 0) {
+    return {
+      words: [],
+      summary: computeDisfluencySummary([]),
+      fragmentsRemoved: 0
+    };
+  }
+
+  // Step 1: Group words by temporal proximity
+  const groups = groupStutterEvents(words);
+
+  // Step 2: Process each group for stutters
+  const allProcessed = [];
+  let totalFragmentsRemoved = 0;
+
+  for (const group of groups) {
+    const { processedWords, fragmentsRemoved } = processStutterGroup(group);
+    allProcessed.push(...processedWords);
+    totalFragmentsRemoved += fragmentsRemoved;
+  }
+
+  // Step 3: Compute summary
+  const summary = computeDisfluencySummary(allProcessed);
+
+  return {
+    words: allProcessed,
+    summary: summary,
+    fragmentsRemoved: totalFragmentsRemoved
+  };
+}
