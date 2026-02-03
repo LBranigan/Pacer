@@ -10,14 +10,14 @@ See: .planning/PROJECT.md (updated 2026-02-03)
 ## Current Position
 
 Phase: 12 - VAD Integration (3/4 plans complete)
-Plan: 04 of 4
+Plan: 03 of 4 complete
 Status: In progress
-Last activity: 2026-02-03 — Completed 12-04-PLAN.md
+Last activity: 2026-02-03 — Completed 12-03-PLAN.md
 
-Progress: [███████████░░░░░░░░░░░░░░░░░░░] 44% (7/16 v1.1 plans)
+Progress: [████████████░░░░░░░░░░░░░░░░░░] 50% (8/16 v1.1 plans)
 
 Phases remaining: 5 (Phases 12-16)
-Plans completed in v1.1: 7
+Plans completed in v1.1: 8
 
 ## Performance Metrics
 
@@ -27,9 +27,9 @@ Plans completed in v1.1: 7
 - Total execution time: ~0.7 hours
 
 **v1.1 Velocity:**
-- Plans completed: 7
+- Plans completed: 8
 - Average duration: 3min
-- Total execution time: 19min
+- Total execution time: 21min
 
 ## Accumulated Context
 
@@ -58,6 +58,8 @@ See PROJECT.md Key Decisions table.
 - 5+ consecutive ghosts triggers hasGhostSequence for UI escalation
 - Calibration: 2s recording, noise classification (Low/Moderate/High), threshold 0.15-0.60
 - No calibration persistence - threshold resets to default (0.375) on page reload
+- VAD runs during assessment flow before alignment (12-03)
+- Ghost detection on merged words, _vad field persisted in saved assessments (12-03)
 
 ### Pending Todos
 
@@ -72,5 +74,5 @@ None.
 ## Session Continuity
 
 Last session: 2026-02-03
-Stopped at: Completed 12-04-PLAN.md
-Resume with: `/gsd:execute-phase` for 12-03-PLAN.md
+Stopped at: Completed 12-03-PLAN.md
+Resume with: `/gsd:execute-phase` for 12-04-PLAN.md
