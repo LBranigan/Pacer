@@ -9,15 +9,15 @@ See: .planning/PROJECT.md (updated 2026-02-03)
 
 ## Current Position
 
-Phase: 11 - Ensemble Core ✓ COMPLETE
-Plan: —
-Status: Phase 11 verified, ready for Phase 12
-Last activity: 2026-02-03 — Phase 11 complete
+Phase: 12 - VAD Integration (1/4 plans complete)
+Plan: 01 of 4
+Status: In progress
+Last activity: 2026-02-03 — Completed 12-01-PLAN.md
 
-Progress: [████████░░░░░░░░░░░░░░░░░░░░░░] 29% (2/7 phases)
+Progress: [█████████░░░░░░░░░░░░░░░░░░░░░] 31% (5/16 v1.1 plans)
 
 Phases remaining: 5 (Phases 12-16)
-Plans completed in v1.1: 4
+Plans completed in v1.1: 5
 
 ## Performance Metrics
 
@@ -27,9 +27,9 @@ Plans completed in v1.1: 4
 - Total execution time: ~0.7 hours
 
 **v1.1 Velocity:**
-- Plans completed: 4
+- Plans completed: 5
 - Average duration: 3min
-- Total execution time: 12min
+- Total execution time: 15min
 
 ## Accumulated Context
 
@@ -50,6 +50,8 @@ See PROJECT.md Key Decisions table.
 - latest_long model takes priority when both models detect same word
 - Async path unchanged for now - ensemble may be extended later if needed
 - Ensemble data preserved in _ensemble field for debugging and future UI display
+- NonRealTimeVAD for post-process audio analysis (not MicVAD for live)
+- CDN loading for ONNX/vad-web (no bundler required)
 
 ### Pending Todos
 
@@ -58,11 +60,11 @@ None.
 ### Blockers/Concerns
 
 **For v1.1:**
-- Silero VAD browser integration (ONNX runtime required)
+- ~~Silero VAD browser integration (ONNX runtime required)~~ RESOLVED in 12-01
 - Two parallel STT API calls doubles latency — may need optimization
 
 ## Session Continuity
 
 Last session: 2026-02-03
-Stopped at: Phase 11 complete
-Resume with: `/gsd:plan-phase 12`
+Stopped at: Completed 12-01-PLAN.md
+Resume with: `/gsd:execute-phase` for 12-02-PLAN.md
