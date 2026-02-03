@@ -16,6 +16,7 @@ import { initDashboard } from './dashboard.js';
 import { initDebugLog, addStage, addWarning, addError, finalizeDebugLog, saveDebugLog } from './debug-logger.js';
 import { vadProcessor } from './vad-processor.js';
 import { flagGhostWords } from './ghost-detector.js';
+import { classifyAllWords, filterGhosts, computeClassificationStats } from './confidence-classifier.js';
 
 // Code version for cache verification
 const CODE_VERSION = 'v34-2026-02-03';
