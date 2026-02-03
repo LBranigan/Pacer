@@ -28,10 +28,10 @@ v1.0 shipped with 24 ES modules, teacher dashboard with Standard Celeration Char
   1. `latest_long` boost level is reduced from 5 to 3
   2. Proper nouns receive highest boost (5), uncommon words receive medium boost (3), common words receive no boost (0)
   3. `default` model configuration exists with lower boost values (proper nouns: 3, uncommon: 2)
-**Plans**: TBD
+**Plans**: 1 plan
 
 Plans:
-- [x] 10-01: Tiered speech context boosting ✓
+- [x] 10-01-PLAN.md — Tiered speech context boosting
 
 ### Phase 11: Ensemble Core
 **Goal**: Run two STT models in parallel with temporal word association
@@ -42,12 +42,12 @@ Plans:
   2. Words from both models are associated by time overlap (50ms jitter tolerance), not text matching
   3. Merged transcript includes `_debug` property showing both model results for each word
   4. Words are tagged with source: `both`, `latest_only`, or `default_only`
-**Plans**: TBD
+**Plans**: 3 plans (2 waves)
 
 Plans:
-- [ ] 11-01: Parallel model API calls
-- [ ] 11-02: Temporal word association algorithm
-- [ ] 11-03: Transcript merger with debug data
+- [ ] 11-01-PLAN.md — Parallel model API calls (Wave 1)
+- [ ] 11-02-PLAN.md — Temporal word association algorithm (Wave 1)
+- [ ] 11-03-PLAN.md — Transcript merger with app.js integration (Wave 2)
 
 ### Phase 12: VAD Integration
 **Goal**: Detect hallucinations by checking for actual speech during `latest_only` words
@@ -148,8 +148,8 @@ Plans:
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 10. Configuration | 1/1 | ✓ Complete | 2026-02-03 |
-| 11. Ensemble Core | 0/3 | Not started | - |
+| 10. Configuration | 1/1 | Complete | 2026-02-03 |
+| 11. Ensemble Core | 0/3 | Planned | - |
 | 12. VAD Integration | 0/4 | Not started | - |
 | 13. Confidence Classification | 0/2 | Not started | - |
 | 14. Disfluency Detection | 0/3 | Not started | - |
