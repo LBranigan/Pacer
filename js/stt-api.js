@@ -232,3 +232,25 @@ export async function sendChunkedSTT(blob, encoding) {
 
   return { results: mergedResults };
 }
+
+/**
+ * Build STT config for the 'default' model (used as confidence oracle in ensemble).
+ * Lower boost values to reduce phantom insertions.
+ * @param {string} encoding - Audio encoding (e.g., 'WEBM_OPUS')
+ * @param {string} passageText - The reference passage text
+ * @returns {object} STT config for default model
+ */
+export function getDefaultModelConfig(encoding, passageText) {
+  return {
+    encoding: encoding,
+    languageCode: 'en-US',
+    model: 'default',
+    useEnhanced: true,
+    enableAutomaticPunctuation: false,
+    enableSpokenPunctuation: false,
+    enableWordTimeOffsets: true,
+    enableWordConfidence: true,
+    maxAlternatives: 1,
+    speechContexts: buildSpeechContexts(passageText, { properNounBoost: 3, uncommonBoost: 2 })
+  };
+}
