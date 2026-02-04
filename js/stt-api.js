@@ -90,11 +90,13 @@ async function fetchSTTRaw(base64, config, apiKey) {
 /**
  * Build STT config object shared by sync and async paths.
  * Uses latest_long model with tiered phrase boosting.
+ * @param {string} encoding - Audio encoding (e.g., 'WEBM_OPUS', 'LINEAR16')
+ * @param {number} sampleRateHertz - Sample rate (required for LINEAR16, optional for others)
  */
-function buildSTTConfig(encoding) {
+function buildSTTConfig(encoding, sampleRateHertz = null) {
   const passageText = document.getElementById('transcript').value.trim();
 
-  return {
+  const config = {
     encoding: encoding,
     languageCode: 'en-US',
     model: 'latest_long',
@@ -106,6 +108,13 @@ function buildSTTConfig(encoding) {
     maxAlternatives: 1,
     speechContexts: buildSpeechContexts(passageText, { properNounBoost: 5, uncommonBoost: 3 })
   };
+
+  // LINEAR16 requires explicit sample rate
+  if (encoding === 'LINEAR16' && sampleRateHertz) {
+    config.sampleRateHertz = sampleRateHertz;
+  }
+
+  return config;
 }
 
 export async function sendToSTT(blob, encoding) {
@@ -259,12 +268,13 @@ export async function sendChunkedSTT(blob, encoding) {
 /**
  * Build STT config for the 'default' model (used as confidence oracle in ensemble).
  * Lower boost values to reduce phantom insertions.
- * @param {string} encoding - Audio encoding (e.g., 'WEBM_OPUS')
+ * @param {string} encoding - Audio encoding (e.g., 'WEBM_OPUS', 'LINEAR16')
  * @param {string} passageText - The reference passage text
+ * @param {number} sampleRateHertz - Sample rate (required for LINEAR16)
  * @returns {object} STT config for default model
  */
-export function getDefaultModelConfig(encoding, passageText) {
-  return {
+export function getDefaultModelConfig(encoding, passageText, sampleRateHertz = null) {
+  const config = {
     encoding: encoding,
     languageCode: 'en-US',
     model: 'default',
@@ -276,16 +286,24 @@ export function getDefaultModelConfig(encoding, passageText) {
     maxAlternatives: 1,
     speechContexts: buildSpeechContexts(passageText, { properNounBoost: 3, uncommonBoost: 2 })
   };
+
+  // LINEAR16 requires explicit sample rate
+  if (encoding === 'LINEAR16' && sampleRateHertz) {
+    config.sampleRateHertz = sampleRateHertz;
+  }
+
+  return config;
 }
 
 /**
  * Send audio to both latest_long and default models in parallel.
  * Uses Promise.allSettled to ensure both results are returned even if one fails.
  * @param {Blob} blob - Audio blob
- * @param {string} encoding - Audio encoding (e.g., 'WEBM_OPUS')
+ * @param {string} encoding - Audio encoding (e.g., 'WEBM_OPUS', 'LINEAR16')
+ * @param {number} sampleRateHertz - Sample rate (required for LINEAR16)
  * @returns {Promise<object>} Object with latestLong, default, and errors properties
  */
-export async function sendEnsembleSTT(blob, encoding) {
+export async function sendEnsembleSTT(blob, encoding, sampleRateHertz = null) {
   const apiKey = document.getElementById('apiKey').value.trim();
   if (!apiKey) {
     return {
@@ -299,8 +317,8 @@ export async function sendEnsembleSTT(blob, encoding) {
   const base64 = await blobToBase64(blob);
 
   // Build configs for both models
-  const latestConfig = buildSTTConfig(encoding);
-  const defaultConfig = getDefaultModelConfig(encoding, passageText);
+  const latestConfig = buildSTTConfig(encoding, sampleRateHertz);
+  const defaultConfig = getDefaultModelConfig(encoding, passageText, sampleRateHertz);
 
   // Fire both API calls in parallel
   const [latestResult, defaultResult] = await Promise.allSettled([

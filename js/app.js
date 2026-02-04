@@ -19,6 +19,8 @@ import { flagGhostWords } from './ghost-detector.js';
 import { classifyAllWords, filterGhosts, computeClassificationStats } from './confidence-classifier.js';
 import { detectDisfluencies } from './disfluency-detector.js';
 import { applySafetyChecks } from './safety-checker.js';
+import { checkTerminalLeniency } from './phonetic-utils.js';
+import { padAudioWithSilence } from './audio-padding.js';
 
 // Code version for cache verification
 const CODE_VERSION = 'v34-2026-02-03';
@@ -107,17 +109,36 @@ async function runAnalysis() {
 
   analyzeBtn.disabled = true;
 
+  // Pad audio with 500ms silence to help ASR resolve final word
+  // (Models use lookahead window; if audio ends abruptly, last word suffers)
+  setStatus('Preparing audio...');
+  let paddedAudioBlob;
+  let effectiveEncoding = appState.audioEncoding;
+  let sampleRateHertz = null;
+  try {
+    const padResult = await padAudioWithSilence(appState.audioBlob);
+    paddedAudioBlob = padResult.blob;
+    sampleRateHertz = padResult.sampleRate;
+    // Padded audio is re-encoded as WAV (LINEAR16)
+    effectiveEncoding = 'LINEAR16';
+    addStage('audio_padding', { applied: true, paddingMs: 500, encoding: 'LINEAR16', sampleRate: sampleRateHertz });
+  } catch (err) {
+    console.warn('[ORF] Audio padding failed:', err.message);
+    paddedAudioBlob = appState.audioBlob;
+    addStage('audio_padding', { applied: false, error: err.message });
+  }
+
   let data;
   if (appState.elapsedSeconds != null && appState.elapsedSeconds > 55) {
     setStatus('Processing long recording via async STT...');
     try {
-      data = await sendToAsyncSTT(appState.audioBlob, appState.audioEncoding, (pct) => {
+      data = await sendToAsyncSTT(paddedAudioBlob, effectiveEncoding, (pct) => {
         setStatus(`Processing long recording... ${pct}%`);
       });
     } catch (err) {
       if (err.code === 'INLINE_REJECTED') {
         setStatus('Async STT unavailable for inline audio. Using chunked processing...');
-        data = await sendChunkedSTT(appState.audioBlob, appState.audioEncoding);
+        data = await sendChunkedSTT(paddedAudioBlob, effectiveEncoding);
       } else {
         setStatus('Async STT error: ' + err.message);
         analyzeBtn.disabled = false;
@@ -126,13 +147,103 @@ async function runAnalysis() {
     }
   } else {
     setStatus('Running ensemble STT analysis...');
-    const ensembleResult = await sendEnsembleSTT(appState.audioBlob, appState.audioEncoding);
+    const ensembleResult = await sendEnsembleSTT(paddedAudioBlob, effectiveEncoding, sampleRateHertz);
 
-    // Log ensemble result for debugging
+    // Log ensemble result for debugging - include verbatim transcripts from both models
+    const parseTimeStr = (t) => {
+      if (typeof t === 'number') return t;
+      if (!t) return 0;
+      if (typeof t === 'object' && t.seconds !== undefined) {
+        return Number(t.seconds || 0) + (Number(t.nanos || 0) / 1e9);
+      }
+      return parseFloat(String(t).replace('s', '')) || 0;
+    };
+
+    const extractTranscript = (sttResponse) => {
+      if (!sttResponse?.results) return { transcript: '', words: [], timeline: [] };
+      const words = [];
+      let transcript = '';
+      for (const result of sttResponse.results) {
+        const alt = result.alternatives?.[0];
+        if (alt) {
+          transcript += (transcript ? ' ' : '') + (alt.transcript || '');
+          if (alt.words) {
+            for (const w of alt.words) {
+              words.push({
+                word: w.word,
+                start: w.startTime,
+                end: w.endTime,
+                conf: w.confidence != null ? Math.round(w.confidence * 100) / 100 : null
+              });
+            }
+          }
+        }
+      }
+
+      // Build timeline with words AND gaps
+      const timeline = [];
+      for (let i = 0; i < words.length; i++) {
+        const w = words[i];
+        const startSec = parseTimeStr(w.start);
+        const endSec = parseTimeStr(w.end);
+
+        // Add leading silence before first word
+        if (i === 0 && startSec > 0.05) {
+          timeline.push({
+            type: 'silence',
+            start: '0.00s',
+            end: startSec.toFixed(2) + 's',
+            duration: startSec.toFixed(2) + 's'
+          });
+        }
+
+        // Add the word
+        timeline.push({
+          type: 'word',
+          word: w.word,
+          start: startSec.toFixed(2) + 's',
+          end: endSec.toFixed(2) + 's',
+          duration: (endSec - startSec).toFixed(2) + 's',
+          conf: w.conf
+        });
+
+        // Add gap after this word (if there's a next word)
+        if (i < words.length - 1) {
+          const nextStart = parseTimeStr(words[i + 1].start);
+          const gap = nextStart - endSec;
+          if (gap > 0.05) { // Only log gaps > 50ms
+            timeline.push({
+              type: 'gap',
+              start: endSec.toFixed(2) + 's',
+              end: nextStart.toFixed(2) + 's',
+              duration: gap.toFixed(2) + 's'
+            });
+          }
+        }
+      }
+
+      return { transcript, words, timeline };
+    };
+
+    const latestLongData = extractTranscript(ensembleResult.latestLong);
+    const defaultData = extractTranscript(ensembleResult.default);
+
     addStage('ensemble_raw', {
       hasLatestLong: !!ensembleResult.latestLong,
       hasDefault: !!ensembleResult.default,
-      errors: ensembleResult.errors
+      errors: ensembleResult.errors,
+      latestLong: {
+        transcript: latestLongData.transcript,
+        wordCount: latestLongData.words.length,
+        words: latestLongData.words,
+        timeline: latestLongData.timeline
+      },
+      default: {
+        transcript: defaultData.transcript,
+        wordCount: defaultData.words.length,
+        words: defaultData.words,
+        timeline: defaultData.timeline
+      }
     });
 
     // Check for complete failure
@@ -146,6 +257,14 @@ async function runAnalysis() {
     // Merge results using temporal word association
     const mergedWords = mergeEnsembleResults(ensembleResult);
     const ensembleStats = computeEnsembleStats(mergedWords);
+
+    // Debug: verify _debug is created at merge time
+    console.log('[Pipeline Debug] First 3 merged words:', mergedWords.slice(0, 3).map(w => ({
+      word: w.word,
+      source: w.source,
+      has_debug: !!w._debug,
+      _debug: w._debug
+    })));
 
     addStage('ensemble_merged', {
       totalWords: ensembleStats.totalWords,
@@ -245,6 +364,13 @@ async function runAnalysis() {
     const safetyResult = applySafetyChecks(wordsWithDisfluency, referenceText, audioDurationMs);
     const wordsWithSafety = safetyResult.words;
 
+    // Debug: verify _debug is preserved through pipeline
+    console.log('[Pipeline Debug] First 3 words after safety checks:', wordsWithSafety.slice(0, 3).map(w => ({
+      word: w.word,
+      has_debug: !!w._debug,
+      _debug: w._debug
+    })));
+
     addStage('safety_checks', {
       rateAnomalies: safetyResult._safety.rateAnomalies,
       uncorroboratedSequences: safetyResult._safety.uncorroboratedSequences,
@@ -323,30 +449,76 @@ async function runAnalysis() {
     }
   }
 
-  // Log STT words with timestamps for debugging pause detection
+  // Log STT words with full details for maximum transparency
   // NOTE: After Phase 13, transcriptWords excludes ghost words (filtered before alignment)
+  const parseT = (t) => parseFloat(String(t).replace('s', '')) || 0;
+
+  // Build complete timeline with words and ALL gaps
+  const wordTimeline = [];
+  for (let i = 0; i < transcriptWords.length; i++) {
+    const w = transcriptWords[i];
+    const startSec = parseT(w.startTime);
+    const endSec = parseT(w.endTime);
+
+    // Leading silence before first word
+    if (i === 0 && startSec > 0) {
+      wordTimeline.push({
+        type: 'silence',
+        duration: startSec.toFixed(3) + 's',
+        range: '0.000s - ' + startSec.toFixed(3) + 's'
+      });
+    }
+
+    // The word itself
+    wordTimeline.push({
+      type: 'word',
+      idx: i,
+      word: w.word,
+      range: startSec.toFixed(3) + 's - ' + endSec.toFixed(3) + 's',
+      duration: (endSec - startSec).toFixed(3) + 's',
+      confidence: w.confidence,
+      source: w.source,
+      trustLevel: w.trustLevel,
+      severity: w.severity,
+      attempts: w.attempts,
+      _flags: w._flags,
+      _debug: w._debug ? {
+        latestLong: w._debug.latestLong ? w._debug.latestLong.word + ' (' + parseT(w._debug.latestLong.startTime).toFixed(3) + 's)' : null,
+        default: w._debug.default ? w._debug.default.word + ' (' + parseT(w._debug.default.startTime).toFixed(3) + 's)' : null
+      } : null
+    });
+
+    // Gap after this word
+    if (i < transcriptWords.length - 1) {
+      const nextStart = parseT(transcriptWords[i + 1].startTime);
+      const gap = nextStart - endSec;
+      if (gap > 0.01) { // Log gaps > 10ms
+        wordTimeline.push({
+          type: 'gap',
+          duration: gap.toFixed(3) + 's',
+          range: endSec.toFixed(3) + 's - ' + nextStart.toFixed(3) + 's',
+          afterWord: w.word,
+          beforeWord: transcriptWords[i + 1].word
+        });
+      }
+    }
+  }
+
   addStage('stt_words', {
     count: transcriptWords.length,
+    timeline: wordTimeline,
+    // Also keep simple word list for quick scanning
     words: transcriptWords.map((w, idx) => ({
       idx,
       word: w.word,
       start: w.startTime,
       end: w.endTime,
       confidence: w.confidence,
-      trustLevel: w.trustLevel,  // Phase 13: trust classification
-      _flags: w._flags  // Phase 13: possible_insertion, etc.
-    })),
-    gaps: transcriptWords.slice(1).map((w, idx) => {
-      const prev = transcriptWords[idx];
-      const prevEnd = parseFloat(prev.endTime?.replace('s', '') || '0');
-      const currStart = parseFloat(w.startTime?.replace('s', '') || '0');
-      return {
-        afterWord: prev.word,
-        beforeWord: w.word,
-        gap: Math.round((currStart - prevEnd) * 1000) / 1000,
-        sttIndex: idx + 1
-      };
-    }).filter(g => g.gap >= 0.5)
+      source: w.source,
+      trustLevel: w.trustLevel,
+      severity: w.severity,
+      _flags: w._flags
+    }))
   });
 
   addStage('reference_text', {
@@ -372,10 +544,32 @@ async function runAnalysis() {
   if (apiKey) {
     setStatus('Analyzing passage text...');
     nlAnnotations = await analyzePassageText(referenceText, apiKey);
+
+    // Filter proper nouns: reference capitalization is ground truth
+    // If reference has "brown" (lowercase), it's NOT a proper noun regardless of NL API
+    const refWords = referenceText.trim().split(/\s+/);
+    const refLowercaseSet = new Set(
+      refWords
+        .filter((w, i) => {
+          if (!w || w.length === 0) return false;
+          // Skip sentence-start words (they're capitalized by grammar, not meaning)
+          if (i === 0) return false;
+          if (i > 0 && /[.!?]$/.test(refWords[i - 1])) return false;
+          // Check if lowercase
+          return w.charAt(0) === w.charAt(0).toLowerCase();
+        })
+        .map(w => w.toLowerCase().replace(/[^a-z'-]/g, ''))
+    );
+
+    const nlProperNouns = nlAnnotations?.filter(a => a?.isProperNoun).map(a => a.word) || [];
+    const filteredProperNouns = nlProperNouns.filter(w => !refLowercaseSet.has(w.toLowerCase()));
+
     addStage('nl_annotations', {
       hasAnnotations: !!nlAnnotations,
       count: nlAnnotations?.length || 0,
-      properNouns: nlAnnotations?.filter(a => a?.isProperNoun).map(a => a.word) || []
+      properNouns: filteredProperNouns,
+      properNounsRaw: nlProperNouns,
+      overriddenByRef: nlProperNouns.filter(w => refLowercaseSet.has(w.toLowerCase()))
     });
   }
 
@@ -469,10 +663,28 @@ async function runAnalysis() {
   // Map NL annotations onto alignment entries
   if (nlAnnotations) {
     let refWordIndex = 0;
+    const refWordsForNL = referenceText.trim().split(/\s+/);
+
     for (const entry of alignment) {
       if (entry.type === 'insertion') continue;
       if (refWordIndex < nlAnnotations.length) {
-        entry.nl = nlAnnotations[refWordIndex];
+        entry.nl = { ...nlAnnotations[refWordIndex] }; // Clone to avoid mutating original
+
+        // Reference capitalization override: if reference is lowercase, it's NOT a proper noun
+        // This fixes STT/NL incorrectly marking "brown" as proper noun "Brown"
+        const refWord = refWordsForNL[refWordIndex] || '';
+        const isAtSentenceStart = refWordIndex === 0 ||
+          (refWordIndex > 0 && /[.!?]$/.test(refWordsForNL[refWordIndex - 1]));
+
+        if (!isAtSentenceStart && refWord.length > 0) {
+          const refIsLowercase = refWord.charAt(0) === refWord.charAt(0).toLowerCase();
+          if (refIsLowercase && entry.nl.isProperNoun) {
+            // Override: reference says it's lowercase, so NOT a proper noun
+            entry.nl.isProperNoun = false;
+            entry.nl.tierOverridden = entry.nl.tier; // Save original for debugging
+            entry.nl.tier = 'academic'; // Default to academic tier instead of proper
+          }
+        }
       }
       refWordIndex++;
     }
@@ -502,7 +714,19 @@ async function runAnalysis() {
 
       if (entry.type === 'substitution') {
         // Check if proper noun via NL API OR via capitalization heuristic
-        const isProperViaNL = entry.nl && entry.nl.isProperNoun;
+        // BUT: Reference text is ground truth - if it's lowercase there, it's NOT a proper noun
+        // (STT often capitalizes common words like "brown" → "Brown" thinking it's a surname)
+        const refWordOriginal = refWordsOriginal[refIdx] || '';
+        const refIsLowercase = refWordOriginal.length > 0 &&
+          refWordOriginal.charAt(0) === refWordOriginal.charAt(0).toLowerCase();
+
+        // NL API detection, but overridden if reference is lowercase
+        let isProperViaNL = entry.nl && entry.nl.isProperNoun;
+        if (isProperViaNL && refIsLowercase) {
+          // Reference has lowercase - author intended it as common word, not proper noun
+          isProperViaNL = false;
+        }
+
         const isProperViaCaps = isCapitalized(refWordsOriginal[refIdx], refIdx);
 
         const logEntry = {
@@ -511,6 +735,7 @@ async function runAnalysis() {
           refIdx,
           isProperViaNL,
           isProperViaCaps,
+          refIsLowercase,
           nlData: entry.nl
         };
 
@@ -573,6 +798,102 @@ async function runAnalysis() {
     });
   }
 
+  // Terminal Leniency: Apply phonetic matching to final word if it's a low-confidence substitution
+  // This handles the "hen"/"hand"/"and" problem where ASR struggles with trailing words.
+  // A human teacher would give credit for phonetically close attempts at the end of a passage.
+  const terminalLeniencyLog = { applied: false, details: null };
+
+  if (alignment.length > 0) {
+    // Find the last non-insertion entry (the actual last reference word)
+    let lastRefIdx = alignment.length - 1;
+    while (lastRefIdx >= 0 && alignment[lastRefIdx].type === 'insertion') {
+      lastRefIdx--;
+    }
+
+    if (lastRefIdx >= 0) {
+      const lastEntry = alignment[lastRefIdx];
+
+      // Only apply to substitutions that weren't already forgiven
+      if (lastEntry.type === 'substitution' && !lastEntry.forgiven) {
+        // Find the confidence for this word from transcript
+        // The last STT word should correspond to this alignment entry
+        const lastSttWord = transcriptWords[transcriptWords.length - 1];
+        const confidence = lastSttWord?.confidence || 0;
+
+        // Check the primary merged word first
+        let leniencyResult = checkTerminalLeniency(
+          lastEntry.ref,
+          lastEntry.hyp,
+          confidence
+        );
+
+        // If primary doesn't match, check alternative model transcription
+        // (e.g., if merged word is "and" but default model heard "hand")
+        let alternativeWord = null;
+        if (!leniencyResult.isMatch && lastSttWord?._debug) {
+          // Extract the other model's word
+          const debug = lastSttWord._debug;
+          if (debug.default && debug.latestLong) {
+            // Find which one differs from the merged word
+            const defaultWord = typeof debug.default === 'string'
+              ? debug.default.split(' ')[0]
+              : debug.default?.word;
+            const latestWord = typeof debug.latestLong === 'string'
+              ? debug.latestLong.split(' ')[0]
+              : debug.latestLong?.word;
+
+            const mergedLower = lastEntry.hyp.toLowerCase();
+            if (defaultWord && defaultWord.toLowerCase() !== mergedLower) {
+              alternativeWord = defaultWord;
+            } else if (latestWord && latestWord.toLowerCase() !== mergedLower) {
+              alternativeWord = latestWord;
+            }
+          }
+
+          if (alternativeWord) {
+            const altResult = checkTerminalLeniency(lastEntry.ref, alternativeWord, confidence);
+            if (altResult.isMatch) {
+              leniencyResult = altResult;
+              leniencyResult.viaAlternative = alternativeWord;
+            }
+          }
+        }
+
+        terminalLeniencyLog.details = {
+          refWord: lastEntry.ref,
+          hypWord: lastEntry.hyp,
+          alternativeWord: alternativeWord,
+          confidence: Math.round(confidence * 100) / 100,
+          refPhonetic: leniencyResult.refCode,
+          hypPhonetic: leniencyResult.asrCode,
+          reason: leniencyResult.reason,
+          viaAlternative: leniencyResult.viaAlternative || null,
+          granted: leniencyResult.isMatch
+        };
+
+        if (leniencyResult.isMatch && leniencyResult.reason !== 'exact') {
+          // Grant terminal leniency - mark as correct via "healed"
+          lastEntry.originalHyp = lastEntry.hyp; // Save original for tooltip
+          lastEntry.type = 'correct';
+          lastEntry.healed = true;
+          lastEntry.healReason = 'terminal_leniency';
+          lastEntry.originalType = 'substitution';
+          lastEntry.phoneticMatch = {
+            ref: leniencyResult.refCode,
+            hyp: leniencyResult.asrCode,
+            reason: leniencyResult.reason,
+            viaAlternative: leniencyResult.viaAlternative || null
+          };
+          terminalLeniencyLog.applied = true;
+          const matchedWord = leniencyResult.viaAlternative || lastEntry.originalHyp;
+          console.log(`[ORF] Terminal leniency: "${matchedWord}" accepted as "${lastEntry.ref}" (phonetic: ${leniencyResult.refCode} ~ ${leniencyResult.asrCode})${leniencyResult.viaAlternative ? ' [via alternative model]' : ''}`);
+        }
+      }
+    }
+  }
+
+  addStage('terminal_leniency', terminalLeniencyLog);
+
   // Calculate effective reading time: first word start = t=0
   // This gives the student a full 60 seconds from when they start speaking
   let effectiveElapsedSeconds = appState.elapsedSeconds;
@@ -627,8 +948,8 @@ async function runAnalysis() {
     diagnostics,
     transcriptWords,
     tierBreakdown,
-    disfluencyResult?.summary || null,   // Disfluency counts by severity
-    safetyResult?._safety || null         // Collapse state and safety flags
+    data._disfluency?.summary || null,   // Disfluency counts by severity
+    data._safety || null                   // Collapse state and safety flags
   );
 
   if (appState.selectedStudentId) {
@@ -823,21 +1144,31 @@ document.getElementById('viewDashboardBtn').addEventListener('click', () => {
 });
 
 // --- VAD Settings UI wiring (Phase 12) ---
+console.log('[VAD UI] Setting up VAD UI elements...');
 const vadCalibrateBtn = document.getElementById('vadCalibrateBtn');
 const vadCalibrationStatus = document.getElementById('vadCalibrationStatus');
 const vadThresholdSlider = document.getElementById('vadThresholdSlider');
 const vadThresholdValue = document.getElementById('vadThresholdValue');
 const vadNoiseInfo = document.getElementById('vadNoiseInfo');
 const vadPresetBtns = document.querySelectorAll('.vad-preset');
+console.log('[VAD UI] Elements found:', {
+  calibrateBtn: !!vadCalibrateBtn,
+  status: !!vadCalibrationStatus,
+  presetBtns: vadPresetBtns.length
+});
 
 // Calibrate button
 if (vadCalibrateBtn) {
+  console.log('[VAD UI] Calibrate button found, attaching listener');
   vadCalibrateBtn.addEventListener('click', async () => {
+    console.log('[VAD UI] Calibrate button clicked');
     vadCalibrateBtn.disabled = true;
     // Show spinner per CONTEXT.md: "simple spinner with 'Calibrating...' text"
     vadCalibrationStatus.innerHTML = '<span class="vad-spinner"></span>Calibrating...';
 
+    console.log('[VAD UI] Calling vadProcessor.calibrateMicrophone()...');
     const result = await vadProcessor.calibrateMicrophone();
+    console.log('[VAD UI] Calibration result:', result);
 
     if (result.error) {
       vadCalibrationStatus.textContent = `Error: ${result.error}`;
@@ -850,12 +1181,12 @@ if (vadCalibrateBtn) {
         vadThresholdValue.textContent = result.threshold.toFixed(2);
       }
 
-      // Show noise info per CONTEXT.md: "Noise Level: Low (0.20)"
+      // Show noise info with precise values
       vadNoiseInfo.style.display = 'block';
-      vadNoiseInfo.textContent = `Noise Level: ${result.noiseLevel} (${result.threshold.toFixed(2)})`;
+      vadNoiseInfo.innerHTML = `Noise: ${result.noiseRatio.toFixed(2)} (${result.noiseLevel}) → Threshold: ${result.threshold.toFixed(2)}`;
       vadNoiseInfo.className = 'vad-info' + (result.noiseLevel === 'High' ? ' high-noise' : '');
 
-      // Per CONTEXT.md: subtle note for high noise
+      // Subtle note for high noise
       if (result.noiseLevel === 'High') {
         vadNoiseInfo.innerHTML += '<br><small>Higher background noise detected</small>';
       }

@@ -235,17 +235,38 @@ function processStutterGroup(group) {
 
   // Also check for full word repetitions (exact matches)
   // e.g., "ball ball ball" - all but last are fragments
+  //
+  // IMPORTANT: Use word distance, not just time. A stutter is almost always:
+  //   - Immediate: "the the"
+  //   - Near (1-word gap): "the um the"
+  // It is NOT 5+ words apart like "the quick brown fox jumped over the lazy hen"
+  //
+  // The lookahead window prevents marking legitimate grammar as stutters.
+  const maxLookahead = DISFLUENCY_THRESHOLDS.MAX_WORD_LOOKAHEAD || 2;
+  const maxTimeGap = DISFLUENCY_THRESHOLDS.MAX_TIME_GAP_FOR_REPETITION || 1.0;
+
   for (let i = 0; i < group.length - 1; i++) {
     if (fragmentIndices.has(i)) continue;
 
     const current = group[i];
     const currentLower = (current.word || '').toLowerCase();
+    const currentEnd = parseTime(current.endTime);
 
-    // Look for later exact match
-    for (let j = i + 1; j < group.length; j++) {
+    // LIMIT THE SEARCH to just the next few words (word distance approach)
+    const searchLimit = Math.min(group.length, i + 1 + maxLookahead);
+
+    for (let j = i + 1; j < searchLimit; j++) {
       const candidate = group[j];
+      const candidateStart = parseTime(candidate.startTime);
+
+      // Time proximity check: if words are physically too far apart,
+      // they can't be a stutter even if they are word-neighbors
+      if ((candidateStart - currentEnd) > maxTimeGap) {
+        break;
+      }
+
       if ((candidate.word || '').toLowerCase() === currentLower) {
-        // This is a repetition - mark current as fragment of later occurrence
+        // Found a match within close proximity - this is a real stutter
         fragmentIndices.add(i);
         if (!targetFragments.has(j)) {
           targetFragments.set(j, []);

@@ -152,7 +152,7 @@ class VADProcessor {
    * @returns {Promise<{threshold: number, noiseLevel: string, error: string|null}>}
    */
   async calibrateMicrophone() {
-    const CALIBRATION_DURATION_MS = 2000;  // Per CONTEXT.md: 2 seconds
+    const CALIBRATION_DURATION_MS = 5000;  // 5 seconds for stable measurement
 
     try {
       // Request microphone access
@@ -205,30 +205,39 @@ class VADProcessor {
       // During 2 seconds of silence, we expect 0 segments in quiet environment
       const noiseRatio = totalSegmentDuration / CALIBRATION_DURATION_MS;
 
-      let noiseLevel, calibratedThreshold;
-      if (noiseRatio < 0.05 && segmentCount <= 1) {
+      // Calculate precise threshold based on noise ratio
+      // Map noise ratio (0.0 - 0.30+) to threshold range (0.15 - 0.60)
+      // Formula: threshold = MIN + (noiseRatio / 0.30) * (MAX - MIN)
+      // This gives a continuous value, not bucketed
+      const noiseScale = Math.min(noiseRatio / 0.30, 1.0); // Cap at 1.0 for very noisy environments
+      let calibratedThreshold = VAD_THRESHOLD_MIN + noiseScale * (VAD_THRESHOLD_MAX - VAD_THRESHOLD_MIN);
+
+      // Round to 2 decimal places for cleaner display
+      calibratedThreshold = Math.round(calibratedThreshold * 100) / 100;
+
+      // Clamp to valid range (safety check)
+      calibratedThreshold = Math.max(VAD_THRESHOLD_MIN, Math.min(VAD_THRESHOLD_MAX, calibratedThreshold));
+
+      // Noise level label is approximate description only
+      let noiseLevel;
+      if (noiseRatio < 0.05) {
         noiseLevel = 'Low';
-        calibratedThreshold = 0.20;  // Can use lower threshold
-      } else if (noiseRatio < 0.15 && segmentCount <= 3) {
+      } else if (noiseRatio < 0.15) {
         noiseLevel = 'Moderate';
-        calibratedThreshold = 0.35;  // Default range
       } else {
         noiseLevel = 'High';
-        calibratedThreshold = 0.50;  // Need higher threshold
       }
-
-      // Clamp to valid range
-      calibratedThreshold = Math.max(VAD_THRESHOLD_MIN, Math.min(VAD_THRESHOLD_MAX, calibratedThreshold));
 
       // Apply the calibrated threshold
       this.threshold = calibratedThreshold;
       this.noiseLevel = noiseLevel;
       this.isCalibrated = true;
 
-      console.log(`[VAD] Calibrated: threshold=${calibratedThreshold.toFixed(2)}, noise=${noiseLevel}`);
+      console.log(`[VAD] Calibrated: threshold=${calibratedThreshold.toFixed(2)}, noiseRatio=${noiseRatio.toFixed(3)}, level=${noiseLevel}`);
 
       return {
         threshold: calibratedThreshold,
+        noiseRatio: Math.round(noiseRatio * 1000) / 1000, // 3 decimal places
         noiseLevel: noiseLevel,
         error: null
       };

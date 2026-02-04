@@ -6,7 +6,13 @@
 // Severity thresholds (per CONTEXT.md "Count-First, Duration-Override" model)
 export const DISFLUENCY_THRESHOLDS = {
   // Gap threshold for grouping stutter attempts
-  MAX_STUTTER_GAP_SEC: 2.0,
+  // Reduced from 2.0s - if student pauses 1+ second, it's a new phrase
+  MAX_STUTTER_GAP_SEC: 1.0,
+
+  // Repetition detection thresholds (word distance approach)
+  // Stutters are immediate ("the the") or near ("the um the"), not 5+ words apart
+  MAX_WORD_LOOKAHEAD: 2,           // Only check next 2 words for repetitions
+  MAX_TIME_GAP_FOR_REPETITION: 1.0, // Max silence between repeated words to count as stutter
 
   // Duration override thresholds
   SIGNIFICANT_DURATION_SEC: 2.0,  // totalDuration >= 2.0s -> significant
