@@ -10,14 +10,14 @@ See: .planning/PROJECT.md (updated 2026-02-03)
 ## Current Position
 
 Phase: 15 - Safety Checks (In Progress)
-Plan: 1 of 3 complete
+Plan: 2 of 3 complete
 Status: Executing Phase 15
-Last activity: 2026-02-03 — Completed 15-01-PLAN.md
+Last activity: 2026-02-03 — Completed 15-02-PLAN.md
 
-Progress: [█████████████████████████░░░░░] 94% (15/16 v1.1 plans)
+Progress: [██████████████████████████░░░░] 97% (16/17 v1.1 plans)
 
 Phases remaining: 2 (Phases 15-16)
-Plans completed in v1.1: 15
+Plans completed in v1.1: 16
 
 ## Performance Metrics
 
@@ -80,6 +80,9 @@ See PROJECT.md Key Decisions table.
 - 5 w/s rate threshold (physiological limit for speech) (15-01)
 - 3-word sliding window for burst detection (15-01)
 - Edge tolerance 300ms skips flagging at boundaries (15-01)
+- Split sequence thresholds: 7 in-ref, 3 not-in-ref for latest_only words (15-02)
+- Strong corroboration (both+0.93) removes rate/sequence flags, never ghost (15-02)
+- 40% flagged/none triggers confidence collapse state (15-02)
 
 ### Pending Todos
 
@@ -94,5 +97,5 @@ None.
 ## Session Continuity
 
 Last session: 2026-02-03
-Stopped at: Completed 15-01-PLAN.md
-Resume with: `/gsd:execute-plan 15-02`
+Stopped at: Completed 15-02-PLAN.md
+Resume with: `/gsd:execute-plan 15-03`
