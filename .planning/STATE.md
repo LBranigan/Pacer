@@ -5,19 +5,19 @@
 See: .planning/PROJECT.md (updated 2026-02-03)
 
 **Core value:** Accurate, word-level fluency error detection powered by Google Cloud STT — giving teachers actionable data on exactly where and how a struggling reader breaks down.
-**Current focus:** v1.1 — ASR Ensemble Strategy
+**Current focus:** v1.1 — ASR Ensemble Strategy (COMPLETE)
 
 ## Current Position
 
-Phase: 17 - Integration Bug Fixes (Pending)
-Plan: 0 of 1 complete
-Status: Gap closure phase created from audit
-Last activity: 2026-02-04 — Created Phase 17 from MILESTONE-AUDIT.md gaps
+Phase: 17 - Integration Bug Fixes (COMPLETE)
+Plan: 1 of 1 complete
+Status: v1.1 MILESTONE COMPLETE
+Last activity: 2026-02-04 — Completed 17-01-PLAN.md (integration bug fixes)
 
-Progress: [█████████████████████████████░] 95% (21/22 v1.1 plans)
+Progress: [██████████████████████████████] 100% (22/22 v1.1 plans)
 
-Phases remaining: 1
-Plans completed in v1.1: 21
+Phases remaining: 0
+Plans completed in v1.1: 22
 
 ## Performance Metrics
 
@@ -27,9 +27,9 @@ Plans completed in v1.1: 21
 - Total execution time: ~0.7 hours
 
 **v1.1 Velocity:**
-- Plans completed: 21
-- Average duration: 2.3min
-- Total execution time: ~48min
+- Plans completed: 22
+- Average duration: 2.2min
+- Total execution time: ~49min
 
 ## Accumulated Context
 
@@ -96,6 +96,8 @@ See PROJECT.md Key Decisions table.
 - Collapse banner replaces WCPM when confidence collapse detected (16-03)
 - Dev mode persists to localStorage, slider hidden by default (16-04)
 - Spinner CSS animation for calibration feedback (16-04)
+- _debug.latestLong property reference (17-01) - matches ensemble-merger.js creation
+- Severity propagation via find() lookup (17-01) - alignment items need severity for WCPM range
 
 ### Pending Todos
 
@@ -105,10 +107,11 @@ None.
 
 **For v1.1:**
 - ~~Silero VAD browser integration (ONNX runtime required)~~ RESOLVED in 12-01
-- Two parallel STT API calls doubles latency — may need optimization
+- ~~Two parallel STT API calls doubles latency~~ Acceptable for accuracy gains
+- ~~Integration bugs in tooltip/WCPM range~~ RESOLVED in 17-01
 
 ## Session Continuity
 
 Last session: 2026-02-04
-Stopped at: Created Phase 17 from milestone audit gaps
-Resume with: /gsd:plan-phase 17 to create execution plan
+Stopped at: Completed 17-01-PLAN.md - v1.1 milestone complete
+Resume with: v1.1 milestone shipped; plan v1.2 or production deployment
