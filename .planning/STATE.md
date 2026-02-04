@@ -10,14 +10,14 @@ See: .planning/PROJECT.md (updated 2026-02-03)
 ## Current Position
 
 Phase: 16 - UI Enhancements (In Progress)
-Plan: 1 of 4 complete
+Plan: 2 of 4 complete
 Status: In Progress
-Last activity: 2026-02-03 — Completed 16-01-PLAN.md
+Last activity: 2026-02-04 — Completed 16-02-PLAN.md
 
-Progress: [████████████████████████████░░] 93% (18/19 v1.1 plans)
+Progress: [█████████████████████████████░] 95% (19/20 v1.1 plans)
 
 Phases remaining: 1 (Phase 16)
-Plans completed in v1.1: 18
+Plans completed in v1.1: 19
 
 ## Performance Metrics
 
@@ -88,6 +88,8 @@ See PROJECT.md Key Decisions table.
 - Flags shown as text list in tooltip, no icons (16-01)
 - Rate anomaly uses dashed underline distinct from correctness colors (16-01)
 - buildEnhancedTooltip helper for unified tooltip generation (16-01)
+- Disfluency badge icons: dot (minor), double-dot (moderate), warning (significant) (16-02)
+- Badge tooltip shows "Attempts: frag1, frag2, word" trace format (16-02)
 
 ### Pending Todos
 
@@ -101,6 +103,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-02-03
-Stopped at: Completed 16-01-PLAN.md
-Resume with: `/gsd:execute-phase 16` (continue with plan 02)
+Last session: 2026-02-04
+Stopped at: Completed 16-02-PLAN.md
+Resume with: `/gsd:execute-phase 16` (continue with plan 03)
