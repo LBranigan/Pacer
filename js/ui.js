@@ -226,7 +226,7 @@ function parseSttTime(t) {
   return parseFloat(String(t).replace('s', '')) || 0;
 }
 
-export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, diagnostics, transcriptWords, tierBreakdown) {
+export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, diagnostics, transcriptWords, tierBreakdown, disfluencySummary, safetyData) {
   const wordsDiv = document.getElementById('resultWords');
   const plainDiv = document.getElementById('resultPlain');
   const jsonDiv = document.getElementById('resultJson');
@@ -236,10 +236,64 @@ export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, di
   const metricsBar = document.createElement('div');
   metricsBar.className = 'metrics-bar';
 
+  // WCPM box with range display
   const wcpmBox = document.createElement('div');
   wcpmBox.className = 'metric-box';
-  wcpmBox.innerHTML = '<span class="metric-value">' + (wcpm ? wcpm.wcpm : 'N/A') + '</span><span class="metric-label">WCPM</span>';
-  metricsBar.appendChild(wcpmBox);
+
+  // Check for collapse state
+  if (safetyData?.collapse?.collapsed) {
+    // Show collapse banner instead of WCPM
+    const banner = document.createElement('div');
+    banner.className = 'collapse-banner';
+    banner.textContent = 'Results may be unreliable due to poor audio quality';
+    metricsBar.appendChild(banner);
+  } else if (wcpm) {
+    // Normal WCPM range display
+    const container = document.createElement('div');
+    container.className = 'wcpm-container';
+
+    const primary = document.createElement('div');
+    primary.className = 'wcpm-primary';
+    primary.textContent = wcpm.wcpmMin ?? wcpm.wcpm ?? 'N/A';
+
+    const range = document.createElement('div');
+    range.className = 'wcpm-range';
+    // Show range only if different
+    if (wcpm.wcpmMin !== undefined && wcpm.wcpmMax !== undefined && wcpm.wcpmMin !== wcpm.wcpmMax) {
+      range.textContent = `${wcpm.wcpmMin}-${wcpm.wcpmMax} WCPM`;
+    } else {
+      range.textContent = `${wcpm.wcpm ?? wcpm.wcpmMin} WCPM`;
+    }
+
+    container.appendChild(primary);
+    container.appendChild(range);
+
+    wcpmBox.appendChild(container);
+    metricsBar.appendChild(wcpmBox);
+
+    // Fluency concerns summary - directly below WCPM per CONTEXT.md
+    if (disfluencySummary && disfluencySummary.totalWordsWithDisfluency > 0) {
+      const summary = document.createElement('div');
+      summary.className = 'fluency-summary';
+
+      const parts = [];
+      if (disfluencySummary.significant > 0) {
+        parts.push(`<span class="significant">${disfluencySummary.significant} significant</span>`);
+      }
+      if (disfluencySummary.moderate > 0) {
+        parts.push(`<span class="moderate">${disfluencySummary.moderate} moderate</span>`);
+      }
+      if (disfluencySummary.minor > 0) {
+        parts.push(`<span class="minor">${disfluencySummary.minor} minor</span>`);
+      }
+
+      summary.innerHTML = parts.join(', ');
+      wcpmBox.appendChild(summary);
+    }
+  } else {
+    wcpmBox.innerHTML = '<span class="metric-value">N/A</span><span class="metric-label">WCPM</span>';
+    metricsBar.appendChild(wcpmBox);
+  }
 
   const accBox = document.createElement('div');
   accBox.className = 'metric-box';
