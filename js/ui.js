@@ -64,6 +64,103 @@ function buildNLTooltip(nl) {
   return lines.join('\n');
 }
 
+/**
+ * Build disfluency badge tooltip showing attempt trace.
+ * Per CONTEXT.md: "Tooltip on disfluency badge should reveal the 'trace' (fragments)"
+ */
+function buildDisfluencyTooltip(word) {
+  if (!word._disfluency) {
+    return `${word.attempts || 1} attempt${word.attempts !== 1 ? 's' : ''}`;
+  }
+
+  const frags = word._disfluency.fragments || [];
+  if (frags.length === 0) {
+    return `${word.attempts} attempts`;
+  }
+
+  // Show trace: "Attempts: b, ba, ball"
+  const trace = frags.map(f => f.word).join(', ');
+  return `Attempts: ${trace}, ${word.word}`;
+}
+
+/**
+ * Create disfluency badge element based on severity.
+ * Per CONTEXT.md: minor=dot, moderate=double-dot, significant=warning
+ */
+function createDisfluencyBadge(word) {
+  const severity = word.severity || 'none';
+  if (severity === 'none') return null;
+
+  const badge = document.createElement('span');
+  badge.className = `disfluency-badge ${severity}`;
+
+  // Badge content per CONTEXT.md
+  const badges = {
+    minor: '\u2022',           // • single dot
+    moderate: '\u2022\u2022',  // •• double dot
+    significant: '\u26A0\uFE0F' // ⚠️ warning icon
+  };
+  badge.textContent = badges[severity] || '';
+  badge.title = buildDisfluencyTooltip(word);
+
+  return badge;
+}
+
+/**
+ * Build enhanced tooltip with ensemble debug info.
+ * Per CONTEXT.md: Full debug info visible to ALL teachers (not dev mode gated).
+ * @param {Object} item - Alignment item with type, ref, hyp
+ * @param {Object|null} sttWord - STT word metadata with timestamps and _debug
+ * @returns {string} Tooltip text
+ */
+function buildEnhancedTooltip(item, sttWord) {
+  const lines = [];
+
+  // Existing type info
+  if (item.type === 'substitution') {
+    lines.push(`Expected: ${item.ref}, Said: ${item.hyp}`);
+  } else if (item.type === 'omission') {
+    lines.push('Omitted (not read)');
+  } else if (item.type === 'self-correction') {
+    lines.push(`"${item.hyp}" (self-correction)`);
+  } else {
+    lines.push(item.ref || '');
+  }
+
+  // Timestamps with duration (per CONTEXT.md: "offset range AND duration")
+  if (sttWord) {
+    const start = parseSttTime(sttWord.startTime);
+    const end = parseSttTime(sttWord.endTime);
+    const durationMs = Math.round((end - start) * 1000);
+    lines.push(`Time: ${start.toFixed(2)}s - ${end.toFixed(2)}s (${durationMs}ms)`);
+
+    // Dual model info from _debug
+    if (sttWord._debug) {
+      if (sttWord._debug.latest) {
+        const l = sttWord._debug.latest;
+        const lStart = parseSttTime(l.startTime);
+        const lEnd = parseSttTime(l.endTime);
+        const conf = l.confidence != null ? (l.confidence * 100).toFixed(1) + '%' : '—';
+        lines.push(`latest_long: "${l.word}" (${conf}) ${lStart.toFixed(2)}s-${lEnd.toFixed(2)}s`);
+      }
+      if (sttWord._debug.default) {
+        const d = sttWord._debug.default;
+        const dStart = parseSttTime(d.startTime);
+        const dEnd = parseSttTime(d.endTime);
+        const conf = d.confidence != null ? (d.confidence * 100).toFixed(1) + '%' : '—';
+        lines.push(`default: "${d.word}" (${conf}) ${dStart.toFixed(2)}s-${dEnd.toFixed(2)}s`);
+      }
+    }
+  }
+
+  // Flags as text list (per CONTEXT.md: "no icons in tooltip")
+  if (sttWord?._flags && sttWord._flags.length > 0) {
+    lines.push(`Flags: ${sttWord._flags.join(', ')}`);
+  }
+
+  return lines.join('\n');
+}
+
 export function displayResults(data) {
   const wordsDiv = document.getElementById('resultWords');
   const plainDiv = document.getElementById('resultPlain');
@@ -253,14 +350,15 @@ export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, di
 
     // Build tooltip with STT metadata
     const hypKey = item.hyp;
+    let sttWord = null;
     let sttInfo = '';
     if (hypKey && sttLookup) {
       const queue = sttLookup.get(hypKey);
       if (queue && queue.length > 0) {
-        const meta = queue.shift();
-        const conf = meta.confidence != null ? (meta.confidence * 100).toFixed(1) + '%' : '—';
-        const start = parseSttTime(meta.startTime);
-        const end = parseSttTime(meta.endTime);
+        sttWord = queue.shift();
+        const conf = sttWord.confidence != null ? (sttWord.confidence * 100).toFixed(1) + '%' : '—';
+        const start = parseSttTime(sttWord.startTime);
+        const end = parseSttTime(sttWord.endTime);
         sttInfo = `\nConfidence: ${conf}  |  ${start.toFixed(2)}s – ${end.toFixed(2)}s`;
       }
     }
@@ -277,8 +375,16 @@ export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, di
       sttInfo += '\n(Healed: STT said "' + item.originalHyp + '")';
     }
 
+    // Rate anomaly visual indicator (Phase 16)
+    if (sttWord?._flags?.includes('rate_anomaly')) {
+      span.classList.add('word-rate-anomaly');
+    }
+
+    // Build tooltip with enhanced debug info
+    span.title = buildEnhancedTooltip(item, sttWord);
+
+    // Additional context for specific types
     if (item.type === 'substitution') {
-      span.title = 'Expected: ' + item.ref + ', Said: ' + item.hyp + sttInfo;
       // Proper noun forgiveness indicator (phonetic proximity check passed)
       // Check this FIRST - forgiven words should NOT be marked as morphological errors
       if (item.forgiven) {
@@ -294,13 +400,16 @@ export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, di
           span.title += '\n(Morphological error)';
         }
       }
-    } else if (item.type === 'omission') {
-      span.title = 'Omitted (not read)';
-    } else if (item.type === 'self-correction') {
-      span.textContent = item.hyp || '';
-      span.title = '"' + item.hyp + '" (self-correction)' + sttInfo;
-    } else {
-      span.title = item.ref + sttInfo;
+    }
+
+    // Append NL tooltip info
+    if (item.nl) {
+      span.title += '\n' + buildNLTooltip(item.nl);
+    }
+
+    // Append healed word indicator
+    if (item.healed) {
+      span.title += '\n(Healed: STT said "' + item.originalHyp + '")';
     }
 
     // Hesitation overlay (for items that have a hyp word)
