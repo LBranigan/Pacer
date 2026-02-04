@@ -33,11 +33,11 @@ Requirements for the ASR Ensemble milestone. Each maps to roadmap phases.
 
 ### Disfluency Detection
 
-- [ ] **DIS-01**: Stutter metrics computed separately from confidence (attempts, duration, max pause)
-- [ ] **DIS-02**: Disfluency severity classified: none | minor | moderate | significant
-- [ ] **DIS-03**: Significant disfluency = maxPause >= 0.5s OR totalDuration >= 2.0s
-- [ ] **DIS-04**: Orphaned stutter fragments (≤3 chars, ≤2s gap, startsWith match) merged into target
-- [ ] **DIS-05**: Confidence and disfluency remain separate signals (not combined)
+- [x] **DIS-01**: Stutter metrics computed separately from confidence (attempts, duration, max pause)
+- [x] **DIS-02**: Disfluency severity classified: none | minor | moderate | significant
+- [x] **DIS-03**: Significant disfluency = maxPause >= 0.5s OR totalDuration >= 2.0s
+- [x] **DIS-04**: Orphaned stutter fragments (≤3 chars, ≤2s gap, startsWith match) merged into target
+- [x] **DIS-05**: Confidence and disfluency remain separate signals (not combined)
 
 ### Safety Checks
 
@@ -113,11 +113,11 @@ Which phases cover which requirements. Updated during roadmap creation.
 | CONF-02 | Phase 13 | Complete |
 | CONF-03 | Phase 13 | Complete |
 | CONF-04 | Phase 13 | Complete |
-| DIS-01 | Phase 14 | Pending |
-| DIS-02 | Phase 14 | Pending |
-| DIS-03 | Phase 14 | Pending |
-| DIS-04 | Phase 14 | Pending |
-| DIS-05 | Phase 14 | Pending |
+| DIS-01 | Phase 14 | Complete |
+| DIS-02 | Phase 14 | Complete |
+| DIS-03 | Phase 14 | Complete |
+| DIS-04 | Phase 14 | Complete |
+| DIS-05 | Phase 14 | Complete |
 | SAFE-01 | Phase 15 | Pending |
 | SAFE-02 | Phase 15 | Pending |
 | SAFE-03 | Phase 15 | Pending |

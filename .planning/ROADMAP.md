@@ -103,9 +103,9 @@ Plans:
 **Plans**: 3 plans (3 waves)
 
 Plans:
-- [ ] 14-01-PLAN.md — Stutter metrics calculation (Wave 1)
-- [ ] 14-02-PLAN.md — Disfluency severity classification (Wave 2)
-- [ ] 14-03-PLAN.md — Fragment merger and app integration (Wave 3)
+- [x] 14-01-PLAN.md — Stutter metrics calculation (Wave 1)
+- [x] 14-02-PLAN.md — Disfluency severity classification (Wave 2)
+- [x] 14-03-PLAN.md — Fragment merger and app integration (Wave 3)
 
 ### Phase 15: Safety Checks
 **Goal**: Flag physically impossible or suspicious ASR outputs
@@ -153,7 +153,7 @@ Plans:
 | 11. Ensemble Core | 3/3 | Complete | 2026-02-03 |
 | 12. VAD Integration | 4/4 | Complete | 2026-02-03 |
 | 13. Confidence Classification | 3/3 | Complete | 2026-02-03 |
-| 14. Disfluency Detection | 0/3 | Planned | - |
+| 14. Disfluency Detection | 3/3 | Complete | 2026-02-03 |
 | 15. Safety Checks | 0/3 | Not started | - |
 | 16. UI Enhancements | 0/4 | Not started | - |
 
