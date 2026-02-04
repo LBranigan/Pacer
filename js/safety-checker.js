@@ -260,3 +260,61 @@ export function detectConfidenceCollapse(words) {
     flaggedCount
   };
 }
+
+/**
+ * Main safety check orchestrator.
+ * Runs all safety checks in the correct order and returns summary.
+ *
+ * Pipeline order:
+ * 1. detectRateAnomalies (3-word sliding window)
+ * 2. detectUncorroboratedSequences (split thresholds)
+ * 3. applyCorroborationOverride (remove flags for strong corroboration)
+ * 4. detectConfidenceCollapse (>40% triggers collapse state)
+ *
+ * @param {Array} words - Array of word objects from ensemble merger
+ * @param {string} referenceText - Reference passage text
+ * @param {number} audioDurationMs - Total audio duration in milliseconds
+ * @returns {{ words: Array, _safety: Object }} Words with flags and safety summary
+ */
+export function applySafetyChecks(words, referenceText, audioDurationMs) {
+  // Skip safety checks for single-word utterances
+  if (words.length <= 1) {
+    return {
+      words,
+      _safety: {
+        rateAnomalies: 0,
+        uncorroboratedSequences: 0,
+        collapse: { collapsed: false, percent: 0, flaggedCount: 0 },
+        skipped: 'single_word_utterance'
+      }
+    };
+  }
+
+  // Build reference set for sequence detection
+  const referenceSet = buildReferenceSet(referenceText);
+
+  // Step 1: Detect rate anomalies (3-word sliding window)
+  detectRateAnomalies(words, audioDurationMs);
+
+  // Step 2: Detect uncorroborated sequences (split thresholds)
+  detectUncorroboratedSequences(words, referenceSet);
+
+  // Step 3: Apply corroboration override (remove flags for strong corroboration)
+  applyCorroborationOverride(words);
+
+  // Step 4: Detect confidence collapse state
+  const collapse = detectConfidenceCollapse(words);
+
+  // Count flags for summary
+  const rateAnomalies = words.filter(w => w._flags?.includes(SAFETY_FLAGS.RATE_ANOMALY)).length;
+  const uncorroboratedSequences = words.filter(w => w._flags?.includes(SAFETY_FLAGS.UNCORROBORATED_SEQUENCE)).length;
+
+  return {
+    words,
+    _safety: {
+      rateAnomalies,
+      uncorroboratedSequences,
+      collapse
+    }
+  };
+}
