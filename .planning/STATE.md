@@ -10,14 +10,14 @@ See: .planning/PROJECT.md (updated 2026-02-03)
 ## Current Position
 
 Phase: 16 - UI Enhancements (In Progress)
-Plan: 2 of 4 complete
+Plan: 3 of 4 complete
 Status: In Progress
-Last activity: 2026-02-04 — Completed 16-02-PLAN.md
+Last activity: 2026-02-04 — Completed 16-03-PLAN.md
 
-Progress: [█████████████████████████████░] 95% (19/20 v1.1 plans)
+Progress: [█████████████████████████████░] 100% (20/20 v1.1 plans)
 
 Phases remaining: 1 (Phase 16)
-Plans completed in v1.1: 19
+Plans completed in v1.1: 20
 
 ## Performance Metrics
 
@@ -27,9 +27,9 @@ Plans completed in v1.1: 19
 - Total execution time: ~0.7 hours
 
 **v1.1 Velocity:**
-- Plans completed: 17
-- Average duration: 2.4min
-- Total execution time: ~41min
+- Plans completed: 20
+- Average duration: 2.3min
+- Total execution time: ~46min
 
 ## Accumulated Context
 
@@ -90,6 +90,10 @@ See PROJECT.md Key Decisions table.
 - buildEnhancedTooltip helper for unified tooltip generation (16-01)
 - Disfluency badge icons: dot (minor), double-dot (moderate), warning (significant) (16-02)
 - Badge tooltip shows "Attempts: frag1, frag2, word" trace format (16-02)
+- WCPM conservative (min) value as primary display (16-03)
+- Range shown only when wcpmMin differs from wcpmMax (16-03)
+- Fluency summary shows severity counts below WCPM (16-03)
+- Collapse banner replaces WCPM when confidence collapse detected (16-03)
 
 ### Pending Todos
 
@@ -104,5 +108,5 @@ None.
 ## Session Continuity
 
 Last session: 2026-02-04
-Stopped at: Completed 16-02-PLAN.md
-Resume with: `/gsd:execute-phase 16` (continue with plan 03)
+Stopped at: Completed 16-03-PLAN.md
+Resume with: `/gsd:execute-phase 16` (continue with plan 04)
