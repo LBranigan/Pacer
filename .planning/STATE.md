@@ -9,15 +9,15 @@ See: .planning/PROJECT.md (updated 2026-02-03)
 
 ## Current Position
 
-Phase: 14 - Disfluency Detection ✓ COMPLETE
-Plan: —
-Status: Phase 14 verified, ready for Phase 15
-Last activity: 2026-02-03 — Phase 14 complete
+Phase: 15 - Safety Checks (In Progress)
+Plan: 1 of 3 complete
+Status: Executing Phase 15
+Last activity: 2026-02-03 — Completed 15-01-PLAN.md
 
-Progress: [████████████████████████░░░░░░] 88% (14/16 v1.1 plans)
+Progress: [█████████████████████████░░░░░] 94% (15/16 v1.1 plans)
 
 Phases remaining: 2 (Phases 15-16)
-Plans completed in v1.1: 14
+Plans completed in v1.1: 15
 
 ## Performance Metrics
 
@@ -27,9 +27,9 @@ Plans completed in v1.1: 14
 - Total execution time: ~0.7 hours
 
 **v1.1 Velocity:**
-- Plans completed: 14
-- Average duration: 2.5min
-- Total execution time: ~35min
+- Plans completed: 15
+- Average duration: 2.4min
+- Total execution time: ~36min
 
 ## Accumulated Context
 
@@ -77,6 +77,9 @@ See PROJECT.md Key Decisions table.
 - Nearest word wins for fragment matching by time proximity (14-03)
 - Full word repetitions count as stutter attempts (14-03)
 - _disfluency field persisted in saved assessments (14-03)
+- 5 w/s rate threshold (physiological limit for speech) (15-01)
+- 3-word sliding window for burst detection (15-01)
+- Edge tolerance 300ms skips flagging at boundaries (15-01)
 
 ### Pending Todos
 
@@ -91,5 +94,5 @@ None.
 ## Session Continuity
 
 Last session: 2026-02-03
-Stopped at: Phase 14 complete
-Resume with: `/gsd:discuss-phase 15`
+Stopped at: Completed 15-01-PLAN.md
+Resume with: `/gsd:execute-plan 15-02`
