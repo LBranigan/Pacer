@@ -9,15 +9,15 @@ See: .planning/PROJECT.md (updated 2026-02-03)
 
 ## Current Position
 
-Phase: 15 - Safety Checks (In Progress)
-Plan: 2 of 3 complete
-Status: Executing Phase 15
-Last activity: 2026-02-03 — Completed 15-02-PLAN.md
+Phase: 15 - Safety Checks (Complete)
+Plan: 3 of 3 complete
+Status: Phase 15 Complete
+Last activity: 2026-02-03 — Completed 15-03-PLAN.md
 
-Progress: [██████████████████████████░░░░] 97% (16/17 v1.1 plans)
+Progress: [███████████████████████████░░░] 100% (17/17 v1.1 plans for Phase 15)
 
-Phases remaining: 2 (Phases 15-16)
-Plans completed in v1.1: 16
+Phases remaining: 1 (Phase 16)
+Plans completed in v1.1: 17
 
 ## Performance Metrics
 
@@ -27,9 +27,9 @@ Plans completed in v1.1: 16
 - Total execution time: ~0.7 hours
 
 **v1.1 Velocity:**
-- Plans completed: 15
+- Plans completed: 17
 - Average duration: 2.4min
-- Total execution time: ~36min
+- Total execution time: ~41min
 
 ## Accumulated Context
 
@@ -83,6 +83,8 @@ See PROJECT.md Key Decisions table.
 - Split sequence thresholds: 7 in-ref, 3 not-in-ref for latest_only words (15-02)
 - Strong corroboration (both+0.93) removes rate/sequence flags, never ghost (15-02)
 - 40% flagged/none triggers confidence collapse state (15-02)
+- Safety checks run after disfluency detection, before alignment (15-03)
+- _safety field persisted in saved assessments for Phase 16 UI (15-03)
 
 ### Pending Todos
 
@@ -97,5 +99,5 @@ None.
 ## Session Continuity
 
 Last session: 2026-02-03
-Stopped at: Completed 15-02-PLAN.md
-Resume with: `/gsd:execute-plan 15-03`
+Stopped at: Completed 15-03-PLAN.md (Phase 15 Complete)
+Resume with: Phase 16 planning or `/gsd:plan-phase 16`
