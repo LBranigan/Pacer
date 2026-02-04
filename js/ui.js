@@ -447,7 +447,22 @@ export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, di
       }
     }
 
-    wordsDiv.appendChild(span);
+    // Check for disfluency badge (Phase 16)
+    const hasDisfluency = sttWord?.severity && sttWord.severity !== 'none';
+
+    if (hasDisfluency) {
+      // Wrap word in container for badge positioning
+      const container = document.createElement('span');
+      container.className = 'word-with-disfluency';
+      container.appendChild(span);
+
+      const badge = createDisfluencyBadge(sttWord);
+      if (badge) container.appendChild(badge);
+
+      wordsDiv.appendChild(container);
+    } else {
+      wordsDiv.appendChild(span);
+    }
     wordsDiv.appendChild(document.createTextNode(' '));
 
     // Advance hypIndex for non-omission items
