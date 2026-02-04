@@ -113,15 +113,15 @@ Plans:
 **Requirements**: SAFE-01, SAFE-02, SAFE-03, SAFE-04
 **Success Criteria** (what must be TRUE):
   1. Words spoken at >5 words/second are flagged as rate anomalies (physically impossible)
-  2. Long sequences (>5 consecutive `latest_only` words) are flagged as suspicious uncorroborated output
+  2. Long uncorroborated sequences are flagged with split thresholds (7+ in-ref, 3+ not-in-ref)
   3. Flagged words include `_flags` array supporting multiple anomaly types
-  4. Strong corroboration (`_source === 'both'` with conf >= 0.9) overrides rate flags
+  4. Strong corroboration (`_source === 'both'` with conf >= 0.93) overrides rate flags
 **Plans**: 3 plans (3 waves)
 
 Plans:
-- [ ] 15-01-PLAN.md — Safety config + rate anomaly detection (Wave 1)
-- [ ] 15-02-PLAN.md — Uncorroborated sequence detection + flag resolution (Wave 2)
-- [ ] 15-03-PLAN.md — App integration with safety check flow (Wave 3)
+- [x] 15-01-PLAN.md — Safety config + rate anomaly detection (Wave 1)
+- [x] 15-02-PLAN.md — Uncorroborated sequence detection + flag resolution (Wave 2)
+- [x] 15-03-PLAN.md — App integration with safety check flow (Wave 3)
 
 ### Phase 16: UI Enhancements
 **Goal**: Surface ensemble data, disfluency badges, and calibration controls in the UI
@@ -154,7 +154,7 @@ Plans:
 | 12. VAD Integration | 4/4 | Complete | 2026-02-03 |
 | 13. Confidence Classification | 3/3 | Complete | 2026-02-03 |
 | 14. Disfluency Detection | 3/3 | Complete | 2026-02-03 |
-| 15. Safety Checks | 0/3 | Not started | - |
+| 15. Safety Checks | 3/3 | Complete | 2026-02-03 |
 | 16. UI Enhancements | 0/4 | Not started | - |
 
 ---

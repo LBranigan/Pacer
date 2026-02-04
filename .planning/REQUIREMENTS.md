@@ -41,10 +41,10 @@ Requirements for the ASR Ensemble milestone. Each maps to roadmap phases.
 
 ### Safety Checks
 
-- [ ] **SAFE-01**: Rate anomaly detection flags >5 words/second as physically impossible
-- [ ] **SAFE-02**: Long uncorroborated sequences (>5 consecutive `latest_only`) flagged as suspicious
-- [ ] **SAFE-03**: Flagged words have `_flags` array for multiple anomaly types
-- [ ] **SAFE-04**: Strong corroboration (`_source === 'both'` + conf >= 0.9) overrides rate flags
+- [x] **SAFE-01**: Rate anomaly detection flags >5 words/second as physically impossible
+- [x] **SAFE-02**: Long uncorroborated sequences flagged (7+ in-ref, 3+ not-in-ref `latest_only`)
+- [x] **SAFE-03**: Flagged words have `_flags` array for multiple anomaly types
+- [x] **SAFE-04**: Strong corroboration (`_source === 'both'` + conf >= 0.93) overrides rate flags
 
 ### UI Enhancements
 
@@ -118,10 +118,10 @@ Which phases cover which requirements. Updated during roadmap creation.
 | DIS-03 | Phase 14 | Complete |
 | DIS-04 | Phase 14 | Complete |
 | DIS-05 | Phase 14 | Complete |
-| SAFE-01 | Phase 15 | Pending |
-| SAFE-02 | Phase 15 | Pending |
-| SAFE-03 | Phase 15 | Pending |
-| SAFE-04 | Phase 15 | Pending |
+| SAFE-01 | Phase 15 | Complete |
+| SAFE-02 | Phase 15 | Complete |
+| SAFE-03 | Phase 15 | Complete |
+| SAFE-04 | Phase 15 | Complete |
 | UI-01 | Phase 16 | Pending |
 | UI-02 | Phase 16 | Pending |
 | UI-03 | Phase 16 | Pending |
