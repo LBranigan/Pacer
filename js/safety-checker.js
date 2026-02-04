@@ -8,6 +8,8 @@
 
 import { parseTime } from './diagnostics.js';
 import { SAFETY_THRESHOLDS, SAFETY_FLAGS } from './safety-config.js';
+import { buildReferenceSet } from './confidence-classifier.js';
+import { getCanonical } from './word-equivalences.js';
 
 /**
  * Add a flag to a word, avoiding duplicates.
@@ -76,6 +78,107 @@ export function detectRateAnomalies(words, audioDurationMs) {
           };
         }
       }
+    }
+  }
+
+  return words;
+}
+
+/**
+ * Normalize word for reference set lookup.
+ * Matches confidence-classifier.js normalizeWord logic.
+ * @param {string} word
+ * @returns {string}
+ */
+function normalizeWord(word) {
+  if (!word) return '';
+  return word.toLowerCase().replace(/^[^a-z0-9'-]+|[^a-z0-9'-]+$/g, '');
+}
+
+/**
+ * Detect uncorroborated sequences (consecutive latest_only words).
+ * Uses split thresholds based on reference presence:
+ * - 7+ consecutive IN reference = suspicious (even expected words lack corroboration)
+ * - 3+ consecutive NOT in reference = highly suspicious (hallucination risk)
+ *
+ * A single corroborated word (_source === 'both') resets both counters.
+ * Per CONTEXT.md: "Flag each word in the suspicious sequence (not just first/last)"
+ *
+ * @param {Array} words - Array of word objects with _source property
+ * @param {Set} referenceSet - Set from buildReferenceSet()
+ * @returns {Array} The words array (mutated with flags)
+ */
+export function detectUncorroboratedSequences(words, referenceSet) {
+  const { UNCORROBORATED_IN_REF_THRESHOLD, UNCORROBORATED_NOT_IN_REF_THRESHOLD } = SAFETY_THRESHOLDS;
+
+  // Track consecutive latest_only words by reference presence
+  let inRefCount = 0;
+  let notInRefCount = 0;
+  let sequenceStartIndex = -1;
+
+  // Track words in current sequence for back-flagging
+  const inRefSequence = [];
+  const notInRefSequence = [];
+
+  for (let i = 0; i < words.length; i++) {
+    const word = words[i];
+    const source = word._source || word.source;
+
+    if (source === 'both') {
+      // Corroborated word resets BOTH counters
+      inRefCount = 0;
+      notInRefCount = 0;
+      sequenceStartIndex = -1;
+      inRefSequence.length = 0;
+      notInRefSequence.length = 0;
+    } else if (source === 'latest_only') {
+      // Check if word is in reference
+      const normalized = normalizeWord(word.word);
+      const canonical = getCanonical(normalized);
+      const inReference = referenceSet.has(normalized) || referenceSet.has(canonical);
+
+      if (sequenceStartIndex === -1) {
+        sequenceStartIndex = i;
+      }
+
+      if (inReference) {
+        inRefCount++;
+        inRefSequence.push(i);
+
+        // Check if in-reference threshold breached
+        if (inRefCount >= UNCORROBORATED_IN_REF_THRESHOLD) {
+          // Flag all words in the in-ref sequence
+          for (const idx of inRefSequence) {
+            addFlag(words[idx], SAFETY_FLAGS.UNCORROBORATED_SEQUENCE);
+            words[idx]._uncorroboratedSequence = {
+              type: 'in_reference',
+              sequenceLength: inRefCount
+            };
+          }
+        }
+      } else {
+        notInRefCount++;
+        notInRefSequence.push(i);
+
+        // Check if not-in-reference threshold breached
+        if (notInRefCount >= UNCORROBORATED_NOT_IN_REF_THRESHOLD) {
+          // Flag all words in the not-in-ref sequence
+          for (const idx of notInRefSequence) {
+            addFlag(words[idx], SAFETY_FLAGS.UNCORROBORATED_SEQUENCE);
+            words[idx]._uncorroboratedSequence = {
+              type: 'not_in_reference',
+              sequenceLength: notInRefCount
+            };
+          }
+        }
+      }
+    } else {
+      // default_only or other - resets counters (breaks sequence)
+      inRefCount = 0;
+      notInRefCount = 0;
+      sequenceStartIndex = -1;
+      inRefSequence.length = 0;
+      notInRefSequence.length = 0;
     }
   }
 
