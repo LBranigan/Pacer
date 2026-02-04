@@ -3,7 +3,7 @@
 ## Milestones
 
 - [x] **v1.0 MVP** - Phases 1-9 (shipped 2026-02-03)
-- [ ] **v1.1 ASR Ensemble** - Phases 10-17 (gap closure in progress)
+- [x] **v1.1 ASR Ensemble** - Phases 10-17 (shipped 2026-02-04)
 
 ## Phases
 
@@ -14,11 +14,11 @@ v1.0 shipped with 24 ES modules, teacher dashboard with Standard Celeration Char
 
 </details>
 
-### v1.1 ASR Ensemble (Gap Closure In Progress)
+### v1.1 ASR Ensemble (SHIPPED 2026-02-04)
 
 **Milestone Goal:** Improve ASR accuracy and reliability using a two-model ensemble (`latest_long` + `default`) with VAD-based hallucination detection, separate disfluency classification, and safety checks.
 
-**Status:** 21 plans complete across 7 phases. Gap closure phase (17) addresses integration bugs found during audit.
+**Status:** 22 plans complete across 8 phases. All gaps closed.
 
 ## Phase Details
 
@@ -157,7 +157,7 @@ Plans:
 **Plans**: 1 plan
 
 Plans:
-- [ ] 17-01-PLAN.md — Fix tooltip property mismatch and severity propagation
+- [x] 17-01-PLAN.md — Fix tooltip property mismatch and severity propagation
 
 ## Progress
 
@@ -172,7 +172,7 @@ Plans:
 | 14. Disfluency Detection | 3/3 | Complete | 2026-02-03 |
 | 15. Safety Checks | 3/3 | Complete | 2026-02-03 |
 | 16. UI Enhancements | 4/4 | Complete | 2026-02-04 |
-| 17. Integration Bug Fixes | 0/1 | Pending | - |
+| 17. Integration Bug Fixes | 1/1 | Complete | 2026-02-04 |
 
 ---
 *Roadmap created: 2026-02-03*
