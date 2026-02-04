@@ -57,3 +57,44 @@ export function computeAccuracy(alignmentResult, options = {}) {
     : Math.round((correctCount / totalRefWords) * 1000) / 10;
   return { accuracy, correctCount, totalRefWords, substitutions, omissions, insertions, forgiven };
 }
+
+/**
+ * Compute WCPM range accounting for uncertainty from disfluencies.
+ * Per CONTEXT.md: Conservative (min) value is primary.
+ *
+ * Range calculation:
+ * - wcpmMin: Excludes words with significant/moderate disfluency (they may not have been "correctly" read)
+ * - wcpmMax: Standard WCPM (all correct words counted)
+ *
+ * @param {Array<{type: string, severity?: string}>} alignmentResult - From alignWords() with disfluency data
+ * @param {number} elapsedSeconds - Reading duration in seconds
+ * @returns {{ wcpmMin: number, wcpmMax: number, correctCount: number, elapsedSeconds: number }}
+ */
+export function computeWCPMRange(alignmentResult, elapsedSeconds) {
+  if (!elapsedSeconds || elapsedSeconds <= 0) {
+    return { wcpmMin: 0, wcpmMax: 0, correctCount: 0, elapsedSeconds: elapsedSeconds || 0 };
+  }
+
+  // Count correct words
+  const correctWords = alignmentResult.filter(w => w.type === 'correct');
+  const correctCount = correctWords.length;
+
+  // Standard WCPM (max) - all correct words
+  const wcpmMax = Math.round((correctCount / elapsedSeconds) * 60 * 10) / 10;
+
+  // Conservative WCPM (min) - exclude words with significant/moderate disfluency
+  // These words may have been technically "correct" but with struggle
+  const confidentCorrect = correctWords.filter(w => {
+    const severity = w.severity || 'none';
+    return severity === 'none' || severity === 'minor';
+  }).length;
+
+  const wcpmMin = Math.round((confidentCorrect / elapsedSeconds) * 60 * 10) / 10;
+
+  return {
+    wcpmMin,
+    wcpmMax,
+    correctCount,
+    elapsedSeconds
+  };
+}
