@@ -9,15 +9,15 @@ See: .planning/PROJECT.md (updated 2026-02-03)
 
 ## Current Position
 
-Phase: 15 - Safety Checks (Complete)
-Plan: 3 of 3 complete
-Status: Phase 15 Complete
-Last activity: 2026-02-03 — Completed 15-03-PLAN.md
+Phase: 16 - UI Enhancements (In Progress)
+Plan: 1 of 4 complete
+Status: In Progress
+Last activity: 2026-02-03 — Completed 16-01-PLAN.md
 
-Progress: [███████████████████████████░░░] 100% (17/17 v1.1 plans for Phase 15)
+Progress: [████████████████████████████░░] 93% (18/19 v1.1 plans)
 
 Phases remaining: 1 (Phase 16)
-Plans completed in v1.1: 17
+Plans completed in v1.1: 18
 
 ## Performance Metrics
 
@@ -85,6 +85,9 @@ See PROJECT.md Key Decisions table.
 - 40% flagged/none triggers confidence collapse state (15-02)
 - Safety checks run after disfluency detection, before alignment (15-03)
 - _safety field persisted in saved assessments for Phase 16 UI (15-03)
+- Flags shown as text list in tooltip, no icons (16-01)
+- Rate anomaly uses dashed underline distinct from correctness colors (16-01)
+- buildEnhancedTooltip helper for unified tooltip generation (16-01)
 
 ### Pending Todos
 
@@ -99,5 +102,5 @@ None.
 ## Session Continuity
 
 Last session: 2026-02-03
-Stopped at: Completed 15-03-PLAN.md (Phase 15 Complete)
-Resume with: Phase 16 planning or `/gsd:plan-phase 16`
+Stopped at: Completed 16-01-PLAN.md
+Resume with: `/gsd:execute-phase 16` (continue with plan 02)
