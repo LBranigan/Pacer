@@ -136,8 +136,8 @@ function buildEnhancedTooltip(item, sttWord) {
 
     // Dual model info from _debug
     if (sttWord._debug) {
-      if (sttWord._debug.latest) {
-        const l = sttWord._debug.latest;
+      if (sttWord._debug.latestLong) {
+        const l = sttWord._debug.latestLong;
         const lStart = parseSttTime(l.startTime);
         const lEnd = parseSttTime(l.endTime);
         const conf = l.confidence != null ? (l.confidence * 100).toFixed(1) + '%' : '—';
