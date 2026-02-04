@@ -215,7 +215,7 @@ async function runAnalysis() {
     }
 
     // Disfluency detection (Phase 14)
-    // Pipeline: Classify -> Filter ghosts -> Detect disfluencies -> Align
+    // Pipeline: Classify -> Filter ghosts -> Detect disfluencies -> Safety checks -> Align
     setStatus('Detecting disfluencies...');
     const disfluencyResult = detectDisfluencies(wordsForAlignment);
     const wordsWithDisfluency = disfluencyResult.words;
@@ -234,15 +234,36 @@ async function runAnalysis() {
       console.log(`[ORF] Disfluency: ${disfluencyResult.summary.totalWordsWithDisfluency} words with stutter events`);
     }
 
+    // Safety checks (Phase 15)
+    // Pipeline: Classify -> Filter ghosts -> Detect disfluencies -> Safety checks -> Align
+    setStatus('Running safety checks...');
+    // Get audio duration: prefer VAD result, fallback to last word's endTime
+    const parseTime = (t) => parseFloat(String(t).replace('s', '')) || 0;
+    const audioDurationMs = vadResult.durationMs > 0
+      ? vadResult.durationMs
+      : parseTime(wordsWithDisfluency[wordsWithDisfluency.length - 1]?.endTime) * 1000 || 0;
+    const safetyResult = applySafetyChecks(wordsWithDisfluency, referenceText, audioDurationMs);
+    const wordsWithSafety = safetyResult.words;
+
+    addStage('safety_checks', {
+      rateAnomalies: safetyResult._safety.rateAnomalies,
+      uncorroboratedSequences: safetyResult._safety.uncorroboratedSequences,
+      collapse: safetyResult._safety.collapse
+    });
+
+    if (safetyResult._safety.collapse.collapsed) {
+      console.warn('[ORF] Confidence collapse detected:', safetyResult._safety.collapse.percent.toFixed(1) + '% flagged');
+    }
+
     // Convert merged words to STT response format for compatibility
     // (existing code expects data.results structure)
-    // NOTE: Use wordsWithDisfluency (ghosts removed, fragments merged) for alignment
+    // NOTE: Use wordsWithSafety (ghosts removed, fragments merged, safety checked) for alignment
     // but preserve all words in _classification for debugging
     data = {
       results: [{
         alternatives: [{
-          words: wordsWithDisfluency,  // Words with disfluency data (fragments removed)
-          transcript: wordsWithDisfluency.map(w => w.word).join(' ')
+          words: wordsWithSafety,  // Words with safety flags (fragments removed, safety checked)
+          transcript: wordsWithSafety.map(w => w.word).join(' ')
         }]
       }],
       _ensemble: {
@@ -264,7 +285,8 @@ async function runAnalysis() {
       _disfluency: {
         summary: disfluencyResult.summary,
         fragmentsRemoved: disfluencyResult.fragmentsRemoved
-      }
+      },
+      _safety: safetyResult._safety  // Preserves safety check data
     };
   }
 
