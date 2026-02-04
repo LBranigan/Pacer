@@ -129,19 +129,19 @@ Plans:
 **Requirements**: UI-01, UI-02, UI-03, UI-04, UI-05, UI-06, CFG-04
 **Success Criteria** (what must be TRUE):
   1. Word hover tooltip shows both model results with timestamps
-  2. Disfluency badges (~, ~~, warning icon) display alongside word colors
+  2. Disfluency badges (dot, double-dot, warning icon) display alongside word colors
   3. WCPM displays as a range (e.g., 85-92) instead of single value to reflect uncertainty
   4. Fluency concerns summary shows counts: significant/moderate/minor disfluencies
   5. Rate anomaly indicators visually highlight flagged words
   6. VAD calibration UI includes button and status display
   7. Dev mode includes manual VAD threshold slider for testing
-**Plans**: TBD
+**Plans**: 4 plans (2 waves)
 
 Plans:
-- [ ] 16-01: Word tooltip enhancements
-- [ ] 16-02: Disfluency badges and WCPM range
-- [ ] 16-03: Fluency concerns summary
-- [ ] 16-04: VAD calibration UI and dev slider
+- [ ] 16-01-PLAN.md — Word tooltip enhancements with ensemble data and rate anomaly underline
+- [ ] 16-02-PLAN.md — Disfluency severity badges with attempt trace tooltips
+- [ ] 16-03-PLAN.md — WCPM range display with fluency concerns summary
+- [ ] 16-04-PLAN.md — VAD calibration UI restructure with dev mode gating
 
 ## Progress
 
