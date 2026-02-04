@@ -822,18 +822,23 @@ const vadPresetBtns = document.querySelectorAll('.vad-preset');
 if (vadCalibrateBtn) {
   vadCalibrateBtn.addEventListener('click', async () => {
     vadCalibrateBtn.disabled = true;
-    vadCalibrationStatus.textContent = 'Calibrating...';
+    // Show spinner per CONTEXT.md: "simple spinner with 'Calibrating...' text"
+    vadCalibrationStatus.innerHTML = '<span class="vad-spinner"></span>Calibrating...';
 
     const result = await vadProcessor.calibrateMicrophone();
 
     if (result.error) {
       vadCalibrationStatus.textContent = `Error: ${result.error}`;
     } else {
-      vadCalibrationStatus.textContent = `Calibrated. Noise level: ${result.noiseLevel}`;
-      vadThresholdSlider.value = result.threshold;
-      vadThresholdValue.textContent = result.threshold.toFixed(2);
+      vadCalibrationStatus.textContent = 'Calibrated';
 
-      // Show noise info per CONTEXT.md format: "Noise Level: Low (0.20)"
+      // Update slider (for dev mode users)
+      if (vadThresholdSlider) {
+        vadThresholdSlider.value = result.threshold;
+        vadThresholdValue.textContent = result.threshold.toFixed(2);
+      }
+
+      // Show noise info per CONTEXT.md: "Noise Level: Low (0.20)"
       vadNoiseInfo.style.display = 'block';
       vadNoiseInfo.textContent = `Noise Level: ${result.noiseLevel} (${result.threshold.toFixed(2)})`;
       vadNoiseInfo.className = 'vad-info' + (result.noiseLevel === 'High' ? ' high-noise' : '');
@@ -876,3 +881,18 @@ if (vadPresetBtns) {
 
 // Note: Per CONTEXT.md "Persistence: Reset each session - threshold resets to default on page reload"
 // No persistence needed - the default behavior handles this naturally
+
+// --- Dev mode toggle (Phase 16) ---
+const devModeToggle = document.getElementById('devModeToggle');
+if (devModeToggle) {
+  // Check localStorage for saved dev mode state
+  if (localStorage.getItem('orf_dev_mode') === 'true') {
+    document.body.classList.add('dev-mode');
+  }
+
+  devModeToggle.addEventListener('click', () => {
+    document.body.classList.toggle('dev-mode');
+    const isDevMode = document.body.classList.contains('dev-mode');
+    localStorage.setItem('orf_dev_mode', isDevMode);
+  });
+}
