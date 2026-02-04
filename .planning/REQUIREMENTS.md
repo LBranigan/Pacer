@@ -48,19 +48,19 @@ Requirements for the ASR Ensemble milestone. Each maps to roadmap phases.
 
 ### UI Enhancements
 
-- [ ] **UI-01**: Word hover tooltip shows both model results and timestamps
-- [ ] **UI-02**: Disfluency badges (~, ~~, ⚠️) display alongside word colors
-- [ ] **UI-03**: WCPM shows range instead of single value (accounts for uncertainty)
-- [ ] **UI-04**: Fluency concerns summary shows significant/moderate/minor counts
-- [ ] **UI-05**: Rate anomaly indicators highlight flagged words
-- [ ] **UI-06**: VAD calibration UI with button and status display
+- [x] **UI-01**: Word hover tooltip shows both model results and timestamps
+- [x] **UI-02**: Disfluency badges (~, ~~, ⚠️) display alongside word colors
+- [x] **UI-03**: WCPM shows range instead of single value (accounts for uncertainty)
+- [x] **UI-04**: Fluency concerns summary shows significant/moderate/minor counts
+- [x] **UI-05**: Rate anomaly indicators highlight flagged words
+- [x] **UI-06**: VAD calibration UI with button and status display
 
 ### Configuration
 
-- [ ] **CFG-01**: `latest_long` boost reduced from 5 to 3
-- [ ] **CFG-02**: Tiered boosting: proper nouns (5), uncommon words (3), common words (0)
-- [ ] **CFG-03**: `default` model uses lower boost (proper nouns: 3, uncommon: 2)
-- [ ] **CFG-04**: Dev mode includes manual VAD threshold slider
+- [x] **CFG-01**: `latest_long` boost reduced from 5 to 3
+- [x] **CFG-02**: Tiered boosting: proper nouns (5), uncommon words (3), common words (0)
+- [x] **CFG-03**: `default` model uses lower boost (proper nouns: 3, uncommon: 2)
+- [x] **CFG-04**: Dev mode includes manual VAD threshold slider
 
 ## v1.2+ Requirements
 
@@ -122,13 +122,13 @@ Which phases cover which requirements. Updated during roadmap creation.
 | SAFE-02 | Phase 15 | Complete |
 | SAFE-03 | Phase 15 | Complete |
 | SAFE-04 | Phase 15 | Complete |
-| UI-01 | Phase 16 | Pending |
-| UI-02 | Phase 16 | Pending |
-| UI-03 | Phase 16 | Pending |
-| UI-04 | Phase 16 | Pending |
-| UI-05 | Phase 16 | Pending |
-| UI-06 | Phase 16 | Pending |
-| CFG-04 | Phase 16 | Pending |
+| UI-01 | Phase 16 | Complete |
+| UI-02 | Phase 16 | Complete |
+| UI-03 | Phase 16 | Complete |
+| UI-04 | Phase 16 | Complete |
+| UI-05 | Phase 16 | Complete |
+| UI-06 | Phase 16 | Complete |
+| CFG-04 | Phase 16 | Complete |
 
 **Coverage:**
 - v1.1 requirements: 32 total
@@ -137,4 +137,4 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 ---
 *Requirements defined: 2026-02-03*
-*Last updated: 2026-02-03 after initial definition*
+*Last updated: 2026-02-04 after Phase 16 completion*

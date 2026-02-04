@@ -3,7 +3,7 @@
 ## Milestones
 
 - [x] **v1.0 MVP** - Phases 1-9 (shipped 2026-02-03)
-- [ ] **v1.1 ASR Ensemble** - Phases 10-16 (in progress)
+- [x] **v1.1 ASR Ensemble** - Phases 10-16 (shipped 2026-02-04)
 
 ## Phases
 
@@ -14,9 +14,11 @@ v1.0 shipped with 24 ES modules, teacher dashboard with Standard Celeration Char
 
 </details>
 
-### v1.1 ASR Ensemble (In Progress)
+### v1.1 ASR Ensemble (SHIPPED 2026-02-04)
 
 **Milestone Goal:** Improve ASR accuracy and reliability using a two-model ensemble (`latest_long` + `default`) with VAD-based hallucination detection, separate disfluency classification, and safety checks.
+
+✓ **Completed:** 21 plans across 7 phases. Full ensemble pipeline with UI visualization.
 
 ## Phase Details
 
@@ -138,10 +140,10 @@ Plans:
 **Plans**: 4 plans (2 waves)
 
 Plans:
-- [ ] 16-01-PLAN.md — Word tooltip enhancements with ensemble data and rate anomaly underline
-- [ ] 16-02-PLAN.md — Disfluency severity badges with attempt trace tooltips
-- [ ] 16-03-PLAN.md — WCPM range display with fluency concerns summary
-- [ ] 16-04-PLAN.md — VAD calibration UI restructure with dev mode gating
+- [x] 16-01-PLAN.md — Word tooltip enhancements with ensemble data and rate anomaly underline
+- [x] 16-02-PLAN.md — Disfluency severity badges with attempt trace tooltips
+- [x] 16-03-PLAN.md — WCPM range display with fluency concerns summary
+- [x] 16-04-PLAN.md — VAD calibration UI restructure with dev mode gating
 
 ## Progress
 
@@ -155,7 +157,7 @@ Plans:
 | 13. Confidence Classification | 3/3 | Complete | 2026-02-03 |
 | 14. Disfluency Detection | 3/3 | Complete | 2026-02-03 |
 | 15. Safety Checks | 3/3 | Complete | 2026-02-03 |
-| 16. UI Enhancements | 0/4 | Not started | - |
+| 16. UI Enhancements | 4/4 | Complete | 2026-02-04 |
 
 ---
 *Roadmap created: 2026-02-03*
