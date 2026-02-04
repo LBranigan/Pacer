@@ -170,3 +170,54 @@ button { padding: 0.6rem 1.4rem; border: none; border-radius: 4px; font-size: 1r
   margin-left: 4px;
 }
 
+/* WCPM range display (Phase 16) */
+.wcpm-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.wcpm-primary {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: #333;
+  line-height: 1.2;
+}
+
+.wcpm-range {
+  font-size: 0.75rem;
+  color: #666;
+  margin-top: 0.1rem;
+}
+
+.wcpm-label {
+  font-size: 0.8rem;
+  color: #666;
+  font-weight: 600;
+  margin-top: 0.25rem;
+}
+
+/* Fluency concerns summary (Phase 16) */
+.fluency-summary {
+  font-size: 0.8rem;
+  color: #666;
+  margin-top: 0.5rem;
+  text-align: center;
+}
+
+.fluency-summary .significant { color: #f44336; font-weight: 600; }
+.fluency-summary .moderate { color: #ff9800; }
+.fluency-summary .minor { color: #ffc107; }
+
+/* Collapse warning banner (Phase 16) */
+.collapse-banner {
+  background: #fff3e0;
+  border: 1px solid #ff9800;
+  border-radius: 6px;
+  padding: 0.75rem 1rem;
+  margin-bottom: 0.75rem;
+  color: #e65100;
+  font-weight: 600;
+  text-align: center;
+}
+
