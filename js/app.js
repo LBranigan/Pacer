@@ -18,6 +18,7 @@ import { vadProcessor } from './vad-processor.js';
 import { flagGhostWords } from './ghost-detector.js';
 import { classifyAllWords, filterGhosts, computeClassificationStats } from './confidence-classifier.js';
 import { detectDisfluencies } from './disfluency-detector.js';
+import { applySafetyChecks } from './safety-checker.js';
 
 // Code version for cache verification
 const CODE_VERSION = 'v34-2026-02-03';
