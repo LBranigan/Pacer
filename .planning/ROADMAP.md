@@ -3,7 +3,7 @@
 ## Milestones
 
 - [x] **v1.0 MVP** - Phases 1-9 (shipped 2026-02-03)
-- [x] **v1.1 ASR Ensemble** - Phases 10-16 (shipped 2026-02-04)
+- [ ] **v1.1 ASR Ensemble** - Phases 10-17 (gap closure in progress)
 
 ## Phases
 
@@ -14,11 +14,11 @@ v1.0 shipped with 24 ES modules, teacher dashboard with Standard Celeration Char
 
 </details>
 
-### v1.1 ASR Ensemble (SHIPPED 2026-02-04)
+### v1.1 ASR Ensemble (Gap Closure In Progress)
 
 **Milestone Goal:** Improve ASR accuracy and reliability using a two-model ensemble (`latest_long` + `default`) with VAD-based hallucination detection, separate disfluency classification, and safety checks.
 
-✓ **Completed:** 21 plans across 7 phases. Full ensemble pipeline with UI visualization.
+**Status:** 21 plans complete across 7 phases. Gap closure phase (17) addresses integration bugs found during audit.
 
 ## Phase Details
 
@@ -145,9 +145,23 @@ Plans:
 - [x] 16-03-PLAN.md — WCPM range display with fluency concerns summary
 - [x] 16-04-PLAN.md — VAD calibration UI restructure with dev mode gating
 
+### Phase 17: Integration Bug Fixes
+**Goal**: Fix critical wiring bugs preventing tooltip and WCPM range from working correctly
+**Depends on**: Phase 16
+**Gap Closure**: Addresses gaps from v1.1-MILESTONE-AUDIT.md
+**Success Criteria** (what must be TRUE):
+  1. Teacher tooltip shows ensemble data (fix `_debug.latest` → `_debug.latestLong` property name)
+  2. WCPM range shows different min/max when uncertainty exists (propagate severity to alignment items)
+  3. Assessment E2E flow completes without broken display
+  4. Teacher Review flow shows ensemble data in tooltips
+**Plans**: 1 plan
+
+Plans:
+- [ ] 17-01-PLAN.md — Fix tooltip property mismatch and severity propagation
+
 ## Progress
 
-**Execution Order:** Phases execute in numeric order: 10 -> 11 -> 12 -> 13 -> 14 -> 15 -> 16
+**Execution Order:** Phases execute in numeric order: 10 -> 11 -> 12 -> 13 -> 14 -> 15 -> 16 -> 17
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
@@ -158,7 +172,9 @@ Plans:
 | 14. Disfluency Detection | 3/3 | Complete | 2026-02-03 |
 | 15. Safety Checks | 3/3 | Complete | 2026-02-03 |
 | 16. UI Enhancements | 4/4 | Complete | 2026-02-04 |
+| 17. Integration Bug Fixes | 0/1 | Pending | - |
 
 ---
 *Roadmap created: 2026-02-03*
 *Milestone: v1.1 ASR Ensemble*
+*Gap closure phase added: 2026-02-04*
