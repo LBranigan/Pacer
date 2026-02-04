@@ -184,3 +184,79 @@ export function detectUncorroboratedSequences(words, referenceSet) {
 
   return words;
 }
+
+/**
+ * Apply corroboration override: remove rate and sequence flags for strongly corroborated words.
+ * Strong corroboration = source='both' AND confidence >= 0.93 (HIGH threshold).
+ *
+ * Per CONTEXT.md: "Ghost flags take priority - show ghost flag but still track other flags"
+ * NEVER removes vad_ghost flag.
+ *
+ * @param {Array} words - Array of word objects with _flags
+ * @returns {Array} The words array (mutated)
+ */
+export function applyCorroborationOverride(words) {
+  const { STRONG_CORROBORATION_CONF } = SAFETY_THRESHOLDS;
+
+  for (const word of words) {
+    const source = word._source || word.source;
+    const confidence = word.confidence ?? 0;
+
+    // Check for strong corroboration
+    if (source === 'both' && confidence >= STRONG_CORROBORATION_CONF) {
+      if (word._flags && word._flags.length > 0) {
+        // Remove RATE_ANOMALY and UNCORROBORATED_SEQUENCE, but NEVER vad_ghost
+        word._flags = word._flags.filter(flag =>
+          flag !== SAFETY_FLAGS.RATE_ANOMALY &&
+          flag !== SAFETY_FLAGS.UNCORROBORATED_SEQUENCE &&
+          flag !== 'vad_ghost' // Explicit check per CONTEXT.md
+        );
+
+        // Clean up empty _flags array
+        if (word._flags.length === 0) {
+          delete word._flags;
+        }
+      }
+    }
+  }
+
+  return words;
+}
+
+/**
+ * Detect confidence collapse state.
+ * Collapse = >40% of words have trustLevel 'none' OR have _flags.
+ *
+ * Per CONTEXT.md: When collapsed, UI shows banner and hides WCPM score.
+ *
+ * @param {Array} words - Array of word objects
+ * @returns {{ collapsed: boolean, percent: number, flaggedCount: number }}
+ */
+export function detectConfidenceCollapse(words) {
+  if (!words || words.length === 0) {
+    return { collapsed: false, percent: 0, flaggedCount: 0 };
+  }
+
+  const { COLLAPSE_THRESHOLD_PERCENT } = SAFETY_THRESHOLDS;
+
+  let flaggedCount = 0;
+
+  for (const word of words) {
+    // Count words with trustLevel 'none' OR any _flags
+    const hasNoneTrust = word.trustLevel === 'none';
+    const hasFlags = word._flags && word._flags.length > 0;
+
+    if (hasNoneTrust || hasFlags) {
+      flaggedCount++;
+    }
+  }
+
+  const percent = (flaggedCount / words.length) * 100;
+  const collapsed = percent > COLLAPSE_THRESHOLD_PERCENT;
+
+  return {
+    collapsed,
+    percent: Math.round(percent * 10) / 10, // Round to 1 decimal
+    flaggedCount
+  };
+}
