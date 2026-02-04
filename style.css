@@ -136,3 +136,10 @@ button { padding: 0.6rem 1.4rem; border: none; border-radius: 4px; font-size: 1r
 .vad-info { font-size: 0.9rem; color: #666; }
 .vad-info.high-noise { color: #e65100; }
 
+/* Rate anomaly - dashed underline (Phase 16) */
+.word-rate-anomaly {
+  text-decoration: underline dashed;
+  text-decoration-color: #e65100;
+  text-underline-offset: 3px;
+}
+
