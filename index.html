@@ -15,7 +15,7 @@
 </head>
 <body>
 
-<div id="version" style="text-align:right;font-size:0.75rem;color:#999;">v 2026-02-04 01:43</div>
+<div id="version" style="text-align:right;font-size:0.75rem;color:#999;">v 2026-02-03 17:46</div>
 <h1>Oral Reading Fluency Assessment</h1>
 <p class="subtitle">Google Cloud Speech-to-Text &mdash; Raw Verbatim Transcription</p>
 
@@ -31,17 +31,18 @@
       <button id="vadCalibrateBtn" title="Record 2 seconds of ambient noise to optimize detection">Calibrate Microphone</button>
       <span id="vadCalibrationStatus">Not calibrated (using default)</span>
     </div>
-    <div class="vad-threshold">
-      <label for="vadThresholdSlider">Detection Threshold: <span id="vadThresholdValue">0.375</span></label>
+    <div class="vad-info" id="vadNoiseInfo" style="display:none;">
+      <!-- Shown after calibration: "Noise Level: Low (0.20)" -->
+    </div>
+    <!-- Dev mode only: manual threshold control -->
+    <div class="vad-threshold dev-mode-only">
+      <label for="vadThresholdSlider">Manual Threshold: <span id="vadThresholdValue">0.375</span></label>
       <input type="range" id="vadThresholdSlider" min="0.15" max="0.60" step="0.01" value="0.375">
       <div class="vad-presets">
         <button class="vad-preset" data-threshold="0.20">Quiet Room</button>
         <button class="vad-preset" data-threshold="0.375">Normal</button>
         <button class="vad-preset" data-threshold="0.50">Noisy</button>
       </div>
-    </div>
-    <div class="vad-info" id="vadNoiseInfo" style="display:none;">
-      <!-- Shown after calibration: "Noise Level: Low (0.20)" -->
     </div>
   </div>
 </div>
@@ -132,5 +133,7 @@
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/diff_match_patch/20121119/diff_match_patch.js"></script>
 <script type="module" src="js/app.js"></script>
+<!-- Dev mode toggle -->
+<button class="dev-mode-toggle" id="devModeToggle" title="Toggle developer mode">Dev Mode</button>
 </body>
 </html>
