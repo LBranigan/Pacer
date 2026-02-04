@@ -5,14 +5,21 @@
 
 // Severity thresholds (per CONTEXT.md "Count-First, Duration-Override" model)
 export const DISFLUENCY_THRESHOLDS = {
-  // Gap threshold for grouping stutter attempts
-  // Reduced from 2.0s - if student pauses 1+ second, it's a new phrase
-  MAX_STUTTER_GAP_SEC: 1.0,
+  // Filter 2: Phonological Horizons (replaces grouping-based approach)
+  // Fragment detection (prefix matches) - STRICT
+  FRAGMENT_MAX_LOOKAHEAD: 1,        // Only check i+1 for fragments
+  FRAGMENT_MAX_TIME_GAP_SEC: 0.5,   // Fragments resolve within 500ms
 
-  // Repetition detection thresholds (word distance approach)
-  // Stutters are immediate ("the the") or near ("the um the"), not 5+ words apart
-  MAX_WORD_LOOKAHEAD: 2,           // Only check next 2 words for repetitions
-  MAX_TIME_GAP_FOR_REPETITION: 1.0, // Max silence between repeated words to count as stutter
+  // Repetition detection (exact matches) - LOOSE
+  REPETITION_MAX_LOOKAHEAD: 2,      // Check i+1 and i+2 for repetitions
+  REPETITION_MAX_TIME_GAP_SEC: 1.0, // Repetitions can have fillers between
+
+  // Filter 3: Confidence Protection
+  // Default model provides real acoustic confidence (unlike latest_long)
+  CONFIDENCE_PROTECTION_THRESHOLD: 0.93,  // Consistent with HIGH_CONFIDENCE_THRESHOLD
+
+  // Filter 1: Phonetic Matching for Reference Protection
+  MAX_PHONETIC_DISTANCE: 1,  // Levenshtein distance for fuzzy N-gram match
 
   // Duration override thresholds
   SIGNIFICANT_DURATION_SEC: 2.0,  // totalDuration >= 2.0s -> significant
@@ -38,7 +45,9 @@ export const SEVERITY_LEVELS = {
 
 // Export for dev mode slider
 export const THRESHOLD_RANGES = {
-  MAX_STUTTER_GAP_SEC: { min: 0.5, max: 5.0, step: 0.5 },
+  FRAGMENT_MAX_TIME_GAP_SEC: { min: 0.2, max: 1.0, step: 0.1 },
+  REPETITION_MAX_TIME_GAP_SEC: { min: 0.5, max: 2.0, step: 0.1 },
+  CONFIDENCE_PROTECTION_THRESHOLD: { min: 0.85, max: 0.99, step: 0.01 },
   SIGNIFICANT_DURATION_SEC: { min: 1.0, max: 5.0, step: 0.5 },
   MODERATE_PAUSE_SEC: { min: 0.2, max: 1.0, step: 0.1 }
 };

@@ -333,10 +333,10 @@ async function runAnalysis() {
       console.log(`[ORF] ${classificationStats.possibleInsertions} possible insertions flagged (not filtered)`);
     }
 
-    // Disfluency detection (Phase 14)
+    // Disfluency detection (Phase 14) - Hierarchy of Truth architecture
     // Pipeline: Classify -> Filter ghosts -> Detect disfluencies -> Safety checks -> Align
     setStatus('Detecting disfluencies...');
-    const disfluencyResult = detectDisfluencies(wordsForAlignment);
+    const disfluencyResult = detectDisfluencies(wordsForAlignment, referenceText);
     const wordsWithDisfluency = disfluencyResult.words;
 
     addStage('disfluency_detection', {
