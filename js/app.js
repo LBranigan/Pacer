@@ -636,7 +636,8 @@ async function runAnalysis() {
       _ensemble: data._ensemble || null,  // Preserves ensemble debug data
       _vad: data._vad || null,  // Preserves VAD ghost detection data
       _classification: data._classification || null,  // Preserves confidence classification data
-      _disfluency: data._disfluency || null  // Preserves disfluency detection data
+      _disfluency: data._disfluency || null,  // Preserves disfluency detection data
+      _safety: data._safety || null  // Preserves safety check data
     });
     refreshStudentUI();
     setStatus('Done (saved).');
