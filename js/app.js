@@ -4,7 +4,7 @@ import { sendToSTT, sendToAsyncSTT, sendChunkedSTT, sendEnsembleSTT } from './st
 import { mergeEnsembleResults, extractWordsFromSTT, computeEnsembleStats } from './ensemble-merger.js';
 import { alignWords } from './alignment.js';
 import { getCanonical } from './word-equivalences.js';
-import { computeWCPM, computeAccuracy } from './metrics.js';
+import { computeWCPM, computeAccuracy, computeWCPMRange } from './metrics.js';
 import { setStatus, displayResults, displayAlignmentResults, showAudioPlayback, renderStudentSelector, renderHistory } from './ui.js';
 import { runDiagnostics, computeTierBreakdown } from './diagnostics.js';
 import { extractTextFromImage } from './ocr-api.js';
@@ -584,7 +584,7 @@ async function runAnalysis() {
   }
 
   const wcpm = (effectiveElapsedSeconds != null && effectiveElapsedSeconds > 0)
-    ? computeWCPM(alignment, effectiveElapsedSeconds)
+    ? computeWCPMRange(alignment, effectiveElapsedSeconds)
     : null;
   const accuracy = computeAccuracy(alignment, { forgivenessEnabled: !!nlAnnotations });
   const tierBreakdown = nlAnnotations ? computeTierBreakdown(alignment) : null;
@@ -607,7 +607,17 @@ async function runAnalysis() {
     }))
   });
 
-  displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, diagnostics, transcriptWords, tierBreakdown);
+  displayAlignmentResults(
+    alignment,
+    wcpm,
+    accuracy,
+    sttLookup,
+    diagnostics,
+    transcriptWords,
+    tierBreakdown,
+    disfluencyResult?.summary || null,   // Disfluency counts by severity
+    safetyResult?._safety || null         // Collapse state and safety flags
+  );
 
   if (appState.selectedStudentId) {
     const errorBreakdown = {
