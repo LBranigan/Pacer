@@ -389,6 +389,18 @@ async function runAnalysis() {
 
   const alignment = alignWords(referenceText, transcriptWords);
 
+  // Propagate severity from STT words to alignment items for WCPM range calculation
+  alignment.forEach(item => {
+    if (item.hyp) {
+      const sttWord = transcriptWords.find(w =>
+        w.word?.toLowerCase() === item.hyp?.toLowerCase()
+      );
+      if (sttWord?.severity) {
+        item.severity = sttWord.severity;
+      }
+    }
+  });
+
   addStage('alignment', {
     totalEntries: alignment.length,
     correct: alignment.filter(a => a.type === 'correct').length,
