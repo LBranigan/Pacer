@@ -517,6 +517,12 @@ export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, di
     if (currentHypIndex !== null && onsetDelayMap.has(currentHypIndex)) {
       const delay = onsetDelayMap.get(currentHypIndex);
       span.classList.add('word-hesitation');
+
+      // VAD visual distinction: orange if speech >= 30%
+      if (delay._vadAnalysis && delay._vadAnalysis.speechPercent >= 30) {
+        span.classList.add('word-hesitation-vad');
+      }
+
       const gapMs = Math.round(delay.gap * 1000);
       const threshMs = Math.round(delay.threshold * 1000);
       let hesitationNote = '\nHesitation: ' + gapMs + 'ms';
@@ -527,6 +533,8 @@ export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, di
       } else {
         hesitationNote += ' (threshold ' + threshMs + 'ms)';
       }
+      // Add VAD info to tooltip
+      hesitationNote += buildVADTooltipInfo(delay._vadAnalysis);
       span.title += hesitationNote;
     }
 
@@ -545,8 +553,16 @@ export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, di
         const pause = longPauseMap.get(currentHypIndex - 1);
         const pauseSpan = document.createElement('span');
         pauseSpan.className = 'pause-indicator';
+
+        // VAD visual distinction: orange if speech >= 30%
+        if (pause._vadAnalysis && pause._vadAnalysis.speechPercent >= 30) {
+          pauseSpan.classList.add('pause-indicator-vad');
+        }
+
         const pauseMs = Math.round(pause.gap * 1000);
-        pauseSpan.title = 'Long pause: ' + pauseMs + 'ms (error: >= 3000ms)';
+        let pauseTooltip = 'Long pause: ' + pauseMs + 'ms (error: >= 3000ms)';
+        pauseTooltip += buildVADTooltipInfo(pause._vadAnalysis);
+        pauseSpan.title = pauseTooltip;
         pauseSpan.textContent = '[' + pause.gap + 's]';
         wordsDiv.appendChild(pauseSpan);
         wordsDiv.appendChild(document.createTextNode(' '));
