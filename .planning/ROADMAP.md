@@ -60,8 +60,8 @@ VAD-based acoustic analysis for pause/gap indicators, giving teachers visibility
 **Plans:** 2 plans
 
 Plans:
-- [ ] 18-01-PLAN.md — Create VAD gap analyzer module with core functions
-- [ ] 18-02-PLAN.md — Integrate into app.js pipeline with debug logging
+- [x] 18-01-PLAN.md — Create VAD gap analyzer module with core functions
+- [x] 18-02-PLAN.md — Integrate into app.js pipeline with debug logging
 
 ---
 
@@ -92,7 +92,7 @@ Plans:
 |-----------|--------|-------|--------|---------|
 | v1.0 MVP | 1-9 | 21 | Complete | 2026-02-03 |
 | v1.1 ASR Ensemble | 10-17 | 22 | Complete | 2026-02-04 |
-| v1.2 VAD Gap Analysis | 18-19 | ~5 | In Progress | — |
+| v1.2 VAD Gap Analysis | 18-19 | ~5 | In Progress (Phase 18 complete) | — |
 
 **Total:** 17 phases shipped, 43 plans shipped
 **Active:** 2 phases, ~5 plans
