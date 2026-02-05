@@ -176,3 +176,19 @@ export function computeVADGapSummary(diagnostics) {
 
   return counts;
 }
+
+/*
+ * Manual Verification Examples:
+ *
+ * calculateSpeechPercent(0, 1000, [{start: 0, end: 500}]) => 50.0
+ * calculateSpeechPercent(0, 1000, [{start: 250, end: 750}]) => 50.0
+ * calculateSpeechPercent(0, 1000, []) => 0
+ * calculateSpeechPercent(0, 0, [{start: 0, end: 500}]) => 0
+ *
+ * getAcousticLabel(0).label => 'silence confirmed'
+ * getAcousticLabel(9.9).label => 'silence confirmed'
+ * getAcousticLabel(10).label => 'mostly silent'
+ * getAcousticLabel(29.9).label => 'mostly silent'
+ * getAcousticLabel(30).label => 'mixed signal'
+ * getAcousticLabel(80).label => 'continuous speech'
+ */
