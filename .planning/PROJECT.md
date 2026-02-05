@@ -8,6 +8,23 @@ A browser-based oral reading fluency (ORF) assessment tool for middle school RTI
 
 Accurate, word-level fluency error detection powered by ensemble ASR with hallucination filtering — giving teachers actionable data on exactly where and how a struggling reader breaks down, without manual running record marking.
 
+## Current Milestone: v1.3 Kitchen Sink Ensemble
+
+**Goal:** Replace Google STT ensemble with Reverb ASR for model-level disfluency detection via verbatimicity diff.
+
+**Target features:**
+- Reverb ASR backend service (Docker/FastAPI, local GPU)
+- Three-pass ensemble: Reverb v=1.0 (verbatim) + Reverb v=0.0 (clean) + Google default (cross-validation)
+- Needleman-Wunsch sequence alignment for disfluency detection from v1.0 vs v0.0 diff
+- Tagged disfluencies: fillers (um, uh), repetitions, false starts
+- Teacher UI showing disfluency markers per word
+- Google STT retained for hallucination cross-validation only
+
+**Why this works (vs abandoned disfluency-detector.js):**
+- Same model/encoder/CTC clock for both passes (no cross-vendor drift)
+- Model-level disfluency decision (trained on 200k hours with verbatim labels)
+- Global sequence alignment absorbs timestamp drift (not brittle local matching)
+
 ## Current State (v1.2 shipped 2026-02-04)
 
 **Shipped features:**
@@ -86,7 +103,13 @@ Accurate, word-level fluency error detection powered by ensemble ASR with halluc
 
 ### Active
 
-(None — define requirements for next milestone)
+**v1.3 Kitchen Sink Ensemble:**
+- [ ] Reverb ASR backend service with dual-pass transcription (v=1.0 + v=0.0)
+- [ ] Needleman-Wunsch sequence alignment for disfluency detection
+- [ ] Disfluency tagging (fillers, repetitions, false starts) from alignment insertions
+- [ ] Integration with existing pipeline (replaces Google ensemble)
+- [ ] Google STT cross-validation for hallucination detection
+- [ ] Teacher UI displaying tagged disfluencies per word
 
 ### Future (v1.2+)
 
@@ -121,11 +144,12 @@ Accurate, word-level fluency error detection powered by ensemble ASR with halluc
 
 ## Constraints
 
-- **API**: Google Cloud STT v1 (sync <60s, async for longer)
+- **API**: Google Cloud STT v1 (cross-validation only in v1.3+)
 - **API**: Google Cloud Natural Language API v1
 - **API**: Google Cloud Vision API for OCR
+- **Backend**: Reverb ASR service (Docker, requires GPU — GTX 1070+ / 8GB VRAM)
 - **Storage**: localStorage (~5MB) + IndexedDB (audio blobs)
-- **Architecture**: Client-side only, no backend — API key entered by teacher
+- **Architecture**: Browser client + local Reverb backend (teacher runs Docker)
 - **Benchmarks**: Hasbrouck-Tindal 2017 norms (grades 1-6 only)
 
 ## Key Decisions
@@ -160,4 +184,4 @@ Accurate, word-level fluency error detection powered by ensemble ASR with halluc
 | Tooltip format "VAD: X% (label) - hint" | User decision from CONTEXT.md | ✓ Good v1.2 |
 
 ---
-*Last updated: 2026-02-04 after v1.2 milestone complete*
+*Last updated: 2026-02-05 after v1.3 milestone started*

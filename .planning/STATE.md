@@ -2,22 +2,22 @@
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-02-04)
+See: .planning/PROJECT.md (updated 2026-02-05)
 
 **Core value:** Accurate, word-level fluency error detection powered by ensemble ASR with hallucination filtering — giving teachers actionable data on exactly where and how a struggling reader breaks down.
-**Current focus:** Planning next milestone
+**Current focus:** v1.3 Kitchen Sink Ensemble — Reverb ASR with model-level disfluency detection
 
 ## Current Position
 
-Phase: None active
-Plan: None active
-Status: v1.2 VAD Gap Analysis shipped — ready for next milestone
-Last activity: 2026-02-04 — v1.2 milestone complete
+Phase: Not started (defining requirements)
+Plan: —
+Status: Defining requirements for v1.3
+Last activity: 2026-02-05 — v1.3 milestone started
 
-Progress: [██████████████████████████████] 100% (19/19 phases shipped)
+Progress: [░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░] 0%
 
 Milestones complete: 3 (v1.0, v1.1, v1.2)
-Current milestone: None (start with /gsd:new-milestone)
+Current milestone: v1.3 Kitchen Sink Ensemble
 
 ## v1.2 VAD Gap Analysis Summary
 
@@ -66,6 +66,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-02-04
-Stopped at: v1.2 milestone archived
-Resume with: `/gsd:new-milestone` to start next milestone
+Last session: 2026-02-05
+Stopped at: Defining v1.3 requirements
+Resume with: Continue requirements definition, then roadmap creation
