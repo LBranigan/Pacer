@@ -19,6 +19,7 @@ import { flagGhostWords } from './ghost-detector.js';
 import { classifyAllWords, filterGhosts, computeClassificationStats } from './confidence-classifier.js';
 import { detectDisfluencies } from './disfluency-detector.js';
 import { applySafetyChecks } from './safety-checker.js';
+import { runKitchenSinkPipeline, isKitchenSinkEnabled, computeKitchenSinkStats } from './kitchen-sink-merger.js';
 import { checkTerminalLeniency } from './phonetic-utils.js';
 import { padAudioWithSilence } from './audio-padding.js';
 import { enrichDiagnosticsWithVAD, computeVADGapSummary } from './vad-gap-analyzer.js';
@@ -147,120 +148,44 @@ async function runAnalysis() {
       }
     }
   } else {
-    setStatus('Running ensemble STT analysis...');
-    const ensembleResult = await sendEnsembleSTT(paddedAudioBlob, effectiveEncoding, sampleRateHertz);
+    // Run Kitchen Sink pipeline (Reverb + Deepgram + disfluency detection)
+    // Falls back to Google ensemble automatically when Reverb unavailable
+    setStatus('Running Kitchen Sink ensemble analysis...');
+    const kitchenSinkResult = await runKitchenSinkPipeline(paddedAudioBlob, effectiveEncoding, sampleRateHertz);
 
-    // Log ensemble result for debugging - include verbatim transcripts from both models
-    const parseTimeStr = (t) => {
-      if (typeof t === 'number') return t;
-      if (!t) return 0;
-      if (typeof t === 'object' && t.seconds !== undefined) {
-        return Number(t.seconds || 0) + (Number(t.nanos || 0) / 1e9);
-      }
-      return parseFloat(String(t).replace('s', '')) || 0;
-    };
-
-    const extractTranscript = (sttResponse) => {
-      if (!sttResponse?.results) return { transcript: '', words: [], timeline: [] };
-      const words = [];
-      let transcript = '';
-      for (const result of sttResponse.results) {
-        const alt = result.alternatives?.[0];
-        if (alt) {
-          transcript += (transcript ? ' ' : '') + (alt.transcript || '');
-          if (alt.words) {
-            for (const w of alt.words) {
-              words.push({
-                word: w.word,
-                start: w.startTime,
-                end: w.endTime,
-                conf: w.confidence != null ? Math.round(w.confidence * 100) / 100 : null
-              });
-            }
-          }
-        }
-      }
-
-      // Build timeline with words AND gaps
-      const timeline = [];
-      for (let i = 0; i < words.length; i++) {
-        const w = words[i];
-        const startSec = parseTimeStr(w.start);
-        const endSec = parseTimeStr(w.end);
-
-        // Add leading silence before first word
-        if (i === 0 && startSec > 0.05) {
-          timeline.push({
-            type: 'silence',
-            start: '0.00s',
-            end: startSec.toFixed(2) + 's',
-            duration: startSec.toFixed(2) + 's'
-          });
-        }
-
-        // Add the word
-        timeline.push({
-          type: 'word',
-          word: w.word,
-          start: startSec.toFixed(2) + 's',
-          end: endSec.toFixed(2) + 's',
-          duration: (endSec - startSec).toFixed(2) + 's',
-          conf: w.conf
-        });
-
-        // Add gap after this word (if there's a next word)
-        if (i < words.length - 1) {
-          const nextStart = parseTimeStr(words[i + 1].start);
-          const gap = nextStart - endSec;
-          if (gap > 0.05) { // Only log gaps > 50ms
-            timeline.push({
-              type: 'gap',
-              start: endSec.toFixed(2) + 's',
-              end: nextStart.toFixed(2) + 's',
-              duration: gap.toFixed(2) + 's'
-            });
-          }
-        }
-      }
-
-      return { transcript, words, timeline };
-    };
-
-    const latestLongData = extractTranscript(ensembleResult.latestLong);
-    const defaultData = extractTranscript(ensembleResult.default);
-
-    addStage('ensemble_raw', {
-      hasLatestLong: !!ensembleResult.latestLong,
-      hasDefault: !!ensembleResult.default,
-      errors: ensembleResult.errors,
-      latestLong: {
-        transcript: latestLongData.transcript,
-        wordCount: latestLongData.words.length,
-        words: latestLongData.words,
-        timeline: latestLongData.timeline
-      },
-      default: {
-        transcript: defaultData.transcript,
-        wordCount: defaultData.words.length,
-        words: defaultData.words,
-        timeline: defaultData.timeline
-      }
+    // Log result for debugging
+    console.log('[Pipeline] Kitchen Sink result:', {
+      source: kitchenSinkResult.source,
+      wordCount: kitchenSinkResult.words?.length || 0,
+      disfluencies: kitchenSinkResult.disfluencyStats?.total || 0,
+      _debug: kitchenSinkResult._debug
     });
 
-    // Check for complete failure
-    if (!ensembleResult.latestLong && !ensembleResult.default) {
-      setStatus('Both STT models failed. Check API key.');
+    // Handle empty result
+    if (!kitchenSinkResult.words || kitchenSinkResult.words.length === 0) {
+      setStatus('No speech detected. Please try again.');
       analyzeBtn.disabled = false;
-      finalizeDebugLog({ error: 'Both STT models failed', details: ensembleResult.errors });
+      finalizeDebugLog({ error: 'No speech detected', source: kitchenSinkResult.source });
       return;
     }
 
-    // Get reference text for Reference Veto logic (when models disagree, prefer word matching reference)
-    const referenceText = document.getElementById('transcript').value.trim();
+    // Extract words for downstream processing
+    const mergedWords = kitchenSinkResult.words;
 
-    // Merge results using temporal word association with Reference Veto
-    const mergedWords = mergeEnsembleResults(ensembleResult, referenceText);
-    const ensembleStats = computeEnsembleStats(mergedWords);
+    // Compute stats based on source
+    const ensembleStats = kitchenSinkResult.source === 'kitchen_sink'
+      ? computeKitchenSinkStats(kitchenSinkResult)
+      : computeEnsembleStats(mergedWords);
+
+    // Log to debug stages
+    addStage('kitchen_sink_result', {
+      source: kitchenSinkResult.source,
+      totalWords: mergedWords.length,
+      disfluencies: kitchenSinkResult.disfluencyStats?.total || 0,
+      disfluencyBreakdown: kitchenSinkResult.disfluencyStats?.byType || null,
+      crossValidated: kitchenSinkResult._debug?.deepgramAvailable || false,
+      stats: ensembleStats
+    });
 
     // Debug: verify _debug is created at merge time
     console.log('[Pipeline Debug] First 3 merged words:', mergedWords.slice(0, 3).map(w => ({
