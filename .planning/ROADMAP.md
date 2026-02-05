@@ -165,6 +165,10 @@ Replace Google STT ensemble with Reverb ASR for model-level disfluency detection
 
 **Dependencies:** Phase 23 (Kitchen Sink integration provides disfluency data)
 
+**Plans:** 2 plans
+- [ ] 24-01-PLAN.md — Miscue registry entries, CSS styles, HTML structure
+- [ ] 24-02-PLAN.md — Word rendering logic, diagnostics section, data threading
+
 **Requirements:**
 - UI-01: Disfluencies visually distinct from reading errors (different color/style)
 - UI-02: Per-word disfluency type indicator (filler, repetition, false start)
@@ -188,10 +192,10 @@ Replace Google STT ensemble with Reverb ASR for model-level disfluency detection
 | v1.0 MVP | 1-9 | 21 | Complete | 2026-02-03 |
 | v1.1 ASR Ensemble | 10-17 | 22 | Complete | 2026-02-04 |
 | v1.2 VAD Gap Analysis | 18-19 | 3 | Complete | 2026-02-04 |
-| v1.3 Kitchen Sink Ensemble | 20-24 | 7 | **Active** | — |
+| v1.3 Kitchen Sink Ensemble | 20-24 | 9 | **Active** | — |
 
 **Total shipped:** 19 phases, 46 plans
-**Active:** 5 phases (v1.3), Phases 20-23 planned (7 plans)
+**Active:** 5 phases (v1.3), Phases 20-24 planned (9 plans)
 
 ## Dependency Graph
 
@@ -217,3 +221,4 @@ Phases 20, 21, 22 can execute in parallel. Phase 23 depends on all three. Phase 
 *Phase 22 complete: 2026-02-05*
 *Phase 23 planned: 2026-02-05*
 *Phase 23 complete: 2026-02-05*
+*Phase 24 planned: 2026-02-05*
