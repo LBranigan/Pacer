@@ -224,8 +224,8 @@ export function detectSelfCorrections(transcriptWords, alignment) {
 
 /**
  * Flag substitutions where ref and hyp share a 3+ char prefix
- * and STT confidence < 0.8.
- * Returns array of { ref, hyp, sharedPrefix, confidence }.
+ * and cross-validation indicates uncertainty (not confirmed by both engines).
+ * Returns array of { ref, hyp, sharedPrefix, confidence, crossValidation }.
  */
 export function detectMorphologicalErrors(alignment, sttLookup) {
   const results = [];
@@ -252,23 +252,28 @@ export function detectMorphologicalErrors(alignment, sttLookup) {
         }
 
         if (shared >= 3) {
-          // Look up confidence from sttLookup (keyed by canonical word string)
+          // Look up cross-validation status from sttLookup
           let confidence = 1;
+          let xval = 'unavailable';
           if (sttLookup instanceof Map) {
             const queue = sttLookup.get(hyp);
             if (queue && queue.length > 0) {
               confidence = queue[0].confidence ?? 1;
+              xval = queue[0].crossValidation || 'unavailable';
             }
           }
 
-          if (confidence < 0.8) {
-            results.push({
-              ref: op.ref || op.reference,
-              hyp: op.hyp || op.hypothesis,
-              sharedPrefix: ref.slice(0, shared),
-              confidence: Math.round(confidence * 1000) / 1000
-            });
-          }
+          // If both engines agree on the spoken word, it's a reliable substitution
+          // (not a morphological uncertainty). Only flag when uncertain.
+          if (xval === 'confirmed') continue;
+
+          results.push({
+            ref: op.ref || op.reference,
+            hyp: op.hyp || op.hypothesis,
+            sharedPrefix: ref.slice(0, shared),
+            confidence: Math.round(confidence * 1000) / 1000,
+            crossValidation: xval
+          });
         }
       }
     }
@@ -354,14 +359,17 @@ export function computeTierBreakdown(alignment) {
  *
  * A word is flagged as a struggle when ALL three conditions are met:
  * 1. Pause or hesitation before the word (gap >= threshold OR gap >= 3s)
- * 2. Low confidence score (confidence < 0.70)
- *    - Kitchen Sink: primary confidence is Deepgram (confirmed) or Reverb (unconfirmed)
+ * 2. Cross-validation indicates uncertainty (not 'confirmed' by both engines)
+ *    - 'confirmed' = both engines agree → not a struggle
+ *    - 'disagreed' = engines heard different words → likely mispronunciation
+ *    - 'unconfirmed' = only Reverb heard something → Deepgram found nothing
+ *    - 'unavailable' = Deepgram was down → can't confirm either way
  * 3. Not a sight word (word length > 3 characters)
  *
  * Struggle words are diagnostic indicators that highlight decoding difficulty.
  * They do NOT count as errors — they help teachers identify words that need practice.
  *
- * Returns array of { wordIndex, word, gap, confidence }.
+ * Returns array of { wordIndex, word, gap, confidence, crossValidation }.
  */
 export function detectStruggleWords(transcriptWords, referenceText, alignment) {
   const results = [];
@@ -382,10 +390,10 @@ export function detectStruggleWords(transcriptWords, referenceText, alignment) {
     const hasPauseOrHesitation = delayIndices.has(i) || pauseBeforeIndices.has(i);
     if (!hasPauseOrHesitation) continue;
 
-    // Condition 2: Low confidence (< 0.70)
-    // Primary confidence = Deepgram (for confirmed words) or Reverb (for unconfirmed)
-    const conf = w.confidence;
-    if (conf == null || conf >= 0.70) continue;
+    // Condition 2: Cross-validation indicates uncertainty
+    // If both engines agree on the word, it's not a struggle regardless of confidence
+    const xval = w.crossValidation;
+    if (xval === 'confirmed') continue;
 
     // Condition 3: Not a sight word (word length > 3 characters)
     if (word.length <= 3) continue;
@@ -405,7 +413,8 @@ export function detectStruggleWords(transcriptWords, referenceText, alignment) {
       wordIndex: i,
       word: w.word,
       gap: Math.round(gap * 1000) / 1000,
-      confidence: Math.round(conf * 1000) / 1000
+      confidence: Math.round((w.confidence ?? 0) * 1000) / 1000,
+      crossValidation: xval || 'unavailable'
     });
   }
 

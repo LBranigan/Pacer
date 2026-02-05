@@ -273,6 +273,7 @@ export function computeKitchenSinkStats(result) {
       disfluencies: 0,
       disfluencyRate: '0%',
       confirmed: 0,
+      disagreed: 0,
       unconfirmed: 0,
       unavailable: 0,
       source: result?.source || 'unknown'
@@ -288,6 +289,7 @@ export function computeKitchenSinkStats(result) {
       ? (words.filter(w => w.isDisfluency).length / words.length * 100).toFixed(1) + '%'
       : '0%',
     confirmed: words.filter(w => w.crossValidation === 'confirmed').length,
+    disagreed: words.filter(w => w.crossValidation === 'disagreed').length,
     unconfirmed: words.filter(w => w.crossValidation === 'unconfirmed').length,
     unavailable: words.filter(w => w.crossValidation === 'unavailable').length,
     source: result.source

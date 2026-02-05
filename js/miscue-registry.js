@@ -213,7 +213,8 @@ const DIAGNOSTIC_MISCUES = {
     countsAsError: true, // Counted as substitution
     config: {
       min_shared_prefix: 3,              // Must share 3+ character prefix
-      max_confidence_for_flag: 0.8       // Only flag if STT confidence < 0.8
+      // Only flag when cross-validation !== 'confirmed'.
+      // If both engines agree on the spoken word, it's a reliable substitution.
     },
     example: {
       reference: 'running',
@@ -224,19 +225,22 @@ const DIAGNOSTIC_MISCUES = {
   },
 
   struggle: {
-    description: 'Word where student showed decoding difficulty (pause + uncertainty)',
+    description: 'Word where student showed decoding difficulty (pause + cross-validation uncertainty)',
     detector: 'diagnostics.js → detectStruggleWords()',
     countsAsError: false, // Diagnostic only - helps identify words needing practice
     config: {
       // Condition 1: Pause (>=3s) or hesitation (>=threshold) before word
-      // Condition 2: Low confidence (confidence < 0.70, from Deepgram or Reverb)
+      // Condition 2: Cross-validation !== 'confirmed' (engines disagree or Deepgram had nothing)
+      //   'confirmed' = both agree → not a struggle
+      //   'disagreed' = engines heard different words → mispronunciation
+      //   'unconfirmed' = Reverb only, Deepgram had no word → possible garble
+      //   'unavailable' = Deepgram offline → uncertain
       // Condition 3: Word length > 3 characters (not a common sight word)
-      min_word_length: 4,                // Words with >3 chars (4+)
-      confidence_threshold: 0.70         // Below 0.70 = low confidence (Deepgram for confirmed words, Reverb for unconfirmed)
+      min_word_length: 4                 // Words with >3 chars (4+)
     },
     example: {
-      context: '3.1s pause before "unnerved" + 61% confidence + 8 chars',
-      result: 'Flagged as struggle word — student needed time to decode'
+      context: '3.8s pause before "jued" (ref: "jumped") + crossValidation: disagreed + 4 chars',
+      result: 'Flagged as struggle word — Deepgram heard "jumped", Reverb heard "jued"'
     },
     uiClass: 'word-struggle',
     note: 'Helps teachers identify words the student found difficult to decode. Not penalized — used for targeted instruction.'

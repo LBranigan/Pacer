@@ -341,12 +341,14 @@ details > summary::-webkit-details-marker { display: none; }
   <div class="ensemble-row">
     <div class="ensemble-box merge">Build Merged Words<br><small>from tagged alignment</small></div>
     <div class="ensemble-arrow-h">&rarr;</div>
-    <div class="ensemble-box xval">Cross-Validate<br><small>Reverb &harr; Deepgram</small></div>
+    <div class="ensemble-box xval">Cross-Validate<br><small>NW sequence alignment<br>Reverb &harr; Deepgram</small></div>
   </div>
   <div class="ensemble-row" style="margin-top:0.3rem;">
     <div style="font-size:0.8rem; color:#666; text-align:center; width:100%;">
       Each word gets: <code>crossValidation</code> = <strong>confirmed</strong> (both agree)
-      | <strong>unconfirmed</strong> (Reverb only) | <strong>unavailable</strong> (no Deepgram)
+      | <strong>disagreed</strong> (different words at same position)
+      | <strong>unconfirmed</strong> (Reverb only &mdash; Deepgram heard nothing)
+      | <strong>unavailable</strong> (Deepgram offline)
     </div>
   </div>
 </div>
@@ -516,7 +518,7 @@ details > summary::-webkit-details-marker { display: none; }
       <td><strong>morphological</strong></td>
       <td><span class="swatch swatch-morphological"></span></td>
       <td>Wrong word ending &mdash; same root, wrong suffix</td>
-      <td>3+ char shared prefix + confidence &lt; 0.80</td>
+      <td>3+ char shared prefix + crossValidation &ne; confirmed</td>
       <td>Yes</td>
       <td>ref "running" &rarr; said "runned"</td>
     </tr>
@@ -524,9 +526,9 @@ details > summary::-webkit-details-marker { display: none; }
       <td><strong>struggle</strong></td>
       <td><span class="swatch swatch-struggle"></span></td>
       <td>Word with decoding difficulty (pause + uncertainty)</td>
-      <td>Pause/hesitation before word + confidence &lt; 0.70 + word length &gt; 3 chars</td>
+      <td>Pause/hesitation before word + crossValidation &ne; confirmed + word length &gt; 3 chars</td>
       <td>No</td>
-      <td>3.1s pause before "unnerved" at 61% confidence</td>
+      <td>3.8s pause before "jued" (ref: jumped) &mdash; crossValidation: disagreed</td>
     </tr>
 
     <!-- Reverb disfluencies -->
@@ -631,10 +633,10 @@ details > summary::-webkit-details-marker { display: none; }
   <summary>DIAG-04: Morphological Errors</summary>
   <div class="card">
     <p><strong>Detector:</strong> <code>detectMorphologicalErrors()</code></p>
-    <p><strong>Logic:</strong> For substitutions, check if ref and hyp share a 3+ character prefix with low confidence.</p>
+    <p><strong>Logic:</strong> For substitutions, check if ref and hyp share a 3+ character prefix and cross-validation shows uncertainty.</p>
     <ul class="threshold-list">
       <li><span class="label">Min shared prefix</span> <span class="value">3 characters</span></li>
-      <li><span class="label">Max confidence to flag</span> <span class="value">&lt; 0.80</span></li>
+      <li><span class="label">Cross-validation gate</span> <span class="value">crossValidation &ne; 'confirmed' (if both engines agree, it's a reliable substitution)</span></li>
     </ul>
     <p style="font-size:0.85rem; color:#666; margin-top:0.5rem;">Morphological errors still count as substitutions but are tagged for teacher visibility.</p>
   </div>
@@ -672,7 +674,7 @@ details > summary::-webkit-details-marker { display: none; }
     <p><strong>Logic:</strong> All three conditions must be met:</p>
     <ul class="threshold-list">
       <li><span class="label">Condition 1: Pause</span> <span class="value">Hesitation (&ge; threshold) or long pause (&ge; 3s) before word</span></li>
-      <li><span class="label">Condition 2: Low confidence</span> <span class="value">confidence &lt; 0.70</span></li>
+      <li><span class="label">Condition 2: Cross-validation uncertainty</span> <span class="value">crossValidation &ne; 'confirmed' (disagreed, unconfirmed, or unavailable)</span></li>
       <li><span class="label">Condition 3: Not a sight word</span> <span class="value">word length &gt; 3 characters</span></li>
     </ul>
     <p style="font-size:0.85rem; color:#666; margin-top:0.5rem;">Diagnostic only &mdash; helps teachers identify words needing targeted instruction. Not penalized.</p>

@@ -158,18 +158,27 @@ function buildEnhancedTooltip(item, sttWord) {
 
     // What each model heard (word text, not confidence %)
     const reverbWord = sttWord._alignment?.verbatim || sttWord.word;
-    const deepgramWord = sttWord._deepgramWord || null;
+    const deepgramWord = sttWord._deepgramWord;
     if (deepgramWord) {
       lines.push(`Deepgram heard: "${deepgramWord}"`);
+      lines.push(`Reverb heard: "${reverbWord}"`);
+    } else if (deepgramWord === null) {
+      lines.push(`Deepgram heard: [null]`);
       lines.push(`Reverb heard: "${reverbWord}"`);
     } else {
       lines.push(`Reverb heard: "${reverbWord}"`);
     }
 
-    // Cross-validation: both models agree on this word?
+    // Cross-validation status
     const xval = sttWord.crossValidation;
     if (xval) {
-      lines.push(`Cross-validation: ${xval}${xval === 'confirmed' ? ' (both agree)' : xval === 'unconfirmed' ? ' (Reverb only)' : ''}`);
+      const xvalLabels = {
+        confirmed: ' (both agree)',
+        disagreed: ' (models heard different words)',
+        unconfirmed: ' (Reverb only — Deepgram heard nothing)',
+        unavailable: ' (Deepgram offline)'
+      };
+      lines.push(`Cross-validation: ${xval}${xvalLabels[xval] || ''}`);
     }
 
     // Disfluency info
@@ -230,7 +239,7 @@ export function displayResults(data) {
       alt.words.forEach(w => {
         allWords.push(w);
         const span = document.createElement('span');
-        span.className = 'word ' + (w.crossValidation === 'confirmed' ? 'high' : w.crossValidation === 'unconfirmed' ? 'mid' : 'low');
+        span.className = 'word ' + (w.crossValidation === 'confirmed' ? 'high' : (w.crossValidation === 'unconfirmed' || w.crossValidation === 'disagreed') ? 'mid' : 'low');
         const start = parseSttTime(w.startTime);
         const end = parseSttTime(w.endTime);
         span.title = `${w.word}  |  ${start.toFixed(2)}s – ${end.toFixed(2)}s  |  ${w.crossValidation || 'N/A'}`;

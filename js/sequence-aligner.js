@@ -194,6 +194,46 @@ export function alignTranscripts(verbatimWords, cleanWords, options = {}) {
   });
 }
 
+/**
+ * Generic sequence alignment — reuses the NW core with neutral labels.
+ * Used for cross-validation (Reverb vs Deepgram) where neither sequence
+ * is privileged as "verbatim" or "clean".
+ *
+ * @param {object[]} wordsA - First word sequence [{word, ...}]
+ * @param {object[]} wordsB - Second word sequence [{word, ...}]
+ * @param {object} [options] - Scoring parameters (same as alignTranscripts)
+ * @returns {object[]} Alignment with { type, wordA, wordB, wordAData, wordBData }
+ */
+export function alignSequences(wordsA, wordsB, options = {}) {
+  if (!wordsA?.length && !wordsB?.length) return [];
+
+  if (!wordsA?.length) {
+    return wordsB.map(w => ({ type: 'deletion', wordA: null, wordB: w.word, wordBData: w }));
+  }
+  if (!wordsB?.length) {
+    return wordsA.map(w => ({ type: 'insertion', wordA: w.word, wordB: null, wordAData: w }));
+  }
+
+  const stringsA = wordsA.map(w => w.word);
+  const stringsB = wordsB.map(w => w.word);
+  const mergedOptions = { ...DEFAULT_OPTIONS, ...options };
+  const { alignment } = needlemanWunsch(stringsA, stringsB, mergedOptions);
+
+  let aIdx = 0;
+  let bIdx = 0;
+
+  return alignment.map(entry => {
+    const result = {
+      type: entry.type,
+      wordA: entry.verbatim,
+      wordB: entry.clean
+    };
+    if (entry.verbatim !== null) result.wordAData = wordsA[aIdx++];
+    if (entry.clean !== null) result.wordBData = wordsB[bIdx++];
+    return result;
+  });
+}
+
 // ============================================================================
 // Inline Tests (commented out - uncomment to verify)
 // ============================================================================

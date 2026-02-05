@@ -2,13 +2,22 @@
  * Deepgram Nova-3 API Client
  *
  * Calls backend proxy at localhost:8765/deepgram (browser cannot call Deepgram directly - no CORS).
- * Provides cross-validation against Reverb ASR for hallucination detection.
+ * Provides cross-validation against Reverb ASR using Needleman-Wunsch sequence alignment.
+ *
+ * Cross-validation statuses:
+ *   confirmed  — both engines produced the same word (text match)
+ *   disagreed  — both engines heard something, but different words (mismatch)
+ *   unconfirmed — only Reverb produced a word; Deepgram had nothing at this position
+ *   unavailable — Deepgram service was offline
  *
  * Requirements covered:
  * - XVAL-01: Deepgram Nova-3 called for cross-validation
+ * - XVAL-02: Reverb <-> Nova-3 disagreement flags words via 'disagreed' status
  * - XVAL-03: Graceful fallback when service unavailable
  * - INTG-02: deepgram-api.js client calls Deepgram Nova-3 API
  */
+
+import { alignSequences } from './sequence-aligner.js';
 
 const BACKEND_BASE_URL = 'http://localhost:8765';
 
@@ -87,27 +96,31 @@ export function extractWordsFromDeepgram(deepgramResponse) {
   return deepgramResponse.words;
 }
 
-/**
- * Normalize word for comparison (lowercase, strip punctuation).
- * @param {string} word
- * @returns {string} Normalized word
- */
-function normalizeWord(word) {
-  return word.toLowerCase().replace(/[^a-z']/g, '');
-}
+// NW scoring tuned for cross-validation: symmetric gaps, cheap mismatches
+// so the aligner pairs words positionally even when text differs
+const XVAL_OPTIONS = {
+  match: 2,        // Same word in both engines
+  mismatch: 0,     // Different word at same position (e.g. "jued"/"jumped")
+  gapInsert: -1,   // Reverb word with no Deepgram counterpart
+  gapDelete: -1    // Deepgram word with no Reverb counterpart
+};
 
 /**
- * Cross-validate Reverb transcript against Deepgram Nova-3.
+ * Cross-validate Reverb transcript against Deepgram Nova-3
+ * using Needleman-Wunsch sequence alignment.
  *
- * Words present in both sources are marked "confirmed".
- * Words present only in Reverb are marked "unconfirmed" (potential hallucination).
- * If Deepgram unavailable, all words marked "unavailable".
+ * Alignment pairs words by position in both sequences, then classifies:
+ *   match    → 'confirmed'   (both heard the same word)
+ *   mismatch → 'disagreed'   (both heard something, text differs)
+ *   insertion→ 'unconfirmed' (Reverb-only, Deepgram had nothing here)
+ *   deletion → unconsumed    (Deepgram-only, logged but not added to word list)
  *
- * Implements XVAL-02: Reverb <-> Nova-3 disagreement flags words as uncertain.
+ * For confirmed and disagreed words, Deepgram timestamps replace Reverb's
+ * (Reverb CTM hardcodes 100ms durations). Both confidence values are preserved.
  *
- * @param {Array} reverbWords - Merged words from Reverb ensemble (v=1.0 verbatim + v=0.0 clean, after Needleman-Wunsch + disfluency tagging)
+ * @param {Array} reverbWords - Merged words from Reverb ensemble (after NW + disfluency tagging)
  * @param {Array|null} deepgramWords - Words from Deepgram Nova-3, or null if unavailable
- * @returns {Array} Words with crossValidation status, Deepgram timestamps as primary (confirmed), and both confidence values preserved
+ * @returns {Array} Reverb words annotated with crossValidation status and Deepgram data
  */
 export function crossValidateWithDeepgram(reverbWords, deepgramWords) {
   // If Deepgram unavailable, mark all as unavailable (graceful degradation)
@@ -118,69 +131,73 @@ export function crossValidateWithDeepgram(reverbWords, deepgramWords) {
     }));
   }
 
-  // Build Deepgram word queue for O(1) lookup with confidence pass-through
-  const dgWordQueues = new Map();
-  for (const w of deepgramWords) {
-    const norm = normalizeWord(w.word);
-    if (!dgWordQueues.has(norm)) dgWordQueues.set(norm, []);
-    dgWordQueues.get(norm).push(w);
-  }
+  // Run NW sequence alignment: Reverb (A) vs Deepgram (B)
+  const alignment = alignSequences(reverbWords, deepgramWords, XVAL_OPTIONS);
 
-  // Annotate each Reverb word with cross-validation status + Deepgram confidence + timestamps
+  const result = [];
   const timestampComparison = [];
+  const unconsumedDg = [];
 
-  const result = reverbWords.map(word => {
-    const normalized = normalizeWord(word.word);
-    const queue = dgWordQueues.get(normalized);
-
-    if (queue && queue.length > 0) {
-      const dgWord = queue.shift();
-
-      // Collect timestamp comparison for diagnostic logging
-      timestampComparison.push({
-        word: word.word,
-        reverbStart: word.startTime,
-        reverbEnd: word.endTime,
-        deepgramStart: dgWord.startTime,
-        deepgramEnd: dgWord.endTime,
-        reverbDurMs: Math.round((_parseTs(word.endTime) - _parseTs(word.startTime)) * 1000),
-        deepgramDurMs: Math.round((_parseTs(dgWord.endTime) - _parseTs(dgWord.startTime)) * 1000),
-      });
-
-      return {
-        ...word,
-        crossValidation: 'confirmed',
-        // Deepgram timestamps as primary (Reverb CTM uses hardcoded 100ms durations)
-        startTime: dgWord.startTime,
-        endTime: dgWord.endTime,
-        // Preserve Reverb timestamps for reference
-        _reverbStartTime: word.startTime,
-        _reverbEndTime: word.endTime,
-        // Deepgram confidence as primary (Reverb attention scores drift to 0)
-        confidence: dgWord.confidence,
-        _reverbConfidence: word.confidence,
-        _deepgramConfidence: dgWord.confidence,
-        // Deepgram's word text for tooltip display
-        _deepgramWord: dgWord.word
-      };
+  for (const entry of alignment) {
+    if (entry.type === 'deletion') {
+      // Deepgram word with no Reverb counterpart — log but don't add to word list
+      unconsumedDg.push(entry.wordBData);
+      continue;
     }
 
-    // Unconfirmed: keep Reverb timestamps (no Deepgram alternative available)
-    return {
-      ...word,
-      crossValidation: 'unconfirmed',
-      _reverbConfidence: word.confidence,
-      _reverbStartTime: word.startTime,
-      _reverbEndTime: word.endTime
-    };
-  });
+    const reverbWord = entry.wordAData;
 
-  // Diagnostic: side-by-side timestamp comparison
+    if (entry.type === 'insertion') {
+      // Reverb-only word — Deepgram had nothing at this position (true null)
+      result.push({
+        ...reverbWord,
+        crossValidation: 'unconfirmed',
+        _reverbConfidence: reverbWord.confidence,
+        _reverbStartTime: reverbWord.startTime,
+        _reverbEndTime: reverbWord.endTime,
+        _deepgramWord: null
+      });
+      continue;
+    }
+
+    // match or mismatch — Deepgram has a paired word
+    const dgWord = entry.wordBData;
+    const status = entry.type === 'match' ? 'confirmed' : 'disagreed';
+
+    // Collect timestamp comparison for diagnostic logging
+    timestampComparison.push({
+      word: reverbWord.word,
+      dgWord: dgWord.word,
+      status,
+      reverbStart: reverbWord.startTime,
+      reverbEnd: reverbWord.endTime,
+      deepgramStart: dgWord.startTime,
+      deepgramEnd: dgWord.endTime,
+      reverbDurMs: Math.round((_parseTs(reverbWord.endTime) - _parseTs(reverbWord.startTime)) * 1000),
+      deepgramDurMs: Math.round((_parseTs(dgWord.endTime) - _parseTs(dgWord.startTime)) * 1000),
+    });
+
+    result.push({
+      ...reverbWord,
+      crossValidation: status,
+      // Deepgram timestamps as primary (Reverb CTM uses hardcoded 100ms durations)
+      startTime: dgWord.startTime,
+      endTime: dgWord.endTime,
+      _reverbStartTime: reverbWord.startTime,
+      _reverbEndTime: reverbWord.endTime,
+      // Deepgram confidence as primary
+      confidence: dgWord.confidence,
+      _reverbConfidence: reverbWord.confidence,
+      _deepgramConfidence: dgWord.confidence,
+      _deepgramWord: dgWord.word
+    });
+  }
+
+  // Diagnostic logging
   if (timestampComparison.length > 0) {
-    console.log('[cross-validation] Reverb vs Deepgram timestamp comparison:');
+    console.log('[cross-validation] Reverb vs Deepgram alignment (NW sequence):');
     console.table(timestampComparison);
 
-    // Show gap comparison (gaps drive hesitation detection)
     const gapComparison = [];
     for (let i = 1; i < timestampComparison.length; i++) {
       const prev = timestampComparison[i - 1];
@@ -194,8 +211,13 @@ export function crossValidateWithDeepgram(reverbWords, deepgramWords) {
         diffMs: reverbGap - deepgramGap
       });
     }
-    console.log('[cross-validation] Inter-word gap comparison (drives hesitation detection):');
+    console.log('[cross-validation] Inter-word gap comparison:');
     console.table(gapComparison);
+  }
+
+  if (unconsumedDg.length > 0) {
+    console.log('[cross-validation] Unconsumed Deepgram words (heard by DG but not Reverb):');
+    console.table(unconsumedDg.map(w => ({ word: w.word, start: w.startTime, end: w.endTime, conf: w.confidence })));
   }
 
   return result;
