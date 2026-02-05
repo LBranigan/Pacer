@@ -31,7 +31,7 @@ const FEATURE_FLAG_KEY = 'orf_use_kitchen_sink';
  * Check if Kitchen Sink pipeline is enabled.
  * Defaults to true (enabled) when localStorage is empty.
  *
- * @returns {boolean} True if Kitchen Sink should be used instead of Google ensemble
+ * @returns {boolean} True if Kitchen Sink should be used, false for Deepgram-only
  */
 export function isKitchenSinkEnabled() {
   // Enabled by default unless explicitly set to 'false'
@@ -41,7 +41,7 @@ export function isKitchenSinkEnabled() {
 /**
  * Set Kitchen Sink feature flag.
  *
- * @param {boolean} enabled - True to enable, false to use Google ensemble
+ * @param {boolean} enabled - True to enable Kitchen Sink, false to use Deepgram-only
  */
 export function setKitchenSinkEnabled(enabled) {
   localStorage.setItem(FEATURE_FLAG_KEY, enabled ? 'true' : 'false');

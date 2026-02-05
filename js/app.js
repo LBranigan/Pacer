@@ -150,7 +150,7 @@ async function runAnalysis() {
     }
   } else {
     // Run Kitchen Sink pipeline (Reverb + Deepgram + disfluency detection)
-    // Falls back to Google ensemble automatically when Reverb unavailable
+    // Falls back to Deepgram-only automatically when Reverb unavailable
     setStatus('Running Kitchen Sink ensemble analysis...');
     const kitchenSinkResult = await runKitchenSinkPipeline(paddedAudioBlob, effectiveEncoding, sampleRateHertz);
 
