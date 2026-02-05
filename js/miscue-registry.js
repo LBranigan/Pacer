@@ -208,18 +208,19 @@ const DIAGNOSTIC_MISCUES = {
   },
 
   morphological: {
-    description: 'Wrong word ending - same root but incorrect suffix/form',
+    description: 'Wrong ending or wrong beginning - same root but different affix',
     detector: 'diagnostics.js → detectMorphologicalErrors()',
     countsAsError: true, // Counted as substitution
     config: {
-      min_shared_prefix: 3,              // Must share 3+ character prefix
-      // Only flag when cross-validation !== 'confirmed'.
-      // If both engines agree on the spoken word, it's a reliable substitution.
+      min_shared_affix: 3,               // Must share 3+ char prefix OR suffix
+      // No cross-validation gate: morphological is about the error pattern,
+      // not ASR reliability. A confirmed "runned" for "running" is still morphological.
+      // Uses positional lookup (transcriptWords[hypIndex]) for metadata.
     },
     example: {
-      reference: 'running',
-      spoken: 'runned',
-      result: 'Shared prefix "run", flagged as morphological error'
+      reference: 'running / unhappy',
+      spoken: 'runned / happy',
+      result: 'Shared prefix "run" (suffix error) or shared suffix "happy" (prefix error)'
     },
     uiClass: 'word-morphological'
   },

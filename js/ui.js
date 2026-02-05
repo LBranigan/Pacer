@@ -415,7 +415,7 @@ export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, di
   // Build diagnostic lookup structures
   const onsetDelayMap = new Map(); // hypIndex -> {gap, threshold, punctuationType}
   const longPauseMap = new Map(); // afterHypIndex -> {gap}
-  const morphErrorSet = new Set(); // "ref|hyp" lowercase pairs
+  const morphErrorMap = new Map(); // "ref|hyp" lowercase -> morphological result
   const struggleWordSet = new Set(); // STT word indices flagged as struggle words
   if (diagnostics) {
     if (diagnostics.onsetDelays) {
@@ -442,7 +442,7 @@ export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, di
     }
     if (diagnostics.morphologicalErrors) {
       for (const m of diagnostics.morphologicalErrors) {
-        morphErrorSet.add((m.ref || '').toLowerCase() + '|' + (m.hyp || '').toLowerCase());
+        morphErrorMap.set((m.ref || '').toLowerCase() + '|' + (m.hyp || '').toLowerCase(), m);
       }
     }
     // Struggle words: words with pause/hesitation + low confidence + not sight word
@@ -524,9 +524,10 @@ export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, di
       } else {
         // Morphological error overlay (only for non-forgiven substitutions)
         const morphKey = (item.ref || '').toLowerCase() + '|' + (item.hyp || '').toLowerCase();
-        if (morphErrorSet.has(morphKey)) {
+        const morphData = morphErrorMap.get(morphKey);
+        if (morphData) {
           span.classList.add('word-morphological');
-          span.title += '\n(Morphological error)';
+          span.title += `\n(Morphological: shared ${morphData.matchType} "${morphData.sharedPart}")`;
         }
       }
     }

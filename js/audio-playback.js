@@ -222,9 +222,24 @@ export function createSyncedPlayback(containerEl) {
       return;
     }
     const ct = audioEl.currentTime;
+
+    // Find the single best word to highlight: among all words whose time range
+    // contains the playhead, pick the one with the latest start time.
+    // This handles overlapping timestamps from mixed Reverb/Deepgram sources —
+    // when an unconfirmed word overlaps with a confirmed word's extended
+    // Deepgram timestamps, the most recently started word wins.
+    let activeIdx = -1;
+    let latestStart = -1;
     for (let i = 0; i < wordEls.length; i++) {
       const t = wordTimings[i];
-      if (t && ct >= t.start && ct < t.end) {
+      if (t && ct >= t.start && ct < t.end && t.start > latestStart) {
+        activeIdx = i;
+        latestStart = t.start;
+      }
+    }
+
+    for (let i = 0; i < wordEls.length; i++) {
+      if (i === activeIdx) {
         wordEls[i].classList.add('speaking');
       } else {
         wordEls[i].classList.remove('speaking');

@@ -573,7 +573,7 @@ async function runAnalysis() {
   });
 
   // Run diagnostics first so we can heal self-corrections
-  const diagnostics = runDiagnostics(transcriptWords, alignment, referenceText, sttLookup);
+  const diagnostics = runDiagnostics(transcriptWords, alignment, referenceText);
 
   addStage('diagnostics', {
     longPauses: diagnostics.longPauses?.length || 0,

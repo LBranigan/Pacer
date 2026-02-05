@@ -223,11 +223,25 @@ export function detectSelfCorrections(transcriptWords, alignment) {
 // ── DIAG-04: Morphological Errors ───────────────────────────────────
 
 /**
- * Flag substitutions where ref and hyp share a 3+ char prefix
- * and cross-validation indicates uncertainty (not confirmed by both engines).
- * Returns array of { ref, hyp, sharedPrefix, confidence, crossValidation }.
+ * Flag substitutions where ref and hyp share a 3+ char root
+ * (detected via shared prefix or shared suffix).
+ *
+ * This identifies "wrong ending" or "wrong beginning" errors where the student
+ * read a morphological variant of the reference word:
+ *   - Suffix error: "running" → "runned"  (shared prefix "run")
+ *   - Prefix error: "unhappy" → "happy"   (shared suffix "happy")
+ *   - Tense error:  "jumped" → "jumping"  (shared prefix "jump")
+ *
+ * No cross-validation gate — morphological classification is about the pattern
+ * of the substitution, not ASR reliability. If both engines confirm the student
+ * said "runned" instead of "running", that's a MORE reliable morphological error,
+ * not a reason to skip it.
+ *
+ * Uses positional lookup into transcriptWords (indexed by hypIndex) for metadata.
+ *
+ * Returns array of { ref, hyp, sharedPart, matchType, crossValidation }.
  */
-export function detectMorphologicalErrors(alignment, sttLookup) {
+export function detectMorphologicalErrors(alignment, transcriptWords) {
   const results = [];
   let hypIndex = 0;
 
@@ -235,7 +249,7 @@ export function detectMorphologicalErrors(alignment, sttLookup) {
     const type = op.type || op.operation;
 
     if (type === 'omission' || type === 'deletion') {
-      // no hyp word
+      // no hyp word — don't advance hypIndex
       continue;
     }
 
@@ -244,41 +258,42 @@ export function detectMorphologicalErrors(alignment, sttLookup) {
       const hyp = (op.hyp || op.hypothesis || '').toLowerCase();
 
       if (ref !== hyp) {
-        // Compute shared prefix length
-        let shared = 0;
         const minLen = Math.min(ref.length, hyp.length);
-        while (shared < minLen && ref[shared] === hyp[shared]) {
-          shared++;
+
+        // Check shared prefix (catches suffix errors: "running"/"runned")
+        let prefixLen = 0;
+        while (prefixLen < minLen && ref[prefixLen] === hyp[prefixLen]) {
+          prefixLen++;
         }
 
-        if (shared >= 3) {
-          // Look up cross-validation status from sttLookup
-          let confidence = 1;
-          let xval = 'unavailable';
-          if (sttLookup instanceof Map) {
-            const queue = sttLookup.get(hyp);
-            if (queue && queue.length > 0) {
-              confidence = queue[0].confidence ?? 1;
-              xval = queue[0].crossValidation || 'unavailable';
-            }
-          }
+        // Check shared suffix (catches prefix errors: "unhappy"/"happy")
+        let suffixLen = 0;
+        while (suffixLen < minLen && ref[ref.length - 1 - suffixLen] === hyp[hyp.length - 1 - suffixLen]) {
+          suffixLen++;
+        }
 
-          // If both engines agree on the spoken word, it's a reliable substitution
-          // (not a morphological uncertainty). Only flag when uncertain.
-          if (xval === 'confirmed') continue;
+        // Use whichever is longer
+        const sharedLen = Math.max(prefixLen, suffixLen);
+
+        if (sharedLen >= 3) {
+          const sttWord = transcriptWords?.[hypIndex];
+          const matchType = prefixLen >= suffixLen ? 'prefix' : 'suffix';
+          const sharedPart = matchType === 'prefix'
+            ? ref.slice(0, prefixLen)
+            : ref.slice(ref.length - suffixLen);
 
           results.push({
             ref: op.ref || op.reference,
             hyp: op.hyp || op.hypothesis,
-            sharedPrefix: ref.slice(0, shared),
-            confidence: Math.round(confidence * 1000) / 1000,
-            crossValidation: xval
+            sharedPart,
+            matchType,
+            crossValidation: sttWord?.crossValidation || 'unavailable'
           });
         }
       }
     }
 
-    // Advance hypIndex for non-omission types
+    // Advance hypIndex for non-omission types (correct, substitution, insertion)
     hypIndex++;
   }
 
@@ -426,12 +441,12 @@ export function detectStruggleWords(transcriptWords, referenceText, alignment) {
 /**
  * Run all diagnostics and return unified result object.
  */
-export function runDiagnostics(transcriptWords, alignment, referenceText, sttLookup) {
+export function runDiagnostics(transcriptWords, alignment, referenceText) {
   return {
     onsetDelays: detectOnsetDelays(transcriptWords, referenceText, alignment),
     longPauses: detectLongPauses(transcriptWords),
     selfCorrections: detectSelfCorrections(transcriptWords, alignment),
-    morphologicalErrors: detectMorphologicalErrors(alignment, sttLookup),
+    morphologicalErrors: detectMorphologicalErrors(alignment, transcriptWords),
     prosodyProxy: computeProsodyProxy(transcriptWords, referenceText, alignment),
     struggleWords: detectStruggleWords(transcriptWords, referenceText, alignment)
   };
