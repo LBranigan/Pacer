@@ -28,7 +28,7 @@ Requirements for Kitchen Sink Ensemble milestone. Each maps to roadmap phases.
 ### Cross-Vendor Validation
 
 - [ ] **XVAL-01**: Deepgram Nova-3 called in parallel for cross-validation
-- [ ] **XVAL-02**: Reverb ↔ Nova-3 disagreement flags words as uncertain
+- [ ] **XVAL-02**: Reverb <-> Nova-3 disagreement flags words as uncertain
 - [ ] **XVAL-03**: Graceful fallback to Deepgram-only when Reverb service unavailable
 
 ### Browser Integration
@@ -78,38 +78,45 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| BACK-01 | TBD | Pending |
-| BACK-02 | TBD | Pending |
-| BACK-03 | TBD | Pending |
-| BACK-04 | TBD | Pending |
-| BACK-05 | TBD | Pending |
-| DISF-01 | TBD | Pending |
-| DISF-02 | TBD | Pending |
-| DISF-03 | TBD | Pending |
-| DISF-04 | TBD | Pending |
-| DISF-05 | TBD | Pending |
-| DISF-06 | TBD | Pending |
-| DISF-07 | TBD | Pending |
-| XVAL-01 | TBD | Pending |
-| XVAL-02 | TBD | Pending |
-| XVAL-03 | TBD | Pending |
-| INTG-01 | TBD | Pending |
-| INTG-02 | TBD | Pending |
-| INTG-03 | TBD | Pending |
-| INTG-04 | TBD | Pending |
-| INTG-05 | TBD | Pending |
-| INTG-06 | TBD | Pending |
-| UI-01 | TBD | Pending |
-| UI-02 | TBD | Pending |
-| UI-03 | TBD | Pending |
-| UI-04 | TBD | Pending |
-| UI-05 | TBD | Pending |
+| BACK-01 | Phase 20 | Pending |
+| BACK-02 | Phase 20 | Pending |
+| BACK-03 | Phase 20 | Pending |
+| BACK-04 | Phase 20 | Pending |
+| BACK-05 | Phase 20 | Pending |
+| DISF-01 | Phase 21 | Pending |
+| DISF-02 | Phase 21 | Pending |
+| DISF-03 | Phase 21 | Pending |
+| DISF-04 | Phase 21 | Pending |
+| DISF-05 | Phase 21 | Pending |
+| DISF-06 | Phase 21 | Pending |
+| DISF-07 | Phase 21 | Pending |
+| XVAL-01 | Phase 22 | Pending |
+| XVAL-02 | Phase 22 | Pending |
+| XVAL-03 | Phase 22 | Pending |
+| INTG-01 | Phase 23 | Pending |
+| INTG-02 | Phase 22 | Pending |
+| INTG-03 | Phase 21 | Pending |
+| INTG-04 | Phase 21 | Pending |
+| INTG-05 | Phase 23 | Pending |
+| INTG-06 | Phase 23 | Pending |
+| UI-01 | Phase 24 | Pending |
+| UI-02 | Phase 24 | Pending |
+| UI-03 | Phase 24 | Pending |
+| UI-04 | Phase 24 | Pending |
+| UI-05 | Phase 24 | Pending |
 
 **Coverage:**
 - v1.3 requirements: 26 total
-- Mapped to phases: 0
-- Unmapped: 26 (pending roadmap creation)
+- Mapped to phases: 26
+- Unmapped: 0
+
+**Phase breakdown:**
+- Phase 20 (Backend): 5 requirements
+- Phase 21 (Alignment/Disfluency): 9 requirements
+- Phase 22 (Cross-Validation): 4 requirements
+- Phase 23 (Integration): 3 requirements
+- Phase 24 (UI): 5 requirements
 
 ---
 *Requirements defined: 2026-02-05*
-*Last updated: 2026-02-05 after initial definition*
+*Last updated: 2026-02-05 (traceability added)*

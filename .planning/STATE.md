@@ -9,17 +9,40 @@ See: .planning/PROJECT.md (updated 2026-02-05)
 
 ## Current Position
 
-Phase: Not started (defining requirements)
-Plan: —
-Status: Defining requirements for v1.3
-Last activity: 2026-02-05 — v1.3 milestone started
+Phase: 20 (Reverb Backend Service)
+Plan: — (not started)
+Status: Roadmap created, ready for phase planning
+Last activity: 2026-02-05 — v1.3 roadmap created
 
 Progress: [░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░] 0%
 
 Milestones complete: 3 (v1.0, v1.1, v1.2)
-Current milestone: v1.3 Kitchen Sink Ensemble
+Current milestone: v1.3 Kitchen Sink Ensemble (5 phases, 26 requirements)
+
+## v1.3 Kitchen Sink Ensemble Overview
+
+**Goal:** Replace Google STT ensemble with Reverb ASR for model-level disfluency detection via verbatimicity diff.
+
+**Phases:**
+- Phase 20: Reverb Backend Service (5 requirements) — NOT STARTED
+- Phase 21: Sequence Alignment & Disfluency Detection (9 requirements) — NOT STARTED
+- Phase 22: Cross-Vendor Validation (4 requirements) — NOT STARTED
+- Phase 23: Kitchen Sink Integration (3 requirements) — NOT STARTED
+- Phase 24: Disfluency UI Display (5 requirements) — NOT STARTED
+
+**Parallelization opportunity:** Phases 20, 21, 22 have no dependencies on each other and can be developed in parallel.
+
+**Key deliverables:**
+- `services/reverb/` - FastAPI backend with Docker + GPU
+- `js/sequence-aligner.js` - Needleman-Wunsch algorithm
+- `js/disfluency-tagger.js` - Disfluency classification
+- `js/deepgram-api.js` - Nova-3 cross-validation client
+- `js/reverb-api.js` - Reverb HTTP client
+- `js/kitchen-sink-merger.js` - Unified ensemble merger
 
 ## v1.2 VAD Gap Analysis Summary
+
+**Status:** SHIPPED 2026-02-04
 
 **Goal:** Teachers can distinguish true silence from speech-containing gaps in pause/hesitation indicators.
 
@@ -60,6 +83,19 @@ See PROJECT.md Key Decisions table for full history.
 - v1.1: 7 key decisions (all validated)
 - v1.2: 6 key decisions (all validated)
 
+### v1.3 Key Research Findings
+
+From `.planning/research/`:
+
+1. **Reverb verbatimicity works:** Same model/encoder/CTC clock for v=1.0 vs v=0.0 means 10-20ms drift (not 60ms+ that caused disfluency-detector.js failure)
+2. **Deepgram Nova-3 for cross-validation:** Pure Transformer architecture (different from Reverb's CTC/Attention) provides uncorrelated errors
+3. **Needleman-Wunsch absorbs drift:** Global alignment with asymmetric gap penalties (insert=-1, delete=-2) works where local matching failed
+4. **Critical pitfalls addressed:**
+   - Docker GPU silent failure -> explicit startup check
+   - VRAM exhaustion -> chunking at 60-90s
+   - CORS blocking -> browser-based smoke test
+   - Gap penalty misconfiguration -> asymmetric penalties + test cases
+
 ### Blockers/Concerns
 
 None.
@@ -67,5 +103,13 @@ None.
 ## Session Continuity
 
 Last session: 2026-02-05
-Stopped at: Defining v1.3 requirements
-Resume with: Continue requirements definition, then roadmap creation
+Stopped at: Roadmap created for v1.3
+Resume with: `/gsd:plan-phase 20` (or parallel: 20, 21, 22)
+
+### Next Steps
+
+1. Plan Phase 20 (Reverb Backend Service) - foundation for browser integration
+2. Plan Phase 21 (Sequence Alignment) - can parallel with Phase 20, pure algorithm
+3. Plan Phase 22 (Cross-Vendor Validation) - can parallel with Phase 20/21
+4. Execute Phase 23 (Integration) after 20-22 complete
+5. Execute Phase 24 (UI) after 23 complete
