@@ -139,6 +139,10 @@ Replace Google STT ensemble with Reverb ASR for model-level disfluency detection
 
 **Dependencies:** Phase 20 (Reverb backend), Phase 21 (alignment/tagging), Phase 22 (Deepgram API)
 
+**Plans:** 2 plans
+- [ ] 23-01-PLAN.md — Reverb API client and Kitchen Sink orchestrator
+- [ ] 23-02-PLAN.md — app.js integration and human verification
+
 **Requirements:**
 - INTG-01: `reverb-api.js` client calls local Reverb service
 - INTG-05: `kitchen-sink-merger.js` combines Reverb + Deepgram results
@@ -182,10 +186,10 @@ Replace Google STT ensemble with Reverb ASR for model-level disfluency detection
 | v1.0 MVP | 1-9 | 21 | Complete | 2026-02-03 |
 | v1.1 ASR Ensemble | 10-17 | 22 | Complete | 2026-02-04 |
 | v1.2 VAD Gap Analysis | 18-19 | 3 | Complete | 2026-02-04 |
-| v1.3 Kitchen Sink Ensemble | 20-24 | 5+ | **Active** | — |
+| v1.3 Kitchen Sink Ensemble | 20-24 | 7 | **Active** | — |
 
 **Total shipped:** 19 phases, 46 plans
-**Active:** 5 phases (v1.3), Phases 20-22 planned (5 plans)
+**Active:** 5 phases (v1.3), Phases 20-23 planned (7 plans)
 
 ## Dependency Graph
 
@@ -209,3 +213,4 @@ Phases 20, 21, 22 can execute in parallel. Phase 23 depends on all three. Phase 
 *Phase 21 planned: 2026-02-05*
 *Phase 22 planned: 2026-02-05*
 *Phase 22 complete: 2026-02-05*
+*Phase 23 planned: 2026-02-05*
