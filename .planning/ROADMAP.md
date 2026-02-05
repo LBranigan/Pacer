@@ -110,6 +110,10 @@ Replace Google STT ensemble with Reverb ASR for model-level disfluency detection
 
 **Dependencies:** None (API integration, can develop in parallel with Phases 20-21)
 
+**Plans:** 2 plans
+- [ ] 22-01-PLAN.md — Add /deepgram endpoint to Reverb backend (proxy for CORS)
+- [ ] 22-02-PLAN.md — Browser client (deepgram-api.js) with cross-validation logic
+
 **Requirements:**
 - XVAL-01: Deepgram Nova-3 called in parallel for cross-validation
 - XVAL-02: Reverb <-> Nova-3 disagreement flags words as uncertain
@@ -174,10 +178,10 @@ Replace Google STT ensemble with Reverb ASR for model-level disfluency detection
 | v1.0 MVP | 1-9 | 21 | Complete | 2026-02-03 |
 | v1.1 ASR Ensemble | 10-17 | 22 | Complete | 2026-02-04 |
 | v1.2 VAD Gap Analysis | 18-19 | 3 | Complete | 2026-02-04 |
-| v1.3 Kitchen Sink Ensemble | 20-24 | 3+ | **Active** | — |
+| v1.3 Kitchen Sink Ensemble | 20-24 | 5+ | **Active** | — |
 
 **Total shipped:** 19 phases, 46 plans
-**Active:** 5 phases (v1.3), Phases 20-21 planned (3 plans)
+**Active:** 5 phases (v1.3), Phases 20-22 planned (5 plans)
 
 ## Dependency Graph
 
@@ -199,3 +203,4 @@ Phases 20, 21, 22 can execute in parallel. Phase 23 depends on all three. Phase 
 *v1.3 roadmap created: 2026-02-05*
 *Phase 20 planned: 2026-02-05*
 *Phase 21 planned: 2026-02-05*
+*Phase 22 planned: 2026-02-05*
