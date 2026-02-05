@@ -21,6 +21,7 @@ import { detectDisfluencies } from './disfluency-detector.js';
 import { applySafetyChecks } from './safety-checker.js';
 import { checkTerminalLeniency } from './phonetic-utils.js';
 import { padAudioWithSilence } from './audio-padding.js';
+import { enrichDiagnosticsWithVAD, computeVADGapSummary } from './vad-gap-analyzer.js';
 
 // Code version for cache verification
 const CODE_VERSION = 'v34-2026-02-03';
@@ -254,8 +255,11 @@ async function runAnalysis() {
       return;
     }
 
-    // Merge results using temporal word association
-    const mergedWords = mergeEnsembleResults(ensembleResult);
+    // Get reference text for Reference Veto logic (when models disagree, prefer word matching reference)
+    const referenceText = document.getElementById('transcript').value.trim();
+
+    // Merge results using temporal word association with Reference Veto
+    const mergedWords = mergeEnsembleResults(ensembleResult, referenceText);
     const ensembleStats = computeEnsembleStats(mergedWords);
 
     // Debug: verify _debug is created at merge time
@@ -271,6 +275,7 @@ async function runAnalysis() {
       both: ensembleStats.both,
       latestOnly: ensembleStats.latestOnly,
       defaultOnly: ensembleStats.defaultOnly,
+      referenceVetoCount: ensembleStats.referenceVetoCount,
       agreementRate: ensembleStats.agreementRate
     });
 
@@ -288,8 +293,7 @@ async function runAnalysis() {
         error: vadResult.error
       });
 
-      // Run ghost detection on merged words
-      const referenceText = document.getElementById('transcript').value.trim();
+      // Run ghost detection on merged words (referenceText already fetched above)
       ghostResult = flagGhostWords(mergedWords, vadResult, referenceText, vadResult.durationMs);
 
       addStage('ghost_detection', {
@@ -310,7 +314,7 @@ async function runAnalysis() {
     // Confidence classification (Phase 13)
     // Pipeline: Classify -> Filter ghosts -> Align
     setStatus('Classifying word confidence...');
-    const referenceText = document.getElementById('transcript').value.trim();
+    // referenceText already fetched above (before ensemble merge)
     const classifiedWords = classifyAllWords(mergedWords, referenceText);
     const classificationStats = computeClassificationStats(classifiedWords);
 
@@ -623,6 +627,25 @@ async function runAnalysis() {
     })) || [],
     selfCorrections: diagnostics.selfCorrections?.length || 0
   });
+
+  // VAD Gap Analysis - enrich diagnostics with acoustic context (Phase 18)
+  if (vadResult.segments && vadResult.segments.length > 0) {
+    enrichDiagnosticsWithVAD(diagnostics, transcriptWords, vadResult.segments);
+
+    // Debug logging (DBG-01)
+    const vadGapSummary = computeVADGapSummary(diagnostics);
+    addStage('vad_gap_analysis', {
+      longPausesAnalyzed: vadGapSummary.longPausesAnalyzed,
+      hesitationsAnalyzed: vadGapSummary.hesitationsAnalyzed,
+      byLabel: {
+        silenceConfirmed: vadGapSummary.silenceConfirmed,
+        mostlySilent: vadGapSummary.mostlySilent,
+        mixedSignal: vadGapSummary.mixedSignal,
+        speechDetected: vadGapSummary.speechDetected,
+        continuousSpeech: vadGapSummary.continuousSpeech
+      }
+    });
+  }
 
   // Reclassify alignment entries that are part of self-corrections
   // (e.g. repeated "ran" should not count as an insertion)
