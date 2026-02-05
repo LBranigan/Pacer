@@ -1,359 +1,708 @@
-# Architecture Research
+# Architecture Research: Kitchen Sink Ensemble Integration
 
-**Domain:** Browser-based Oral Reading Fluency (ORF) assessment
-**Researched:** 2026-02-02
-**Confidence:** HIGH
+**Domain:** Browser-based oral reading fluency assessment with local GPU backend
+**Researched:** 2026-02-05 (Updated from 2026-02-02 original)
+**Confidence:** HIGH (based on existing codebase analysis + implementation plan)
 
-## System Overview
+## Executive Summary
 
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                      Presentation Layer                         │
-│  ┌──────────────┐  ┌──────────────┐  ┌──────────────────────┐  │
-│  │ Teacher View  │  │ Student View │  │ Shared Components    │  │
-│  │ (Dashboard)   │  │ (Playback)   │  │ (PassageInput, etc.) │  │
-│  └──────┬───────┘  └──────┬───────┘  └──────────┬───────────┘  │
-├─────────┴─────────────────┴─────────────────────┴───────────────┤
-│                      Application Layer                          │
-│  ┌───────────┐ ┌───────────┐ ┌──────────┐ ┌────────────────┐   │
-│  │ Assessment │ │ Alignment │ │ Scoring  │ │   Animation    │   │
-│  │ Controller │ │  Engine   │ │  Engine  │ │    Engine      │   │
-│  └─────┬─────┘ └─────┬─────┘ └────┬─────┘ └───────┬────────┘   │
-├────────┴──────────────┴────────────┴───────────────┴────────────┤
-│                      Service Layer                              │
-│  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────────┐    │
-│  │ Audio    │  │ STT      │  │ OCR      │  │ Data         │    │
-│  │ Capture  │  │ Service  │  │ Service  │  │ Store        │    │
-│  └──────────┘  └──────────┘  └──────────┘  └──────────────┘    │
-├─────────────────────────────────────────────────────────────────┤
-│                      External APIs                              │
-│  ┌──────────────────────┐  ┌──────────────────────┐             │
-│  │ Google Cloud STT     │  │ Google Cloud Vision   │             │
-│  └──────────────────────┘  └──────────────────────┘             │
-└─────────────────────────────────────────────────────────────────┘
-```
+This document describes the architecture for integrating the Kitchen Sink Ensemble (Reverb v1.0 + v0.0 + Google default) into the existing browser-based ReadingQuest application. The key change is adding a **local Reverb backend** (Python/FastAPI/Docker/GPU) while preserving the existing browser-only Google STT path as fallback.
 
-### Component Responsibilities
+**Key architectural decisions:**
+1. **Service Adapter Pattern** - Normalize Reverb and Google responses to common interface
+2. **Graceful Degradation** - Fall back to Google-only when Reverb offline
+3. **New Algorithm for Disfluency** - Needleman-Wunsch alignment of v1.0 vs v0.0 (not post-hoc comparison)
+4. **Cross-Vendor Validation** - Reverb vs Google disagreement flags hallucinations
 
-| Component | Responsibility | Typical Implementation |
-|-----------|----------------|------------------------|
-| Audio Capture | Record mic audio, handle file uploads, produce blobs | MediaRecorder API wrapper, returns audio blob + encoding |
-| STT Service | Send audio to Google STT, return structured word-level results | Fetch wrapper around speech:recognize and longrunningrecognize |
-| OCR Service | Send camera photo to Google Vision, return extracted text | Fetch wrapper around Vision API annotateImage |
-| Alignment Engine | Diff STT transcript against reference text, classify each word | LCS/edit-distance algorithm producing word-level alignment array |
-| Scoring Engine | Compute WCPM, accuracy, error counts, pause detection from alignment | Pure function: alignment + timestamps in, metrics out |
-| Animation Engine | Animate character hopping across words synced to timestamps | requestAnimationFrame loop driven by word timestamp array |
-| Assessment Controller | Orchestrate full assessment flow: capture -> STT -> align -> score -> display | Glue module connecting services to UI |
-| Data Store | Persist assessments, student progress, settings to localStorage | Thin wrapper over localStorage with JSON serialization |
-| Teacher View | Dashboard: assessment list, metrics, error breakdown, progress charts | DOM rendering, reads from Data Store |
-| Student View | Animated playback with character and word highlighting | Canvas or DOM animation, reads assessment data |
+---
 
-## Recommended Project Structure
+## Current Architecture (v1.2)
+
+### System Overview
 
 ```
-src/
-├── index.html              # Shell HTML, entry point
-├── styles/
-│   ├── main.css            # Shared styles
-│   ├── teacher.css         # Teacher dashboard styles
-│   └── student.css         # Student playback styles
-├── services/
-│   ├── audio-capture.js    # Mic recording + file upload
-│   ├── stt-service.js      # Google STT API (sync + async)
-│   ├── ocr-service.js      # Google Vision API
-│   └── data-store.js       # localStorage persistence
-├── engines/
-│   ├── alignment.js        # Reference-to-transcript diff (LCS)
-│   ├── scoring.js          # WCPM, accuracy, error classification
-│   └── animation.js        # Word-hop animation controller
-├── views/
-│   ├── router.js           # Simple hash-based view switching
-│   ├── teacher/
-│   │   ├── dashboard.js    # Assessment list + summary
-│   │   ├── assessment.js   # Single assessment detail view
-│   │   └── progress.js     # Student progress over time
-│   └── student/
-│       └── playback.js     # Animated reading playback
-├── components/
-│   ├── passage-input.js    # OCR photo + manual text entry
-│   ├── audio-controls.js   # Record/upload UI
-│   └── word-display.js     # Color-coded word rendering
-└── app.js                  # Bootstrap, wire components together
+                         CURRENT ARCHITECTURE (v1.2)
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                           BROWSER CLIENT                                     │
+│                                                                             │
+│  ┌─────────────┐  ┌──────────────┐  ┌────────────────┐  ┌───────────────┐  │
+│  │  recorder   │  │  file-       │  │  audio-        │  │  vad-         │  │
+│  │  .js        │  │  handler.js  │  │  padding.js    │  │  processor.js │  │
+│  │ (WebRTC)    │  │ (WAV upload) │  │ (500ms pad)    │  │ (Silero ONNX) │  │
+│  └─────────┬───┘  └──────┬───────┘  └───────┬────────┘  └───────┬───────┘  │
+│            │             │                   │                   │          │
+│            └─────────────┴────────┬──────────┴───────────────────┘          │
+│                                   │                                         │
+│                                   ▼                                         │
+│  ┌────────────────────────────────────────────────────────────────────────┐ │
+│  │                          app.js (Orchestrator)                         │ │
+│  │   - Controls pipeline flow                                             │ │
+│  │   - Manages app state (audioBlob, encoding, studentId)                 │ │
+│  │   - Coordinates STT -> Merge -> Classify -> Filter -> Disfluency -> Align │
+│  └─────────────────────────────────┬──────────────────────────────────────┘ │
+│                                    │                                        │
+│       ┌────────────────────────────┼────────────────────────────────┐       │
+│       │                            │                                │       │
+│       ▼                            ▼                                ▼       │
+│  ┌─────────────┐          ┌─────────────────┐          ┌─────────────────┐  │
+│  │  stt-api.js │          │ ensemble-       │          │ alignment.js    │  │
+│  │             │          │ merger.js       │          │ (diff-match-    │  │
+│  │ - sendToSTT │          │                 │          │  patch)         │  │
+│  │ - ensemble  │          │ - Trust hier.   │          │                 │  │
+│  │   STT       │          │ - Ref Veto      │          │ - alignWords()  │  │
+│  │ - async STT │          │ - Deduplication │          │ - mergeCompound │  │
+│  └──────┬──────┘          └────────┬────────┘          └────────┬────────┘  │
+│         │                          │                            │           │
+└─────────┼──────────────────────────┼────────────────────────────┼───────────┘
+          │                          │                            │
+          ▼                          │                            │
+┌─────────────────────┐              │                            │
+│   Google Cloud      │              │                            │
+│   Speech-to-Text    │──────────────┘                            │
+│                     │                                           │
+│   - latest_long     │                                           │
+│   - default         │                                           │
+│   REST API (browser)│                                           │
+└─────────────────────┘                                           │
+                                                                  │
+                              ┌────────────────────────────────────┘
+                              ▼
+                     ┌─────────────────────┐
+                     │   Reference Text    │
+                     │   (textarea/OCR)    │
+                     └─────────────────────┘
 ```
 
-### Structure Rationale
+### Component Responsibilities (Current)
 
-- **services/:** External API wrappers isolated from business logic. Each service has a single external dependency. Testable by mocking fetch.
-- **engines/:** Pure computation modules with no DOM or API dependencies. Alignment and scoring are the clinical core -- keeping them pure makes them testable and reusable.
-- **views/:** UI rendering grouped by user role (teacher vs student). Each view reads from Data Store and calls engines as needed.
-- **components/:** Reusable UI pieces shared across views.
-- **No build tool required initially.** Use ES modules (`<script type="module">`) natively supported in all modern browsers. Add a bundler only when file count or performance demands it.
+| Component | Responsibility | File |
+|-----------|----------------|------|
+| **recorder.js** | WebRTC audio capture, WAV encoding | `js/recorder.js` |
+| **file-handler.js** | WAV file upload handling | `js/file-handler.js` |
+| **audio-padding.js** | Add 500ms silence to help ASR resolve final word | `js/audio-padding.js` |
+| **vad-processor.js** | Silero VAD via ONNX for ghost detection | `js/vad-processor.js` |
+| **stt-api.js** | Google Cloud STT REST client (latest_long + default ensemble) | `js/stt-api.js` |
+| **ensemble-merger.js** | Two-pass word association, Reference Veto, deduplication | `js/ensemble-merger.js` |
+| **ghost-detector.js** | Flag latest_only words with no VAD speech overlap | `js/ghost-detector.js` |
+| **confidence-classifier.js** | Classify word confidence levels, filter ghosts | `js/confidence-classifier.js` |
+| **disfluency-detector.js** | Tag morphological breaks (simplified from prior attempts) | `js/disfluency-detector.js` |
+| **alignment.js** | Needleman-Wunsch alignment via diff-match-patch | `js/alignment.js` |
+| **diagnostics.js** | Hesitation detection, long pauses, prosody proxy | `js/diagnostics.js` |
+| **app.js** | Pipeline orchestration, state management | `js/app.js` |
 
-## Architectural Patterns
-
-### Pattern 1: Pipeline Architecture
-
-**What:** The assessment flow is a linear pipeline: Audio -> STT -> Alignment -> Scoring -> Display. Each stage takes the output of the previous stage as input.
-**When to use:** This is the core assessment flow. Every assessment runs through this exact pipeline.
-**Trade-offs:** Simple to reason about and debug. Rigid -- hard to skip stages or reorder. Good fit here because the stages genuinely depend on each other.
-
-```javascript
-// assessment-controller.js
-export async function runAssessment(audioBlob, encoding, referenceText, apiKey) {
-  // Stage 1: STT
-  const sttResult = await sttService.recognize(audioBlob, encoding, apiKey, referenceText);
-
-  // Stage 2: Align
-  const alignment = alignmentEngine.align(referenceText, sttResult.words);
-
-  // Stage 3: Score
-  const metrics = scoringEngine.compute(alignment, sttResult.duration);
-
-  // Stage 4: Persist
-  const assessment = { sttResult, alignment, metrics, timestamp: Date.now() };
-  dataStore.saveAssessment(studentId, assessment);
-
-  return assessment;
-}
-```
-
-### Pattern 2: Event-Driven View Updates
-
-**What:** Views subscribe to Data Store changes rather than being imperatively updated. When an assessment completes, the store emits an event and any visible view re-renders.
-**When to use:** Decouples the pipeline from view rendering. Allows teacher and student views to update independently.
-**Trade-offs:** Slight indirection. Worth it because two distinct views (teacher dashboard, student playback) consume the same data differently.
-
-```javascript
-// data-store.js
-class DataStore {
-  #listeners = [];
-
-  onChange(fn) { this.#listeners.push(fn); }
-
-  saveAssessment(studentId, assessment) {
-    const data = this.#load();
-    data.assessments.push({ studentId, ...assessment });
-    localStorage.setItem('orf_data', JSON.stringify(data));
-    this.#listeners.forEach(fn => fn('assessment-saved', assessment));
-  }
-}
-```
-
-### Pattern 3: Pure Engine Functions
-
-**What:** Alignment and scoring engines are pure functions with no side effects, no DOM access, no API calls. Input data in, results out.
-**When to use:** All computation that transforms data. Alignment, scoring, pause detection, error classification.
-**Trade-offs:** Requires careful interface design (what goes in, what comes out). Pays off enormously in testability -- these are the modules most likely to have bugs and most important to get right.
-
-```javascript
-// alignment.js
-export function align(referenceWords, spokenWords) {
-  // Returns: Array<{ ref: string|null, spoken: string|null, type: 'correct'|'substitution'|'omission'|'insertion' }>
-  // Pure LCS-based diff, no side effects
-}
-
-// scoring.js
-export function compute(alignment, durationSeconds) {
-  // Returns: { wcpm, accuracy, errorCounts: { substitutions, omissions, insertions }, pauses: [...] }
-}
-```
-
-## Data Flow
-
-### Primary Assessment Flow
+### Current Data Flow
 
 ```
-[Teacher provides passage]
+Audio Blob
     │
-    ├── OCR Photo ──→ [OCR Service] ──→ referenceText
-    │                                        │
-    └── Manual Type ─────────────────────────┘
-                                             │
-[Student reads aloud]                        │
-    │                                        │
-    ├── Mic Record ──→ [Audio Capture] ──→ audioBlob
-    │                                        │
-    └── File Upload ─────────────────────────┘
-                                             │
-                                             ▼
-                                    [STT Service]
-                                    Google Cloud STT
-                                             │
-                                             ▼
-                                    sttResult: {
-                                      words: [{ word, confidence,
-                                               startTime, endTime }],
-                                      alternatives: [...]
-                                    }
-                                             │
-                             referenceText ──┤
-                                             ▼
-                                    [Alignment Engine]
-                                             │
-                                             ▼
-                                    alignment: [
-                                      { ref, spoken, type,
-                                        confidence, timing }
-                                    ]
-                                             │
-                                             ▼
-                                    [Scoring Engine]
-                                             │
-                                             ▼
-                                    metrics: {
-                                      wcpm, accuracy,
-                                      errorCounts, pauses
-                                    }
-                                             │
-                            ┌────────────────┤
-                            ▼                ▼
-                    [Data Store]     [View Update Event]
-                    localStorage      │           │
-                                      ▼           ▼
-                              [Teacher View] [Student View]
-                              metrics/errors  animated playback
+    ├──▶ padAudioWithSilence() -> LINEAR16 WAV
+    │
+    ├──▶ sendEnsembleSTT() ──▶ Google Cloud (parallel: latest_long + default)
+    │         │
+    │         ▼
+    │    mergeEnsembleResults(referenceText)
+    │         │
+    │         ├─ Two-pass word association
+    │         ├─ Reference Veto (when models disagree)
+    │         ├─ Phantom filtering (<10ms duration)
+    │         ├─ Deduplication (timestamp drift)
+    │         └─ Morphological prefix absorption
+    │
+    ├──▶ vadProcessor.processAudio() -> VAD segments
+    │         │
+    │         ▼
+    │    flagGhostWords() -> mark vad_ghost_in_reference
+    │
+    └──▶ classifyAllWords() -> trustLevel (high/medium/low/ghost)
+              │
+              ▼
+         filterGhosts() -> remove confidence=0.0 words
+              │
+              ▼
+         detectDisfluencies() -> tag morphological breaks
+              │
+              ▼
+         applySafetyChecks() -> rate anomalies, collapse detection
+              │
+              ▼
+         alignWords(referenceText, processedWords)
+              │
+              ▼
+         runDiagnostics() -> hesitations, long pauses, prosody
+              │
+              ▼
+         computeWCPM(), computeAccuracy()
+              │
+              ▼
+         displayAlignmentResults()
 ```
 
-### Data Store Schema
+---
 
-```javascript
-{
-  settings: {
-    apiKey: string,          // persisted so teacher doesn't re-enter
-    defaultStudentId: string
-  },
-  students: {
-    [studentId]: {
-      name: string,
-      grade: number
-    }
-  },
-  assessments: [
-    {
-      id: string,            // crypto.randomUUID()
-      studentId: string,
-      timestamp: number,
-      passage: string,       // reference text
-      sttResult: { words, alternatives },
-      alignment: [...],
-      metrics: { wcpm, accuracy, errorCounts, pauses },
-      audioBlob: null        // NOT stored (too large for localStorage)
-    }
-  ]
-}
-```
+## Proposed Architecture (v1.3 Kitchen Sink)
 
-### Key Data Flows
-
-1. **OCR Flow:** Camera capture -> base64 encode -> Vision API -> text extraction -> passage input field. Independent of assessment pipeline; runs before student reads.
-2. **Assessment Pipeline:** Audio blob -> STT -> alignment -> scoring -> persistence. Linear, each stage depends on previous.
-3. **Playback Flow:** Load assessment from store -> word array with timestamps -> animation engine plays through words at recorded pace, highlighting and animating character.
-4. **Progress Flow:** Load all assessments for student -> compute trend data (WCPM over time, error pattern changes) -> render charts.
-
-## Build Order (Dependencies)
-
-This is the critical section for roadmap phase structure. Components have natural dependencies:
+### System Overview
 
 ```
-Level 0 (no dependencies):
-  - data-store.js        (standalone localStorage wrapper)
-  - audio-capture.js     (standalone MediaRecorder wrapper)
-
-Level 1 (depends on Level 0):
-  - stt-service.js       (needs audio blob from audio-capture)
-  - ocr-service.js       (standalone API wrapper, but needs data-store for API key)
-
-Level 2 (depends on Level 1):
-  - alignment.js         (needs STT result + reference text)
-
-Level 3 (depends on Level 2):
-  - scoring.js           (needs alignment output)
-
-Level 4 (depends on Level 3):
-  - teacher dashboard    (needs scoring output + data-store)
-  - animation.js         (needs alignment + STT timestamps)
-
-Level 5 (depends on Level 4):
-  - student playback     (needs animation engine + assessment data)
-  - progress tracking    (needs multiple assessments in store)
+                         PROPOSED ARCHITECTURE (v1.3)
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                           BROWSER CLIENT                                     │
+│                                                                             │
+│  ┌─────────────┐  ┌──────────────┐  ┌────────────────┐  ┌───────────────┐  │
+│  │  recorder   │  │  file-       │  │  audio-        │  │  vad-         │  │
+│  │  .js        │  │  handler.js  │  │  padding.js    │  │  processor.js │  │
+│  └─────────┬───┘  └──────┬───────┘  └───────┬────────┘  └───────┬───────┘  │
+│            │             │                   │                   │          │
+│            └─────────────┴────────┬──────────┴───────────────────┘          │
+│                                   │                                         │
+│                                   ▼                                         │
+│  ┌────────────────────────────────────────────────────────────────────────┐ │
+│  │                    kitchen-sink-orchestrator.js [NEW]                  │ │
+│  │   - Coordinates parallel API calls                                     │ │
+│  │   - Handles Reverb availability check                                  │ │
+│  │   - Falls back to Google-only if Reverb offline                        │ │
+│  └─────────────────────────────────┬──────────────────────────────────────┘ │
+│                                    │                                        │
+│       ┌────────────────────────────┼────────────────────────────────────┐   │
+│       │                            │                                    │   │
+│       ▼                            ▼                                    ▼   │
+│  ┌─────────────┐          ┌─────────────────┐          ┌─────────────────┐ │
+│  │ reverb-     │          │ stt-api.js      │          │ sequence-       │ │
+│  │ api.js      │          │ (existing)      │          │ aligner.js      │ │
+│  │ [NEW]       │          │                 │          │ [NEW]           │ │
+│  │             │          │ - sendToSTT     │          │                 │ │
+│  │ - checkHlth │          │   (Google)      │          │ - Needleman-    │ │
+│  │ - transcrib │          │                 │          │   Wunsch        │ │
+│  │   Ensemble  │          │                 │          │ - findDisfluency│ │
+│  │   (v1+v0)   │          │                 │          │   Indices       │ │
+│  └──────┬──────┘          └────────┬────────┘          └────────┬────────┘ │
+│         │                          │                            │          │
+│         │                          │                            ▼          │
+│         │                          │          ┌─────────────────────────┐  │
+│         │                          │          │ disfluency-tagger.js    │  │
+│         │                          │          │ [NEW]                   │  │
+│         │                          │          │                         │  │
+│         │                          │          │ - tagDisfluencies()     │  │
+│         │                          │          │ - classify: filler,     │  │
+│         │                          │          │   repetition, false_    │  │
+│         │                          │          │   start, other          │  │
+│         │                          │          └────────────┬────────────┘  │
+│         │                          │                       │               │
+│         └──────────────────┬───────┴───────────────────────┘               │
+│                            │                                               │
+│                            ▼                                               │
+│  ┌────────────────────────────────────────────────────────────────────────┐│
+│  │                    kitchen-sink-merger.js [NEW]                        ││
+│  │                                                                        ││
+│  │   - Combine Reverb + Google results                                    ││
+│  │   - Cross-vendor validation (disagreement = flag for review)           ││
+│  │   - Trust hierarchy: Reverb text > Reverb timestamps > Google conf     ││
+│  │   - Output: words[] with isDisfluency, disfluencyType, crossValidation ││
+│  └─────────────────────────────────┬──────────────────────────────────────┘│
+│                                    │                                       │
+│                                    ▼                                       │
+│  ┌────────────────────────────────────────────────────────────────────────┐│
+│  │               EXISTING PIPELINE (mostly unchanged)                     ││
+│  │                                                                        ││
+│  │   confidence-classifier.js -> ghost-detector.js -> disfluency-detector.js
+│  │            -> alignment.js -> diagnostics.js -> metrics.js -> ui.js    ││
+│  └────────────────────────────────────────────────────────────────────────┘│
+└─────────────────────────────────────────────────────────────────────────────┘
+          │                          │
+          ▼                          ▼
+┌─────────────────────┐    ┌─────────────────────┐
+│   Reverb Backend    │    │   Google Cloud      │
+│   [NEW]             │    │   Speech-to-Text    │
+│                     │    │   (existing)        │
+│   - FastAPI server  │    │                     │
+│   - Docker + GPU    │    │   - latest_long     │
+│   - /ensemble       │    │   - default         │
+│     endpoint        │    │                     │
+│   - Returns v=1.0   │    │                     │
+│     and v=0.0       │    │                     │
+│                     │    │                     │
+│   localhost:8765    │    │   REST API          │
+└─────────────────────┘    └─────────────────────┘
 ```
 
-**Suggested build order for phases:**
+### New Components
 
-1. **Extract and modularize** -- Pull existing code into modules (audio-capture, stt-service, data-store). No new features, just structure.
-2. **OCR pipeline** -- Add ocr-service.js and passage-input component. Teacher can now photograph a page.
-3. **Alignment engine** -- Core diff algorithm. This is the hardest, most important module. Build it with thorough test cases.
-4. **Scoring engine** -- WCPM, accuracy, error counts. Straightforward once alignment exists.
-5. **Teacher dashboard** -- Display metrics, error breakdown, assessment history. Reads from data-store.
-6. **Animation engine + student playback** -- Most complex UI work, but no dependency on earlier stages being perfect.
-7. **Progress tracking** -- Requires multiple assessments to exist. Build last.
+| Component | Responsibility | Integration Points |
+|-----------|----------------|-------------------|
+| **reverb-api.js** [NEW] | HTTP client for local Reverb service | Calls localhost:8765/ensemble |
+| **sequence-aligner.js** [NEW] | Needleman-Wunsch text alignment (v1.0 vs v0.0) | Pure function, no external deps |
+| **disfluency-tagger.js** [NEW] | Classify disfluencies (filler, repetition, false_start) | Uses sequence-aligner output |
+| **kitchen-sink-merger.js** [NEW] | Combine Reverb + Google, cross-validation | Replaces ensemble-merger.js for new flow |
+| **kitchen-sink-orchestrator.js** [NEW] | Coordinate parallel API calls, fallback logic | Replaces sendEnsembleSTT for new flow |
+| **services/reverb/server.py** [NEW] | FastAPI server wrapping Reverb model | Docker container with GPU |
 
-## Anti-Patterns
+### Existing Components (Modifications)
 
-### Anti-Pattern 1: Storing Audio in localStorage
+| Component | Modification Required |
+|-----------|----------------------|
+| **app.js** | Add feature flag to switch between Google-only and Kitchen Sink modes |
+| **stt-api.js** | None - still used for Google fallback and validation |
+| **ensemble-merger.js** | None - becomes fallback when Reverb unavailable |
+| **disfluency-detector.js** | None - Kitchen Sink uses new tagger, old code remains for fallback |
+| **alignment.js** | None - still used for reference alignment |
+| **diagnostics.js** | None - still used for hesitations, pauses |
 
-**What people do:** Base64-encode audio blobs and stuff them into localStorage alongside assessment data.
-**Why it's wrong:** A 60-second WebM file is ~500KB-1MB. localStorage has a ~5MB limit. Five assessments and you're full. Silently fails or corrupts all stored data.
-**Do this instead:** Store only structured data (alignment, metrics, timestamps) in localStorage. Audio is ephemeral -- used during the assessment pipeline then discarded. If audio replay is needed later, use IndexedDB (which has much higher storage limits) as a separate concern.
-
-### Anti-Pattern 2: Monolithic Assessment Function
-
-**What people do:** One giant function that records audio, calls STT, aligns, scores, and updates the DOM.
-**Why it's wrong:** Untestable, impossible to reuse stages independently, difficult to debug which stage failed.
-**Do this instead:** Pipeline pattern with discrete stages. Each engine is a pure function. The controller orchestrates but doesn't compute.
-
-### Anti-Pattern 3: Synchronous DOM Manipulation During Pipeline
-
-**What people do:** Update the DOM at every pipeline stage (show spinner, show STT result, show alignment, show score) inside the pipeline function.
-**Why it's wrong:** Couples business logic to presentation. Makes it impossible to run the pipeline in tests or reuse it for batch processing.
-**Do this instead:** Pipeline returns a result object. Views subscribe to events or receive the result and render independently. Status updates go through a status emitter, not direct DOM calls.
-
-### Anti-Pattern 4: Hardcoded Thresholds
-
-**What people do:** Scatter magic numbers (0.9 for high confidence, 3s for pause detection, 150 WCPM for grade level) throughout the code.
-**Why it's wrong:** ORF thresholds vary by grade level, student, and research basis. Changing them means hunting through code.
-**Do this instead:** Centralize all thresholds in a config object (or in data-store settings). Reference them by name.
+---
 
 ## Integration Points
 
-### External Services
+### 1. Audio Input (Unchanged)
 
-| Service | Integration Pattern | Notes |
-|---------|---------------------|-------|
-| Google Cloud STT (sync) | POST to speech:recognize, returns inline | Max ~60s audio. Use for typical ORF passages. |
-| Google Cloud STT (async) | POST to longrunningrecognize, poll operations.get | For passages >60s. Need polling logic with backoff. |
-| Google Cloud Vision | POST to images:annotate with TEXT_DETECTION | Returns full text + bounding boxes. Use DOCUMENT_TEXT_DETECTION for better paragraph structure. |
+```
+recorder.js / file-handler.js
+    │
+    ▼
+appState.audioBlob (Blob, WAV or WebM)
+```
 
-### Internal Boundaries
+No changes needed. Kitchen Sink orchestrator receives the same `audioBlob`.
 
-| Boundary | Communication | Notes |
-|----------|---------------|-------|
-| Services -> Engines | Function call (data in, data out) | Services produce structured data, engines consume it. No coupling. |
-| Engines -> Views | Via Data Store events | Engines never touch DOM. Results go to store, store notifies views. |
-| Views -> Services | Via Assessment Controller | Views don't call APIs directly. Controller orchestrates. |
-| Router -> Views | Hash-change event | Simple #teacher / #student routing. Each view mounts/unmounts. |
+### 2. API Abstraction Layer (New)
+
+**Pattern: Service Adapter**
+
+```javascript
+// reverb-api.js
+export async function checkHealth() { ... }
+export async function transcribeEnsemble(audioBlob) {
+  // Returns: { verbatim: {...}, clean: {...} }
+}
+
+// stt-api.js (existing)
+export async function sendToSTT(blob, encoding) { ... }
+export async function sendEnsembleSTT(blob, encoding, sampleRate) { ... }
+```
+
+Both APIs return normalized word structures:
+```typescript
+interface Word {
+  word: string;
+  startTime: string;  // "1.400s"
+  endTime: string;    // "1.600s"
+  confidence: number; // 0.0-1.0
+}
+```
+
+### 3. Disfluency Detection (New Algorithm)
+
+**Previous approach (failed):** Compare words from two Google models, flag differences
+**Problem:** STT loses acoustic signal; timestamp drift caused false positives
+
+**New approach:** Needleman-Wunsch global alignment of Reverb v1.0 vs v0.0
+**Why it works:**
+- Same model, same encoder, same CTC clock
+- v=0.0 explicitly removes disfluencies during decoding
+- Text match provides "gravity" - drift becomes irrelevant
+- Insertions in v1.0 (not in v0.0) = disfluencies
+
+```javascript
+// sequence-aligner.js
+export function alignSequences(cleanWords, verbatimWords) {
+  // Returns: { operations: [...], stats: {...} }
+}
+
+export function findDisfluencyIndices(cleanWords, verbatimWords) {
+  // Returns: Set<number> of verbatim indices that are disfluencies
+}
+```
+
+### 4. Cross-Vendor Validation (New)
+
+**Purpose:** Catch hallucinations that Reverb might introduce
+
+```javascript
+// kitchen-sink-merger.js
+function crossValidate(reverbWord, googleWords) {
+  // Find Google word at same timestamp
+  // Agreement -> high confidence
+  // Disagreement -> flag for review, apply Reference Veto logic
+}
+```
+
+### 5. Fallback Chain
+
+```
+┌───────────────────────────────────────────────────────────────┐
+│                      Availability Check                       │
+└───────────────────────────────────────────────────────────────┘
+                              │
+        ┌─────────────────────┴─────────────────────┐
+        │                                           │
+        ▼                                           ▼
+   Reverb Online                              Reverb Offline
+        │                                           │
+        ▼                                           ▼
+  Kitchen Sink Mode                         Google-Only Mode
+  (Reverb + Google)                         (existing pipeline)
+        │                                           │
+        ├──▶ Reverb ensemble (v1.0 + v0.0)         │
+        ├──▶ Google STT (parallel)                 │
+        ├──▶ N-W disfluency tagging                │
+        ├──▶ Cross-validation                      │
+        └──▶ Merge to unified format ──────────────┴──▶ Continue pipeline
+```
+
+---
+
+## Data Flow (Proposed v1.3)
+
+```
+Audio Blob
+    │
+    ├──▶ checkReverbHealth()
+    │         │
+    │    ┌────┴────┐
+    │    │         │
+    │    ▼         ▼
+    │  Online   Offline -> Fall back to Google-only (existing)
+    │    │
+    │    ▼
+    ├──▶ PARALLEL CALLS:
+    │    ├─▶ transcribeEnsemble(audioBlob) -> Reverb (localhost:8765)
+    │    │       └─▶ { verbatim: words[], clean: words[] }
+    │    │
+    │    └─▶ sendToSTT(audioBlob) -> Google Cloud
+    │            └─▶ { results: [...] }
+    │
+    ├──▶ alignSequences(clean, verbatim)
+    │         │
+    │         ▼
+    │    findDisfluencyIndices() -> Set<index>
+    │
+    ├──▶ tagDisfluencies(verbatim, clean)
+    │         │
+    │         ▼
+    │    words[] with isDisfluency, disfluencyType
+    │
+    ├──▶ crossValidate(reverb, google)
+    │         │
+    │         ▼
+    │    words[] with crossValidation status
+    │
+    └──▶ EXISTING PIPELINE:
+         │
+         ├─▶ classifyAllWords() -> trustLevel
+         ├─▶ filterGhosts() -> remove ghosts
+         ├─▶ alignWords(reference, words)
+         ├─▶ runDiagnostics() -> hesitations, pauses
+         ├─▶ computeMetrics()
+         └─▶ displayResults()
+```
+
+---
+
+## File Structure
+
+### New Files
+
+```
+js/
+├── reverb-api.js           # NEW: HTTP client for Reverb service
+├── sequence-aligner.js     # NEW: Needleman-Wunsch for v1.0 vs v0.0
+├── disfluency-tagger.js    # NEW: Classify disfluencies from alignment
+├── kitchen-sink-merger.js  # NEW: Combine Reverb + Google results
+├── kitchen-sink-orchestrator.js  # NEW: Coordinate parallel API calls
+│
+├── stt-api.js              # EXISTING: Google STT client (unchanged)
+├── ensemble-merger.js      # EXISTING: Google ensemble merger (fallback)
+├── alignment.js            # EXISTING: Reference text alignment (unchanged)
+├── diagnostics.js          # EXISTING: Hesitations, pauses (unchanged)
+├── app.js                  # MODIFIED: Feature flag for Kitchen Sink mode
+└── ...
+
+services/
+└── reverb/
+    ├── server.py           # NEW: FastAPI server
+    ├── Dockerfile          # NEW: Container config
+    ├── docker-compose.yml  # NEW: Service orchestration
+    └── requirements.txt    # NEW: Python dependencies
+```
+
+### Existing Files (24 JS modules)
+
+```
+js/
+├── alignment.js            # Reference-to-transcript diff (unchanged)
+├── app.js                  # Main orchestrator (modified: add mode switch)
+├── audio-padding.js        # Silence padding (unchanged)
+├── audio-playback.js       # Audio controls (unchanged)
+├── audio-store.js          # IndexedDB audio storage (unchanged)
+├── benchmarks.js           # Grade-level benchmarks (unchanged)
+├── celeration-chart.js     # Progress charts (unchanged)
+├── confidence-classifier.js # Trust levels (unchanged)
+├── confidence-config.js    # Threshold config (unchanged)
+├── dashboard.js            # Teacher dashboard (unchanged)
+├── debug-logger.js         # Debug log utility (unchanged)
+├── diagnostics.js          # Hesitations, pauses (unchanged)
+├── disfluency-config.js    # Disfluency thresholds (unchanged)
+├── disfluency-detector.js  # Existing detector (fallback)
+├── effect-engine.js        # Visual effects (unchanged)
+├── ensemble-merger.js      # Google ensemble (fallback)
+├── file-handler.js         # File upload (unchanged)
+├── gamification.js         # Achievement system (unchanged)
+├── ghost-detector.js       # VAD ghost flagging (unchanged)
+├── metrics.js              # WCPM calculation (unchanged)
+├── miscue-registry.js      # Miscue type registry (unchanged)
+├── nl-api.js               # Natural Language API (unchanged)
+├── ocr-api.js              # Vision OCR (unchanged)
+├── passage-trimmer.js      # OCR passage trim (unchanged)
+├── phonetic-utils.js       # Phonetic matching (unchanged)
+├── recorder.js             # Audio recording (unchanged)
+├── safety-checker.js       # Rate anomalies (unchanged)
+├── safety-config.js        # Safety thresholds (unchanged)
+├── sprite-animator.js      # Character animation (unchanged)
+├── storage.js              # localStorage wrapper (unchanged)
+├── student-playback.js     # Playback UI (unchanged)
+├── stt-api.js              # Google STT client (unchanged)
+├── text-normalize.js       # Text normalization (unchanged)
+├── ui.js                   # DOM rendering (unchanged)
+├── vad-gap-analyzer.js     # VAD gap analysis (unchanged)
+├── vad-processor.js        # Silero VAD (unchanged)
+└── word-equivalences.js    # Synonym mapping (unchanged)
+```
+
+---
+
+## Architectural Patterns
+
+### Pattern 1: Service Adapter
+
+**What:** Abstract external API differences behind consistent interface
+**When:** Multiple backends with different response formats
+
+```javascript
+// reverb-api.js
+function normalizeWord(w) {
+  return {
+    word: w.word,
+    startTime: `${w.start_time}s`,
+    endTime: `${w.end_time}s`,
+    confidence: w.confidence
+  };
+}
+
+// stt-api.js (existing pattern)
+// Already returns normalized format with startTime: "1.400s"
+```
+
+### Pattern 2: Graceful Degradation
+
+**What:** Fallback to reduced functionality when service unavailable
+**When:** Optional backend service (Reverb) may be offline
+
+```javascript
+// kitchen-sink-orchestrator.js
+export async function runKitchenSinkEnsemble(audioBlob, encoding) {
+  const reverbUp = await checkHealth();
+
+  if (!reverbUp) {
+    console.log('[Kitchen Sink] Reverb offline, using Google-only mode');
+    return runGoogleOnlyEnsemble(audioBlob, encoding);  // Existing path
+  }
+
+  // Full Kitchen Sink path
+  ...
+}
+```
+
+### Pattern 3: Parallel Execution with Independent Failure
+
+**What:** Run multiple async operations in parallel, handle failures independently
+**When:** Multiple API calls that don't depend on each other
+
+```javascript
+const [reverbResult, googleResult] = await Promise.allSettled([
+  transcribeEnsemble(audioBlob),
+  sendToSTT(audioBlob, encoding)
+]);
+
+// Handle each result independently
+if (reverbResult.status === 'rejected') {
+  errors.push(`Reverb: ${reverbResult.reason}`);
+}
+```
+
+### Pattern 4: Pure Engine Functions (Existing)
+
+**What:** Alignment and scoring engines are pure functions with no side effects
+**When:** All computation that transforms data
+
+```javascript
+// sequence-aligner.js (NEW - follows existing pattern)
+export function alignSequences(cleanWords, verbatimWords) {
+  // Pure function: arrays in, alignment out
+  // No DOM, no API calls, no side effects
+}
+```
+
+---
+
+## Anti-Patterns to Avoid
+
+### Anti-Pattern 1: Synchronous Service Calls
+
+**What people do:** Await Reverb, then await Google sequentially
+**Why it's wrong:** Doubles latency unnecessarily
+**Do this instead:** `Promise.allSettled([reverb, google])`
+
+### Anti-Pattern 2: Tight Coupling to Backend Response Format
+
+**What people do:** Access `response.verbatim.words[0].start_time` directly throughout codebase
+**Why it's wrong:** Backend format change requires changes everywhere
+**Do this instead:** Normalize at API boundary (reverb-api.js), use consistent internal format
+
+### Anti-Pattern 3: Feature Flag Sprawl
+
+**What people do:** Add `if (kitchenSinkEnabled)` checks throughout app.js
+**Why it's wrong:** Makes code unreadable, increases maintenance burden
+**Do this instead:** Create kitchen-sink-orchestrator.js that encapsulates the mode decision
+
+### Anti-Pattern 4: Assuming Backend Always Available
+
+**What people do:** Call Reverb without checking health first
+**Why it's wrong:** User sees cryptic error on ECONNREFUSED
+**Do this instead:** Health check with fallback message: "Reverb offline, using Google-only"
+
+### Anti-Pattern 5: Storing Audio in localStorage (Existing Warning)
+
+**What people do:** Base64-encode audio blobs in localStorage
+**Why it's wrong:** localStorage has ~5MB limit; audio fills it quickly
+**Do this instead:** Already solved - using IndexedDB via audio-store.js
+
+---
+
+## Build Order Recommendation
+
+### Phase 1: Backend Service (Foundation)
+
+**Why first:** Can't develop JS integration without working backend
+**Deliverables:**
+1. `services/reverb/server.py` - FastAPI server
+2. `services/reverb/Dockerfile` - Container
+3. `services/reverb/docker-compose.yml` - GPU support
+4. Health check endpoint working
+
+**Verification:** `curl localhost:8765/health` returns `{"status": "ok"}`
+
+**Dependencies:** None (standalone)
+
+### Phase 2: Browser API Client
+
+**Why second:** Needs backend to test against
+**Deliverables:**
+1. `js/reverb-api.js` - HTTP client with normalized response
+2. Health check integration
+3. Error handling
+
+**Verification:** Browser console shows Reverb responses
+
+**Dependencies:** Phase 1 (backend running)
+
+### Phase 3: Sequence Aligner
+
+**Why third:** Pure function, can test independently
+**Deliverables:**
+1. `js/sequence-aligner.js` - Needleman-Wunsch implementation
+2. Unit tests for alignment edge cases
+
+**Verification:** Test cases from implementation plan pass
+
+**Dependencies:** None (pure function)
+
+### Phase 4: Disfluency Tagger
+
+**Why fourth:** Depends on sequence aligner
+**Deliverables:**
+1. `js/disfluency-tagger.js` - Classify disfluencies
+2. Integration with sequence aligner
+
+**Verification:** Fillers, repetitions, false starts correctly tagged
+
+**Dependencies:** Phase 3 (sequence-aligner.js)
+
+### Phase 5: Kitchen Sink Merger
+
+**Why fifth:** Needs all pieces above
+**Deliverables:**
+1. `js/kitchen-sink-merger.js` - Combine Reverb + Google
+2. Cross-validation logic
+3. Trust hierarchy implementation
+
+**Verification:** Merged output has expected properties
+
+**Dependencies:** Phases 2, 3, 4
+
+### Phase 6: Orchestrator + Integration
+
+**Why last:** Ties everything together
+**Deliverables:**
+1. `js/kitchen-sink-orchestrator.js` - Coordinate flow
+2. `app.js` modifications - Feature flag
+3. Fallback logic
+4. UI updates (disfluency display)
+
+**Verification:** Full end-to-end test with real audio
+
+**Dependencies:** All previous phases
+
+---
+
+## Trust Hierarchy (v1.3)
+
+| Property | v1.2 Source | v1.3 Source | Rationale |
+|----------|-------------|-------------|-----------|
+| **Word text** | latest_long (Google) | Reverb v=1.0 | 200k hours training, Conformer architecture |
+| **Timestamps** | default (Google) | Reverb v=1.0 | Same model for consistency |
+| **Confidence** | default (Google) | Defaults (0.9/0.7) | Reverb CTM has 0.00 values |
+| **Disfluencies** | (none reliable) | N-W diff(v1.0, v0.0) | Model-level decision, not post-hoc |
+| **Hallucination check** | VAD + ghost detector | Reverb vs Google disagreement | Cross-vendor = uncorrelated errors |
+
+---
 
 ## Scaling Considerations
 
 | Scale | Architecture Adjustments |
 |-------|--------------------------|
-| 1 teacher, few students | Current design. localStorage is fine. Single HTML file origin. |
-| Multiple teachers/classrooms | localStorage is per-browser. No data sharing. Add export/import JSON for portability. |
-| School-wide deployment | Outgrows localStorage. Need a backend with database. This is explicitly out of scope for now but the modular architecture makes it a clean migration: swap data-store.js from localStorage to fetch-based API client. |
+| Single user (current) | Docker container, single GPU, synchronous requests |
+| 10 concurrent users | GPU lock prevents OOM; queue requests |
+| 100+ users | Out of scope - would need cloud deployment |
 
-### Scaling Priorities
+**First bottleneck:** GPU memory (8GB VRAM limits concurrent requests)
+**Mitigation:** `gpu_lock = asyncio.Lock()` in server.py
 
-1. **First bottleneck: localStorage 5MB limit.** At roughly 2-5KB per assessment, that is ~1000-2500 assessments before hitting the wall. Mitigation: prune old assessments, offer JSON export, or migrate to IndexedDB for 50MB+ storage.
-2. **Second bottleneck: API key management.** Every teacher enters their own key. For school-wide use, need a thin proxy or shared key management. Out of scope for now.
+**Second bottleneck:** localStorage 5MB limit (existing concern)
+**Mitigation:** Already using IndexedDB for audio; consider for assessments if needed
+
+---
 
 ## Sources
 
-- Google Cloud Speech-to-Text v1 REST API (existing integration in codebase)
-- Google Cloud Vision API documentation (TEXT_DETECTION / DOCUMENT_TEXT_DETECTION)
-- Existing codebase analysis: orf_assessment.html (236 lines)
-- PROJECT.md requirements and constraints
-- Web Speech API and MediaRecorder API (MDN, browser-native)
+### Existing Codebase (HIGH confidence)
+- `js/app.js` - Current pipeline orchestration (1265 lines)
+- `js/stt-api.js` - Google STT client (338 lines)
+- `js/ensemble-merger.js` - Current two-model merge (888 lines)
+- `js/alignment.js` - Needleman-Wunsch via diff-match-patch (163 lines)
+- `js/disfluency-detector.js` - Why previous approach was abandoned (259 lines)
+- `js/vad-processor.js` - Silero VAD integration (270 lines)
+- `js/ghost-detector.js` - VAD-based hallucination detection (174 lines)
+
+### Implementation Plan (HIGH confidence)
+- `FuturePlans/0 Kitchen-Sink-Ensemble-Implementation-Plan.md` (1014 lines)
+- Phase 0 verification results (2026-02-05)
+- Reverb paper verbatimicity findings
+
+### Reverb ASR (MEDIUM confidence - paper claims, not production tested)
+- [arXiv paper](https://arxiv.org/html/2410.03930v2) - Table 5 verbatimicity behavior
+- CTM format verified via Phase 0 testing
+- "gonna" preservation confirmed (no normalization in v0.0)
 
 ---
-*Architecture research for: Browser-based ORF Assessment*
-*Researched: 2026-02-02*
+
+*Architecture research for: Kitchen Sink Ensemble Integration*
+*Researched: 2026-02-05*
+*Updates: Added Reverb backend, new disfluency algorithm, cross-vendor validation*

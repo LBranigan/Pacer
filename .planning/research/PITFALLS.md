@@ -1,10 +1,370 @@
 # Pitfalls Research
 
 **Domain:** ASR-based oral reading fluency assessment for struggling middle school readers
-**Researched:** 2026-02-02
-**Confidence:** MEDIUM-HIGH (well-documented research domain, but specific to Google Cloud STT v1 integration)
+**Researched:** 2026-02-02 (base), 2026-02-05 (Reverb integration update)
+**Confidence:** MEDIUM-HIGH (well-documented research domain, specific to Google Cloud STT v1 and now Reverb integration)
 
-## Critical Pitfalls
+---
+
+## v1.3 Milestone: Reverb ASR Integration Pitfalls
+
+> **Context:** This section covers pitfalls specific to adding Reverb ASR local backend and cross-vendor alignment. ReadingQuest currently has no backend -- v1.3 introduces first backend service (FastAPI/Docker), first GPU dependency, and first cross-vendor ASR comparison.
+>
+> **Prior failure reference:** The abandoned `disfluency-detector.js` demonstrated that cross-vendor timestamp drift (Google latest_long vs default) with naive local matching (50ms windows) caused 100% false positive rate when drift exceeded window size.
+
+### Pitfall V1.3-1: Cross-Vendor Timestamp Drift Causing False Positives (CRITICAL)
+
+**What goes wrong:**
+When comparing transcripts from different ASR systems (Google STT vs Reverb, or even Reverb v=1.0 vs v=0.0), timestamp drift between systems causes alignment algorithms to misidentify words. The disfluency-detector.js failure is the canonical example: 60ms global drift between Google's latest_long and default models caused 100% of words to be flagged as disfluencies because naive local matching (50ms windows) couldn't absorb the drift.
+
+**Why it happens:**
+- Different models have different acoustic front-ends and CTC decoders
+- Cross-vendor systems (Google cloud vs local Reverb) have no shared clock
+- Even same-vendor models can drift when using different architectures (Conformer vs CTC)
+- Research shows [timestamp prediction errors range from 22 to 127 milliseconds](https://arxiv.org/html/2505.15646v1) across different systems
+
+**How to avoid:**
+1. Use **global alignment** (Needleman-Wunsch) instead of local matching windows
+2. For Reverb v=1.0 vs v=0.0 comparison: same model, same encoder, same CTC clock = minimal drift (10-20ms expected)
+3. Normalize timestamps BEFORE alignment (convert "1.5s" strings to milliseconds consistently)
+4. Implement drift estimation: compute median offset across aligned word pairs, then compensate
+
+**Warning signs:**
+- Alignment flagging >30% of words as mismatches between same-model passes
+- Systematic offset visible in aligned word pairs (all v=1.0 words 50ms earlier than v=0.0)
+- "Disfluency" count equals total word count (the abandoned detector's failure mode)
+
+**Phase to address:**
+Phase 2 (Needleman-Wunsch Alignment) - Build alignment with drift tolerance from day one
+
+---
+
+### Pitfall V1.3-2: Docker GPU Access Silent Failure (CRITICAL)
+
+**What goes wrong:**
+Container starts successfully, model loads, but inference runs on CPU instead of GPU. No error is thrown - just 10-20x slower inference. With 8GB VRAM, this means 1-minute audio takes 2-3 minutes instead of 12-20 seconds.
+
+**Why it happens:**
+- Missing `--gpus` flag in docker run command
+- NVIDIA Container Toolkit not installed or not configured
+- CUDA version mismatch between base image and host drivers
+- WSL2-specific: GPU passthrough requires additional configuration
+- [Docker GPU support on Windows requires WSL2 backend specifically](https://docs.docker.com/desktop/features/gpu/)
+
+**How to avoid:**
+1. Add explicit GPU check at startup:
+   ```python
+   import torch
+   if not torch.cuda.is_available():
+       raise RuntimeError("GPU not available - check Docker --gpus flag and NVIDIA Container Toolkit")
+   print(f"Using GPU: {torch.cuda.get_device_name(0)}")
+   ```
+2. Include `--gpus all` in docker-compose.yml and startup scripts
+3. Pin CUDA version in Dockerfile to match host driver
+4. Test inference speed immediately after deployment (should be >3x realtime)
+
+**Warning signs:**
+- Inference taking >0.5x realtime (1 min audio > 2 min processing)
+- `torch.cuda.is_available()` returns False inside container
+- nvidia-smi shows 0% GPU utilization during transcription
+
+**Phase to address:**
+Phase 1 (Backend Setup) - GPU verification must be first health check
+
+---
+
+### Pitfall V1.3-3: VRAM Exhaustion on Long Audio (CRITICAL)
+
+**What goes wrong:**
+Model loads fine, short clips transcribe successfully, but longer recordings (>3-5 minutes) cause CUDA out-of-memory errors. With 8GB VRAM limit, this is a hard constraint.
+
+**Why it happens:**
+- ASR models accumulate hidden states proportional to audio length
+- CTC decoder memory grows with sequence length
+- PyTorch memory allocator fragments VRAM over multiple inferences
+- [CUDA OOM likely means the GPU is too small for the job](https://www.runpod.io/articles/guides/cloud-gpu-mistakes-to-avoid)
+
+**How to avoid:**
+1. Implement chunked processing: split audio into 60-90 second segments with 1-2 second overlap
+2. Set `PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True` to reduce fragmentation
+3. Explicitly free tensors and call `torch.cuda.empty_cache()` between chunks
+4. Add request timeout (60s) to prevent single long request from blocking service
+5. Monitor with nvidia-smi during load testing
+
+**Warning signs:**
+- First few transcriptions succeed, then random failures
+- `CUDA out of memory` errors in logs
+- Service becoming unresponsive after processing long files
+
+**Phase to address:**
+Phase 1 (Backend Setup) - Implement chunking before first real deployment
+
+---
+
+### Pitfall V1.3-4: CORS Blocking Browser-to-Backend Communication (MODERATE)
+
+**What goes wrong:**
+FastAPI server running, health check passes via curl, but browser JavaScript gets `CORS policy` errors. The frontend shows "Reverb offline" even though the service is running.
+
+**Why it happens:**
+- [CORS errors are common when frontend and backend run on different origins](https://fastapi.tiangolo.com/tutorial/cors/)
+- Default CORSMiddleware is restrictive - must explicitly allow origins
+- `allow_origins=["*"]` doesn't work with credentials
+- Docker networking adds another origin layer (localhost:8765 inside container vs host port mapping)
+
+**How to avoid:**
+1. Configure explicit CORS in FastAPI:
+   ```python
+   app.add_middleware(
+       CORSMiddleware,
+       allow_origins=["http://localhost:8000", "http://127.0.0.1:8000", "file://"],
+       allow_methods=["GET", "POST"],
+       allow_headers=["Content-Type"],
+   )
+   ```
+2. For development, use `allow_origins=["*"]` BUT set `allow_credentials=False`
+3. Test with actual browser (not curl) - CORS is browser-enforced
+4. Check browser DevTools Network tab for preflight OPTIONS failures
+
+**Warning signs:**
+- curl works, browser doesn't
+- `Access-Control-Allow-Origin` errors in browser console
+- Health check returns "offline" despite service running
+
+**Phase to address:**
+Phase 1 (Backend Setup) - Test browser connectivity, not just curl
+
+---
+
+### Pitfall V1.3-5: Needleman-Wunsch Gap Penalty Misconfiguration (MODERATE)
+
+**What goes wrong:**
+Alignment produces implausible results: short words aligned to long sequences, or systematic insertion/deletion bias. Gap penalties that work for DNA sequences don't work for word alignment.
+
+**Why it happens:**
+- Default gap penalties from bioinformatics tutorials are calibrated for DNA (4-letter alphabet)
+- Word alignment needs different penalties: insertions (disfluencies) are common, deletions (omissions) are meaningful
+- [Multiple optimal pathways exist](https://en.wikipedia.org/wiki/Needleman%E2%80%93Wunsch_algorithm) - wrong tiebreaker selection causes inconsistent alignments
+- Scoring substitution similarity (phonetic distance) vs binary match/mismatch matters
+
+**How to avoid:**
+1. Use asymmetric gap penalties: `gap_insert = -1` (disfluencies cheap), `gap_delete = -2` (omissions costly)
+2. Use phonetic similarity for substitution scores (not binary)
+3. Implement traceback tiebreaker: prefer diagonal (substitution) over gaps
+4. Test with known-good alignments: "the the cat" vs "the cat" should produce 1 insertion
+5. Log alignment matrix for debugging (at least for development)
+
+**Warning signs:**
+- Alignment length >> max(len(verbatim), len(clean))
+- All differences classified as one type (all insertions, no substitutions)
+- Same input producing different alignments on repeated runs
+
+**Phase to address:**
+Phase 2 (Needleman-Wunsch Alignment) - Tune penalties with real ORF data
+
+---
+
+### Pitfall V1.3-6: CTM Format Parsing Assumptions (MODERATE)
+
+**What goes wrong:**
+Parser assumes 5-field CTM format but Reverb outputs 6 fields. Or assumes confidence is always present but Phase 0 validation shows `confidence=0.00` (default, not real).
+
+**Why it happens:**
+- CTM format has variations: `<word> <channel> <start> <duration> <confidence> [<alternative>]`
+- Documentation says 5 fields, actual output may have 6
+- `0.00` confidence looks valid but means "no real score available"
+
+**How to avoid:**
+1. Parse by field count, not fixed positions
+2. Treat confidence=0.00 as "unknown" (use 0.9 default as proposal suggests)
+3. Validate with actual Reverb output from Phase 0:
+   ```
+   <word> <channel> <start> <duration> 0.00 <sixth_field>
+   ```
+
+**Warning signs:**
+- IndexError during CTM parsing
+- All words showing identical confidence scores
+- Word text appearing in wrong field
+
+**Phase to address:**
+Phase 1 (Backend Setup) - Validate CTM parsing against real output
+
+---
+
+### Pitfall V1.3-7: Vocabulary Normalization Asymmetry (MODERATE)
+
+**What goes wrong:**
+v=0.0 (clean) normalizes "gonna" to "going to" but v=1.0 (verbatim) preserves "gonna". Alignment marks this as substitution instead of match.
+
+**Why it happens:**
+- verbatimicity=0.0 is explicitly designed to "clean up" disfluencies AND informal speech
+- This is by design in Reverb, not a bug
+- Phase 0 validation confirmed: v=0.0 may normalize vocabulary
+
+**How to avoid:**
+1. Normalize both sides before alignment: `gonna` -> `gonna`, `going to` -> `gonna`
+2. Build normalization map for common informal/formal pairs
+3. Compare on lemmatized forms when detecting disfluencies
+
+**Warning signs:**
+- High substitution rate between v=1.0 and v=0.0 for non-disfluent speech
+- Formal words appearing in clean that weren't in verbatim
+- WER unexpectedly high between same-audio transcripts
+
+**Phase to address:**
+Phase 2 (Needleman-Wunsch Alignment) - Normalize before comparing
+
+---
+
+### Pitfall V1.3-8: Cross-Vendor Hallucination Detection False Positives (MINOR)
+
+**What goes wrong:**
+Cross-vendor comparison (Google vs Reverb) flags legitimate differences as "hallucinations" - words that exist in both transcripts but with different surface forms.
+
+**Why it happens:**
+- Different models have different vocabularies ("gonna" vs "going to")
+- Different models handle named entities differently ("iPhone" vs "iphone")
+- [Hallucinations defined as semantically disconnected outputs](https://arxiv.org/html/2502.12414) - need semantic comparison, not string matching
+- Research shows [WER/CER often fail to reflect quality in critical contexts](https://arxiv.org/html/2502.12414)
+
+**How to avoid:**
+1. Normalize case and common contractions before comparison
+2. Use semantic similarity (embedding distance) not just string matching
+3. Flag only words that appear in one transcript with NO corresponding word in the other
+4. Trust same-model disagreement (verbatim vs clean) more than cross-vendor disagreement
+
+**Warning signs:**
+- "Hallucination" count correlates with vocabulary style differences
+- Common words like "going" flagged as hallucinations
+- Same audio producing dramatically different "hallucination" counts
+
+**Phase to address:**
+Phase 3 (Cross-Vendor Validation) - Build semantic comparison, not string matching
+
+---
+
+## V1.3 Technical Debt Patterns
+
+| Shortcut | Immediate Benefit | Long-term Cost | When Acceptable |
+|----------|-------------------|----------------|-----------------|
+| `allow_origins=["*"]` | No CORS debugging | Security risk in production | Development only |
+| Hardcoded gap penalties | Faster implementation | Poor alignment on edge cases | Never - parameterize from start |
+| No chunking for long audio | Simpler code | OOM on real classroom recordings | Never - 8GB VRAM is hard limit |
+| Skip GPU verification | Service starts faster | Silent 10x slowdown | Never - must fail fast |
+| String timestamps ("1.5s") | Matches Google format | Conversion bugs in alignment | Convert to ms at API boundary |
+
+---
+
+## V1.3 Integration Gotchas
+
+| Integration | Common Mistake | Correct Approach |
+|-------------|----------------|------------------|
+| Docker GPU | Assuming GPU access without `--gpus` | Explicit flag + startup verification |
+| FastAPI CORS | Testing with curl instead of browser | Browser-based smoke test mandatory |
+| Reverb CTM | Assuming 5-field format | Parse dynamically by field count |
+| WSL2 networking | localhost inside container | Host network mode or explicit port mapping |
+| PyTorch VRAM | Trusting automatic garbage collection | Explicit `empty_cache()` between requests |
+
+---
+
+## V1.3 Performance Traps
+
+| Trap | Symptoms | Prevention | When It Breaks |
+|------|----------|------------|----------------|
+| No audio chunking | OOM on long files | Chunk at 60-90s with overlap | >3-5 min audio |
+| CPU fallback | 2-3 min for 1 min audio | GPU check at startup | Any production use |
+| Synchronous transcription | UI blocks during inference | Async with progress callback | Any file >10s |
+| Full model reload per request | 5-10s latency per call | Load once at startup | Any multi-request scenario |
+| No request timeout | One bad request blocks all | 60s timeout per request | Concurrent users |
+
+---
+
+## V1.3 "Looks Done But Isn't" Checklist
+
+- [ ] **Backend health check:** Passes from browser, not just curl (CORS)
+- [ ] **GPU inference:** Verified with nvidia-smi during actual transcription (not just torch.cuda.is_available)
+- [ ] **Long audio:** Tested with 5+ minute recording without OOM
+- [ ] **CTM parsing:** Validated against real Reverb output (6 fields, confidence=0.00)
+- [ ] **Alignment correctness:** Tested with known inputs ("the the cat" vs "the cat")
+- [ ] **Vocabulary normalization:** Checked that "gonna" aligns to "gonna" not flagged as error
+- [ ] **Error handling:** Service recovers after OOM without restart
+
+---
+
+## V1.3 Recovery Strategies
+
+| Pitfall | Recovery Cost | Recovery Steps |
+|---------|---------------|----------------|
+| Timestamp drift false positives | MEDIUM | Implement global alignment, reprocess existing data |
+| GPU silent fallback | LOW | Add startup check, redeploy |
+| VRAM exhaustion | MEDIUM | Implement chunking, handle existing long recordings specially |
+| CORS blocking | LOW | Update middleware config, no data loss |
+| Wrong gap penalties | MEDIUM | Retune parameters, reprocess alignments |
+
+---
+
+## V1.3 Pitfall-to-Phase Mapping
+
+| Pitfall | Prevention Phase | Verification |
+|---------|------------------|--------------|
+| V1.3-1: Cross-vendor timestamp drift | Phase 2: NW Alignment | Global alignment absorbs 100ms+ drift |
+| V1.3-2: Docker GPU silent failure | Phase 1: Backend Setup | Startup GPU check, nvidia-smi during health check |
+| V1.3-3: VRAM exhaustion | Phase 1: Backend Setup | Process 5-min audio without OOM |
+| V1.3-4: CORS blocking | Phase 1: Backend Setup | Browser fetch to /health succeeds |
+| V1.3-5: NW gap penalty misconfiguration | Phase 2: NW Alignment | Known-good test cases pass |
+| V1.3-6: CTM format parsing | Phase 1: Backend Setup | Parse real Reverb output correctly |
+| V1.3-7: Vocabulary normalization | Phase 2: NW Alignment | "gonna" aligns to "gonna" between passes |
+| V1.3-8: Hallucination false positives | Phase 3: Cross-Vendor Validation | Semantic similarity, not string matching |
+
+---
+
+## Project-Specific Context: The Abandoned disfluency-detector.js
+
+This project has direct experience with cross-vendor alignment failure. Key lessons:
+
+1. **Local matching windows (50ms) cannot absorb global drift (60ms+)**
+   - Naive approach: find matching word within +-50ms window
+   - Failure mode: 100% of words flagged when drift exceeds window
+
+2. **Same model, different passes is fundamentally different from cross-vendor**
+   - Google latest_long vs default: different models, different encoders, 500ms+ drift possible
+   - Reverb v=1.0 vs v=0.0: same model, same encoder, same CTC clock, 10-20ms drift expected
+   - This is why Reverb integration is more tractable
+
+3. **Needleman-Wunsch global alignment is the correct approach**
+   - Absorbs global drift by finding optimal alignment across entire sequence
+   - Validated in Phase 0 as the right technique
+
+---
+
+## V1.3 Sources
+
+**Docker/GPU Issues:**
+- [Docker GPU Documentation](https://docs.docker.com/desktop/features/gpu/)
+- [GPU Container Pitfalls Discussion](https://forums.docker.com/t/applications-not-using-gpu-inside-the-container/140376)
+- [VRAM Management Strategies](https://localai.io/advanced/vram-management/)
+
+**CORS Configuration:**
+- [FastAPI CORS Documentation](https://fastapi.tiangolo.com/tutorial/cors/)
+- [CORS in Docker Environments](https://github.com/fastapi/fastapi/issues/5086)
+
+**Sequence Alignment:**
+- [Needleman-Wunsch Algorithm](https://en.wikipedia.org/wiki/Needleman%E2%80%93Wunsch_algorithm)
+- [Time Complexity Analysis](https://bio.libretexts.org/Bookshelves/Computational_Biology/Book:_Computational_Biology_-_Genomes_Networks_and_Evolution_(Kellis_et_al.)/02:_Sequence_Alignment_and_Dynamic_Programming/2.05:_The_Needleman-Wunsch_Algorithm)
+
+**ASR Timestamp Issues:**
+- [Cross-vendor ASR Comparison Research](https://arxiv.org/html/2406.19363v1)
+- [Timestamp Alignment Drift Study](https://arxiv.org/html/2505.15646v1)
+- [Reverb ASR Technical Paper](https://arxiv.org/html/2410.03930)
+
+**Hallucination Detection:**
+- [ASR Hallucination Research](https://arxiv.org/html/2502.12414)
+- [Hallucination Benchmark](https://www.arxiv.org/pdf/2510.16567)
+
+---
+
+## Critical Pitfalls (Base System - v1.0-v1.2)
 
 ### Pitfall 1: Treating ASR Confidence Scores as Mispronunciation Detectors
 
@@ -279,4 +639,4 @@ Phase 2 or 3. Build it, measure it, and be transparent about its low reliability
 
 ---
 *Pitfalls research for: ASR-based oral reading fluency assessment*
-*Researched: 2026-02-02*
+*Researched: 2026-02-02 (base), 2026-02-05 (v1.3 Reverb integration)*
