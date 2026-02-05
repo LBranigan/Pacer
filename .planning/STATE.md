@@ -5,19 +5,34 @@
 See: .planning/PROJECT.md (updated 2026-02-04)
 
 **Core value:** Accurate, word-level fluency error detection powered by ensemble ASR with hallucination filtering — giving teachers actionable data on exactly where and how a struggling reader breaks down.
-**Current focus:** v1.2 VAD Gap Analysis
+**Current focus:** v1.2 VAD Gap Analysis — Phase 18 (VAD Gap Analyzer Core)
 
 ## Current Position
 
-Phase: — (defining requirements)
-Plan: —
-Status: Defining requirements
-Last activity: 2026-02-04 — Milestone v1.2 started
+Phase: 18 — VAD Gap Analyzer Core
+Plan: — (phase not yet planned)
+Status: Ready for planning
+Last activity: 2026-02-04 — Roadmap created for v1.2
 
-Progress: [░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░] 0%
+Progress: [##░░░░░░░░░░░░░░░░░░░░░░░░░░░░] 0% (0/2 phases)
 
 Milestones complete: 2 (v1.0, v1.1)
 Current milestone: v1.2 VAD Gap Analysis
+
+## Phase 18 Overview
+
+**Goal:** System can analyze VAD speech activity within any time range and enrich diagnostics with acoustic context.
+
+**Requirements:** VAD-01, VAD-02, VAD-03, VAD-04, DBG-01
+
+**Success Criteria:**
+1. Given a time range, system returns speech percentage (0-100%) calculated from VAD segments
+2. Speech percentages map to acoustic labels (silence confirmed, mostly silent, mixed signal, speech detected, continuous speech)
+3. After diagnostics processing, each longPause object has `_vadAnalysis` property
+4. After diagnostics processing, each onsetDelay object has `_vadAnalysis` property
+5. Debug panel shows VAD Gap Analysis summary with counts per acoustic label category
+
+**Estimated plans:** 3
 
 ## Performance Metrics
 
@@ -31,6 +46,11 @@ Current milestone: v1.2 VAD Gap Analysis
 - Average duration: 2.2min
 - Total execution time: ~49min
 
+**v1.2 Velocity:**
+- Plans completed: 0
+- Average duration: —
+- Total execution time: —
+
 ## Accumulated Context
 
 ### Decisions
@@ -40,10 +60,11 @@ See PROJECT.md Key Decisions table for full history.
 **Summary:**
 - v1.0: 8 key decisions (all validated)
 - v1.1: 7 key decisions (all validated)
+- v1.2: 0 key decisions (milestone just started)
 
 ### Pending Todos
 
-None.
+- [ ] Plan Phase 18 (`/gsd:plan-phase 18`)
 
 ### Blockers/Concerns
 
@@ -52,5 +73,5 @@ None.
 ## Session Continuity
 
 Last session: 2026-02-04
-Stopped at: Defining v1.2 requirements
-Resume with: Continue requirements definition or `/gsd:progress`
+Stopped at: Roadmap created for v1.2
+Resume with: `/gsd:plan-phase 18` to create execution plan for Phase 18

@@ -45,16 +45,16 @@ Explicitly excluded per the plan document.
 | VAD-02 | Phase 18 | Pending |
 | VAD-03 | Phase 18 | Pending |
 | VAD-04 | Phase 18 | Pending |
-| UI-01 | Phase 18 | Pending |
-| UI-02 | Phase 18 | Pending |
-| UI-03 | Phase 18 | Pending |
 | DBG-01 | Phase 18 | Pending |
+| UI-01 | Phase 19 | Pending |
+| UI-02 | Phase 19 | Pending |
+| UI-03 | Phase 19 | Pending |
 
 **Coverage:**
 - v1.2 requirements: 8 total
 - Mapped to phases: 8
-- Unmapped: 0 ✓
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-02-04*
-*Last updated: 2026-02-04 after initial definition*
+*Last updated: 2026-02-04 after roadmap creation*
