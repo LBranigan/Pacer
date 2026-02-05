@@ -82,7 +82,10 @@ Plans:
 3. Pause indicators with >=30% VAD activity have distinct visual style (e.g., orange vs red)
 4. Visual distinction helps teachers identify pauses that may be sounding-out vs true silence
 
-**Estimated plans:** 2 (tooltip integration, visual distinction)
+**Plans:** 1 plan
+
+Plans:
+- [ ] 19-01-PLAN.md — Add VAD tooltips and visual distinction to pause/hesitation indicators
 
 </details>
 
@@ -92,10 +95,10 @@ Plans:
 |-----------|--------|-------|--------|---------|
 | v1.0 MVP | 1-9 | 21 | Complete | 2026-02-03 |
 | v1.1 ASR Ensemble | 10-17 | 22 | Complete | 2026-02-04 |
-| v1.2 VAD Gap Analysis | 18-19 | ~5 | In Progress (Phase 18 complete) | — |
+| v1.2 VAD Gap Analysis | 18-19 | 3 | In Progress (Phase 18 complete) | — |
 
 **Total:** 17 phases shipped, 43 plans shipped
-**Active:** 2 phases, ~5 plans
+**Active:** 2 phases, 3 plans
 
 ---
 *Roadmap created: 2026-02-02*
