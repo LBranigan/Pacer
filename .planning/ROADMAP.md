@@ -57,7 +57,11 @@ VAD-based acoustic analysis for pause/gap indicators, giving teachers visibility
 4. After diagnostics processing, each onsetDelay object has `_vadAnalysis` with `speechPercent` and `label`
 5. Debug panel shows VAD Gap Analysis summary with counts per acoustic label category
 
-**Estimated plans:** 3 (module creation, diagnostics integration, debug logging)
+**Plans:** 2 plans
+
+Plans:
+- [ ] 18-01-PLAN.md — Create VAD gap analyzer module with core functions
+- [ ] 18-02-PLAN.md — Integrate into app.js pipeline with debug logging
 
 ---
 
