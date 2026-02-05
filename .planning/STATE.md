@@ -21,7 +21,7 @@ Current milestone: v1.3 Kitchen Sink Ensemble (5 phases, 26 requirements)
 
 ## v1.3 Kitchen Sink Ensemble Overview
 
-**Goal:** Replace Google STT ensemble with Reverb ASR for model-level disfluency detection via verbatimicity diff.
+**Goal:** Replace Google STT ensemble with Reverb ASR for model-level disfluency detection via verbatimicity diff. (Google fully removed — Deepgram-only fallback when Reverb offline)
 
 **Phases:**
 - Phase 20: Reverb Backend Service (5 requirements) — COMPLETE (confirmed by user)
@@ -92,10 +92,11 @@ See PROJECT.md Key Decisions table for full history.
 |----------|--------|-----------|
 | Feature flag default | Enabled (localStorage !== 'false') | Kitchen Sink is primary path; fallback always available |
 | Parallel API strategy | Promise.allSettled | Both Reverb + Deepgram can proceed independently |
-| Fallback chain | Flag -> Reverb health -> Reverb result | Graceful degradation at each step |
-| Placeholder properties | isDisfluency=false, disfluencyType=null, crossValidation='unavailable' | Downstream compatibility in fallback |
+| Fallback chain | Kitchen Sink → Deepgram-only → Error | No Google dependency; Deepgram provides degraded transcription when Reverb offline |
+| Google STT removal | Fully removed from pipeline | User requested no Google dependency; Deepgram-only fallback is sufficient |
+| Placeholder properties | isDisfluency=false, disfluencyType=null, crossValidation='confirmed' | Downstream compatibility in Deepgram fallback |
 | Primary pipeline replacement | runKitchenSinkPipeline replaces sendEnsembleSTT | Kitchen Sink as default analysis path |
-| Source-based stats | computeKitchenSinkStats vs computeEnsembleStats | Correct stats calculation per source |
+| Stats computation | Always computeKitchenSinkStats | Works for both kitchen_sink and deepgram_fallback sources |
 
 ### v1.3 Key Research Findings
 

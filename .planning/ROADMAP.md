@@ -133,27 +133,29 @@ Replace Google STT ensemble with Reverb ASR for model-level disfluency detection
 
 ---
 
-### Phase 23: Kitchen Sink Integration
+### Phase 23: Kitchen Sink Integration ✓
 
 **Goal:** Reverb + Deepgram results are merged into unified pipeline, replacing Google STT ensemble for primary transcription.
 
 **Dependencies:** Phase 20 (Reverb backend), Phase 21 (alignment/tagging), Phase 22 (Deepgram API)
 
+**Status:** COMPLETE (2026-02-05)
+
 **Plans:** 2 plans
-- [ ] 23-01-PLAN.md — Reverb API client and Kitchen Sink orchestrator
-- [ ] 23-02-PLAN.md — app.js integration and human verification
+- [x] 23-01-PLAN.md — Reverb API client and Kitchen Sink orchestrator
+- [x] 23-02-PLAN.md — app.js integration and human verification
 
 **Requirements:**
 - INTG-01: `reverb-api.js` client calls local Reverb service
 - INTG-05: `kitchen-sink-merger.js` combines Reverb + Deepgram results
-- INTG-06: Existing Google STT ensemble replaced with Kitchen Sink ensemble
+- INTG-06: Existing Google STT ensemble replaced with Kitchen Sink ensemble (fully removed, not just alternative)
 
 **Success Criteria:**
 1. Browser successfully calls local Reverb service and receives normalized word array
 2. Merged output includes isDisfluency, disfluencyType, and crossValidation properties per word
-3. Pipeline uses Kitchen Sink ensemble when Reverb online, falls back to Google ensemble when offline
+3. Pipeline uses Kitchen Sink ensemble when Reverb online, falls back to Deepgram-only when offline (no Google dependency)
 4. Existing downstream components (alignment, diagnostics, metrics) work unchanged with new word format
-5. Feature flag allows switching between Kitchen Sink and legacy Google ensemble for comparison
+5. Feature flag allows toggling Kitchen Sink (when disabled, uses Deepgram-only)
 
 ---
 
@@ -214,3 +216,4 @@ Phases 20, 21, 22 can execute in parallel. Phase 23 depends on all three. Phase 
 *Phase 22 planned: 2026-02-05*
 *Phase 22 complete: 2026-02-05*
 *Phase 23 planned: 2026-02-05*
+*Phase 23 complete: 2026-02-05*
