@@ -3,12 +3,14 @@ Reverb ASR HTTP API Server
 
 Endpoints:
   POST /ensemble - Dual-pass transcription (v=1.0 verbatim + v=0.0 clean)
+  POST /deepgram - Deepgram Nova-3 transcription proxy (cross-validation)
   GET  /health   - Health check with GPU status and model info
 
 Requirements:
   - NVIDIA GPU with CUDA support
   - Docker with NVIDIA Container Toolkit
   - 8GB+ VRAM recommended for long audio
+  - DEEPGRAM_API_KEY environment variable (optional, for /deepgram endpoint)
 """
 
 from fastapi import FastAPI, HTTPException
@@ -20,6 +22,7 @@ import tempfile
 import os
 import torch
 import wenet
+from deepgram import DeepgramClient, PrerecordedOptions
 
 # =============================================================================
 # Application Setup
@@ -67,6 +70,21 @@ def get_model():
     return _model
 
 
+# Deepgram client singleton - initialized lazily
+_deepgram_client = None
+
+
+def get_deepgram_client():
+    """Get or initialize Deepgram client. Returns None if not configured."""
+    global _deepgram_client
+    if _deepgram_client is None:
+        api_key = os.environ.get("DEEPGRAM_API_KEY")
+        if not api_key:
+            return None  # Graceful degradation
+        _deepgram_client = DeepgramClient(api_key)
+    return _deepgram_client
+
+
 # =============================================================================
 # Startup Event (BACK-04: GPU verification)
 # =============================================================================
@@ -109,7 +127,8 @@ async def health():
     return {
         "status": "ok" if _model else "ready",
         "model_loaded": _model is not None,
-        "gpu": gpu_info
+        "gpu": gpu_info,
+        "deepgram_configured": get_deepgram_client() is not None
     }
 
 
@@ -166,6 +185,11 @@ def parse_ctm(ctm_text: str) -> list:
 
 class EnsembleRequest(BaseModel):
     """Request model for /ensemble endpoint."""
+    audio_base64: str
+
+
+class DeepgramRequest(BaseModel):
+    """Request model for /deepgram endpoint."""
     audio_base64: str
 
 
@@ -238,3 +262,59 @@ async def ensemble(req: EnsembleRequest):
             }
         finally:
             os.unlink(temp_path)
+
+
+# =============================================================================
+# Deepgram Endpoint (Cross-vendor validation)
+# =============================================================================
+
+@app.post("/deepgram")
+async def deepgram_transcribe(req: DeepgramRequest):
+    """
+    Transcribe audio using Deepgram Nova-3 via backend proxy.
+
+    Returns normalized word-level timestamps matching project format.
+    Browser cannot call Deepgram directly (no CORS support).
+    """
+    client = get_deepgram_client()
+    if client is None:
+        raise HTTPException(
+            status_code=503,
+            detail="Deepgram service not configured (missing DEEPGRAM_API_KEY)"
+        )
+
+    try:
+        audio_bytes = base64.b64decode(req.audio_base64)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Invalid base64: {e}")
+
+    try:
+        options = PrerecordedOptions(
+            model="nova-3",
+            language="en-US",
+            smart_format=True,
+        )
+
+        response = client.listen.rest.v("1").transcribe_file(
+            {"buffer": audio_bytes, "mimetype": "audio/wav"},
+            options
+        )
+
+        # Normalize to project format (matching Google STT structure)
+        words = []
+        for word_data in response.results.channels[0].alternatives[0].words:
+            words.append({
+                "word": word_data.punctuated_word or word_data.word,
+                "startTime": f"{word_data.start}s",
+                "endTime": f"{word_data.end}s",
+                "confidence": word_data.confidence
+            })
+
+        return {
+            "words": words,
+            "transcript": response.results.channels[0].alternatives[0].transcript,
+            "model": "nova-3"
+        }
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Deepgram error: {e}")
