@@ -75,14 +75,16 @@ Replace Google STT ensemble with Reverb ASR for model-level disfluency detection
 
 ---
 
-### Phase 21: Sequence Alignment & Disfluency Detection
+### Phase 21: Sequence Alignment & Disfluency Detection ✓
 
 **Goal:** Disfluencies (fillers, repetitions, false starts) are reliably identified from the difference between verbatim and clean Reverb transcripts.
 
 **Dependencies:** None (pure algorithm, can develop with mock data in parallel with Phase 20)
 
+**Status:** COMPLETE (2026-02-05)
+
 **Plans:** 1 plan
-- [ ] 21-01-PLAN.md — Needleman-Wunsch alignment and disfluency classification
+- [x] 21-01-PLAN.md — Needleman-Wunsch alignment and disfluency classification
 
 **Requirements:**
 - DISF-01: Needleman-Wunsch global sequence alignment compares v=1.0 vs v=0.0 transcripts

@@ -25,7 +25,7 @@ Current milestone: v1.3 Kitchen Sink Ensemble (5 phases, 26 requirements)
 
 **Phases:**
 - Phase 20: Reverb Backend Service (5 requirements) — Plan 01/04 complete
-- Phase 21: Sequence Alignment & Disfluency Detection (9 requirements) — Plan 01/04 complete
+- Phase 21: Sequence Alignment & Disfluency Detection (9 requirements) — COMPLETE
 - Phase 22: Cross-Vendor Validation (4 requirements) — Plan 02/04 complete
 - Phase 23: Kitchen Sink Integration (3 requirements) — NOT STARTED
 - Phase 24: Disfluency UI Display (5 requirements) — NOT STARTED
