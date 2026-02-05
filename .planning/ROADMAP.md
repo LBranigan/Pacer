@@ -106,15 +106,17 @@ Replace Google STT ensemble with Reverb ASR for model-level disfluency detection
 
 ---
 
-### Phase 22: Cross-Vendor Validation
+### Phase 22: Cross-Vendor Validation ✓
 
 **Goal:** Deepgram Nova-3 provides architecturally-decorrelated cross-validation to catch Reverb hallucinations.
 
 **Dependencies:** None (API integration, can develop in parallel with Phases 20-21)
 
+**Status:** COMPLETE (2026-02-05)
+
 **Plans:** 2 plans
-- [ ] 22-01-PLAN.md — Add /deepgram endpoint to Reverb backend (proxy for CORS)
-- [ ] 22-02-PLAN.md — Browser client (deepgram-api.js) with cross-validation logic
+- [x] 22-01-PLAN.md — Add /deepgram endpoint to Reverb backend (proxy for CORS)
+- [x] 22-02-PLAN.md — Browser client (deepgram-api.js) with cross-validation logic
 
 **Requirements:**
 - XVAL-01: Deepgram Nova-3 called in parallel for cross-validation
@@ -206,3 +208,4 @@ Phases 20, 21, 22 can execute in parallel. Phase 23 depends on all three. Phase 
 *Phase 20 planned: 2026-02-05*
 *Phase 21 planned: 2026-02-05*
 *Phase 22 planned: 2026-02-05*
+*Phase 22 complete: 2026-02-05*

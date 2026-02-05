@@ -27,14 +27,14 @@ Requirements for Kitchen Sink Ensemble milestone. Each maps to roadmap phases.
 
 ### Cross-Vendor Validation
 
-- [ ] **XVAL-01**: Deepgram Nova-3 called in parallel for cross-validation
-- [ ] **XVAL-02**: Reverb <-> Nova-3 disagreement flags words as uncertain
-- [ ] **XVAL-03**: Graceful fallback to Deepgram-only when Reverb service unavailable
+- [x] **XVAL-01**: Deepgram Nova-3 called in parallel for cross-validation
+- [x] **XVAL-02**: Reverb <-> Nova-3 disagreement flags words as uncertain
+- [x] **XVAL-03**: Graceful fallback to Deepgram-only when Reverb service unavailable
 
 ### Browser Integration
 
 - [ ] **INTG-01**: `reverb-api.js` client calls local Reverb service
-- [ ] **INTG-02**: `deepgram-api.js` client calls Deepgram Nova-3 API
+- [x] **INTG-02**: `deepgram-api.js` client calls Deepgram Nova-3 API
 - [ ] **INTG-03**: `sequence-aligner.js` implements Needleman-Wunsch algorithm
 - [ ] **INTG-04**: `disfluency-tagger.js` classifies disfluency types from alignment
 - [ ] **INTG-05**: `kitchen-sink-merger.js` combines Reverb + Deepgram results
@@ -90,11 +90,11 @@ Which phases cover which requirements. Updated during roadmap creation.
 | DISF-05 | Phase 21 | Complete |
 | DISF-06 | Phase 21 | Complete |
 | DISF-07 | Phase 21 | Complete |
-| XVAL-01 | Phase 22 | Pending |
-| XVAL-02 | Phase 22 | Pending |
-| XVAL-03 | Phase 22 | Pending |
+| XVAL-01 | Phase 22 | Complete |
+| XVAL-02 | Phase 22 | Complete |
+| XVAL-03 | Phase 22 | Complete |
 | INTG-01 | Phase 23 | Pending |
-| INTG-02 | Phase 22 | Pending |
+| INTG-02 | Phase 22 | Complete |
 | INTG-03 | Phase 21 | Complete |
 | INTG-04 | Phase 21 | Complete |
 | INTG-05 | Phase 23 | Pending |
@@ -119,4 +119,4 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 ---
 *Requirements defined: 2026-02-05*
-*Last updated: 2026-02-05 (traceability added)*
+*Last updated: 2026-02-05 (Phase 22 complete)*
