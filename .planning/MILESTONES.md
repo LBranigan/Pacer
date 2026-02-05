@@ -1,5 +1,33 @@
 # Project Milestones: ReadingQuest
 
+## v1.2 VAD Gap Analysis (Shipped: 2026-02-04)
+
+**Delivered:** VAD-based acoustic analysis for pause/gap indicators, giving teachers visibility into what actually happened during reported "silences" — distinguishing true hesitation from sounding out.
+
+**Phases completed:** 18-19 (3 plans total)
+
+**Key accomplishments:**
+
+- VAD gap analyzer module with speech percentage calculation for any time range
+- 5-tier acoustic label classification (silence confirmed to continuous speech)
+- Diagnostics enrichment — longPauses and onsetDelays include `_vadAnalysis`
+- VAD tooltips on pause/hesitation indicators ("VAD: X% (label) - hint")
+- Orange visual distinction for gaps with ≥30% speech activity
+- Debug logging integration with vad_gap_analysis stage
+
+**Stats:**
+
+- 16 files created/modified
+- +1,888 lines of code
+- 2 phases, 3 plans
+- 2 days (2026-02-02 → 2026-02-04)
+
+**Git range:** `feat(18-01)` → `docs(19)`
+
+**What's next:** v1.3 — prosody scoring, backend server, or user authentication
+
+---
+
 ## v1.1 ASR Ensemble (Shipped: 2026-02-04)
 
 **Delivered:** Two-model ensemble ASR with VAD-based hallucination detection, separate disfluency classification, safety checks, and enhanced teacher UI for accurate word-level fluency assessment.

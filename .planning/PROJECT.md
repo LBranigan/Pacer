@@ -8,18 +8,7 @@ A browser-based oral reading fluency (ORF) assessment tool for middle school RTI
 
 Accurate, word-level fluency error detection powered by ensemble ASR with hallucination filtering — giving teachers actionable data on exactly where and how a struggling reader breaks down, without manual running record marking.
 
-## Current Milestone: v1.2 VAD Gap Analysis
-
-**Goal:** Add VAD-based acoustic analysis to pause/gap indicators, giving teachers visibility into what actually happened during reported "silences" — distinguishing true hesitation from sounding out or timestamp drift.
-
-**Target features:**
-- VAD speech percentage overlay on pause indicators (hover tooltip)
-- VAD speech percentage overlay on hesitation indicators (hover tooltip)
-- Acoustic labels (silence confirmed, mostly silent, mixed signal, speech detected, continuous speech)
-- Visual indicator for pauses with significant speech activity
-- Debug logging for VAD gap analysis
-
-## Current State (v1.1 shipped 2026-02-04)
+## Current State (v1.2 shipped 2026-02-04)
 
 **Shipped features:**
 - ES module architecture (24+ modules) with PWA support
@@ -37,7 +26,7 @@ Accurate, word-level fluency error detection powered by ensemble ASR with halluc
 - Gamified student playback with animated character battles
 
 **Tech stack:**
-- ~9,400 LOC (JS/HTML/CSS)
+- ~9,840 LOC (JS/HTML/CSS)
 - localStorage + IndexedDB for persistence
 - Google Cloud APIs: STT, Vision, Natural Language
 - Silero VAD via ONNX runtime (browser-based)
@@ -89,12 +78,15 @@ Accurate, word-level fluency error detection powered by ensemble ASR with halluc
 - ✓ Safety checks (rate anomaly, uncorroborated sequence detection) — v1.1
 - ✓ Enhanced UI (word tooltips, disfluency badges, WCPM ranges) — v1.1
 
+**v1.2:**
+- ✓ VAD acoustic analysis overlay on pause/gap indicators — v1.2
+- ✓ 5-tier acoustic labels for speech percentage classification — v1.2
+- ✓ Orange visual distinction for pauses with significant VAD activity (≥30%) — v1.2
+- ✓ Debug logging for VAD gap analysis summary — v1.2
+
 ### Active
 
-- [ ] VAD acoustic analysis overlay on pause/gap indicators
-- [ ] Acoustic labels for speech percentage classification
-- [ ] Visual indicator for pauses with significant VAD activity
-- [ ] Debug logging for VAD gap analysis summary
+(None — define requirements for next milestone)
 
 ### Future (v1.2+)
 
@@ -156,5 +148,16 @@ Accurate, word-level fluency error detection powered by ensemble ASR with halluc
 | Conservative WCPM as primary | Underpromise philosophy — show min value, range reveals uncertainty | ✓ Good v1.1 |
 | Ghost filtering before alignment | Prevents WCPM inflation from hallucinated words | ✓ Good v1.1 |
 
+## Key Decisions (v1.2)
+
+| Decision | Rationale | Outcome |
+|----------|-----------|---------|
+| <10% threshold for silence confirmed | Strict interpretation of requirements | ✓ Good v1.2 |
+| Round speech percentage to one decimal | Clean display in UI | ✓ Good v1.2 |
+| Mutation pattern with _vadAnalysis | Matches existing codebase conventions | ✓ Good v1.2 |
+| Place VAD enrichment after diagnostics | Ensures diagnostics exist and alignment not yet modified | ✓ Good v1.2 |
+| Guard with vadResult.segments check | Handle cases where VAD is unavailable | ✓ Good v1.2 |
+| Tooltip format "VAD: X% (label) - hint" | User decision from CONTEXT.md | ✓ Good v1.2 |
+
 ---
-*Last updated: 2026-02-04 after v1.2 milestone start*
+*Last updated: 2026-02-04 after v1.2 milestone complete*
