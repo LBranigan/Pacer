@@ -65,6 +65,28 @@ function buildNLTooltip(nl) {
 }
 
 /**
+ * Build tooltip portion for VAD gap analysis.
+ * Per CONTEXT.md: "VAD: X% (acoustic label) - factual hint"
+ * Shows acoustic label in parentheses followed by interpretive hint.
+ * @param {Object|null} vadAnalysis - _vadAnalysis from diagnostics
+ * @returns {string} Tooltip portion or empty string if no VAD data
+ */
+function buildVADTooltipInfo(vadAnalysis) {
+  if (!vadAnalysis) return '';
+
+  const factualHints = {
+    'silence confirmed': 'no speech detected',
+    'mostly silent': 'minimal speech detected',
+    'mixed signal': 'partial speech during gap',
+    'speech detected': 'speech detected during gap',
+    'continuous speech': 'continuous speech during gap'
+  };
+
+  const hint = factualHints[vadAnalysis.label] || vadAnalysis.label;
+  return `\nVAD: ${vadAnalysis.speechPercent}% (${vadAnalysis.label}) - ${hint}`;
+}
+
+/**
  * Build disfluency badge tooltip showing attempt trace.
  * Per CONTEXT.md: "Tooltip on disfluency badge should reveal the 'trace' (fragments)"
  */
@@ -135,13 +157,14 @@ function buildEnhancedTooltip(item, sttWord) {
     lines.push(`Time: ${start.toFixed(2)}s - ${end.toFixed(2)}s (${durationMs}ms)`);
 
     // Dual model info from _debug
+    // NOTE: Only default model has trustworthy confidence (latest_long returns fake scores per Google docs)
     if (sttWord._debug) {
       if (sttWord._debug.latestLong) {
         const l = sttWord._debug.latestLong;
         const lStart = parseSttTime(l.startTime);
         const lEnd = parseSttTime(l.endTime);
-        const conf = l.confidence != null ? (l.confidence * 100).toFixed(1) + '%' : '—';
-        lines.push(`latest_long: "${l.word}" (${conf}) ${lStart.toFixed(2)}s-${lEnd.toFixed(2)}s`);
+        // No confidence shown for latest_long - Google returns fake scores for this model
+        lines.push(`latest_long: "${l.word}" ${lStart.toFixed(2)}s-${lEnd.toFixed(2)}s`);
       }
       if (sttWord._debug.default) {
         const d = sttWord._debug.default;
@@ -360,6 +383,7 @@ export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, di
   const onsetDelayMap = new Map(); // hypIndex -> {gap, threshold, punctuationType}
   const longPauseMap = new Map(); // afterHypIndex -> {gap}
   const morphErrorSet = new Set(); // "ref|hyp" lowercase pairs
+  const struggleWordSet = new Set(); // STT word indices flagged as struggle words
   if (diagnostics) {
     if (diagnostics.onsetDelays) {
       for (const d of diagnostics.onsetDelays) {
@@ -386,6 +410,16 @@ export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, di
     if (diagnostics.morphologicalErrors) {
       for (const m of diagnostics.morphologicalErrors) {
         morphErrorSet.add((m.ref || '').toLowerCase() + '|' + (m.hyp || '').toLowerCase());
+      }
+    }
+    // Struggle words: words with pause/hesitation + low confidence + not sight word
+    if (diagnostics.struggleWords) {
+      for (const s of diagnostics.struggleWords) {
+        // Convert STT wordIndex to render hypIndex
+        const hypIdx = sttToHypIndex.get(s.wordIndex);
+        if (hypIdx !== undefined) {
+          struggleWordSet.add(hypIdx);
+        }
       }
     }
   }
@@ -432,6 +466,18 @@ export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, di
     // Rate anomaly visual indicator (Phase 16)
     if (sttWord?._flags?.includes('rate_anomaly')) {
       span.classList.add('word-rate-anomaly');
+    }
+
+    // Morphological prefix break indicator (ensemble-merger.js)
+    // Shows squiggly line when student sounded out a prefix separately (e.g., "un...nerved")
+    // This is NOT an error - it indicates the student used phonics skills to decode the word
+    if (sttWord?._debug?.morphologicalBreak) {
+      span.classList.add('word-morphological');
+      const mb = sttWord._debug.morphologicalBreak;
+      const breakNote = `Prefix sounded out: "${mb.prefix}" + "${sttWord.word}" (${mb.gapMs}ms gap)`;
+      // Add prefix to display (optional - show what student sounded out)
+      span.dataset.morphPrefix = mb.prefix;
+      sttInfo += '\n' + breakNote;
     }
 
     // Build tooltip with enhanced debug info
@@ -482,6 +528,13 @@ export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, di
         hesitationNote += ' (threshold ' + threshMs + 'ms)';
       }
       span.title += hesitationNote;
+    }
+
+    // Struggle word overlay (pause/hesitation + low confidence + not sight word)
+    // Highlights words where student showed decoding difficulty
+    if (currentHypIndex !== null && struggleWordSet.has(currentHypIndex)) {
+      span.classList.add('word-struggle');
+      span.title += '\n⚠ Struggle word: pause/hesitation + low confidence + multi-syllable';
     }
 
     // Insert pause indicator before this word if previous hyp word had a long pause
@@ -576,6 +629,46 @@ export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, di
     wordsDiv.appendChild(scSection);
   }
 
+  // ─────────────────────────────────────────────────────────────────────────
+  // Confidence Visualization Section
+  // ─────────────────────────────────────────────────────────────────────────
+  const confWordsDiv = document.getElementById('confidenceWords');
+  if (confWordsDiv && transcriptWords && transcriptWords.length > 0) {
+    confWordsDiv.innerHTML = '';
+
+    for (const w of transcriptWords) {
+      const span = document.createElement('span');
+
+      // Determine confidence class based on trustLevel or raw confidence
+      let confClass = 'conf-low';
+      const conf = w.confidence;
+      const trustLevel = w.trustLevel;
+
+      if (trustLevel === 'ghost') {
+        confClass = 'conf-ghost';
+      } else if (trustLevel === 'high' || (conf != null && conf >= 0.93)) {
+        confClass = 'conf-high';
+      } else if (trustLevel === 'medium' || (conf != null && conf >= 0.70)) {
+        confClass = 'conf-medium';
+      } else {
+        confClass = 'conf-low';
+      }
+
+      span.className = 'conf-word ' + confClass;
+      span.textContent = w.word;
+
+      // Build tooltip with confidence details
+      const confPercent = conf != null ? (conf * 100).toFixed(1) + '%' : 'N/A';
+      const source = w.source || 'unknown';
+      const start = parseSttTime(w.startTime);
+      const end = parseSttTime(w.endTime);
+      span.title = `${w.word}\nConfidence: ${confPercent}\nTrust: ${trustLevel || 'N/A'}\nSource: ${source}\n${start.toFixed(2)}s – ${end.toFixed(2)}s`;
+
+      confWordsDiv.appendChild(span);
+      confWordsDiv.appendChild(document.createTextNode(' '));
+    }
+  }
+
   // JSON details — per-word timestamps from raw STT, all inter-word gaps
 
   // Build STT words array with parsed times
@@ -629,6 +722,64 @@ export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, di
 }
 
 /**
+ * Convert AudioBuffer to WAV blob.
+ */
+function audioBufferToWav(buffer) {
+  const numChannels = buffer.numberOfChannels;
+  const sampleRate = buffer.sampleRate;
+  const format = 1; // PCM
+  const bitDepth = 16;
+
+  const bytesPerSample = bitDepth / 8;
+  const blockAlign = numChannels * bytesPerSample;
+
+  const length = buffer.length;
+  const dataLength = length * numChannels * bytesPerSample;
+  const headerLength = 44;
+  const totalLength = headerLength + dataLength;
+
+  const arrayBuffer = new ArrayBuffer(totalLength);
+  const view = new DataView(arrayBuffer);
+
+  const writeString = (offset, string) => {
+    for (let i = 0; i < string.length; i++) {
+      view.setUint8(offset + i, string.charCodeAt(i));
+    }
+  };
+
+  writeString(0, 'RIFF');
+  view.setUint32(4, totalLength - 8, true);
+  writeString(8, 'WAVE');
+  writeString(12, 'fmt ');
+  view.setUint32(16, 16, true);
+  view.setUint16(20, format, true);
+  view.setUint16(22, numChannels, true);
+  view.setUint32(24, sampleRate, true);
+  view.setUint32(28, sampleRate * blockAlign, true);
+  view.setUint16(32, blockAlign, true);
+  view.setUint16(34, bitDepth, true);
+  writeString(36, 'data');
+  view.setUint32(40, dataLength, true);
+
+  const channels = [];
+  for (let i = 0; i < numChannels; i++) {
+    channels.push(buffer.getChannelData(i));
+  }
+
+  let offset = 44;
+  for (let i = 0; i < length; i++) {
+    for (let ch = 0; ch < numChannels; ch++) {
+      const sample = Math.max(-1, Math.min(1, channels[ch][i]));
+      const intSample = sample < 0 ? sample * 0x8000 : sample * 0x7FFF;
+      view.setInt16(offset, intSample, true);
+      offset += 2;
+    }
+  }
+
+  return new Blob([arrayBuffer], { type: 'audio/wav' });
+}
+
+/**
  * Show an audio playback control for the recorded/uploaded blob.
  * @param {Blob} blob
  */
@@ -641,10 +792,49 @@ export function showAudioPlayback(blob) {
     document.getElementById('resultWords').parentNode.insertBefore(container, document.getElementById('resultWords'));
   }
   container.innerHTML = '';
+
+  const wrapper = document.createElement('div');
+  wrapper.style.display = 'flex';
+  wrapper.style.alignItems = 'center';
+  wrapper.style.gap = '0.5rem';
+
   const audio = document.createElement('audio');
   audio.controls = true;
   audio.src = URL.createObjectURL(blob);
-  container.appendChild(audio);
+
+  const downloadBtn = document.createElement('button');
+  downloadBtn.textContent = '⬇ WAV';
+  downloadBtn.title = 'Download as WAV file';
+  downloadBtn.style.padding = '0.4rem 0.8rem';
+  downloadBtn.style.cursor = 'pointer';
+
+  downloadBtn.addEventListener('click', async () => {
+    downloadBtn.disabled = true;
+    downloadBtn.textContent = '...';
+    try {
+      const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+      const arrayBuffer = await blob.arrayBuffer();
+      const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
+      const wavBlob = audioBufferToWav(audioBuffer);
+      const url = URL.createObjectURL(wavBlob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'recording-' + new Date().toISOString().slice(0, 19).replace(/[:.]/g, '-') + '.wav';
+      a.click();
+      URL.revokeObjectURL(url);
+      audioContext.close();
+    } catch (err) {
+      console.error('WAV conversion failed:', err);
+      alert('Failed to convert to WAV: ' + err.message);
+    } finally {
+      downloadBtn.disabled = false;
+      downloadBtn.textContent = '⬇ WAV';
+    }
+  });
+
+  wrapper.appendChild(audio);
+  wrapper.appendChild(downloadBtn);
+  container.appendChild(wrapper);
 }
 
 /**
