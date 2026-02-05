@@ -1,0 +1,811 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ORF Pipeline Architecture</title>
+<style>
+/* ========== Reset & Base ========== */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  line-height: 1.6;
+  color: #1a1a1a;
+  background: #fff;
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 2rem 1.5rem 4rem;
+}
+h1 { font-size: 1.8rem; color: #1565c0; margin-bottom: 0.25rem; }
+h2 { font-size: 1.35rem; color: #333; margin: 2.5rem 0 0.75rem; border-bottom: 2px solid #e0e0e0; padding-bottom: 0.4rem; }
+h3 { font-size: 1.1rem; color: #444; margin: 1.5rem 0 0.5rem; }
+p, li { font-size: 0.95rem; }
+code { font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace; font-size: 0.88rem; background: #f5f5f5; padding: 1px 5px; border-radius: 3px; }
+
+/* ========== Header ========== */
+.header-meta { font-size: 0.8rem; color: #777; margin-bottom: 2rem; }
+.toc { background: #fafafa; border: 1px solid #e0e0e0; border-radius: 6px; padding: 1rem 1.5rem; margin-bottom: 2rem; }
+.toc h3 { margin: 0 0 0.5rem; font-size: 0.95rem; }
+.toc ol { padding-left: 1.5rem; }
+.toc li { font-size: 0.88rem; margin: 0.2rem 0; }
+.toc a { color: #1565c0; text-decoration: none; }
+.toc a:hover { text-decoration: underline; }
+
+/* ========== Flowchart ========== */
+.flowchart { display: flex; flex-direction: column; align-items: center; gap: 0; margin: 1.5rem 0; }
+.flow-box {
+  background: #e3f2fd;
+  border: 2px solid #90caf9;
+  border-radius: 8px;
+  padding: 0.6rem 1.4rem;
+  font-weight: 600;
+  font-size: 0.9rem;
+  text-align: center;
+  min-width: 220px;
+  position: relative;
+}
+.flow-box.primary { background: #1565c0; color: #fff; border-color: #0d47a1; }
+.flow-box.accent { background: #fff3e0; border-color: #ffb74d; }
+.flow-box.success { background: #e8f5e9; border-color: #81c784; }
+.flow-box.error { background: #fce4ec; border-color: #ef9a9a; }
+.flow-arrow {
+  width: 2px;
+  height: 24px;
+  background: #90caf9;
+  position: relative;
+}
+.flow-arrow::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  border-left: 6px solid transparent;
+  border-right: 6px solid transparent;
+  border-top: 8px solid #90caf9;
+}
+
+/* ========== Cards ========== */
+.card {
+  background: #fafafa;
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  padding: 1rem 1.25rem;
+  margin: 0.75rem 0;
+}
+.card-label {
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: #777;
+  margin-bottom: 0.4rem;
+}
+
+/* ========== Pipeline Detail ========== */
+.pipeline-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.75rem;
+  margin: 1rem 0;
+}
+.pipeline-cell {
+  background: #f5f5f5;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  padding: 0.75rem 1rem;
+}
+.pipeline-cell h4 { font-size: 0.9rem; color: #1565c0; margin-bottom: 0.3rem; }
+.pipeline-cell p { font-size: 0.85rem; margin: 0.15rem 0; }
+.pipeline-cell code { font-size: 0.82rem; }
+
+/* ========== Ensemble Diagram ========== */
+.ensemble-diagram {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  background: #fafafa;
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  padding: 1.25rem;
+  margin: 1rem 0;
+  gap: 0;
+}
+.ensemble-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  width: 100%;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+.ensemble-box {
+  background: #e3f2fd;
+  border: 1px solid #90caf9;
+  border-radius: 6px;
+  padding: 0.5rem 0.9rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+  text-align: center;
+  min-width: 140px;
+}
+.ensemble-box.reverb { background: #e8eaf6; border-color: #9fa8da; color: #283593; }
+.ensemble-box.deepgram { background: #fce4ec; border-color: #f48fb1; color: #880e4f; }
+.ensemble-box.nw { background: #fff3e0; border-color: #ffb74d; color: #e65100; }
+.ensemble-box.tag { background: #f3e5f5; border-color: #ce93d8; color: #6a1b9a; }
+.ensemble-box.merge { background: #e8f5e9; border-color: #81c784; color: #2e7d32; }
+.ensemble-box.xval { background: #fce4ec; border-color: #ef9a9a; color: #c62828; }
+.ensemble-arrow-h { font-size: 1.2rem; color: #90caf9; }
+.ensemble-sep { width: 100%; height: 1px; background: #e0e0e0; margin: 0.5rem 0; }
+.ensemble-label { font-size: 0.75rem; color: #888; font-style: italic; text-align: center; width: 100%; }
+
+/* ========== Classification Table ========== */
+.class-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; margin: 1rem 0; }
+.class-table th {
+  background: #f5f5f5;
+  border: 1px solid #ddd;
+  padding: 0.5rem 0.6rem;
+  text-align: left;
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+.class-table td {
+  border: 1px solid #ddd;
+  padding: 0.45rem 0.6rem;
+  vertical-align: top;
+}
+.class-table tr:hover { background: #f9f9f9; }
+
+/* ========== Color Swatches ========== */
+.swatch {
+  display: inline-block;
+  width: 24px;
+  height: 18px;
+  border-radius: 3px;
+  vertical-align: middle;
+  margin-right: 6px;
+  border: 1px solid rgba(0,0,0,0.15);
+}
+.swatch-correct { background: #c8e6c9; }
+.swatch-substitution { background: #ffe0b2; }
+.swatch-omission { background: #ffcdd2; }
+.swatch-insertion { background: #bbdefb; }
+.swatch-hesitation { background: #fff; border-left: 3px solid #ff9800; }
+.swatch-pause { background: #eee; border: 1px dotted #999; }
+.swatch-self-correction { background: #e1bee7; }
+.swatch-morphological { background: #fff; border-bottom: 2px wavy #e65100; }
+.swatch-struggle { background: linear-gradient(135deg, #e0f7fa 0%, #b2ebf2 100%); border: 1px dotted #00897b; }
+.swatch-disfluency { background: #f5f5f5; border: 1px solid #ddd; position: relative; }
+.swatch-forgiven { background: #fff; border: 2px dashed #4caf50; }
+.swatch-healed { background: #c8e6c9; border: 1px dashed #66bb6a; }
+
+/* ========== Collapsible ========== */
+details { margin: 0.5rem 0; }
+details > summary {
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 0.9rem;
+  color: #1565c0;
+  padding: 0.4rem 0;
+  list-style: none;
+}
+details > summary::before {
+  content: '\25B6';
+  display: inline-block;
+  margin-right: 0.5rem;
+  font-size: 0.75rem;
+  transition: transform 0.2s;
+}
+details[open] > summary::before { transform: rotate(90deg); }
+details > summary::-webkit-details-marker { display: none; }
+
+/* ========== Threshold List ========== */
+.threshold-list { list-style: none; padding: 0; }
+.threshold-list li {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  padding: 0.25rem 0;
+  font-size: 0.88rem;
+  border-bottom: 1px dotted #eee;
+}
+.threshold-list .label { font-weight: 600; min-width: 160px; color: #444; }
+.threshold-list .value { font-family: monospace; color: #1565c0; }
+
+/* ========== Fallback Chain ========== */
+.fallback-chain {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  margin: 0.75rem 0;
+  font-size: 0.88rem;
+}
+.fallback-step {
+  background: #f5f5f5;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  padding: 0.3rem 0.7rem;
+  font-weight: 600;
+}
+.fallback-step.fail { color: #c62828; }
+.fallback-step.ok { color: #2e7d32; }
+.fallback-arrow { color: #999; }
+
+/* ========== Print ========== */
+@media print {
+  body { max-width: 100%; padding: 1rem; }
+  .card, .ensemble-diagram { break-inside: avoid; }
+  details { display: block; }
+  details > summary::before { content: ''; }
+  h2 { break-after: avoid; }
+}
+</style>
+</head>
+<body>
+
+<!-- ============================================================ -->
+<!-- 1. HEADER                                                      -->
+<!-- ============================================================ -->
+<h1>ORF Pipeline Architecture</h1>
+<div class="header-meta">
+  v 2026-02-05 &nbsp;|&nbsp; Kitchen Sink Ensemble (Reverb + Deepgram)
+</div>
+
+<nav class="toc">
+  <h3>Contents</h3>
+  <ol>
+    <li><a href="#pipeline-flow">High-Level Pipeline Flow</a></li>
+    <li><a href="#kitchen-sink">Kitchen Sink Pipeline</a></li>
+    <li><a href="#confidence">Confidence Pipeline</a></li>
+    <li><a href="#alignment">Word Alignment (Reference vs STT)</a></li>
+    <li><a href="#classification">Classification Reference Table</a></li>
+    <li><a href="#diagnostics">Diagnostics Detail</a></li>
+    <li><a href="#vad-gap">VAD Gap Analysis</a></li>
+    <li><a href="#metrics">Metrics</a></li>
+    <li><a href="#backend">Server Backend</a></li>
+  </ol>
+</nav>
+
+
+<!-- ============================================================ -->
+<!-- 2. HIGH-LEVEL PIPELINE FLOW                                    -->
+<!-- ============================================================ -->
+<h2 id="pipeline-flow">1. High-Level Pipeline Flow</h2>
+<p>Every assessment follows this vertical pipeline from audio capture to final display.</p>
+
+<div class="flowchart">
+  <div class="flow-box primary">Audio Input (Record / Upload)</div>
+  <div class="flow-arrow"></div>
+  <div class="flow-box">Pad Audio (+500ms silence)<br><small>audio-padding.js &mdash; helps ASR resolve final word</small></div>
+  <div class="flow-arrow"></div>
+  <div class="flow-box accent">Kitchen Sink Pipeline<br><small>Reverb + Deepgram in parallel</small></div>
+  <div class="flow-arrow"></div>
+  <div class="flow-box">Word Alignment<br><small>alignment.js &mdash; diff-match-patch vs reference</small></div>
+  <div class="flow-arrow"></div>
+  <div class="flow-box">Diagnostics (6 detectors)<br><small>diagnostics.js &mdash; hesitations, pauses, self-corrections, etc.</small></div>
+  <div class="flow-arrow"></div>
+  <div class="flow-box">Post-Alignment Processing<br><small>Proper noun forgiveness, terminal leniency, self-correction healing</small></div>
+  <div class="flow-arrow"></div>
+  <div class="flow-box">VAD Gap Analysis<br><small>vad-gap-analyzer.js &mdash; acoustic labels for pauses</small></div>
+  <div class="flow-arrow"></div>
+  <div class="flow-box">Metrics (WCPM + Accuracy)<br><small>metrics.js</small></div>
+  <div class="flow-arrow"></div>
+  <div class="flow-box success">UI Rendering &amp; Storage<br><small>ui.js, storage.js</small></div>
+</div>
+
+
+<!-- ============================================================ -->
+<!-- 3. KITCHEN SINK PIPELINE                                       -->
+<!-- ============================================================ -->
+<h2 id="kitchen-sink">2. Kitchen Sink Pipeline</h2>
+<p>The Kitchen Sink pipeline (<code>kitchen-sink-merger.js</code>) replaces the legacy Google STT ensemble with Reverb ASR + Deepgram Nova-3. No Google dependency.</p>
+
+<div class="ensemble-diagram">
+  <div class="ensemble-label">Step 1: Parallel ASR</div>
+  <div class="ensemble-row">
+    <div class="ensemble-box reverb">
+      Reverb /ensemble<br>
+      <small>v=1.0 (verbatim) + v=0.0 (clean)</small>
+    </div>
+    <div class="ensemble-arrow-h">+</div>
+    <div class="ensemble-box deepgram">
+      Deepgram Nova-3<br>
+      <small>via /deepgram proxy</small>
+    </div>
+  </div>
+
+  <div class="ensemble-sep"></div>
+  <div class="ensemble-label">Step 2-3: Disfluency Detection (Reverb only)</div>
+  <div class="ensemble-row">
+    <div class="ensemble-box reverb" style="min-width:100px;">v=1.0<br><small>verbatim</small></div>
+    <div class="ensemble-arrow-h">&rarr;</div>
+    <div class="ensemble-box nw">Needleman-Wunsch<br><small>sequence-aligner.js</small></div>
+    <div class="ensemble-arrow-h">&rarr;</div>
+    <div class="ensemble-box tag">Disfluency Tagger<br><small>disfluency-tagger.js</small></div>
+  </div>
+  <div class="ensemble-row" style="margin-top:0.3rem;">
+    <div class="ensemble-box reverb" style="min-width:100px;">v=0.0<br><small>clean</small></div>
+    <div class="ensemble-arrow-h" style="visibility:hidden;">&rarr;</div>
+    <div style="min-width:140px; text-align:center; font-size:0.8rem; color:#666;">
+      <strong>Alignment ops:</strong><br>match / mismatch /<br>insertion / deletion
+    </div>
+    <div class="ensemble-arrow-h" style="visibility:hidden;">&rarr;</div>
+    <div style="min-width:140px; text-align:center; font-size:0.8rem; color:#666;">
+      <strong>Disfluency types:</strong><br>filler / repetition /<br>false_start / unknown
+    </div>
+  </div>
+
+  <div class="ensemble-sep"></div>
+  <div class="ensemble-label">Step 4-5: Build Merged Words + Cross-Validation</div>
+  <div class="ensemble-row">
+    <div class="ensemble-box merge">Build Merged Words<br><small>from tagged alignment</small></div>
+    <div class="ensemble-arrow-h">&rarr;</div>
+    <div class="ensemble-box xval">Cross-Validate<br><small>Reverb &harr; Deepgram</small></div>
+  </div>
+  <div class="ensemble-row" style="margin-top:0.3rem;">
+    <div style="font-size:0.8rem; color:#666; text-align:center; width:100%;">
+      Each word gets: <code>crossValidation</code> = <strong>confirmed</strong> (both agree)
+      | <strong>unconfirmed</strong> (Reverb only) | <strong>unavailable</strong> (no Deepgram)
+    </div>
+  </div>
+</div>
+
+<h3>Fallback Chain</h3>
+<div class="fallback-chain">
+  <span class="fallback-step ok">Reverb + Deepgram</span>
+  <span class="fallback-arrow">&rarr; Reverb offline? &rarr;</span>
+  <span class="fallback-step ok">Deepgram only</span>
+  <span class="fallback-arrow">&rarr; Deepgram fails? &rarr;</span>
+  <span class="fallback-step fail">Error (empty)</span>
+</div>
+<p style="font-size:0.85rem; color:#666;">When Reverb is offline, disfluency detection is unavailable (no verbatim/clean diff). Cross-validation marks all words as <code>confirmed</code> (Deepgram is the only source).</p>
+
+
+<!-- ============================================================ -->
+<!-- 4. CONFIDENCE PIPELINE                                         -->
+<!-- ============================================================ -->
+<h2 id="confidence">3. Confidence Pipeline</h2>
+<p>Confidence scores flow from two independent ASR engines and are preserved on each word for downstream use.</p>
+
+<div class="pipeline-grid">
+  <div class="pipeline-cell">
+    <h4>Reverb v=1.0</h4>
+    <p><strong>Mode:</strong> <code>attention_rescoring</code></p>
+    <p><strong>Source:</strong> CTC beam search + attention decoder rescoring</p>
+    <p><strong>Range:</strong> 0.0 &ndash; 1.0 (real log-softmax probs)</p>
+    <p><strong>Stored as:</strong> <code>_reverbConfidence</code></p>
+  </div>
+  <div class="pipeline-cell">
+    <h4>Deepgram Nova-3</h4>
+    <p><strong>Source:</strong> Model confidence from Deepgram API</p>
+    <p><strong>Range:</strong> 0.0 &ndash; 1.0</p>
+    <p><strong>Stored as:</strong> <code>_deepgramConfidence</code></p>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-label">Primary Confidence Resolution</div>
+  <ul style="font-size:0.9rem; padding-left:1.5rem;">
+    <li><strong>Confirmed words</strong> (in both sources): <code>confidence</code> = Deepgram value</li>
+    <li><strong>Unconfirmed words</strong> (Reverb only): <code>confidence</code> = Reverb value</li>
+    <li><strong>Unavailable</strong> (no Deepgram): <code>confidence</code> = Reverb value</li>
+  </ul>
+  <p style="font-size:0.85rem; color:#666; margin-top:0.5rem;">Both original values are always preserved as <code>_reverbConfidence</code> and <code>_deepgramConfidence</code> for debugging.</p>
+  <p style="font-size:0.85rem; color:#666;"><strong>UI note:</strong> Confidence percentages are <em>not</em> shown to users (both models have calibration issues &mdash; Deepgram clusters near 100%, Reverb drifts to 0%). Instead, tooltips show which word each model detected and the cross-validation status.</p>
+</div>
+
+<div class="card">
+  <div class="card-label">Timestamp Resolution</div>
+  <p style="font-size:0.9rem;">Deepgram Nova-3 timestamps are the <strong>primary timekeeper</strong> for all confirmed words. Reverb CTM timestamps use a hardcoded 100ms duration (<code>g_time_stamp_gap_ms = 100</code> in ctc_align.py), making all words appear as exactly 100ms regardless of actual acoustic length.</p>
+  <ul style="font-size:0.9rem; padding-left:1.5rem;">
+    <li><strong>Confirmed words:</strong> <code>startTime</code> / <code>endTime</code> = Deepgram values; originals preserved as <code>_reverbStartTime</code> / <code>_reverbEndTime</code></li>
+    <li><strong>Unconfirmed words:</strong> <code>startTime</code> / <code>endTime</code> = Reverb values (no Deepgram alternative)</li>
+  </ul>
+  <p style="font-size:0.85rem; color:#666; margin-top:0.5rem;">This directly affects hesitation and pause detection in <code>diagnostics.js</code>, which measures inter-word gaps from <code>endTime</code> to <code>startTime</code>.</p>
+</div>
+
+
+<!-- ============================================================ -->
+<!-- 5. WORD ALIGNMENT                                              -->
+<!-- ============================================================ -->
+<h2 id="alignment">4. Word Alignment (Reference vs STT)</h2>
+<p><code>alignment.js</code> compares the reference passage against the student's transcribed speech using diff-match-patch.</p>
+
+<div class="card">
+  <div class="card-label">Pipeline</div>
+  <div class="flowchart" style="margin:0.5rem 0;">
+    <div class="flow-box" style="font-size:0.85rem; min-width:auto; padding:0.4rem 1rem;">Normalize words (lowercase, strip punctuation, apply equivalences)</div>
+    <div class="flow-arrow" style="height:16px;"></div>
+    <div class="flow-box" style="font-size:0.85rem; min-width:auto; padding:0.4rem 1rem;">Filter disfluencies (<code>isDisfluency === true</code> &rarr; excluded from alignment)</div>
+    <div class="flow-arrow" style="height:16px;"></div>
+    <div class="flow-box" style="font-size:0.85rem; min-width:auto; padding:0.4rem 1rem;">diff-match-patch (Levenshtein-based diff)</div>
+    <div class="flow-arrow" style="height:16px;"></div>
+    <div class="flow-box" style="font-size:0.85rem; min-width:auto; padding:0.4rem 1rem;">Classify each operation: correct / substitution / omission / insertion</div>
+  </div>
+</div>
+
+<h3>Alignment Types with Color Swatches</h3>
+<table class="class-table">
+  <tr><th>Type</th><th>Visual</th><th>Meaning</th></tr>
+  <tr><td>correct</td><td><span class="swatch swatch-correct"></span> Green</td><td>Student said the right word</td></tr>
+  <tr><td>substitution</td><td><span class="swatch swatch-substitution"></span> Orange</td><td>Student said a different word</td></tr>
+  <tr><td>omission</td><td><span class="swatch swatch-omission"></span> Red + strikethrough</td><td>Student skipped a word</td></tr>
+  <tr><td>insertion</td><td><span class="swatch swatch-insertion"></span> Blue</td><td>Student added a word not in reference</td></tr>
+</table>
+
+
+<!-- ============================================================ -->
+<!-- 6. CLASSIFICATION REFERENCE TABLE                              -->
+<!-- ============================================================ -->
+<h2 id="classification">5. Classification Reference Table</h2>
+<p>Complete list of every miscue type in the system. Source of truth: <code>miscue-registry.js</code>.</p>
+
+<table class="class-table">
+  <thead>
+    <tr>
+      <th style="width:140px;">Type</th>
+      <th style="width:36px;">Visual</th>
+      <th>Description</th>
+      <th>Logic / Thresholds</th>
+      <th style="width:60px;">Error?</th>
+      <th>Example</th>
+    </tr>
+  </thead>
+  <tbody>
+    <!-- Alignment-based -->
+    <tr>
+      <td><strong>correct</strong></td>
+      <td><span class="swatch swatch-correct"></span></td>
+      <td>Word matches reference</td>
+      <td>diff-match-patch equality</td>
+      <td>&mdash;</td>
+      <td>ref "dog" &rarr; said "dog"</td>
+    </tr>
+    <tr>
+      <td><strong>substitution</strong></td>
+      <td><span class="swatch swatch-substitution"></span></td>
+      <td>Student said a different word</td>
+      <td>diff-match-patch replacement</td>
+      <td>Yes</td>
+      <td>ref "house" &rarr; said "horse"</td>
+    </tr>
+    <tr>
+      <td><strong>omission</strong></td>
+      <td><span class="swatch swatch-omission"></span></td>
+      <td>Student skipped a word</td>
+      <td>diff-match-patch deletion from reference</td>
+      <td>Yes</td>
+      <td>ref "the big dog" &rarr; said "the dog"</td>
+    </tr>
+    <tr>
+      <td><strong>insertion</strong></td>
+      <td><span class="swatch swatch-insertion"></span></td>
+      <td>Student added a word not in reference</td>
+      <td>diff-match-patch insertion</td>
+      <td>No</td>
+      <td>ref "the dog" &rarr; said "the big dog"</td>
+    </tr>
+
+    <!-- Diagnostics -->
+    <tr>
+      <td><strong>hesitation</strong></td>
+      <td><span class="swatch swatch-hesitation"></span></td>
+      <td>Noticeable pause before a word (decoding difficulty)</td>
+      <td>Gap 500ms&ndash;3000ms (800ms after comma, 1200ms after period)</td>
+      <td>No</td>
+      <td>800ms gap before "elephant"</td>
+    </tr>
+    <tr>
+      <td><strong>long pause</strong></td>
+      <td><span class="swatch swatch-pause"></span></td>
+      <td>Extended silence (student got stuck)</td>
+      <td>Gap &ge; 3000ms</td>
+      <td>Yes</td>
+      <td>4.5s silence between "the" and "dog"</td>
+    </tr>
+    <tr>
+      <td><strong>self-correction</strong></td>
+      <td><span class="swatch swatch-self-correction"></span></td>
+      <td>Student repeated a word or phrase</td>
+      <td>Consecutive identical words/phrases (excludes legitimate reference repeats)</td>
+      <td>No</td>
+      <td>"the dog the dog ran"</td>
+    </tr>
+    <tr>
+      <td><strong>morphological</strong></td>
+      <td><span class="swatch swatch-morphological"></span></td>
+      <td>Wrong word ending &mdash; same root, wrong suffix</td>
+      <td>3+ char shared prefix + confidence &lt; 0.80</td>
+      <td>Yes</td>
+      <td>ref "running" &rarr; said "runned"</td>
+    </tr>
+    <tr>
+      <td><strong>struggle</strong></td>
+      <td><span class="swatch swatch-struggle"></span></td>
+      <td>Word with decoding difficulty (pause + uncertainty)</td>
+      <td>Pause/hesitation before word + confidence &lt; 0.70 + word length &gt; 3 chars</td>
+      <td>No</td>
+      <td>3.1s pause before "unnerved" at 61% confidence</td>
+    </tr>
+
+    <!-- Reverb disfluencies -->
+    <tr>
+      <td><strong>reverb_filler</strong></td>
+      <td><span class="swatch swatch-disfluency"></span></td>
+      <td>Filler word detected by Reverb verbatim/clean diff</td>
+      <td>Word in v=1.0 but not in v=0.0 &rarr; classified as filler (um, uh, er, ah, mm, hmm)</td>
+      <td>No</td>
+      <td>"the <em>um</em> cat sat"</td>
+    </tr>
+    <tr>
+      <td><strong>reverb_repetition</strong></td>
+      <td><span class="swatch swatch-disfluency"></span></td>
+      <td>Word repetition detected by Reverb diff</td>
+      <td>Same word in v=1.0 that is absent from v=0.0 (insertion in alignment)</td>
+      <td>No</td>
+      <td>"<em>the</em> the cat sat"</td>
+    </tr>
+    <tr>
+      <td><strong>reverb_false_start</strong></td>
+      <td><span class="swatch swatch-disfluency"></span></td>
+      <td>Partial word / false start detected by Reverb diff</td>
+      <td>Partial word in v=1.0 absent from v=0.0</td>
+      <td>No</td>
+      <td>"<em>ca-</em> cat sat"</td>
+    </tr>
+
+    <!-- Forgiveness -->
+    <tr>
+      <td><strong>forgiven</strong> (proper noun)</td>
+      <td><span class="swatch swatch-forgiven"></span></td>
+      <td>Phonetically close attempt at a proper noun</td>
+      <td>NL API proper noun detection + Levenshtein ratio &ge; 0.40</td>
+      <td>No</td>
+      <td>ref "Hermione" &rarr; said "Her-my-own"</td>
+    </tr>
+    <tr>
+      <td><strong>healed</strong> (terminal leniency)</td>
+      <td><span class="swatch swatch-healed"></span></td>
+      <td>Last 1&ndash;2 words forgiven due to recording cutoff</td>
+      <td>Phonetic match (Double Metaphone) on final word</td>
+      <td>No</td>
+      <td>ref "hand" &rarr; said "hen" at end of recording</td>
+    </tr>
+  </tbody>
+</table>
+
+
+<!-- ============================================================ -->
+<!-- 7. DIAGNOSTICS DETAIL                                          -->
+<!-- ============================================================ -->
+<h2 id="diagnostics">6. Diagnostics Detail</h2>
+<p>Seven detectors run after alignment (<code>diagnostics.js</code>). All are orchestrated by <code>runDiagnostics()</code>.</p>
+
+<!-- DIAG-01 -->
+<details>
+  <summary>DIAG-01: Onset Delays (Hesitations)</summary>
+  <div class="card">
+    <p><strong>Detector:</strong> <code>detectOnsetDelays()</code></p>
+    <p><strong>Logic:</strong> Measure inter-word gap. Flag if gap &ge; threshold AND &lt; 3s.</p>
+    <ul class="threshold-list">
+      <li><span class="label">Default threshold</span> <span class="value">500ms</span></li>
+      <li><span class="label">After comma/semicolon</span> <span class="value">800ms</span></li>
+      <li><span class="label">After period/!/? </span> <span class="value">1200ms</span></li>
+      <li><span class="label">Upper bound (long pause)</span> <span class="value">3000ms</span></li>
+    </ul>
+    <p style="font-size:0.85rem; color:#666; margin-top:0.5rem;">First word is always skipped (no preceding word to measure gap from).</p>
+  </div>
+</details>
+
+<!-- DIAG-02 -->
+<details>
+  <summary>DIAG-02: Long Pauses</summary>
+  <div class="card">
+    <p><strong>Detector:</strong> <code>detectLongPauses()</code></p>
+    <p><strong>Logic:</strong> Flag gaps &ge; 3 seconds between consecutive words.</p>
+    <ul class="threshold-list">
+      <li><span class="label">Threshold</span> <span class="value">&ge; 3000ms</span></li>
+    </ul>
+    <p style="font-size:0.85rem; color:#666; margin-top:0.5rem;">Long pauses count as errors &mdash; the student was stuck and couldn't continue.</p>
+  </div>
+</details>
+
+<!-- DIAG-03 -->
+<details>
+  <summary>DIAG-03: Self-Corrections</summary>
+  <div class="card">
+    <p><strong>Detector:</strong> <code>detectSelfCorrections()</code></p>
+    <p><strong>Logic:</strong> Find consecutive repeated words/phrases, excluding legitimate reference repeats.</p>
+    <ul class="threshold-list">
+      <li><span class="label">Phrase-repeat</span> <span class="value">2-word phrases checked first (greedy)</span></li>
+      <li><span class="label">Word-repeat</span> <span class="value">Single word runs after phrase-repeat</span></li>
+      <li><span class="label">Reference guard</span> <span class="value">Skips repeats that exist in reference text</span></li>
+    </ul>
+    <p style="font-size:0.85rem; color:#666; margin-top:0.5rem;">Detected repetitions are reclassified from "insertion" to "self-correction" in alignment post-processing.</p>
+  </div>
+</details>
+
+<!-- DIAG-04 -->
+<details>
+  <summary>DIAG-04: Morphological Errors</summary>
+  <div class="card">
+    <p><strong>Detector:</strong> <code>detectMorphologicalErrors()</code></p>
+    <p><strong>Logic:</strong> For substitutions, check if ref and hyp share a 3+ character prefix with low confidence.</p>
+    <ul class="threshold-list">
+      <li><span class="label">Min shared prefix</span> <span class="value">3 characters</span></li>
+      <li><span class="label">Max confidence to flag</span> <span class="value">&lt; 0.80</span></li>
+    </ul>
+    <p style="font-size:0.85rem; color:#666; margin-top:0.5rem;">Morphological errors still count as substitutions but are tagged for teacher visibility.</p>
+  </div>
+</details>
+
+<!-- DIAG-05 -->
+<details>
+  <summary>DIAG-05: Prosody Proxy</summary>
+  <div class="card">
+    <p><strong>Detector:</strong> <code>computeProsodyProxy()</code></p>
+    <p><strong>Logic:</strong> Compare average pause at punctuation vs mid-sentence. A fluent reader pauses longer at punctuation.</p>
+    <ul class="threshold-list">
+      <li><span class="label">Metric</span> <span class="value">ratio = avgPauseAtPunct / avgPauseMid</span></li>
+      <li><span class="label">Ideal ratio</span> <span class="value">&gt; 1.0 (pauses more at punctuation)</span></li>
+    </ul>
+    <p style="font-size:0.85rem; color:#666; margin-top:0.5rem;">Diagnostic only &mdash; not used for scoring, provides fluency insight for teachers.</p>
+  </div>
+</details>
+
+<!-- DIAG-06 -->
+<details>
+  <summary>DIAG-06: Tier Breakdown</summary>
+  <div class="card">
+    <p><strong>Detector:</strong> <code>computeTierBreakdown()</code></p>
+    <p><strong>Logic:</strong> Categorize errors by word tier (sight / academic / proper / function) using NL API annotations.</p>
+    <p style="font-size:0.85rem; color:#666; margin-top:0.5rem;">Requires NL API annotations. Helps teachers identify which word categories the student struggles with.</p>
+  </div>
+</details>
+
+<!-- DIAG-07 -->
+<details>
+  <summary>DIAG-07: Struggle Words</summary>
+  <div class="card">
+    <p><strong>Detector:</strong> <code>detectStruggleWords()</code></p>
+    <p><strong>Logic:</strong> All three conditions must be met:</p>
+    <ul class="threshold-list">
+      <li><span class="label">Condition 1: Pause</span> <span class="value">Hesitation (&ge; threshold) or long pause (&ge; 3s) before word</span></li>
+      <li><span class="label">Condition 2: Low confidence</span> <span class="value">confidence &lt; 0.70</span></li>
+      <li><span class="label">Condition 3: Not a sight word</span> <span class="value">word length &gt; 3 characters</span></li>
+    </ul>
+    <p style="font-size:0.85rem; color:#666; margin-top:0.5rem;">Diagnostic only &mdash; helps teachers identify words needing targeted instruction. Not penalized.</p>
+  </div>
+</details>
+
+
+<!-- ============================================================ -->
+<!-- 8. VAD GAP ANALYSIS                                            -->
+<!-- ============================================================ -->
+<h2 id="vad-gap">7. VAD Gap Analysis</h2>
+<p><code>vad-gap-analyzer.js</code> enriches diagnostics with acoustic context by measuring VAD speech overlap during pauses and hesitations.</p>
+
+<div class="card">
+  <div class="card-label">Acoustic Labels</div>
+  <table class="class-table" style="margin:0.5rem 0;">
+    <tr><th>Speech %</th><th>Label</th><th>Interpretation</th></tr>
+    <tr><td>0 &ndash; 9%</td><td><strong>silence confirmed</strong></td><td>True silence &mdash; no speech activity detected</td></tr>
+    <tr><td>10 &ndash; 29%</td><td><strong>mostly silent</strong></td><td>Minimal speech (breathing, lip smacks)</td></tr>
+    <tr><td>30 &ndash; 49%</td><td><strong>mixed signal</strong></td><td>Some speech activity (sub-lexical attempts?)</td></tr>
+    <tr><td>50 &ndash; 79%</td><td><strong>speech detected</strong></td><td>Significant speech that STT didn't transcribe</td></tr>
+    <tr><td>80 &ndash; 100%</td><td><strong>continuous speech</strong></td><td>Full speech &mdash; STT may have dropped words</td></tr>
+  </table>
+</div>
+
+<p style="font-size:0.85rem; color:#666;">VAD analysis is added as <code>_vadAnalysis</code> on each long pause and hesitation entry in diagnostics. Teachers see the acoustic label in the pause/hesitation tooltip.</p>
+
+
+<!-- ============================================================ -->
+<!-- 9. METRICS                                                     -->
+<!-- ============================================================ -->
+<h2 id="metrics">8. Metrics</h2>
+
+<div class="pipeline-grid">
+  <div class="pipeline-cell">
+    <h4>WCPM (Words Correct Per Minute)</h4>
+    <p style="font-family:monospace; font-size:0.9rem; margin:0.5rem 0;">
+      WCPM = (correctCount / elapsedSeconds) &times; 60
+    </p>
+    <p style="font-size:0.85rem; color:#666;"><strong>Elapsed time:</strong> first word start &rarr; last word end (capped at 60s)</p>
+    <p style="font-size:0.85rem; color:#666;"><strong>Range:</strong> <code>wcpmMin</code> excludes words with moderate/significant disfluency; <code>wcpmMax</code> counts all correct words.</p>
+  </div>
+  <div class="pipeline-cell">
+    <h4>Accuracy</h4>
+    <p style="font-family:monospace; font-size:0.9rem; margin:0.5rem 0;">
+      Accuracy = correctCount / totalRefWords &times; 100%
+    </p>
+    <p style="font-size:0.85rem; color:#666;"><code>totalRefWords = correct + substitutions + omissions</code></p>
+    <p style="font-size:0.85rem; color:#666;">Insertions are <strong>not</strong> counted as errors (per ORF standards).</p>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-label">What Counts as Errors vs. Not</div>
+  <div class="pipeline-grid" style="margin:0.5rem 0;">
+    <div class="pipeline-cell" style="border-left:3px solid #c62828;">
+      <h4 style="color:#c62828;">Counts as Error</h4>
+      <ul style="font-size:0.85rem; padding-left:1.25rem;">
+        <li>Substitution</li>
+        <li>Omission</li>
+        <li>Long pause (&ge; 3s)</li>
+        <li>Morphological error</li>
+      </ul>
+    </div>
+    <div class="pipeline-cell" style="border-left:3px solid #2e7d32;">
+      <h4 style="color:#2e7d32;">Does NOT Count as Error</h4>
+      <ul style="font-size:0.85rem; padding-left:1.25rem;">
+        <li>Insertion</li>
+        <li>Hesitation (&lt; 3s)</li>
+        <li>Self-correction</li>
+        <li>Struggle word (diagnostic)</li>
+        <li>Disfluency (filler/repetition/false start)</li>
+        <li>Forgiven proper noun</li>
+        <li>Terminal leniency</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+
+<!-- ============================================================ -->
+<!-- 10. SERVER BACKEND                                              -->
+<!-- ============================================================ -->
+<h2 id="backend">9. Server Backend</h2>
+<p>FastAPI server running in Docker with NVIDIA GPU support (<code>services/reverb/server.py</code>).</p>
+
+<table class="class-table">
+  <thead>
+    <tr><th>Endpoint</th><th>Method</th><th>Description</th><th>Notes</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code>/health</code></td>
+      <td>GET</td>
+      <td>Health check with GPU status and model info</td>
+      <td>Returns <code>status: "ok"</code> (model loaded) or <code>"ready"</code> (waiting for first request). Includes <code>deepgram_configured</code> flag.</td>
+    </tr>
+    <tr>
+      <td><code>/ensemble</code></td>
+      <td>POST</td>
+      <td>Dual-pass transcription (Reverb ASR)</td>
+      <td>
+        <strong>Input:</strong> <code>{ audio_base64 }</code><br>
+        <strong>Pass 1:</strong> <code>verbatimicity=1.0</code> (preserves fillers, repetitions, false starts)<br>
+        <strong>Pass 2:</strong> <code>verbatimicity=0.0</code> (removes disfluencies)<br>
+        <strong>Mode:</strong> <code>attention_rescoring</code> (real per-word confidence)<br>
+        <strong>Timeout:</strong> 120s (first request triggers model loading)
+      </td>
+    </tr>
+    <tr>
+      <td><code>/deepgram</code></td>
+      <td>POST</td>
+      <td>Deepgram Nova-3 transcription proxy</td>
+      <td>
+        <strong>Input:</strong> <code>{ audio_base64 }</code><br>
+        <strong>Model:</strong> nova-3, en-US, smart_format<br>
+        <strong>Requires:</strong> <code>DEEPGRAM_API_KEY</code> env var<br>
+        <strong>Timeout:</strong> 30s
+      </td>
+    </tr>
+  </tbody>
+</table>
+
+<div class="card" style="margin-top:1rem;">
+  <div class="card-label">Infrastructure</div>
+  <ul style="font-size:0.85rem; padding-left:1.25rem;">
+    <li><strong>Runtime:</strong> Docker with NVIDIA Container Toolkit (<code>--gpus all</code>)</li>
+    <li><strong>GPU:</strong> NVIDIA GPU with CUDA support, 8GB+ VRAM recommended</li>
+    <li><strong>Model:</strong> <code>reverb_asr_v1</code> (loaded lazily on first request via <code>wenet</code>)</li>
+    <li><strong>CORS:</strong> All origins allowed (local dev service)</li>
+    <li><strong>GPU lock:</strong> Async mutex serializes GPU operations to prevent VRAM contention</li>
+  </ul>
+</div>
+
+</body>
+</html>

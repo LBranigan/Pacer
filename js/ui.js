@@ -149,31 +149,55 @@ function buildEnhancedTooltip(item, sttWord) {
     lines.push(item.ref || '');
   }
 
-  // Timestamps with duration (per CONTEXT.md: "offset range AND duration")
+  // Timestamps with duration
   if (sttWord) {
     const start = parseSttTime(sttWord.startTime);
     const end = parseSttTime(sttWord.endTime);
     const durationMs = Math.round((end - start) * 1000);
     lines.push(`Time: ${start.toFixed(2)}s - ${end.toFixed(2)}s (${durationMs}ms)`);
 
-    // Dual model info from _debug
-    // NOTE: Only default model has trustworthy confidence (latest_long returns fake scores per Google docs)
-    if (sttWord._debug) {
-      if (sttWord._debug.latestLong) {
-        const l = sttWord._debug.latestLong;
-        const lStart = parseSttTime(l.startTime);
-        const lEnd = parseSttTime(l.endTime);
-        // No confidence shown for latest_long - Google returns fake scores for this model
-        lines.push(`latest_long: "${l.word}" ${lStart.toFixed(2)}s-${lEnd.toFixed(2)}s`);
-      }
-      if (sttWord._debug.default) {
-        const d = sttWord._debug.default;
-        const dStart = parseSttTime(d.startTime);
-        const dEnd = parseSttTime(d.endTime);
-        const conf = d.confidence != null ? (d.confidence * 100).toFixed(1) + '%' : '—';
-        lines.push(`default: "${d.word}" (${conf}) ${dStart.toFixed(2)}s-${dEnd.toFixed(2)}s`);
+    // What each model heard (word text, not confidence %)
+    const reverbWord = sttWord._alignment?.verbatim || sttWord.word;
+    const deepgramWord = sttWord._deepgramWord || null;
+    if (deepgramWord) {
+      lines.push(`Deepgram heard: "${deepgramWord}"`);
+      lines.push(`Reverb heard: "${reverbWord}"`);
+    } else {
+      lines.push(`Reverb heard: "${reverbWord}"`);
+    }
+
+    // Cross-validation: both models agree on this word?
+    const xval = sttWord.crossValidation;
+    if (xval) {
+      lines.push(`Cross-validation: ${xval}${xval === 'confirmed' ? ' (both agree)' : xval === 'unconfirmed' ? ' (Reverb only)' : ''}`);
+    }
+
+    // Disfluency info
+    if (sttWord.isDisfluency) {
+      const typeLabels = { filler: 'Filler (um, uh)', repetition: 'Repetition', false_start: 'False start', unknown: 'Disfluency' };
+      lines.push(`Disfluency: ${typeLabels[sttWord.disfluencyType] || 'Yes'} (not an error)`);
+    }
+
+    // Reverb internal diff (v=1.0 verbatim vs v=0.0 clean)
+    if (sttWord._alignment) {
+      const a = sttWord._alignment;
+      if (a.verbatim && a.clean) {
+        lines.push(`Reverb v=1.0: "${a.verbatim}" | v=0.0: "${a.clean}"`);
+      } else if (a.verbatim && !a.clean) {
+        lines.push(`Reverb v=1.0 only: "${a.verbatim}" (removed in v=0.0 clean pass)`);
       }
     }
+  }
+
+  // Google NL API annotations (POS, entity type, vocabulary tier)
+  if (item.nl) {
+    const nlTip = buildNLTooltip(item.nl);
+    if (nlTip) lines.push(nlTip);
+  }
+
+  // Healed word
+  if (item.healed) {
+    lines.push(`Healed: STT said "${item.originalHyp}"`);
   }
 
   // Flags as text list (per CONTEXT.md: "no icons in tooltip")
@@ -206,10 +230,10 @@ export function displayResults(data) {
       alt.words.forEach(w => {
         allWords.push(w);
         const span = document.createElement('span');
-        span.className = 'word ' + (w.confidence >= 0.9 ? 'high' : w.confidence >= 0.7 ? 'mid' : 'low');
+        span.className = 'word ' + (w.crossValidation === 'confirmed' ? 'high' : w.crossValidation === 'unconfirmed' ? 'mid' : 'low');
         const start = parseSttTime(w.startTime);
         const end = parseSttTime(w.endTime);
-        span.title = `Confidence: ${(w.confidence * 100).toFixed(1)}%  |  ${start.toFixed(2)}s – ${end.toFixed(2)}s`;
+        span.title = `${w.word}  |  ${start.toFixed(2)}s – ${end.toFixed(2)}s  |  ${w.crossValidation || 'N/A'}`;
         span.textContent = w.word;
         wordsDiv.appendChild(span);
         wordsDiv.appendChild(document.createTextNode(' '));
@@ -436,7 +460,7 @@ export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, di
     span.className = 'word word-' + item.type;
     span.textContent = item.ref || '';
 
-    // Build tooltip with STT metadata
+    // Look up STT word metadata for tooltip
     const hypKey = item.hyp;
     let sttWord = null;
     let sttInfo = '';
@@ -444,10 +468,6 @@ export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, di
       const queue = sttLookup.get(hypKey);
       if (queue && queue.length > 0) {
         sttWord = queue.shift();
-        const conf = sttWord.confidence != null ? (sttWord.confidence * 100).toFixed(1) + '%' : '—';
-        const start = parseSttTime(sttWord.startTime);
-        const end = parseSttTime(sttWord.endTime);
-        sttInfo = `\nConfidence: ${conf}  |  ${start.toFixed(2)}s – ${end.toFixed(2)}s`;
       }
     }
 
@@ -502,15 +522,7 @@ export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, di
       }
     }
 
-    // Append NL tooltip info
-    if (item.nl) {
-      span.title += '\n' + buildNLTooltip(item.nl);
-    }
-
-    // Append healed word indicator
-    if (item.healed) {
-      span.title += '\n(Healed: STT said "' + item.originalHyp + '")';
-    }
+    // NL tooltip and healed indicator are already included by buildEnhancedTooltip()
 
     // Hesitation overlay (for items that have a hyp word)
     const currentHypIndex = (item.type !== 'omission') ? hypIndex : null;
@@ -636,10 +648,9 @@ export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, di
         const queue = sttLookup.get(ins.hyp);
         if (queue && queue.length > 0) {
           const meta = queue.shift();
-          const conf = meta.confidence != null ? (meta.confidence * 100).toFixed(1) + '%' : '—';
           const start = parseFloat(meta.startTime?.replace('s', '')) || 0;
           const end = parseFloat(meta.endTime?.replace('s', '')) || 0;
-          span.title = ins.hyp + `\nConfidence: ${conf}  |  ${start.toFixed(2)}s – ${end.toFixed(2)}s`;
+          span.title = ins.hyp + `\n${start.toFixed(2)}s – ${end.toFixed(2)}s  |  ${meta.crossValidation || 'N/A'}`;
         }
       }
       insertSection.appendChild(span);
@@ -679,16 +690,14 @@ export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, di
     for (const w of transcriptWords) {
       const span = document.createElement('span');
 
-      // Determine confidence class based on trustLevel or raw confidence
+      // Determine confidence class from real confidence scores
+      // Primary confidence = Deepgram (confirmed words) or Reverb (unconfirmed)
       let confClass = 'conf-low';
       const conf = w.confidence;
-      const trustLevel = w.trustLevel;
 
-      if (trustLevel === 'ghost') {
-        confClass = 'conf-ghost';
-      } else if (trustLevel === 'high' || (conf != null && conf >= 0.93)) {
+      if (conf != null && conf >= 0.93) {
         confClass = 'conf-high';
-      } else if (trustLevel === 'medium' || (conf != null && conf >= 0.70)) {
+      } else if (conf != null && conf >= 0.70) {
         confClass = 'conf-medium';
       } else {
         confClass = 'conf-low';
@@ -697,12 +706,12 @@ export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, di
       span.className = 'conf-word ' + confClass;
       span.textContent = w.word;
 
-      // Build tooltip with confidence details
-      const confPercent = conf != null ? (conf * 100).toFixed(1) + '%' : 'N/A';
-      const source = w.source || 'unknown';
+      // Build tooltip with model words and cross-validation status
       const start = parseSttTime(w.startTime);
       const end = parseSttTime(w.endTime);
-      span.title = `${w.word}\nConfidence: ${confPercent}\nTrust: ${trustLevel || 'N/A'}\nSource: ${source}\n${start.toFixed(2)}s – ${end.toFixed(2)}s`;
+      const xval = w.crossValidation || 'N/A';
+      const dgWord = w._deepgramWord ? `Deepgram heard: "${w._deepgramWord}"` : '';
+      span.title = `${w.word}\n${dgWord}\nCross-validation: ${xval}\n${start.toFixed(2)}s – ${end.toFixed(2)}s`;
 
       confWordsDiv.appendChild(span);
       confWordsDiv.appendChild(document.createTextNode(' '));
@@ -781,14 +790,21 @@ function renderDisfluencySection(disfluencyStats) {
 
   if (!section || !summaryEl || !detailsEl) return;
 
-  // Hide section if no disfluency data or zero disfluencies
-  if (!disfluencyStats || disfluencyStats.total === 0) {
+  // Hide section if no disfluency data at all
+  if (!disfluencyStats) {
     section.style.display = 'none';
     return;
   }
 
-  // Show section
+  // Show section (even with 0 disfluencies to confirm pipeline is active)
   section.style.display = '';
+
+  // Zero disfluencies — show confirmation message
+  if (disfluencyStats.total === 0) {
+    summaryEl.textContent = 'No disfluencies detected';
+    detailsEl.innerHTML = '';
+    return;
+  }
 
   // Determine dominant type for collapsed summary
   const byType = disfluencyStats.byType || {};

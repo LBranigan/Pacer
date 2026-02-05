@@ -347,10 +347,75 @@ export function computeTierBreakdown(alignment) {
   return tiers;
 }
 
+// ── DIAG-07: Struggle Words ─────────────────────────────────────────
+
+/**
+ * Detect "struggle" words — words the student had difficulty decoding.
+ *
+ * A word is flagged as a struggle when ALL three conditions are met:
+ * 1. Pause or hesitation before the word (gap >= threshold OR gap >= 3s)
+ * 2. Low confidence score (confidence < 0.70)
+ *    - Kitchen Sink: primary confidence is Deepgram (confirmed) or Reverb (unconfirmed)
+ * 3. Not a sight word (word length > 3 characters)
+ *
+ * Struggle words are diagnostic indicators that highlight decoding difficulty.
+ * They do NOT count as errors — they help teachers identify words that need practice.
+ *
+ * Returns array of { wordIndex, word, gap, confidence }.
+ */
+export function detectStruggleWords(transcriptWords, referenceText, alignment) {
+  const results = [];
+
+  // Get onset delays (hesitations) for cross-reference
+  const onsetDelays = detectOnsetDelays(transcriptWords, referenceText, alignment);
+  const delayIndices = new Set(onsetDelays.map(d => d.wordIndex));
+
+  // Get long pauses for cross-reference (pause AFTER word index means struggle on NEXT word)
+  const longPauses = detectLongPauses(transcriptWords);
+  const pauseBeforeIndices = new Set(longPauses.map(p => p.afterWordIndex + 1));
+
+  for (let i = 0; i < transcriptWords.length; i++) {
+    const w = transcriptWords[i];
+    const word = (w.word || '').toLowerCase();
+
+    // Condition 1: Pause or hesitation before this word
+    const hasPauseOrHesitation = delayIndices.has(i) || pauseBeforeIndices.has(i);
+    if (!hasPauseOrHesitation) continue;
+
+    // Condition 2: Low confidence (< 0.70)
+    // Primary confidence = Deepgram (for confirmed words) or Reverb (for unconfirmed)
+    const conf = w.confidence;
+    if (conf == null || conf >= 0.70) continue;
+
+    // Condition 3: Not a sight word (word length > 3 characters)
+    if (word.length <= 3) continue;
+
+    // All conditions met — this is a struggle word
+    // Find the gap value from whichever source detected it
+    let gap = 0;
+    const delayEntry = onsetDelays.find(d => d.wordIndex === i);
+    if (delayEntry) {
+      gap = delayEntry.gap;
+    } else {
+      const pauseEntry = longPauses.find(p => p.afterWordIndex + 1 === i);
+      if (pauseEntry) gap = pauseEntry.gap;
+    }
+
+    results.push({
+      wordIndex: i,
+      word: w.word,
+      gap: Math.round(gap * 1000) / 1000,
+      confidence: Math.round(conf * 1000) / 1000
+    });
+  }
+
+  return results;
+}
+
 // ── Orchestrator ────────────────────────────────────────────────────
 
 /**
- * Run all five diagnostics and return unified result object.
+ * Run all diagnostics and return unified result object.
  */
 export function runDiagnostics(transcriptWords, alignment, referenceText, sttLookup) {
   return {
@@ -358,6 +423,7 @@ export function runDiagnostics(transcriptWords, alignment, referenceText, sttLoo
     longPauses: detectLongPauses(transcriptWords),
     selfCorrections: detectSelfCorrections(transcriptWords, alignment),
     morphologicalErrors: detectMorphologicalErrors(alignment, sttLookup),
-    prosodyProxy: computeProsodyProxy(transcriptWords, referenceText, alignment)
+    prosodyProxy: computeProsodyProxy(transcriptWords, referenceText, alignment),
+    struggleWords: detectStruggleWords(transcriptWords, referenceText, alignment)
   };
 }

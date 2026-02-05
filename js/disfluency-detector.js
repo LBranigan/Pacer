@@ -1,182 +1,68 @@
 /**
- * Disfluency detector - Hierarchy of Truth architecture.
+ * Disfluency detector - SIMPLIFIED.
  *
- * Replaces grouping-based greedy scan with single-pass, three-filter approach:
- *   Filter 1: Reference Text Protection (phonetic N-gram matching)
- *   Filter 2: Phonological Horizons (strict for fragments, loose for repetitions)
- *   Filter 3: Acoustic Confidence Veto (default model confidence >= 0.93)
+ * IMPORTANT: Fragment and repetition detection have been REMOVED because STT
+ * converts acoustic events into words, losing the original signal needed to
+ * reliably detect stutters. What we see as "d d duck" could be:
+ *   - A real stutter (d-d-duck)
+ *   - Separate words that STT misheard
+ *   - Timestamp drift between models creating duplicates
  *
- * This fixes "Semantic Vacuuming" bug where valid words like "the" were
- * incorrectly removed as fragments of later words like "then".
+ * The old approach caused false positives like marking "went" as repeated when
+ * it was actually timestamp drift, or marking "the" as a fragment of "then".
+ *
+ * Current approach:
+ *   - Morphological prefix absorption is handled in ensemble-merger.js
+ *   - Hesitation detection is handled in diagnostics.js (timing gaps)
+ *   - This file now just passes through words with basic severity tagging
  *
  * Pipeline order: Classify -> Filter ghosts -> Detect disfluencies -> Align
  */
 
 import { parseTime } from './diagnostics.js';
 import { DISFLUENCY_THRESHOLDS, SEVERITY_LEVELS } from './disfluency-config.js';
-import { doubleMetaphone, levenshtein } from './phonetic-utils.js';
+// NOTE: Removed phonetic-utils imports (doubleMetaphone, levenshtein) - no longer needed
+// after removing unreliable fragment/repetition detection
 
 /**
  * Normalize a word for comparison (lowercase, strip punctuation).
  * @param {string} word - Word to normalize
  * @returns {string} Normalized word
+ * @deprecated Kept for backward compatibility with isMergeEligible export
  */
 function normalizeWord(word) {
   if (!word) return '';
   return word.toLowerCase().replace(/[^a-z'-]/g, '');
 }
 
-/**
- * Normalize text for N-gram building.
- * @param {string} text - Text to normalize
- * @returns {string} Normalized text
- */
-function normalizeText(text) {
-  if (!text) return '';
-  return text.toLowerCase().replace(/[^a-z' -]/g, '');
-}
+// NOTE: normalizeText() removed - was only used by buildReferenceNgrams() which was removed
 
 // ═══════════════════════════════════════════════════════════════════════════
-// FILTER 1: Reference Text Anchor (Intent Filter)
+// DEPRECATED: Fragment/Repetition Detection Functions
 // ═══════════════════════════════════════════════════════════════════════════
-
-/**
- * Build phonetic N-gram index from reference text.
- * Stores both exact strings and phonetic codes for fuzzy matching.
- *
- * @param {string} referenceText - The reference passage
- * @param {number} maxN - Maximum N-gram size (default 3)
- * @returns {{exact: Set<string>, phonetic: Map<string, string>}}
- */
-function buildReferenceNgrams(referenceText, maxN = 3) {
-  if (!referenceText) return { exact: new Set(), phonetic: new Map() };
-
-  const words = normalizeText(referenceText).split(/\s+/).filter(w => w.length > 0);
-  const exact = new Set();
-  const phonetic = new Map();  // phoneticKey → original ngram
-
-  for (let n = 1; n <= maxN; n++) {
-    for (let i = 0; i <= words.length - n; i++) {
-      const ngram = words.slice(i, i + n);
-      const ngramStr = ngram.join(' ');
-      const phoneticKey = ngram.map(w => doubleMetaphone(w)).join(' ');
-
-      exact.add(ngramStr);
-      phonetic.set(phoneticKey, ngramStr);
-    }
-  }
-
-  return { exact, phonetic };
-}
-
-/**
- * Check if STT words match reference using phonetic similarity.
- * Returns true if the N-gram exists in reference (exact or phonetic match).
- *
- * @param {Array<string>} sttWords - STT word strings to check
- * @param {{exact: Set, phonetic: Map}} referenceNgrams - Pre-built reference index
- * @param {number} maxPhoneticDistance - Max Levenshtein distance for phonetic match
- * @returns {{matched: boolean, type?: string, ref?: string, distance?: number}}
- */
-function matchesReferencePhonetically(sttWords, referenceNgrams, maxPhoneticDistance = 1) {
-  const sttNgram = sttWords.map(w => normalizeWord(w)).join(' ');
-  const sttPhonetic = sttWords.map(w => doubleMetaphone(w)).join(' ');
-
-  // Exact match
-  if (referenceNgrams.exact.has(sttNgram)) {
-    return { matched: true, type: 'exact', ref: sttNgram };
-  }
-
-  // Phonetic match - find closest reference N-gram
-  for (const [refPhonetic, refOriginal] of referenceNgrams.phonetic) {
-    const distance = levenshtein(sttPhonetic, refPhonetic);
-    if (distance <= maxPhoneticDistance) {
-      return { matched: true, type: 'phonetic', ref: refOriginal, distance };
-    }
-  }
-
-  return { matched: false };
-}
-
-/**
- * Check if word at index is protected by reference text.
- * Checks bigrams and trigrams starting at this position.
- *
- * @param {Array} words - Array of word objects
- * @param {number} index - Index of word to check
- * @param {{exact: Set, phonetic: Map}} referenceNgrams - Pre-built reference index
- * @returns {boolean} True if word is protected by reference match
- */
-function isProtectedByReference(words, index, referenceNgrams) {
-  if (!referenceNgrams || referenceNgrams.exact.size === 0) return false;
-
-  // Check unigram (single word exact match in reference)
-  const unigram = [words[index].word];
-  const uniMatch = matchesReferencePhonetically(unigram, referenceNgrams, 0);  // Exact only for unigrams
-  if (uniMatch.matched && uniMatch.type === 'exact') {
-    // Single word is in reference - but only protect if confidence is decent
-    // (prevents protecting random fragments that happen to match common words)
-    const conf = words[index]._debug?.default?.confidence;
-    if (conf != null && conf >= 0.8) return true;
-  }
-
-  // Check bigram: [current, next]
-  if (index < words.length - 1) {
-    const bigram = [words[index].word, words[index + 1].word];
-    const match = matchesReferencePhonetically(bigram, referenceNgrams, DISFLUENCY_THRESHOLDS.MAX_PHONETIC_DISTANCE);
-    if (match.matched) return true;
-  }
-
-  // Check trigram: [current, next, next2]
-  if (index < words.length - 2) {
-    const trigram = [words[index].word, words[index + 1].word, words[index + 2].word];
-    const match = matchesReferencePhonetically(trigram, referenceNgrams, DISFLUENCY_THRESHOLDS.MAX_PHONETIC_DISTANCE);
-    if (match.matched) return true;
-  }
-
-  return false;
-}
-
-// ═══════════════════════════════════════════════════════════════════════════
-// FILTER 3: Acoustic Confidence Veto
-// ═══════════════════════════════════════════════════════════════════════════
-
-/**
- * Check if word is protected by high acoustic confidence.
- * Uses default model confidence (not latest_long which returns fake scores).
- *
- * @param {object} word - Word object with _debug containing model confidences
- * @returns {boolean} True if protected by high confidence
- */
-function isProtectedByConfidence(word) {
-  // Check default model confidence (real acoustic confidence)
-  const defaultConf = word._debug?.default?.confidence;
-  if (defaultConf != null && defaultConf >= DISFLUENCY_THRESHOLDS.CONFIDENCE_PROTECTION_THRESHOLD) {
-    return true;
-  }
-
-  // Fallback: check merged confidence if no _debug
-  if (word.confidence != null && word.confidence >= DISFLUENCY_THRESHOLDS.CONFIDENCE_PROTECTION_THRESHOLD) {
-    return true;
-  }
-
-  return false;
-}
-
-// ═══════════════════════════════════════════════════════════════════════════
-// FILTER 2: Phonological Horizons
+// The following functions have been REMOVED because STT-based stutter detection
+// is unreliable. The acoustic signal is lost when STT converts speech to words.
+//
+// REMOVED:
+//   - buildReferenceNgrams() - was for phonetic N-gram protection
+//   - matchesReferencePhonetically() - was for fuzzy reference matching
+//   - isProtectedByReference() - was Filter 1
+//   - isProtectedByConfidence() - was Filter 3
+//   - checkForFragment() - was Filter 2A (caused false positives)
+//   - checkForRepetition() - was Filter 2B (caused "went went" bugs)
+//
+// Morphological prefix absorption is now handled in ensemble-merger.js
+// Hesitation detection is handled in diagnostics.js
 // ═══════════════════════════════════════════════════════════════════════════
 
 /**
  * Check if a fragment word should be merged into a target word.
- * Per CONTEXT.md merge eligibility rules:
- *   - First char must match
- *   - Short fragments (1-3 chars): must match prefix of target
- *   - Long fragments (4+ chars): must be exact match OR long prefix match
+ * DEPRECATED but kept for backward compatibility.
  *
  * @param {string} fragment - The potential fragment word
  * @param {string} target - The potential target word
  * @returns {boolean} True if fragment should merge into target
+ * @deprecated No longer used - fragment detection removed
  */
 function isMergeEligible(fragment, target) {
   if (!fragment || !target) return false;
@@ -194,102 +80,6 @@ function isMergeEligible(fragment, target) {
 
   // Long fragments (4+ chars): must be exact match OR long prefix match
   return (f === t) || (t.startsWith(f) && f.length >= DISFLUENCY_THRESHOLDS.LONG_PREFIX_MIN_CHARS);
-}
-
-/**
- * Check for fragment at current position (STRICT: i+1 only, 500ms max).
- *
- * @param {Array} words - Array of word objects
- * @param {number} i - Current index
- * @param {Set} fragmentIndices - Set to add fragment indices to
- * @param {Map} targetFragments - Map from target index to its fragments
- * @returns {boolean} True if current word is a fragment
- */
-function checkForFragment(words, i, fragmentIndices, targetFragments) {
-  const current = words[i];
-  const nextIdx = i + 1;
-
-  if (nextIdx >= words.length) return false;
-
-  const next = words[nextIdx];
-  const currentEnd = parseTime(current.endTime);
-  const nextStart = parseTime(next.startTime);
-  const gap = nextStart - currentEnd;
-
-  // Time limit: fragments must resolve within 500ms
-  if (gap > DISFLUENCY_THRESHOLDS.FRAGMENT_MAX_TIME_GAP_SEC) return false;
-
-  // Check if current is a prefix/fragment of next
-  if (isMergeEligible(current.word, next.word)) {
-    // Don't merge if words are exactly the same (that's a repetition, not fragment)
-    if (normalizeWord(current.word) === normalizeWord(next.word)) return false;
-
-    fragmentIndices.add(i);
-
-    if (!targetFragments.has(nextIdx)) {
-      targetFragments.set(nextIdx, []);
-    }
-    targetFragments.get(nextIdx).push({
-      word: current.word,
-      startTime: current.startTime,
-      endTime: current.endTime,
-      type: 'fragment'
-    });
-
-    return true;
-  }
-
-  return false;
-}
-
-/**
- * Check for repetition at current position (LOOSE: i+1 and i+2, 1.0s max).
- *
- * @param {Array} words - Array of word objects
- * @param {number} i - Current index
- * @param {Set} fragmentIndices - Set to add fragment indices to
- * @param {Map} targetFragments - Map from target index to its fragments
- * @returns {boolean} True if current word is a repetition
- */
-function checkForRepetition(words, i, fragmentIndices, targetFragments) {
-  const current = words[i];
-  const currentLower = normalizeWord(current.word);
-  const currentEnd = parseTime(current.endTime);
-
-  // Search limit: i+1 and i+2
-  const maxLookahead = DISFLUENCY_THRESHOLDS.REPETITION_MAX_LOOKAHEAD;
-  const searchLimit = Math.min(words.length, i + 1 + maxLookahead);
-
-  for (let j = i + 1; j < searchLimit; j++) {
-    // Skip words already marked as fragments
-    if (fragmentIndices.has(j)) continue;
-
-    const candidate = words[j];
-    const candidateStart = parseTime(candidate.startTime);
-    const gap = candidateStart - currentEnd;
-
-    // Time limit: repetitions within 1.0s
-    if (gap > DISFLUENCY_THRESHOLDS.REPETITION_MAX_TIME_GAP_SEC) break;
-
-    // Exact match (case-insensitive)
-    if (normalizeWord(candidate.word) === currentLower) {
-      fragmentIndices.add(i);
-
-      if (!targetFragments.has(j)) {
-        targetFragments.set(j, []);
-      }
-      targetFragments.get(j).push({
-        word: current.word,
-        startTime: current.startTime,
-        endTime: current.endTime,
-        type: 'repetition'
-      });
-
-      return true;
-    }
-  }
-
-  return false;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -402,19 +192,22 @@ function computeDisfluencySummary(words) {
 // ═══════════════════════════════════════════════════════════════════════════
 
 /**
- * Main disfluency detection function using Hierarchy of Truth architecture.
+ * Main disfluency detection function - SIMPLIFIED.
  *
- * Single-pass algorithm:
- *   For each word:
- *     → Filter 1: Is it protected by reference text? (N-gram with phonetic matching)
- *     → Filter 2: Does it pass phonological horizon rules? (distance + time limits)
- *     → Filter 3: Is it protected by acoustic confidence? (default model ≥ 0.93)
+ * Fragment and repetition detection have been REMOVED due to unreliable results.
+ * STT converts acoustic events to words, losing the signal needed for stutter
+ * detection. False positives were common (e.g., timestamp drift creating "went went").
  *
- *   Only mark as fragment if it passes ALL filters AND matches a target.
+ * What remains:
+ *   - Pass through words without fragment merging
+ *   - Tag words with morphological breaks (from ensemble-merger.js)
+ *   - Basic severity tagging (for future use if needed)
+ *
+ * Hesitation detection is handled separately in diagnostics.js using timing gaps.
  *
  * @param {Array} words - Classified words (from filterGhosts output)
- * @param {string} referenceText - Reference passage for protection matching
- * @returns {object} { words: processedWords, summary: _disfluencySummary, fragmentsRemoved }
+ * @param {string} referenceText - Reference passage (kept for API compatibility)
+ * @returns {object} { words: processedWords, summary: _disfluencySummary, fragmentsRemoved: 0 }
  */
 export function detectDisfluencies(words, referenceText = '') {
   if (!words || words.length === 0) {
@@ -425,83 +218,27 @@ export function detectDisfluencies(words, referenceText = '') {
     };
   }
 
-  // Pre-build reference N-grams with phonetic index
-  const referenceNgrams = buildReferenceNgrams(referenceText);
-
-  const fragmentIndices = new Set();
-  const targetFragments = new Map();  // targetIndex → array of fragment info
-
-  // Single pass through all words
-  for (let i = 0; i < words.length; i++) {
-    const current = words[i];
-
-    // Skip if already marked as fragment
-    if (fragmentIndices.has(i)) continue;
-
-    // ─────────────────────────────────────────────
-    // FILTER 1: Reference Text Protection (Phonetic)
-    // ─────────────────────────────────────────────
-    if (isProtectedByReference(words, i, referenceNgrams)) {
-      continue;  // Protected - skip fragment detection
-    }
-
-    // ─────────────────────────────────────────────
-    // FILTER 3: Acoustic Confidence Veto
-    // (Checked before Filter 2 for efficiency)
-    // ─────────────────────────────────────────────
-    if (isProtectedByConfidence(current)) {
-      continue;  // High confidence - real word, not fragment
-    }
-
-    // ─────────────────────────────────────────────
-    // FILTER 2A: Fragment Detection (STRICT)
-    // Only check i+1, within 500ms
-    // ─────────────────────────────────────────────
-    if (checkForFragment(words, i, fragmentIndices, targetFragments)) {
-      continue;
-    }
-
-    // ─────────────────────────────────────────────
-    // FILTER 2B: Repetition Detection (LOOSE)
-    // Check i+1 and i+2, within 1.0s
-    // ─────────────────────────────────────────────
-    checkForRepetition(words, i, fragmentIndices, targetFragments);
-  }
-
-  // Build processed words array (excluding fragments)
+  // Build processed words array - pass through without fragment detection
   const processedWords = [];
 
   for (let i = 0; i < words.length; i++) {
-    if (fragmentIndices.has(i)) continue;  // Skip fragments
-
     const word = { ...words[i] };
-    const fragments = targetFragments.get(i) || [];
 
-    // Compute metrics including fragments + this word
-    const allAttempts = [
-      ...fragments,
-      { word: word.word, startTime: word.startTime, endTime: word.endTime }
-    ];
-    const attempts = allAttempts.length;
+    // Default: clean read (no attempts/fragments)
+    word.attempts = 1;
+    word.severity = SEVERITY_LEVELS.NONE;
 
-    if (attempts >= 2) {
-      const metrics = computeDisfluencyMetrics(allAttempts.map(f => ({
-        word: f.word,
-        startTime: f.startTime,
-        endTime: f.endTime
-      })));
-
-      word.attempts = attempts;
-      word.severity = calculateSeverity(attempts, metrics?.totalDuration || 0, metrics?.maxPause || 0);
+    // Check if this word has a morphological break (from ensemble-merger.js)
+    // These are NOT errors, just indicators that student sounded out a prefix
+    if (word._debug?.morphologicalBreak) {
+      // Add disfluency info for UI display (squiggly line)
       word._disfluency = {
-        maxPause: metrics?.maxPause || 0,
-        totalDuration: metrics?.totalDuration || 0,
-        fragments: fragments
+        type: 'morphological_break',
+        prefix: word._debug.morphologicalBreak.prefix,
+        gapMs: word._debug.morphologicalBreak.gapMs
       };
-    } else {
-      // Clean read
-      word.attempts = 1;
-      word.severity = SEVERITY_LEVELS.NONE;
+      // Morphological breaks are NOT counted as disfluencies for severity
+      // They indicate good phonics skills, not reading struggles
     }
 
     processedWords.push(word);
@@ -513,7 +250,7 @@ export function detectDisfluencies(words, referenceText = '') {
   return {
     words: processedWords,
     summary: summary,
-    fragmentsRemoved: fragmentIndices.size
+    fragmentsRemoved: 0  // No longer removing fragments
   };
 }
 

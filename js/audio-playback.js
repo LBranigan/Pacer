@@ -43,6 +43,8 @@ export function createSyncedPlayback(containerEl) {
   let playBtn = null;
   let progressBar = null;
   let timeDisplay = null;
+  let downloadBtn = null;
+  let currentBlob = null;
 
   function buildUI() {
     containerEl.innerHTML = '';
@@ -74,9 +76,17 @@ export function createSyncedPlayback(containerEl) {
     timeDisplay.className = 'playback-time';
     timeDisplay.textContent = '0:00 / 0:00';
 
+    downloadBtn = document.createElement('button');
+    downloadBtn.className = 'playback-download-btn';
+    downloadBtn.textContent = '⬇ WAV';
+    downloadBtn.title = 'Download as WAV file';
+    downloadBtn.style.marginLeft = '0.5rem';
+    downloadBtn.addEventListener('click', downloadAsWav);
+
     controlsDiv.appendChild(playBtn);
     controlsDiv.appendChild(progressBar);
     controlsDiv.appendChild(timeDisplay);
+    controlsDiv.appendChild(downloadBtn);
 
     wordArea = document.createElement('div');
     wordArea.className = 'playback-words';
@@ -109,6 +119,103 @@ export function createSyncedPlayback(containerEl) {
     animFrameId = null;
   }
 
+  /**
+   * Convert AudioBuffer to WAV blob.
+   */
+  function audioBufferToWav(buffer) {
+    const numChannels = buffer.numberOfChannels;
+    const sampleRate = buffer.sampleRate;
+    const format = 1; // PCM
+    const bitDepth = 16;
+
+    const bytesPerSample = bitDepth / 8;
+    const blockAlign = numChannels * bytesPerSample;
+
+    // Interleave channels
+    const length = buffer.length;
+    const dataLength = length * numChannels * bytesPerSample;
+    const headerLength = 44;
+    const totalLength = headerLength + dataLength;
+
+    const arrayBuffer = new ArrayBuffer(totalLength);
+    const view = new DataView(arrayBuffer);
+
+    // WAV header
+    const writeString = (offset, string) => {
+      for (let i = 0; i < string.length; i++) {
+        view.setUint8(offset + i, string.charCodeAt(i));
+      }
+    };
+
+    writeString(0, 'RIFF');
+    view.setUint32(4, totalLength - 8, true);
+    writeString(8, 'WAVE');
+    writeString(12, 'fmt ');
+    view.setUint32(16, 16, true); // fmt chunk size
+    view.setUint16(20, format, true);
+    view.setUint16(22, numChannels, true);
+    view.setUint32(24, sampleRate, true);
+    view.setUint32(28, sampleRate * blockAlign, true);
+    view.setUint16(32, blockAlign, true);
+    view.setUint16(34, bitDepth, true);
+    writeString(36, 'data');
+    view.setUint32(40, dataLength, true);
+
+    // Write audio data
+    const channels = [];
+    for (let i = 0; i < numChannels; i++) {
+      channels.push(buffer.getChannelData(i));
+    }
+
+    let offset = 44;
+    for (let i = 0; i < length; i++) {
+      for (let ch = 0; ch < numChannels; ch++) {
+        const sample = Math.max(-1, Math.min(1, channels[ch][i]));
+        const intSample = sample < 0 ? sample * 0x8000 : sample * 0x7FFF;
+        view.setInt16(offset, intSample, true);
+        offset += 2;
+      }
+    }
+
+    return new Blob([arrayBuffer], { type: 'audio/wav' });
+  }
+
+  /**
+   * Download current audio as WAV file.
+   */
+  async function downloadAsWav() {
+    if (!currentBlob) {
+      alert('No audio loaded');
+      return;
+    }
+
+    downloadBtn.disabled = true;
+    downloadBtn.textContent = '...';
+
+    try {
+      const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+      const arrayBuffer = await currentBlob.arrayBuffer();
+      const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
+
+      const wavBlob = audioBufferToWav(audioBuffer);
+      const url = URL.createObjectURL(wavBlob);
+
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'recording-' + new Date().toISOString().slice(0, 19).replace(/[:.]/g, '-') + '.wav';
+      a.click();
+
+      URL.revokeObjectURL(url);
+      audioContext.close();
+    } catch (err) {
+      console.error('WAV conversion failed:', err);
+      alert('Failed to convert to WAV: ' + err.message);
+    } finally {
+      downloadBtn.disabled = false;
+      downloadBtn.textContent = '⬇ WAV';
+    }
+  }
+
   function syncLoop() {
     if (!audioEl || audioEl.paused || audioEl.ended) {
       animFrameId = null;
@@ -139,9 +246,11 @@ export function createSyncedPlayback(containerEl) {
     if (!blob) {
       wordArea.innerHTML = '<p class="playback-no-audio">Audio not available</p>';
       playBtn.disabled = true;
+      downloadBtn.disabled = true;
       return;
     }
 
+    currentBlob = blob;
     objectUrl = URL.createObjectURL(blob);
     audioEl.src = objectUrl;
 

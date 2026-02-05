@@ -22,7 +22,7 @@ import tempfile
 import os
 import torch
 import wenet
-from deepgram import DeepgramClient, PrerecordedOptions
+from deepgram import DeepgramClient
 
 # =============================================================================
 # Application Setup
@@ -35,16 +35,11 @@ app = FastAPI(
 )
 
 # CORS Configuration (critical for browser access)
-# file:// protocol sends "null" as origin
+# Allow all origins — this is a local dev service running in Docker,
+# accessed from file:// (origin "null"), localhost, or 127.0.0.1
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost",
-        "http://localhost:8080",
-        "http://127.0.0.1",
-        "http://127.0.0.1:8080",
-        "null",  # file:// protocol sends "null" as origin
-    ],
+    allow_origins=["*"],
     allow_methods=["GET", "POST", "OPTIONS"],
     allow_headers=["Content-Type"],
 )
@@ -81,7 +76,7 @@ def get_deepgram_client():
         api_key = os.environ.get("DEEPGRAM_API_KEY")
         if not api_key:
             return None  # Graceful degradation
-        _deepgram_client = DeepgramClient(api_key)
+        _deepgram_client = DeepgramClient(api_key=api_key)
     return _deepgram_client
 
 
@@ -136,17 +131,14 @@ async def health():
 # CTM Parser (BACK-05: Word timestamps and confidence)
 # =============================================================================
 
-# Filler words for confidence defaults
-FILLERS = {'um', 'uh', 'er', 'ah', 'mm', 'hmm', 'hm'}
-
-
 def parse_ctm(ctm_text: str) -> list:
     """
     Parse CTM format output from Reverb ASR.
 
-    CTM format: <file> <channel> <start> <duration> <word> [<confidence>]
-    Phase 0 verified: 6 fields present but confidence always 0.00
-    Use type-based defaults instead.
+    CTM format: <file> <channel> <start> <duration> <word> <confidence>
+    With mode="attention_rescoring", confidence contains real attention decoder
+    log-softmax probabilities (0.0-1.0). For multi-BPE-token words, confidence
+    is the max of constituent token confidences.
 
     Args:
         ctm_text: Raw CTM output from model.transcribe(format="ctm")
@@ -166,9 +158,9 @@ def parse_ctm(ctm_text: str) -> list:
         start = float(parts[2])
         duration = float(parts[3])
 
-        # Default confidence: 0.7 for fillers, 0.9 for content words
-        # (CTM confidence from Reverb is always 0.00)
-        conf = 0.7 if word_text.lower() in FILLERS else 0.9
+        # Real confidence from attention_rescoring mode
+        # Falls back to 0.0 if field missing (shouldn't happen)
+        conf = float(parts[5]) if len(parts) >= 6 else 0.0
 
         words.append({
             "word": word_text,
@@ -238,11 +230,16 @@ async def ensemble(req: EnsembleRequest):
             model = get_model()
 
             # Pass 1: Verbatim (v=1.0) - preserves disfluencies
-            verbatim_ctm = model.transcribe(temp_path, verbatimicity=1.0, format="ctm")
+            # attention_rescoring mode: CTC beam search + attention decoder rescoring
+            # Returns real per-word confidence scores (attention log-softmax probs)
+            # ~20-50% slower but more accurate transcription + real confidence
+            verbatim_ctm = model.transcribe(temp_path, verbatimicity=1.0, format="ctm",
+                                            mode="attention_rescoring")
             verbatim_words = parse_ctm(verbatim_ctm)
 
             # Pass 2: Clean (v=0.0) - removes disfluencies
-            clean_ctm = model.transcribe(temp_path, verbatimicity=0.0, format="ctm")
+            clean_ctm = model.transcribe(temp_path, verbatimicity=0.0, format="ctm",
+                                         mode="attention_rescoring")
             clean_words = parse_ctm(clean_ctm)
 
             # Clear GPU memory after processing
@@ -289,15 +286,11 @@ async def deepgram_transcribe(req: DeepgramRequest):
         raise HTTPException(status_code=400, detail=f"Invalid base64: {e}")
 
     try:
-        options = PrerecordedOptions(
+        response = client.listen.v1.media.transcribe_file(
+            request=audio_bytes,
             model="nova-3",
             language="en-US",
             smart_format=True,
-        )
-
-        response = client.listen.rest.v("1").transcribe_file(
-            {"buffer": audio_bytes, "mimetype": "audio/wav"},
-            options
         )
 
         # Normalize to project format (matching Google STT structure)
@@ -317,4 +310,6 @@ async def deepgram_transcribe(req: DeepgramRequest):
         }
 
     except Exception as e:
+        import traceback
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Deepgram error: {e}")

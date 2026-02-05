@@ -70,8 +70,9 @@ export async function isReverbAvailable() {
     if (!resp.ok) return false;
 
     const data = await resp.json();
-    // Must have status 'ok' AND model loaded for transcription to work
-    return data.status === 'ok' && data.model_loaded === true;
+    // Accept both 'ok' (model loaded) and 'ready' (model loads on first request)
+    // Model loads lazily on first /ensemble call, so 'ready' means service is up
+    return data.status === 'ok' || data.status === 'ready';
   } catch {
     // Network error, timeout, or service unavailable
     return false;
@@ -105,8 +106,9 @@ export async function sendToReverbEnsemble(blob) {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ audio_base64: base64 }),
-      // 60-second timeout for long audio support (up to ~90 seconds)
-      signal: AbortSignal.timeout(60000)
+      // 120-second timeout: first request triggers model loading (~30-60s)
+      // Subsequent requests are fast (~5-15s depending on audio length)
+      signal: AbortSignal.timeout(120000)
     });
 
     if (!resp.ok) {
@@ -131,6 +133,6 @@ export async function sendToReverbEnsemble(blob) {
     };
   } catch (e) {
     console.warn('[reverb-api] Service unavailable:', e.message);
-    return null; // Graceful degradation - caller should fall back to Google
+    return null; // Graceful degradation - caller should fall back to Deepgram-only
   }
 }

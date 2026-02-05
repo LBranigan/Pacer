@@ -229,10 +229,10 @@ const DIAGNOSTIC_MISCUES = {
     countsAsError: false, // Diagnostic only - helps identify words needing practice
     config: {
       // Condition 1: Pause (>=3s) or hesitation (>=threshold) before word
-      // Condition 2: Low confidence (trustLevel='low' OR confidence < 0.70)
+      // Condition 2: Low confidence (confidence < 0.70, from Deepgram or Reverb)
       // Condition 3: Word length > 3 characters (not a common sight word)
       min_word_length: 4,                // Words with >3 chars (4+)
-      confidence_threshold: 0.70         // Below 70% = low confidence
+      confidence_threshold: 0.70         // Below 0.70 = low confidence (Deepgram for confirmed words, Reverb for unconfirmed)
     },
     example: {
       context: '3.1s pause before "unnerved" + 61% confidence + 8 chars',

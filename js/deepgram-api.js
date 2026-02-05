@@ -105,9 +105,9 @@ function normalizeWord(word) {
  *
  * Implements XVAL-02: Reverb <-> Nova-3 disagreement flags words as uncertain.
  *
- * @param {Array} reverbWords - Words from Reverb ensemble (verbatim or clean)
+ * @param {Array} reverbWords - Merged words from Reverb ensemble (v=1.0 verbatim + v=0.0 clean, after Needleman-Wunsch + disfluency tagging)
  * @param {Array|null} deepgramWords - Words from Deepgram Nova-3, or null if unavailable
- * @returns {Array} Reverb words with crossValidation property added
+ * @returns {Array} Words with crossValidation status, Deepgram timestamps as primary (confirmed), and both confidence values preserved
  */
 export function crossValidateWithDeepgram(reverbWords, deepgramWords) {
   // If Deepgram unavailable, mark all as unavailable (graceful degradation)
@@ -118,19 +118,90 @@ export function crossValidateWithDeepgram(reverbWords, deepgramWords) {
     }));
   }
 
-  // Build Deepgram word set for O(1) lookup
-  const dgWordSet = new Set(
-    deepgramWords.map(w => normalizeWord(w.word))
-  );
+  // Build Deepgram word queue for O(1) lookup with confidence pass-through
+  const dgWordQueues = new Map();
+  for (const w of deepgramWords) {
+    const norm = normalizeWord(w.word);
+    if (!dgWordQueues.has(norm)) dgWordQueues.set(norm, []);
+    dgWordQueues.get(norm).push(w);
+  }
 
-  // Annotate each Reverb word with cross-validation status
-  return reverbWords.map(word => {
+  // Annotate each Reverb word with cross-validation status + Deepgram confidence + timestamps
+  const timestampComparison = [];
+
+  const result = reverbWords.map(word => {
     const normalized = normalizeWord(word.word);
-    const inDeepgram = dgWordSet.has(normalized);
+    const queue = dgWordQueues.get(normalized);
 
+    if (queue && queue.length > 0) {
+      const dgWord = queue.shift();
+
+      // Collect timestamp comparison for diagnostic logging
+      timestampComparison.push({
+        word: word.word,
+        reverbStart: word.startTime,
+        reverbEnd: word.endTime,
+        deepgramStart: dgWord.startTime,
+        deepgramEnd: dgWord.endTime,
+        reverbDurMs: Math.round((_parseTs(word.endTime) - _parseTs(word.startTime)) * 1000),
+        deepgramDurMs: Math.round((_parseTs(dgWord.endTime) - _parseTs(dgWord.startTime)) * 1000),
+      });
+
+      return {
+        ...word,
+        crossValidation: 'confirmed',
+        // Deepgram timestamps as primary (Reverb CTM uses hardcoded 100ms durations)
+        startTime: dgWord.startTime,
+        endTime: dgWord.endTime,
+        // Preserve Reverb timestamps for reference
+        _reverbStartTime: word.startTime,
+        _reverbEndTime: word.endTime,
+        // Deepgram confidence as primary (Reverb attention scores drift to 0)
+        confidence: dgWord.confidence,
+        _reverbConfidence: word.confidence,
+        _deepgramConfidence: dgWord.confidence,
+        // Deepgram's word text for tooltip display
+        _deepgramWord: dgWord.word
+      };
+    }
+
+    // Unconfirmed: keep Reverb timestamps (no Deepgram alternative available)
     return {
       ...word,
-      crossValidation: inDeepgram ? 'confirmed' : 'unconfirmed'
+      crossValidation: 'unconfirmed',
+      _reverbConfidence: word.confidence,
+      _reverbStartTime: word.startTime,
+      _reverbEndTime: word.endTime
     };
   });
+
+  // Diagnostic: side-by-side timestamp comparison
+  if (timestampComparison.length > 0) {
+    console.log('[cross-validation] Reverb vs Deepgram timestamp comparison:');
+    console.table(timestampComparison);
+
+    // Show gap comparison (gaps drive hesitation detection)
+    const gapComparison = [];
+    for (let i = 1; i < timestampComparison.length; i++) {
+      const prev = timestampComparison[i - 1];
+      const curr = timestampComparison[i];
+      const reverbGap = Math.round((_parseTs(curr.reverbStart) - _parseTs(prev.reverbEnd)) * 1000);
+      const deepgramGap = Math.round((_parseTs(curr.deepgramStart) - _parseTs(prev.deepgramEnd)) * 1000);
+      gapComparison.push({
+        between: `"${prev.word}" → "${curr.word}"`,
+        reverbGapMs: reverbGap,
+        deepgramGapMs: deepgramGap,
+        diffMs: reverbGap - deepgramGap
+      });
+    }
+    console.log('[cross-validation] Inter-word gap comparison (drives hesitation detection):');
+    console.table(gapComparison);
+  }
+
+  return result;
+}
+
+/** Parse timestamp string "1.234s" to float seconds. */
+function _parseTs(t) {
+  return parseFloat(String(t).replace('s', '')) || 0;
 }

@@ -13,6 +13,10 @@ RUN apt-get update && apt-get install -y \
 # Initialize git-lfs for HuggingFace model download
 RUN git lfs install
 
+# Configure git to use HF_TOKEN for HuggingFace model download at runtime
+# The token is passed via environment variable, not baked into the image
+RUN git config --global credential.helper '!f() { echo "username=hf"; echo "password=${HF_TOKEN}"; }; f'
+
 WORKDIR /app
 
 # Install Python dependencies

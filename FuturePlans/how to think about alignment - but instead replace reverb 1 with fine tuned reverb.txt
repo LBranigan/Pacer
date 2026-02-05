@@ -1,0 +1,275 @@
+Good question — and this is where most people either hand-wave or quietly give up. I won’t.
+
+## First, the uncomfortable truth you’re circling
+
+You’re right to suspect this:
+
+> *“Isn’t the nature of disfluency fundamentally hostile to alignment?”*
+
+**Yes.**
+If you define alignment as *clean, monotonic, word-to-word mapping*, then **disfluent child reading breaks it by definition**.
+
+But here’s the key reframe most people miss:
+
+> **You don’t need perfect alignment to get dependable constructs.
+> You need *bounded, probabilistic alignment anchored to known text*.**
+
+That distinction matters a lot.
+
+---
+
+## Why naïve alignment fails (and always will)
+
+Disfluent oral reading includes things alignment algorithms hate:
+
+* false starts (`b-b-because`)
+* intra-word pauses (`trans-…-formation`)
+* rereads (non-monotonicity)
+* partial phoneme production
+* visual skips and regressions
+* self-repairs that *overwrite* earlier speech
+
+So if your goal is:
+
+> “Map every acoustic event to exactly one canonical word”
+
+You will fail. Forever. Even humans disagree.
+
+That’s why current ASR pipelines lie by omission.
+
+---
+
+## What actually *is* possible (and how people really do this)
+
+### The trick: stop aligning *words* first
+
+Align **time → zones → hypotheses**, not tokens.
+
+Think in **three layers**, not one.
+
+---
+
+## Layer 1: Time-anchored acoustic truth (this is solid)
+
+This layer is **not controversial** and *does not require labels*.
+
+You can reliably extract:
+
+* pause duration (energy + VAD)
+* speech rate over windows
+* restart events (speech → silence → speech)
+* elongations
+* repeated acoustic patterns
+
+This gives you **objective friction**, even when words are unknown.
+
+This layer *survives disfluency*.
+
+---
+
+## Layer 2: Soft alignment to the canonical text (this is where nuance lives)
+
+Instead of asking:
+
+> “Which word did this belong to?”
+
+Ask:
+
+> “Which *region* of the passage is most consistent with this audio window?”
+
+That means:
+
+* sentence-level or phrase-level anchoring
+* sliding window forced alignment
+* allowing skips and regressions
+* allowing multiple candidate mappings
+
+This is **not** classic forced alignment — it’s *elastic alignment*.
+
+The output is not:
+
+> “This was word 17”
+
+It’s:
+
+> “This 1.4s window most likely corresponds to words 14–18, with uncertainty.”
+
+That uncertainty is the feature, not the bug.
+
+---
+
+## Layer 3: Competing hypotheses, not single labels
+
+Now — and only now — do labels come into play.
+
+For a given region, you can say:
+
+* Hypothesis A: substitution
+* Hypothesis B: mispronunciation
+* Hypothesis C: decoding struggle with partial phonemes
+* Hypothesis D: visual reread
+
+You do **not** pick one.
+
+You track:
+
+* which hypotheses recur
+* which diminish over time
+* which correlate with acoustic friction
+
+Teachers don’t need certainty — they need *patterns*.
+
+---
+
+## Now let’s address your specific list, honestly
+
+### 1. Substitution vs mispronunciation
+
+**Indistinguishable at token level.**
+
+But distinguishable *over time*:
+
+* substitutions vary semantically
+* mispronunciations recur phonologically
+* substitutions often co-occur with skips
+* mispronunciations co-occur with elongation
+
+This requires **longitudinal evidence**, not one read.
+
+---
+
+### 2. Morpheme errors
+
+Single instance? ❌ No.
+Across repeated encounters with the same morpheme? ✅ Yes.
+
+Children:
+
+* consistently drop `-ed`, `-s`, `-ing`
+* hesitate before affixes
+* repair stems but not endings
+
+You don’t align morphemes once — you **accumulate evidence**.
+
+---
+
+### 3. Decoding vs visual mistakes
+
+This one *is* possible — but only probabilistically.
+
+Signals:
+
+* visual errors correlate with line breaks, punctuation, layout
+* decoding errors correlate with phonotactic difficulty
+* visual errors often involve skips or rereads
+* decoding errors involve elongation and phoneme searching
+
+Again: patterns, not certainties.
+
+---
+
+### 4. Articulation vs phonological issues
+
+You cannot solve this with ASR alone.
+
+But you *can* approximate:
+
+* articulation errors are consistent across contexts
+* phonological errors vary with word structure
+* articulation errors persist even in isolation
+* phonological errors reduce with repetition
+
+This requires **multiple readings**, not one.
+
+---
+
+## So how do you “eventually get the data”?
+
+### Step 1: Accept that alignment is probabilistic
+
+Your labels should look like:
+
+```
+region_id: 42
+likely_target: words 18–22
+acoustic_friction: high
+pause_before: 900ms
+hypotheses:
+  substitution: 0.3
+  decoding: 0.5
+  visual_skip: 0.2
+```
+
+That is honest data.
+
+---
+
+### Step 2: Use humans strategically (not exhaustively)
+
+You do *not* label everything.
+
+You:
+
+* sample high-uncertainty regions
+* sample recurring friction zones
+* sample disagreements across sessions
+
+Humans don’t provide “truth” — they **shape the hypothesis space**.
+
+---
+
+### Step 3: Train models to predict *patterns*, not labels
+
+Your eventual model should predict:
+
+* “this region is risky”
+* “this child struggles with suffixes”
+* “this word family causes breakdowns”
+
+Not:
+
+* “this was a substitution”
+
+This is where most startups lie to themselves.
+
+---
+
+## The brutal truth (the one no vendor will say)
+
+You will **never** get clean, static labels for disfluent child reading.
+
+But you **can** get:
+
+* stable tendencies
+* longitudinal signals
+* instructional relevance
+
+That’s how *actual reading specialists think*, by the way.
+
+---
+
+## Final answer, stripped of comfort
+
+> Is disfluency fundamentally misaligned with clean alignment?
+
+**Yes.**
+
+> Does that make your goal impossible?
+
+**No — it just means the unit of truth is *regions over time*, not words in isolation.**
+
+If you build toward:
+
+* elastic alignment
+* hypothesis tracking
+* trend-level inference
+
+…then your data becomes *more* meaningful than brittle “correct/incorrect” labels.
+
+If you want next, I can:
+
+* sketch a concrete data schema for this
+* show what *not* to label
+* or tell you exactly where most teams waste years chasing false precision
+
+Just say where to push.

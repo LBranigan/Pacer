@@ -264,7 +264,7 @@ export async function runKitchenSinkPipeline(blob, encoding, sampleRateHertz) {
  *   - confirmed: Words confirmed by Deepgram
  *   - unconfirmed: Words not in Deepgram (potential hallucinations)
  *   - unavailable: Words where Deepgram was unavailable
- *   - source: 'kitchen_sink' or 'google_fallback'
+ *   - source: 'kitchen_sink' or 'deepgram_fallback'
  */
 export function computeKitchenSinkStats(result) {
   if (!result || !result.words) {

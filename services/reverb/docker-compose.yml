@@ -11,6 +11,7 @@ services:
     environment:
       - PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
       - DEEPGRAM_API_KEY=${DEEPGRAM_API_KEY}
+      - HF_TOKEN=${HF_TOKEN}
     deploy:
       resources:
         reservations:

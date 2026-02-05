@@ -1,11 +1,17 @@
 #!/bin/bash
-echo "Stopping ORF services..."
+echo "Stopping ReadingQuest services..."
 
-# Kill Python HTTP server on port 8000
-PID=$(lsof -ti:8000)
+cd "$(dirname "$0")"
+
+# Kill Python HTTP server on port 8080
+PID=$(lsof -ti:8080)
 if [ -n "$PID" ]; then
-    echo "Killing process $PID on port 8000"
+    echo "Killing web server process $PID on port 8080"
     kill -9 $PID
 fi
 
-echo "Services stopped."
+# Stop Reverb ASR Docker service
+echo "Stopping Reverb ASR service..."
+(cd services/reverb && docker compose down)
+
+echo "All services stopped."

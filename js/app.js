@@ -26,7 +26,7 @@ import { padAudioWithSilence } from './audio-padding.js';
 import { enrichDiagnosticsWithVAD, computeVADGapSummary } from './vad-gap-analyzer.js';
 
 // Code version for cache verification
-const CODE_VERSION = 'v34-2026-02-03';
+const CODE_VERSION = 'v35-2026-02-05';
 console.log('[ORF] Code version:', CODE_VERSION);
 
 if ('serviceWorker' in navigator) {
@@ -132,6 +132,10 @@ async function runAnalysis() {
   }
 
   let data;
+  // Declare vadResult at outer scope — populated in Kitchen Sink path,
+  // consumed by VAD Gap Analysis (Phase 18) after the if/else block
+  let vadResult = { segments: [], durationMs: 0, error: 'VAD not initialized' };
+
   if (appState.elapsedSeconds != null && appState.elapsedSeconds > 55) {
     setStatus('Processing long recording via async STT...');
     try {
@@ -203,147 +207,182 @@ async function runAnalysis() {
       agreementRate: ensembleStats.agreementRate
     });
 
-    // VAD processing for ghost detection (Phase 12)
-    let vadResult = { segments: [], durationMs: 0, error: 'VAD not initialized' };
-    let ghostResult = { ghostCount: 0, hasGhostSequence: false, vadError: null, ghostIndices: [] };
+    // =========================================================================
+    // LEGACY v1.1 PIPELINE — COMMENTED OUT (2026-02-05)
+    // =========================================================================
+    // The following stages were designed for the old Google STT two-model
+    // ensemble and are REDUNDANT with the Kitchen Sink architecture:
+    //
+    // - Ghost Detection (Phase 12): Caught hallucinated words from Google STT.
+    //   Kitchen Sink uses Deepgram cross-validation instead (crossValidation
+    //   property on each word: "confirmed"/"unconfirmed"/"unavailable").
+    //
+    // - Confidence Classification (Phase 13): Classified words as high/medium/
+    //   low/ghost based on Google ensemble agreement. Kitchen Sink words already
+    //   have per-word confidence from Reverb/Deepgram.
+    //
+    // - Phase 14 Disfluency Detection: Detected disfluencies via timing gaps
+    //   between words (severity-based: minor/moderate/significant). Kitchen Sink
+    //   uses Reverb verbatim-vs-clean diff for model-level disfluency detection
+    //   (type-based: filler/repetition/false_start) — far more accurate.
+    //
+    // - Safety Checks (Phase 15): Caught confidence collapse and rate anomalies
+    //   in the Google ensemble. Not applicable to Kitchen Sink pipeline.
+    //
+    // These stages also had a bug: they referenced `referenceText` before it
+    // was declared (line 363), causing a ReferenceError crash.
+    //
+    // The Kitchen Sink pipeline (kitchen-sink-merger.js) handles all of this:
+    //   - Hallucination filtering via Deepgram cross-validation
+    //   - Disfluency detection via Reverb verbatim/clean alignment
+    //   - Word-level confidence from source ASR models
+    // =========================================================================
 
+    // // VAD processing for ghost detection (Phase 12)
+    // let vadResult = { segments: [], durationMs: 0, error: 'VAD not initialized' };
+    // let ghostResult = { ghostCount: 0, hasGhostSequence: false, vadError: null, ghostIndices: [] };
+    //
+    // if (vadProcessor.isLoaded) {
+    //   setStatus('Running ghost detection...');
+    //   vadResult = await vadProcessor.processAudio(appState.audioBlob);
+    //
+    //   addStage('vad_processing', {
+    //     segmentCount: vadResult.segments.length,
+    //     durationMs: vadResult.durationMs,
+    //     error: vadResult.error
+    //   });
+    //
+    //   // Run ghost detection on merged words (referenceText already fetched above)
+    //   ghostResult = flagGhostWords(mergedWords, vadResult, referenceText, vadResult.durationMs);
+    //
+    //   addStage('ghost_detection', {
+    //     ghostCount: ghostResult.ghostCount,
+    //     hasGhostSequence: ghostResult.hasGhostSequence,
+    //     vadError: ghostResult.vadError,
+    //     ghostIndices: ghostResult.ghostIndices
+    //   });
+    //
+    //   if (ghostResult.ghostCount > 0) {
+    //     console.log(`[ORF] Ghost detection: ${ghostResult.ghostCount} potential hallucinations flagged`);
+    //   }
+    // } else {
+    //   addWarning('VAD not loaded', { error: vadProcessor.loadError });
+    //   console.warn('[ORF] VAD not loaded, skipping ghost detection:', vadProcessor.loadError);
+    // }
+
+    // // Confidence classification (Phase 13)
+    // // Pipeline: Classify -> Filter ghosts -> Align
+    // setStatus('Classifying word confidence...');
+    // // referenceText already fetched above (before ensemble merge)
+    // const classifiedWords = classifyAllWords(mergedWords, referenceText);
+    // const classificationStats = computeClassificationStats(classifiedWords);
+    //
+    // addStage('confidence_classification', {
+    //   total: classificationStats.total,
+    //   high: classificationStats.high,
+    //   medium: classificationStats.medium,
+    //   low: classificationStats.low,
+    //   ghost: classificationStats.ghost,
+    //   possibleInsertions: classificationStats.possibleInsertions
+    // });
+    //
+    // // Filter ghost words BEFORE alignment (confidence === 0.0)
+    // const wordsForAlignment = filterGhosts(classifiedWords);
+    //
+    // if (classificationStats.ghost > 0) {
+    //   console.log(`[ORF] Filtered ${classificationStats.ghost} ghost words before alignment`);
+    // }
+    // if (classificationStats.possibleInsertions > 0) {
+    //   console.log(`[ORF] ${classificationStats.possibleInsertions} possible insertions flagged (not filtered)`);
+    // }
+
+    // // Disfluency detection (Phase 14) - Hierarchy of Truth architecture
+    // // Pipeline: Classify -> Filter ghosts -> Detect disfluencies -> Safety checks -> Align
+    // setStatus('Detecting disfluencies...');
+    // const disfluencyResult = detectDisfluencies(wordsForAlignment, referenceText);
+    // const wordsWithDisfluency = disfluencyResult.words;
+    //
+    // addStage('disfluency_detection', {
+    //   wordsProcessed: wordsForAlignment.length,
+    //   wordsAfter: wordsWithDisfluency.length,
+    //   fragmentsRemoved: disfluencyResult.fragmentsRemoved,
+    //   summary: disfluencyResult.summary
+    // });
+    //
+    // if (disfluencyResult.fragmentsRemoved > 0) {
+    //   console.log(`[ORF] Disfluency: ${disfluencyResult.fragmentsRemoved} fragments merged`);
+    // }
+    // if (disfluencyResult.summary.totalWordsWithDisfluency > 0) {
+    //   console.log(`[ORF] Disfluency: ${disfluencyResult.summary.totalWordsWithDisfluency} words with stutter events`);
+    // }
+
+    // // Safety checks (Phase 15)
+    // // Pipeline: Classify -> Filter ghosts -> Detect disfluencies -> Safety checks -> Align
+    // setStatus('Running safety checks...');
+    // // Get audio duration: prefer VAD result, fallback to last word's endTime
+    // const parseTime = (t) => parseFloat(String(t).replace('s', '')) || 0;
+    // const audioDurationMs = vadResult.durationMs > 0
+    //   ? vadResult.durationMs
+    //   : parseTime(wordsWithDisfluency[wordsWithDisfluency.length - 1]?.endTime) * 1000 || 0;
+    // const safetyResult = applySafetyChecks(wordsWithDisfluency, referenceText, audioDurationMs);
+    // const wordsWithSafety = safetyResult.words;
+    //
+    // // Debug: verify _debug is preserved through pipeline
+    // console.log('[Pipeline Debug] First 3 words after safety checks:', wordsWithSafety.slice(0, 3).map(w => ({
+    //   word: w.word,
+    //   has_debug: !!w._debug,
+    //   _debug: w._debug
+    // })));
+    //
+    // addStage('safety_checks', {
+    //   rateAnomalies: safetyResult._safety.rateAnomalies,
+    //   uncorroboratedSequences: safetyResult._safety.uncorroboratedSequences,
+    //   collapse: safetyResult._safety.collapse
+    // });
+    //
+    // if (safetyResult._safety.collapse.collapsed) {
+    //   console.warn('[ORF] Confidence collapse detected:', safetyResult._safety.collapse.percent.toFixed(1) + '% flagged');
+    // }
+
+    // =========================================================================
+    // Kitchen Sink direct pass-through
+    // =========================================================================
+    // Kitchen Sink words go directly to alignment — no legacy filtering needed.
+    // Disfluency data (isDisfluency, disfluencyType) is already on each word.
+    // Cross-validation data (crossValidation) is already on each word.
+    const wordsForAlignment = mergedWords;
+
+    // VAD processing — still needed for Phase 18 gap analysis (not ghost detection)
+    // VAD tells teachers about speech activity in pauses/hesitations
     if (vadProcessor.isLoaded) {
-      setStatus('Running ghost detection...');
+      setStatus('Analyzing speech segments...');
       vadResult = await vadProcessor.processAudio(appState.audioBlob);
-
       addStage('vad_processing', {
         segmentCount: vadResult.segments.length,
         durationMs: vadResult.durationMs,
         error: vadResult.error
       });
-
-      // Run ghost detection on merged words (referenceText already fetched above)
-      ghostResult = flagGhostWords(mergedWords, vadResult, referenceText, vadResult.durationMs);
-
-      addStage('ghost_detection', {
-        ghostCount: ghostResult.ghostCount,
-        hasGhostSequence: ghostResult.hasGhostSequence,
-        vadError: ghostResult.vadError,
-        ghostIndices: ghostResult.ghostIndices
-      });
-
-      if (ghostResult.ghostCount > 0) {
-        console.log(`[ORF] Ghost detection: ${ghostResult.ghostCount} potential hallucinations flagged`);
-      }
-    } else {
-      addWarning('VAD not loaded', { error: vadProcessor.loadError });
-      console.warn('[ORF] VAD not loaded, skipping ghost detection:', vadProcessor.loadError);
-    }
-
-    // Confidence classification (Phase 13)
-    // Pipeline: Classify -> Filter ghosts -> Align
-    setStatus('Classifying word confidence...');
-    // referenceText already fetched above (before ensemble merge)
-    const classifiedWords = classifyAllWords(mergedWords, referenceText);
-    const classificationStats = computeClassificationStats(classifiedWords);
-
-    addStage('confidence_classification', {
-      total: classificationStats.total,
-      high: classificationStats.high,
-      medium: classificationStats.medium,
-      low: classificationStats.low,
-      ghost: classificationStats.ghost,
-      possibleInsertions: classificationStats.possibleInsertions
-    });
-
-    // Filter ghost words BEFORE alignment (confidence === 0.0)
-    const wordsForAlignment = filterGhosts(classifiedWords);
-
-    if (classificationStats.ghost > 0) {
-      console.log(`[ORF] Filtered ${classificationStats.ghost} ghost words before alignment`);
-    }
-    if (classificationStats.possibleInsertions > 0) {
-      console.log(`[ORF] ${classificationStats.possibleInsertions} possible insertions flagged (not filtered)`);
-    }
-
-    // Disfluency detection (Phase 14) - Hierarchy of Truth architecture
-    // Pipeline: Classify -> Filter ghosts -> Detect disfluencies -> Safety checks -> Align
-    setStatus('Detecting disfluencies...');
-    const disfluencyResult = detectDisfluencies(wordsForAlignment, referenceText);
-    const wordsWithDisfluency = disfluencyResult.words;
-
-    addStage('disfluency_detection', {
-      wordsProcessed: wordsForAlignment.length,
-      wordsAfter: wordsWithDisfluency.length,
-      fragmentsRemoved: disfluencyResult.fragmentsRemoved,
-      summary: disfluencyResult.summary
-    });
-
-    if (disfluencyResult.fragmentsRemoved > 0) {
-      console.log(`[ORF] Disfluency: ${disfluencyResult.fragmentsRemoved} fragments merged`);
-    }
-    if (disfluencyResult.summary.totalWordsWithDisfluency > 0) {
-      console.log(`[ORF] Disfluency: ${disfluencyResult.summary.totalWordsWithDisfluency} words with stutter events`);
-    }
-
-    // Safety checks (Phase 15)
-    // Pipeline: Classify -> Filter ghosts -> Detect disfluencies -> Safety checks -> Align
-    setStatus('Running safety checks...');
-    // Get audio duration: prefer VAD result, fallback to last word's endTime
-    const parseTime = (t) => parseFloat(String(t).replace('s', '')) || 0;
-    const audioDurationMs = vadResult.durationMs > 0
-      ? vadResult.durationMs
-      : parseTime(wordsWithDisfluency[wordsWithDisfluency.length - 1]?.endTime) * 1000 || 0;
-    const safetyResult = applySafetyChecks(wordsWithDisfluency, referenceText, audioDurationMs);
-    const wordsWithSafety = safetyResult.words;
-
-    // Debug: verify _debug is preserved through pipeline
-    console.log('[Pipeline Debug] First 3 words after safety checks:', wordsWithSafety.slice(0, 3).map(w => ({
-      word: w.word,
-      has_debug: !!w._debug,
-      _debug: w._debug
-    })));
-
-    addStage('safety_checks', {
-      rateAnomalies: safetyResult._safety.rateAnomalies,
-      uncorroboratedSequences: safetyResult._safety.uncorroboratedSequences,
-      collapse: safetyResult._safety.collapse
-    });
-
-    if (safetyResult._safety.collapse.collapsed) {
-      console.warn('[ORF] Confidence collapse detected:', safetyResult._safety.collapse.percent.toFixed(1) + '% flagged');
     }
 
     // Convert merged words to STT response format for compatibility
     // (existing code expects data.results structure)
-    // NOTE: Use wordsWithSafety (ghosts removed, fragments merged, safety checked) for alignment
-    // but preserve all words in _classification for debugging
     data = {
       results: [{
         alternatives: [{
-          words: wordsWithSafety,  // Words with safety flags (fragments removed, safety checked)
-          transcript: wordsWithSafety.map(w => w.word).join(' ')
+          words: wordsForAlignment,
+          transcript: wordsForAlignment.map(w => w.word).join(' ')
         }]
       }],
       _ensemble: {
-        raw: ensembleResult,
         stats: ensembleStats
       },
-      _vad: {
-        segments: vadResult.segments,
-        durationMs: vadResult.durationMs,
-        ghostCount: ghostResult.ghostCount,
-        hasGhostSequence: ghostResult.hasGhostSequence,
-        error: vadResult.error || ghostResult.vadError
-      },
-      _classification: {
-        stats: classificationStats,
-        allWords: classifiedWords,  // Keep ALL words (including ghosts) for debugging
-        filteredCount: classifiedWords.length - wordsForAlignment.length
-      },
+      _vad: null,             // Legacy ghost detection disabled
+      _classification: null,  // Legacy confidence classification disabled
       _kitchenSink: {
         disfluencyStats: kitchenSinkResult.disfluencyStats || null
       },
-      _disfluency: {
-        summary: disfluencyResult.summary,
-        fragmentsRemoved: disfluencyResult.fragmentsRemoved
-      },
-      _safety: safetyResult._safety  // Preserves safety check data
+      _disfluency: null,      // Legacy Phase 14 disfluency detection disabled
+      _safety: null            // Legacy safety checks disabled
     };
   }
 
@@ -408,15 +447,12 @@ async function runAnalysis() {
       range: startSec.toFixed(3) + 's - ' + endSec.toFixed(3) + 's',
       duration: (endSec - startSec).toFixed(3) + 's',
       confidence: w.confidence,
+      _reverbConfidence: w._reverbConfidence,
+      _deepgramConfidence: w._deepgramConfidence,
+      crossValidation: w.crossValidation,
       source: w.source,
-      trustLevel: w.trustLevel,
-      severity: w.severity,
-      attempts: w.attempts,
-      _flags: w._flags,
-      _debug: w._debug ? {
-        latestLong: w._debug.latestLong ? w._debug.latestLong.word + ' (' + parseT(w._debug.latestLong.startTime).toFixed(3) + 's)' : null,
-        default: w._debug.default ? w._debug.default.word + ' (' + parseT(w._debug.default.startTime).toFixed(3) + 's)' : null
-      } : null
+      isDisfluency: w.isDisfluency || false,
+      disfluencyType: w.disfluencyType || null
     });
 
     // Gap after this word
@@ -445,10 +481,12 @@ async function runAnalysis() {
       start: w.startTime,
       end: w.endTime,
       confidence: w.confidence,
+      _reverbConfidence: w._reverbConfidence,
+      _deepgramConfidence: w._deepgramConfidence,
+      crossValidation: w.crossValidation,
       source: w.source,
-      trustLevel: w.trustLevel,
-      severity: w.severity,
-      _flags: w._flags
+      isDisfluency: w.isDisfluency || false,
+      disfluencyType: w.disfluencyType || null
     }))
   });
 
