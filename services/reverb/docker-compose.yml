@@ -10,6 +10,7 @@ services:
       - reverb-cache:/root/.cache  # Persist model cache
     environment:
       - PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
+      - DEEPGRAM_API_KEY=${DEEPGRAM_API_KEY}
     deploy:
       resources:
         reservations:
