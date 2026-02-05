@@ -4,26 +4,25 @@
  * Combines Reverb + Deepgram results into unified pipeline for:
  * - Model-level disfluency detection (fillers, repetitions, false starts)
  * - Cross-vendor hallucination flagging
- * - Graceful fallback to Google ensemble
  *
  * Requirements covered:
  * - INTG-05: kitchen-sink-merger.js combines Reverb + Deepgram results
- * - INTG-06: Replaces Google STT ensemble with Kitchen Sink (when enabled)
+ * - INTG-06: Replaces Google STT ensemble with Kitchen Sink
  *
  * Pipeline:
  * 1. Reverb /ensemble (v=1.0 + v=0.0)
  * 2. Needleman-Wunsch alignment (sequence-aligner.js)
  * 3. Disfluency tagging (disfluency-tagger.js)
  * 4. Deepgram cross-validation (deepgram-api.js)
- * 5. Fallback to Google if Reverb unavailable
+ * 5. Fallback to Deepgram-only if Reverb unavailable (no disfluency detection)
+ *
+ * No Google dependency - fully replaced.
  */
 
 import { isReverbAvailable, sendToReverbEnsemble } from './reverb-api.js';
 import { alignTranscripts } from './sequence-aligner.js';
 import { tagDisfluencies, computeDisfluencyStats } from './disfluency-tagger.js';
 import { sendToDeepgram, crossValidateWithDeepgram } from './deepgram-api.js';
-import { sendEnsembleSTT } from './stt-api.js';
-import { mergeEnsembleResults, computeEnsembleStats } from './ensemble-merger.js';
 
 // Feature flag stored in localStorage for A/B comparison
 const FEATURE_FLAG_KEY = 'orf_use_kitchen_sink';
@@ -90,55 +89,58 @@ function buildMergedWordsFromAlignment(verbatimWords, taggedAlignment) {
 }
 
 /**
- * Run Google ensemble fallback.
+ * Run Deepgram-only fallback.
  *
  * Used when:
- * - Feature flag disabled
  * - Reverb service unavailable
  * - Reverb transcription fails
  *
- * Adds placeholder disfluency/crossValidation properties for downstream compatibility.
+ * Provides transcription without disfluency detection (no verbatim/clean diff available).
+ * Still cloud-based (Deepgram API) but no Google dependency.
  *
  * @param {Blob} blob - Audio blob
- * @param {string} encoding - Audio encoding (e.g., 'WEBM_OPUS', 'LINEAR16')
- * @param {number} sampleRateHertz - Sample rate (required for LINEAR16)
  * @returns {Promise<object>} Result object with words array
  */
-async function runGoogleFallback(blob, encoding, sampleRateHertz) {
-  const referenceText = document.getElementById('transcript')?.value || '';
+async function runDeepgramFallback(blob) {
+  console.log('[kitchen-sink] Running Deepgram-only fallback (no disfluency detection)');
 
-  const ensembleResult = await sendEnsembleSTT(blob, encoding, sampleRateHertz);
+  const deepgramResult = await sendToDeepgram(blob);
 
   // Handle complete failure
-  if (!ensembleResult.latestLong && !ensembleResult.default) {
+  if (!deepgramResult || !deepgramResult.words || deepgramResult.words.length === 0) {
+    console.error('[kitchen-sink] Deepgram fallback failed');
     return {
       words: [],
-      source: 'google_fallback',
-      error: 'Both Google models failed',
-      _ensemble: ensembleResult
+      source: 'deepgram_fallback',
+      error: 'Deepgram transcription failed',
+      _debug: {
+        reverbAvailable: false,
+        deepgramAvailable: false,
+        fallbackReason: 'Both Reverb and Deepgram failed'
+      }
     };
   }
 
-  const mergedWords = mergeEnsembleResults(ensembleResult, referenceText);
-  const stats = computeEnsembleStats(mergedWords);
-
   // Add placeholder properties for consistency with Kitchen Sink output
-  // Google can't reliably detect disfluencies (timing issues, no verbatimicity control)
-  const wordsWithDefaults = mergedWords.map(w => ({
+  // No disfluency detection without Reverb's verbatim/clean diff
+  const wordsWithDefaults = deepgramResult.words.map(w => ({
     ...w,
     isDisfluency: false,
     disfluencyType: null,
-    crossValidation: 'unavailable'
+    crossValidation: 'confirmed', // Deepgram is the only source, so "confirmed" by itself
+    source: 'deepgram'
   }));
 
   return {
     words: wordsWithDefaults,
-    source: 'google_fallback',
-    _ensemble: ensembleResult,
-    stats: stats,
+    source: 'deepgram_fallback',
+    deepgram: deepgramResult,
+    transcript: deepgramResult.transcript,
     _debug: {
       reverbAvailable: false,
-      fallbackReason: 'Reverb service unavailable'
+      deepgramAvailable: true,
+      fallbackReason: 'Reverb service unavailable, using Deepgram only',
+      wordCount: wordsWithDefaults.length
     }
   };
 }
@@ -147,7 +149,7 @@ async function runGoogleFallback(blob, encoding, sampleRateHertz) {
  * Run Kitchen Sink ensemble pipeline.
  *
  * Full pipeline:
- * 1. Check feature flag - if disabled, use Google fallback
+ * 1. Check feature flag - if disabled, use Deepgram-only fallback
  * 2. Check Reverb availability
  * 3. Run Reverb + Deepgram in parallel
  * 4. Align verbatim vs clean to find disfluencies
@@ -156,12 +158,16 @@ async function runGoogleFallback(blob, encoding, sampleRateHertz) {
  * 7. Cross-validate against Deepgram
  * 8. Return result with all metadata
  *
+ * Fallback chain (no Google dependency):
+ * - Reverb offline → Deepgram-only (no disfluency detection)
+ * - Deepgram fails → Error (empty words array)
+ *
  * @param {Blob} blob - Audio blob
- * @param {string} encoding - Audio encoding for Google fallback
- * @param {number} sampleRateHertz - Sample rate for Google fallback
+ * @param {string} encoding - Audio encoding (unused, kept for API compatibility)
+ * @param {number} sampleRateHertz - Sample rate (unused, kept for API compatibility)
  * @returns {Promise<object>} Pipeline result with:
  *   - words: Array of words with isDisfluency, disfluencyType, crossValidation
- *   - source: 'kitchen_sink' or 'google_fallback'
+ *   - source: 'kitchen_sink' or 'deepgram_fallback'
  *   - reverb: Raw Reverb response (if used)
  *   - deepgram: Raw Deepgram response (may be null)
  *   - disfluencyStats: Statistics from disfluency-tagger
@@ -171,16 +177,16 @@ async function runGoogleFallback(blob, encoding, sampleRateHertz) {
 export async function runKitchenSinkPipeline(blob, encoding, sampleRateHertz) {
   // Step 0: Check feature flag
   if (!isKitchenSinkEnabled()) {
-    console.log('[kitchen-sink] Feature flag disabled, using Google ensemble');
-    return await runGoogleFallback(blob, encoding, sampleRateHertz);
+    console.log('[kitchen-sink] Feature flag disabled, using Deepgram only');
+    return await runDeepgramFallback(blob);
   }
 
   // Step 1: Check Reverb availability (3s timeout)
   const reverbUp = await isReverbAvailable();
 
   if (!reverbUp) {
-    console.log('[kitchen-sink] Reverb offline, falling back to Google ensemble');
-    return await runGoogleFallback(blob, encoding, sampleRateHertz);
+    console.log('[kitchen-sink] Reverb offline, falling back to Deepgram only');
+    return await runDeepgramFallback(blob);
   }
 
   // Step 2: Run Reverb + Deepgram in parallel
@@ -193,10 +199,10 @@ export async function runKitchenSinkPipeline(blob, encoding, sampleRateHertz) {
   const reverb = reverbResult.status === 'fulfilled' ? reverbResult.value : null;
   const deepgram = deepgramResult.status === 'fulfilled' ? deepgramResult.value : null;
 
-  // Step 3: If Reverb failed, fall back to Google
+  // Step 3: If Reverb failed, fall back to Deepgram only
   if (!reverb) {
-    console.log('[kitchen-sink] Reverb failed, falling back to Google ensemble');
-    return await runGoogleFallback(blob, encoding, sampleRateHertz);
+    console.log('[kitchen-sink] Reverb transcription failed, falling back to Deepgram only');
+    return await runDeepgramFallback(blob);
   }
 
   // Step 4: Align verbatim vs clean to detect disfluencies

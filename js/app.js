@@ -1,7 +1,8 @@
 import { initRecorder, setOnComplete as recorderSetOnComplete } from './recorder.js';
 import { initFileHandler, setOnComplete as fileHandlerSetOnComplete } from './file-handler.js';
 import { sendToSTT, sendToAsyncSTT, sendChunkedSTT, sendEnsembleSTT } from './stt-api.js';
-import { mergeEnsembleResults, extractWordsFromSTT, computeEnsembleStats } from './ensemble-merger.js';
+// Note: ensemble-merger.js still exists for legacy/reference but is no longer used
+// Kitchen Sink pipeline (Reverb + Deepgram) fully replaces Google STT ensemble
 import { alignWords } from './alignment.js';
 import { getCanonical } from './word-equivalences.js';
 import { computeWCPM, computeAccuracy, computeWCPMRange } from './metrics.js';
@@ -172,10 +173,8 @@ async function runAnalysis() {
     // Extract words for downstream processing
     const mergedWords = kitchenSinkResult.words;
 
-    // Compute stats based on source
-    const ensembleStats = kitchenSinkResult.source === 'kitchen_sink'
-      ? computeKitchenSinkStats(kitchenSinkResult)
-      : computeEnsembleStats(mergedWords);
+    // Compute stats (works for both kitchen_sink and deepgram_fallback sources)
+    const ensembleStats = computeKitchenSinkStats(kitchenSinkResult);
 
     // Log to debug stages
     addStage('kitchen_sink_result', {
