@@ -81,6 +81,9 @@ Replace Google STT ensemble with Reverb ASR for model-level disfluency detection
 
 **Dependencies:** None (pure algorithm, can develop with mock data in parallel with Phase 20)
 
+**Plans:** 1 plan
+- [ ] 21-01-PLAN.md — Needleman-Wunsch alignment and disfluency classification
+
 **Requirements:**
 - DISF-01: Needleman-Wunsch global sequence alignment compares v=1.0 vs v=0.0 transcripts
 - DISF-02: Alignment insertions (words in v=1.0 not in v=0.0) identified as disfluencies
@@ -171,10 +174,10 @@ Replace Google STT ensemble with Reverb ASR for model-level disfluency detection
 | v1.0 MVP | 1-9 | 21 | Complete | 2026-02-03 |
 | v1.1 ASR Ensemble | 10-17 | 22 | Complete | 2026-02-04 |
 | v1.2 VAD Gap Analysis | 18-19 | 3 | Complete | 2026-02-04 |
-| v1.3 Kitchen Sink Ensemble | 20-24 | 2+ | **Active** | — |
+| v1.3 Kitchen Sink Ensemble | 20-24 | 3+ | **Active** | — |
 
 **Total shipped:** 19 phases, 46 plans
-**Active:** 5 phases (v1.3), Phase 20 planned (2 plans)
+**Active:** 5 phases (v1.3), Phases 20-21 planned (3 plans)
 
 ## Dependency Graph
 
@@ -195,3 +198,4 @@ Phases 20, 21, 22 can execute in parallel. Phase 23 depends on all three. Phase 
 *v1.2 shipped: 2026-02-04*
 *v1.3 roadmap created: 2026-02-05*
 *Phase 20 planned: 2026-02-05*
+*Phase 21 planned: 2026-02-05*
