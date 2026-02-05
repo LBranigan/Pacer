@@ -4,7 +4,7 @@
 
 - [x] **v1.0 MVP** — Phases 1-9 (shipped 2026-02-03)
 - [x] **v1.1 ASR Ensemble** — Phases 10-17 (shipped 2026-02-04)
-- [ ] **v1.2 VAD Gap Analysis** — Phases 18-19 (in progress)
+- [x] **v1.2 VAD Gap Analysis** — Phases 18-19 (shipped 2026-02-04)
 
 ## Phases
 
@@ -32,8 +32,8 @@ v1.1 shipped with two-model ensemble STT, VAD-based ghost detection, asymmetric 
 
 </details>
 
-<details open>
-<summary>v1.2 VAD Gap Analysis (Phases 18-19) — IN PROGRESS</summary>
+<details>
+<summary>v1.2 VAD Gap Analysis (Phases 18-19) — SHIPPED 2026-02-04</summary>
 
 VAD-based acoustic analysis for pause/gap indicators, giving teachers visibility into what actually happened during reported "silences."
 
@@ -85,7 +85,7 @@ Plans:
 **Plans:** 1 plan
 
 Plans:
-- [ ] 19-01-PLAN.md — Add VAD tooltips and visual distinction to pause/hesitation indicators
+- [x] 19-01-PLAN.md — Add VAD tooltips and visual distinction to pause/hesitation indicators
 
 </details>
 
@@ -95,13 +95,13 @@ Plans:
 |-----------|--------|-------|--------|---------|
 | v1.0 MVP | 1-9 | 21 | Complete | 2026-02-03 |
 | v1.1 ASR Ensemble | 10-17 | 22 | Complete | 2026-02-04 |
-| v1.2 VAD Gap Analysis | 18-19 | 3 | In Progress (Phase 18 complete) | — |
+| v1.2 VAD Gap Analysis | 18-19 | 3 | Complete | 2026-02-04 |
 
-**Total:** 17 phases shipped, 43 plans shipped
-**Active:** 2 phases, 3 plans
+**Total:** 19 phases shipped, 46 plans shipped
+**Active:** 0 phases, 0 plans
 
 ---
 *Roadmap created: 2026-02-02*
 *v1.0 shipped: 2026-02-03*
 *v1.1 shipped: 2026-02-04*
-*v1.2 started: 2026-02-04*
+*v1.2 shipped: 2026-02-04*
