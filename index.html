@@ -15,7 +15,7 @@
 </head>
 <body>
 
-<div id="version" style="text-align:right;font-size:0.75rem;color:#999;">v 2026-02-04 22:30</div>
+<div id="version" style="text-align:right;font-size:0.75rem;color:#999;">v 2026-02-05 02:49</div>
 <h1>Oral Reading Fluency Assessment</h1>
 <p class="subtitle">Google Cloud Speech-to-Text &mdash; Raw Verbatim Transcription</p>
 
@@ -112,13 +112,31 @@
     <span class="word-substitution" title="Student said a different word than the reference.&#10;&#10;Logic: Diff alignment finds a DELETE+INSERT pair at the same position — the reference word was replaced by a different spoken word. Counts as an error in accuracy calculation.&#10;&#10;Example: Reference 'house' → Student says 'horse' → Substitution">Substitution</span>
     <span class="word-omission" title="Student skipped a word from the reference text.&#10;&#10;Logic: Diff alignment finds a DELETE with no corresponding INSERT — the reference word has no matching spoken word. Counts as an error in accuracy calculation.&#10;&#10;Example: Reference 'the big dog' → Student says 'the dog' → 'big' is an omission">Omission</span>
     <span class="word-insertion" title="Student said a word not in the reference text.&#10;&#10;Logic: Diff alignment finds an INSERT with no corresponding DELETE — a spoken word has no match in the reference. Does NOT count as an error per ORF standards.&#10;&#10;Example: Reference 'the dog' → Student says 'the big dog' → 'big' is an insertion">Insertion</span>
-    <span class="word-self-correction" title="Student repeated a word or phrase, indicating a self-correction attempt.&#10;&#10;Logic: Consecutive identical words (or 2-word phrases) in the STT transcript that are NOT legitimate repeats in the reference text. Checked via alignment mapping back to reference positions.&#10;&#10;Example: Student says 'the the the dog' → 'the' repeated twice → self-correction">Self-correction</span>
+    <span class="word-self-correction" title="Student repeated a word or phrase, indicating a self-correction attempt.&#10;&#10;Logic: Consecutive identical words (or 2-word phrases) in the STT transcript that are NOT legitimate repeats in the reference text. Checked via alignment mapping back to reference positions.&#10;&#10;Example: Student says 'the the the dog' → 'the' repeated twice → self-correction">Self-corr.</span>
+    <span class="word-struggle" title="Word where student showed decoding difficulty (struggle).&#10;&#10;Logic: ALL three conditions must be met:&#10;1. Pause (≥3s) or hesitation (500ms-3s) detected before the word&#10;2. Low STT confidence (< 70% or trustLevel='low')&#10;3. Word length > 3 characters (not a common sight word)&#10;&#10;This is a diagnostic indicator showing the student needed extra time to decode.&#10;Does NOT count as an error — helps teachers identify words needing practice.&#10;&#10;Example: 3.1s pause before 'unnerved' + 61% confidence + 8 chars → struggle word">Struggle</span>
     <span class="pause-indicator" title="A long pause detected between consecutive words.&#10;&#10;Logic: Any gap of 3 seconds or longer between one word's endTime and the next word's startTime is flagged as an error. No exceptions for punctuation.&#10;&#10;Example: 'the' ends at 2.0s, 'dog' starts at 5.5s → 3.5s gap → flagged as long pause (error)">[pause]</span>
-    <span class="word-hesitation" style="padding:2px 8px;" title="Student hesitated before saying a word.&#10;&#10;Logic: Gap between previous word's endTime and this word's startTime falls within the hesitation range (flagged but not counted as error):&#10;• Default: 500ms – 3000ms&#10;• After comma: 800ms – 3000ms&#10;• After period/!/?: 1200ms – 3000ms&#10;&#10;Gaps ≥ 3000ms are flagged separately as long pauses (errors).&#10;&#10;Example: Previous word ends at 4.0s, next word starts at 4.8s → 800ms gap → hesitation">Hesitation</span>
-    <span class="word-morphological" style="padding:2px 8px;" title="Student said a word sharing the same root but with a wrong ending.&#10;&#10;Logic: All three conditions must be true:&#10;1. Word is already classified as a substitution&#10;2. Reference and spoken word share a 3+ character prefix&#10;3. STT confidence for the spoken word is below 0.8&#10;&#10;Example: Reference 'running' → Student says 'runned' → shared prefix 'run' (3 chars) + low confidence → morphological error">Morphological</span>
-    <span class="word-forgiven" style="padding:2px 8px; position:relative;" title="Error on a proper name that is phonetically close to the expected word.&#10;&#10;Logic: Word is a proper noun (via NL API) AND Levenshtein similarity ≥ 40%.&#10;&#10;This is a vocabulary/knowledge gap, not a decoding failure. Student used phonics rules correctly but doesn't know the accepted pronunciation.&#10;&#10;Example: Reference 'Hermione' → Student says 'Her-my-oh-nee' → phonetically decoded → forgiven (not counted as error)">Forgiven ✓</span>
+    <span class="word-hesitation" title="Student hesitated before saying a word.&#10;&#10;Logic: Gap between previous word's endTime and this word's startTime falls within the hesitation range (flagged but not counted as error):&#10;• Default: 500ms – 3000ms&#10;• After comma: 800ms – 3000ms&#10;• After period/!/?: 1200ms – 3000ms&#10;&#10;Gaps ≥ 3000ms are flagged separately as long pauses (errors).&#10;&#10;Example: Previous word ends at 4.0s, next word starts at 4.8s → 800ms gap → hesitation">Hesit.</span>
+    <span class="word-morphological" title="Student said a word sharing the same root but with a wrong ending.&#10;&#10;Logic: All three conditions must be true:&#10;1. Word is already classified as a substitution&#10;2. Reference and spoken word share a 3+ character prefix&#10;3. STT confidence for the spoken word is below 0.8&#10;&#10;Example: Reference 'running' → Student says 'runned' → shared prefix 'run' (3 chars) + low confidence → morphological error">Morph.</span>
+    <span class="word-forgiven" title="Error on a proper name that is phonetically close to the expected word.&#10;&#10;Logic: Word is a proper noun (via NL API) AND Levenshtein similarity ≥ 40%.&#10;&#10;This is a vocabulary/knowledge gap, not a decoding failure. Student used phonics rules correctly but doesn't know the accepted pronunciation.&#10;&#10;Example: Reference 'Hermione' → Student says 'Her-my-oh-nee' → phonetically decoded → forgiven (not counted as error)">Forgiven ✓</span>
   </div>
   <div class="result-box" id="resultWords">Awaiting audio...</div>
+
+  <!-- Confidence Visualization (collapsed by default) -->
+  <div class="confidence-section" id="confidenceSection">
+    <div class="confidence-header" onclick="document.getElementById('confidenceSection').classList.toggle('expanded')">
+      <h4>Confidence View</h4>
+      <span class="confidence-toggle">▼</span>
+    </div>
+    <div class="confidence-body">
+      <div class="confidence-legend">
+        <span class="conf-high">High (≥93%)</span>
+        <span class="conf-medium">Medium (≥70%)</span>
+        <span class="conf-low">Low (&lt;70%)</span>
+      </div>
+      <div class="confidence-words" id="confidenceWords">Awaiting audio...</div>
+    </div>
+  </div>
+
   <label style="margin-top:1rem;">Metrics</label>
   <div class="result-box" id="resultPlain"></div>
   <label style="margin-top:1rem;">Details (JSON)</label>
