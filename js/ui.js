@@ -545,6 +545,20 @@ export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, di
       span.title += '\n⚠ Struggle word: pause/hesitation + low confidence + multi-syllable';
     }
 
+    // Kitchen Sink disfluency dot marker (Phase 24)
+    // sttWord has isDisfluency and disfluencyType from kitchen-sink-merger.js
+    if (sttWord?.isDisfluency) {
+      span.classList.add('word-disfluency');
+      const typeLabels = {
+        filler: 'Filler (um, uh)',
+        repetition: 'Repetition',
+        false_start: 'False start',
+        unknown: 'Disfluency'
+      };
+      const label = typeLabels[sttWord.disfluencyType] || 'Disfluency';
+      span.title += '\n' + label + ' — not an error';
+    }
+
     // Insert pause indicator before this word if previous hyp word had a long pause
     if (currentHypIndex !== null && currentHypIndex > 0) {
       const hasPause = longPauseMap.has(currentHypIndex - 1);
@@ -570,8 +584,8 @@ export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, di
       }
     }
 
-    // Check for disfluency badge (Phase 16)
-    const hasDisfluency = sttWord?.severity && sttWord.severity !== 'none';
+    // Check for disfluency badge (Phase 16) -- skip when Kitchen Sink data present
+    const hasDisfluency = sttWord?.severity && sttWord.severity !== 'none' && !('isDisfluency' in (sttWord || {}));
 
     if (hasDisfluency) {
       // Wrap word in container for badge positioning
@@ -594,8 +608,18 @@ export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, di
     }
   }
 
-  // Insertions section (excluding those that are part of forgiven proper noun pronunciations)
-  const regularInsertions = insertions.filter(ins => !ins.partOfForgiven);
+  // Insertions section (excluding forgiven proper noun parts AND disfluent words)
+  // Disfluent words are expected speech patterns, not unexpected insertions
+  const regularInsertions = insertions.filter(ins => {
+    if (ins.partOfForgiven) return false;
+    // Check if the corresponding STT word is a disfluency
+    if (ins.hyp && sttLookup) {
+      const queue = sttLookup.get(ins.hyp);
+      // Peek at first item without consuming it
+      if (queue && queue.length > 0 && queue[0]?.isDisfluency) return false;
+    }
+    return true;
+  });
   if (regularInsertions.length > 0) {
     const insertSection = document.createElement('div');
     insertSection.style.marginTop = '1rem';
@@ -727,6 +751,12 @@ export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, di
     return entry;
   });
 
+  // Disfluency diagnostics section (Phase 24)
+  // disfluencySummary carries Kitchen Sink disfluencyStats when available
+  if (disfluencySummary && disfluencySummary.total !== undefined) {
+    renderDisfluencySection(disfluencySummary);
+  }
+
   jsonDiv.textContent = JSON.stringify({
     alignment: enrichedAlignment,
     sttWords,
@@ -735,6 +765,94 @@ export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, di
     accuracy,
     diagnostics: diagnostics || null
   }, null, 2);
+}
+
+/**
+ * Render the disfluency diagnostics section (Phase 24).
+ * Populates the collapsible section with count, rate, and type breakdown.
+ *
+ * @param {object|null} disfluencyStats - Stats from Kitchen Sink pipeline:
+ *   { total, contentWords, rate, byType: { filler, repetition, false_start, unknown } }
+ */
+function renderDisfluencySection(disfluencyStats) {
+  const section = document.getElementById('disfluencySection');
+  const summaryEl = document.getElementById('disfluencySummaryText');
+  const detailsEl = document.getElementById('disfluencyDetails');
+
+  if (!section || !summaryEl || !detailsEl) return;
+
+  // Hide section if no disfluency data or zero disfluencies
+  if (!disfluencyStats || disfluencyStats.total === 0) {
+    section.style.display = 'none';
+    return;
+  }
+
+  // Show section
+  section.style.display = '';
+
+  // Determine dominant type for collapsed summary
+  const byType = disfluencyStats.byType || {};
+  let dominant = '';
+  let maxCount = 0;
+  for (const [type, count] of Object.entries(byType)) {
+    if (count > maxCount) {
+      maxCount = count;
+      dominant = type;
+    }
+  }
+
+  const dominantLabels = {
+    filler: 'fillers',
+    repetition: 'repetitions',
+    false_start: 'false starts',
+    unknown: 'unclassified'
+  };
+  const dominantText = dominant && maxCount > 0
+    ? ` (mostly ${dominantLabels[dominant] || dominant})`
+    : '';
+
+  // Collapsed summary line
+  summaryEl.textContent = `Disfluencies: ${disfluencyStats.total}${dominantText}`;
+
+  // Expanded detail breakdown
+  detailsEl.innerHTML = '';
+
+  const typeDisplay = [
+    { key: 'filler', label: 'Fillers (um, uh)' },
+    { key: 'repetition', label: 'Repetitions' },
+    { key: 'false_start', label: 'False starts' },
+    { key: 'unknown', label: 'Other' }
+  ];
+
+  for (const { key, label } of typeDisplay) {
+    const count = byType[key] || 0;
+    if (count === 0) continue;
+
+    const row = document.createElement('div');
+    row.className = 'disfluency-type-row';
+
+    const labelSpan = document.createElement('span');
+    labelSpan.className = 'disfluency-type-label';
+    labelSpan.textContent = label;
+
+    const countSpan = document.createElement('span');
+    countSpan.className = 'disfluency-type-count';
+    countSpan.textContent = count;
+
+    row.appendChild(labelSpan);
+    row.appendChild(countSpan);
+    detailsEl.appendChild(row);
+  }
+
+  // Rate line at bottom
+  if (disfluencyStats.rate) {
+    const rateLine = document.createElement('div');
+    rateLine.style.marginTop = '0.5rem';
+    rateLine.style.color = '#888';
+    rateLine.style.fontSize = '0.8rem';
+    rateLine.textContent = `Rate: ${disfluencyStats.rate} of words`;
+    detailsEl.appendChild(rateLine);
+  }
 }
 
 /**

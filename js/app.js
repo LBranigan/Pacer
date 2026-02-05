@@ -336,6 +336,9 @@ async function runAnalysis() {
         allWords: classifiedWords,  // Keep ALL words (including ghosts) for debugging
         filteredCount: classifiedWords.length - wordsForAlignment.length
       },
+      _kitchenSink: {
+        disfluencyStats: kitchenSinkResult.disfluencyStats || null
+      },
       _disfluency: {
         summary: disfluencyResult.summary,
         fragmentsRemoved: disfluencyResult.fragmentsRemoved
@@ -895,7 +898,8 @@ async function runAnalysis() {
     diagnostics,
     transcriptWords,
     tierBreakdown,
-    data._disfluency?.summary || null,   // Disfluency counts by severity
+    // Prefer Kitchen Sink disfluencyStats (Phase 24) over Phase 14 severity summary
+    data._kitchenSink?.disfluencyStats || data._disfluency?.summary || null,
     data._safety || null                   // Collapse state and safety flags
   );
 
