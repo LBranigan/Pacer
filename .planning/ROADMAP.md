@@ -55,6 +55,10 @@ Replace Google STT ensemble with Reverb ASR for model-level disfluency detection
 
 **Dependencies:** None (foundation phase)
 
+**Plans:** 2 plans
+- [ ] 20-01-PLAN.md — Docker infrastructure (Dockerfile, docker-compose.yml, requirements.txt)
+- [ ] 20-02-PLAN.md — FastAPI server with health and ensemble endpoints
+
 **Requirements:**
 - BACK-01: Reverb ASR service runs in Docker container with GPU access
 - BACK-02: Service exposes `/ensemble` endpoint returning both v=1.0 (verbatim) and v=0.0 (clean) transcriptions
@@ -167,10 +171,10 @@ Replace Google STT ensemble with Reverb ASR for model-level disfluency detection
 | v1.0 MVP | 1-9 | 21 | Complete | 2026-02-03 |
 | v1.1 ASR Ensemble | 10-17 | 22 | Complete | 2026-02-04 |
 | v1.2 VAD Gap Analysis | 18-19 | 3 | Complete | 2026-02-04 |
-| v1.3 Kitchen Sink Ensemble | 20-24 | TBD | **Active** | — |
+| v1.3 Kitchen Sink Ensemble | 20-24 | 2+ | **Active** | — |
 
 **Total shipped:** 19 phases, 46 plans
-**Active:** 5 phases (v1.3), 0 plans started
+**Active:** 5 phases (v1.3), Phase 20 planned (2 plans)
 
 ## Dependency Graph
 
@@ -190,3 +194,4 @@ Phases 20, 21, 22 can execute in parallel. Phase 23 depends on all three. Phase 
 *v1.1 shipped: 2026-02-04*
 *v1.2 shipped: 2026-02-04*
 *v1.3 roadmap created: 2026-02-05*
+*Phase 20 planned: 2026-02-05*
