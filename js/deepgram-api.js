@@ -86,3 +86,51 @@ export function extractWordsFromDeepgram(deepgramResponse) {
   if (!deepgramResponse || !deepgramResponse.words) return [];
   return deepgramResponse.words;
 }
+
+/**
+ * Normalize word for comparison (lowercase, strip punctuation).
+ * @param {string} word
+ * @returns {string} Normalized word
+ */
+function normalizeWord(word) {
+  return word.toLowerCase().replace(/[^a-z']/g, '');
+}
+
+/**
+ * Cross-validate Reverb transcript against Deepgram Nova-3.
+ *
+ * Words present in both sources are marked "confirmed".
+ * Words present only in Reverb are marked "unconfirmed" (potential hallucination).
+ * If Deepgram unavailable, all words marked "unavailable".
+ *
+ * Implements XVAL-02: Reverb <-> Nova-3 disagreement flags words as uncertain.
+ *
+ * @param {Array} reverbWords - Words from Reverb ensemble (verbatim or clean)
+ * @param {Array|null} deepgramWords - Words from Deepgram Nova-3, or null if unavailable
+ * @returns {Array} Reverb words with crossValidation property added
+ */
+export function crossValidateWithDeepgram(reverbWords, deepgramWords) {
+  // If Deepgram unavailable, mark all as unavailable (graceful degradation)
+  if (!deepgramWords || deepgramWords.length === 0) {
+    return reverbWords.map(word => ({
+      ...word,
+      crossValidation: 'unavailable'
+    }));
+  }
+
+  // Build Deepgram word set for O(1) lookup
+  const dgWordSet = new Set(
+    deepgramWords.map(w => normalizeWord(w.word))
+  );
+
+  // Annotate each Reverb word with cross-validation status
+  return reverbWords.map(word => {
+    const normalized = normalizeWord(word.word);
+    const inDeepgram = dgWordSet.has(normalized);
+
+    return {
+      ...word,
+      crossValidation: inDeepgram ? 'confirmed' : 'unconfirmed'
+    };
+  });
+}
