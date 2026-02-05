@@ -22,8 +22,8 @@ button { padding: 0.6rem 1.4rem; border: none; border-radius: 4px; font-size: 1r
 .word-substitution { background: #ffe0b2; color: #e65100; }
 .word-omission { background: #ffcdd2; color: #c62828; text-decoration: line-through; }
 .word-insertion { background: #bbdefb; color: #1565c0; }
-.legend { display: flex; gap: 1rem; margin-top: 0.5rem; font-size: 0.85rem; }
-.legend span { padding: 2px 8px; border-radius: 3px; cursor: help; }
+.legend { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.5rem; font-size: 0.8rem; }
+.legend span { padding: 2px 6px; border-radius: 3px; cursor: help; white-space: nowrap; }
 .controls { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
 .timer { font-variant-numeric: tabular-nums; font-size: 1.1rem; font-weight: 600; color: #d32f2f; min-width: 3rem; }
 
@@ -270,5 +270,126 @@ body.dev-mode .dev-mode-toggle {
 
 @keyframes spin {
   to { transform: rotate(360deg); }
+}
+
+/* Confidence visualization section (collapsible) */
+.confidence-section {
+  margin-top: 1rem;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.confidence-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.5rem 0.75rem;
+  background: #f5f5f5;
+  cursor: pointer;
+  user-select: none;
+}
+
+.confidence-header:hover {
+  background: #eee;
+}
+
+.confidence-header h4 {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #555;
+  margin: 0;
+}
+
+.confidence-toggle {
+  font-size: 0.8rem;
+  color: #888;
+  transition: transform 0.2s;
+}
+
+.confidence-section.expanded .confidence-toggle {
+  transform: rotate(180deg);
+}
+
+.confidence-body {
+  display: none;
+  padding: 0.75rem;
+  background: #fafafa;
+}
+
+.confidence-section.expanded .confidence-body {
+  display: block;
+}
+
+.confidence-legend {
+  display: flex;
+  gap: 1rem;
+  margin-bottom: 0.5rem;
+  font-size: 0.8rem;
+}
+
+.confidence-legend span {
+  padding: 2px 8px;
+  border-radius: 3px;
+}
+
+.confidence-words {
+  line-height: 2;
+}
+
+/* Confidence-based word colors */
+.conf-word {
+  display: inline-block;
+  margin: 2px;
+  padding: 2px 6px;
+  border-radius: 3px;
+  font-size: 0.9rem;
+}
+
+.conf-high {
+  background: #c8e6c9;
+  color: #2e7d32;
+}
+
+.conf-medium {
+  background: #fff3e0;
+  color: #e65100;
+}
+
+.conf-low {
+  background: #ffcdd2;
+  color: #c62828;
+}
+
+.conf-ghost {
+  background: #e0e0e0;
+  color: #757575;
+  text-decoration: line-through;
+}
+
+/* Struggle word indicator (DIAG-07)
+ * Highlights words where student showed decoding difficulty:
+ * 1. Pause/hesitation before word
+ * 2. Low STT confidence
+ * 3. Word length > 3 chars (not a sight word)
+ * Distinct style: teal/cyan with dotted border - stands out from other indicators
+ */
+.word-struggle {
+  background: linear-gradient(135deg, #e0f7fa 0%, #b2ebf2 100%);
+  color: #00695c;
+  border: 1px dotted #00897b;
+  font-weight: 600;
+}
+
+/* VAD Gap UI Display (Phase 19)
+ * Orange color for pause/hesitation indicators with VAD speech >= 30%
+ * Helps teachers distinguish gaps with speech activity from true silence
+ */
+.pause-indicator-vad {
+  color: #ff9800;  /* Orange - differentiates from default gray */
+}
+
+.word-hesitation-vad {
+  border-left-color: #ff9800;  /* Orange left border instead of default orange */
 }
 
