@@ -8,6 +8,17 @@ A browser-based oral reading fluency (ORF) assessment tool for middle school RTI
 
 Accurate, word-level fluency error detection powered by ensemble ASR with hallucination filtering — giving teachers actionable data on exactly where and how a struggling reader breaks down, without manual running record marking.
 
+## Current Milestone: v1.2 VAD Gap Analysis
+
+**Goal:** Add VAD-based acoustic analysis to pause/gap indicators, giving teachers visibility into what actually happened during reported "silences" — distinguishing true hesitation from sounding out or timestamp drift.
+
+**Target features:**
+- VAD speech percentage overlay on pause indicators (hover tooltip)
+- VAD speech percentage overlay on hesitation indicators (hover tooltip)
+- Acoustic labels (silence confirmed, mostly silent, mixed signal, speech detected, continuous speech)
+- Visual indicator for pauses with significant speech activity
+- Debug logging for VAD gap analysis
+
 ## Current State (v1.1 shipped 2026-02-04)
 
 **Shipped features:**
@@ -80,7 +91,10 @@ Accurate, word-level fluency error detection powered by ensemble ASR with halluc
 
 ### Active
 
-(None — milestone complete, define for next milestone)
+- [ ] VAD acoustic analysis overlay on pause/gap indicators
+- [ ] Acoustic labels for speech percentage classification
+- [ ] Visual indicator for pauses with significant VAD activity
+- [ ] Debug logging for VAD gap analysis summary
 
 ### Future (v1.2+)
 
@@ -143,4 +157,4 @@ Accurate, word-level fluency error detection powered by ensemble ASR with halluc
 | Ghost filtering before alignment | Prevents WCPM inflation from hallucinated words | ✓ Good v1.1 |
 
 ---
-*Last updated: 2026-02-04 after v1.1 milestone*
+*Last updated: 2026-02-04 after v1.2 milestone start*

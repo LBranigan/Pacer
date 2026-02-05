@@ -5,19 +5,19 @@
 See: .planning/PROJECT.md (updated 2026-02-04)
 
 **Core value:** Accurate, word-level fluency error detection powered by ensemble ASR with hallucination filtering — giving teachers actionable data on exactly where and how a struggling reader breaks down.
-**Current focus:** Planning next milestone
+**Current focus:** v1.2 VAD Gap Analysis
 
 ## Current Position
 
-Phase: — (milestone complete)
+Phase: — (defining requirements)
 Plan: —
-Status: v1.1 SHIPPED
-Last activity: 2026-02-04 — v1.1 milestone archived
+Status: Defining requirements
+Last activity: 2026-02-04 — Milestone v1.2 started
 
-Progress: [██████████████████████████████] 100% (43/43 total plans shipped)
+Progress: [░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░] 0%
 
 Milestones complete: 2 (v1.0, v1.1)
-Next milestone: Not yet defined
+Current milestone: v1.2 VAD Gap Analysis
 
 ## Performance Metrics
 
@@ -47,10 +47,10 @@ None.
 
 ### Blockers/Concerns
 
-None — both milestones shipped successfully.
+None.
 
 ## Session Continuity
 
 Last session: 2026-02-04
-Stopped at: v1.1 milestone complete and archived
-Resume with: `/gsd:new-milestone` to plan v1.2 or other future work
+Stopped at: Defining v1.2 requirements
+Resume with: Continue requirements definition or `/gsd:progress`
