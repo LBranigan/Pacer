@@ -15,7 +15,7 @@
 </head>
 <body>
 
-<div id="version" style="text-align:right;font-size:0.75rem;color:#999;">v 2026-02-07 01:10</div>
+<div id="version" style="text-align:right;font-size:0.75rem;color:#999;">v 2026-02-07 00:15</div>
 <h1>Oral Reading Fluency Assessment</h1>
 <p class="subtitle">Reverb + Deepgram &mdash; Kitchen Sink Pipeline</p>
 
@@ -44,6 +44,14 @@
         <button class="vad-preset" data-threshold="0.50">Noisy</button>
       </div>
     </div>
+  </div>
+</div>
+
+<div class="section dev-mode-only" id="xvalEngineSection">
+  <label>Cross-Validator Engine</label>
+  <div class="xval-engine-options">
+    <label><input type="radio" name="xvalEngine" value="deepgram"> Deepgram Nova-3</label>
+    <label><input type="radio" name="xvalEngine" value="parakeet"> Parakeet TDT 0.6B</label>
   </div>
 </div>
 

@@ -20,6 +20,7 @@ import { classifyAllWords, filterGhosts, computeClassificationStats } from './co
 import { detectDisfluencies } from './disfluency-detector.js';
 import { applySafetyChecks } from './safety-checker.js';
 import { runKitchenSinkPipeline, isKitchenSinkEnabled, computeKitchenSinkStats } from './kitchen-sink-merger.js';
+import { getCrossValidatorEngine, setCrossValidatorEngine, getCrossValidatorName } from './cross-validator.js';
 import { checkTerminalLeniency } from './phonetic-utils.js';
 import { padAudioWithSilence } from './audio-padding.js';
 import { enrichDiagnosticsWithVAD, computeVADGapSummary, adjustGapsWithVADOverhang } from './vad-gap-analyzer.js';
@@ -715,7 +716,7 @@ async function runAnalysis() {
         _xvalEndTime: xvWord.endTime,
         _xvalConfidence: xvWord.confidence,
         _xvalWord: xvWord.word,
-        _xvalEngine: 'deepgram',
+        _xvalEngine: getCrossValidatorEngine(),
         _reverbStartTime: null,
         _reverbEndTime: null,
         _reverbConfidence: null,
@@ -1479,4 +1480,27 @@ if (devModeToggle) {
     const isDevMode = document.body.classList.contains('dev-mode');
     localStorage.setItem('orf_dev_mode', isDevMode);
   });
+}
+
+// --- Cross-validator engine toggle (Phase C) ---
+function updateSubtitle() {
+  const subtitle = document.querySelector('.subtitle');
+  if (subtitle) {
+    subtitle.innerHTML = `Reverb + ${getCrossValidatorName()} &mdash; Kitchen Sink Pipeline`;
+  }
+}
+
+const xvalRadios = document.querySelectorAll('input[name="xvalEngine"]');
+if (xvalRadios.length > 0) {
+  // Restore saved selection
+  const savedEngine = getCrossValidatorEngine();
+  xvalRadios.forEach(radio => {
+    if (radio.value === savedEngine) radio.checked = true;
+    radio.addEventListener('change', () => {
+      setCrossValidatorEngine(radio.value);
+      updateSubtitle();
+    });
+  });
+  // Set initial subtitle to reflect saved engine
+  updateSubtitle();
 }

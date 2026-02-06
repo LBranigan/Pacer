@@ -13,8 +13,8 @@
  * 1. Reverb /ensemble (v=1.0 + v=0.0)
  * 2. Needleman-Wunsch alignment (sequence-aligner.js)
  * 3. Disfluency tagging (disfluency-tagger.js)
- * 4. Deepgram cross-validation (deepgram-api.js)
- * 5. Fallback to Deepgram-only if Reverb unavailable (no disfluency detection)
+ * 4. Cross-validation (cross-validator.js)
+ * 5. Fallback to cross-validator-only if Reverb unavailable (no disfluency detection)
  *
  * No Google dependency - fully replaced.
  */
@@ -22,7 +22,7 @@
 import { isReverbAvailable, sendToReverbEnsemble } from './reverb-api.js';
 import { alignTranscripts } from './sequence-aligner.js';
 import { tagDisfluencies, computeDisfluencyStats } from './disfluency-tagger.js';
-import { sendToDeepgram, crossValidateTranscripts } from './deepgram-api.js';
+import { sendToCrossValidator, crossValidateTranscripts, getCrossValidatorEngine } from './cross-validator.js';
 
 // Feature flag stored in localStorage for A/B comparison
 const FEATURE_FLAG_KEY = 'orf_use_kitchen_sink';
@@ -98,29 +98,29 @@ function buildMergedWordsFromAlignment(verbatimWords, taggedAlignment) {
 }
 
 /**
- * Run Deepgram-only fallback.
+ * Run cross-validator-only fallback.
  *
  * Used when:
  * - Reverb service unavailable
  * - Reverb transcription fails
  *
  * Provides transcription without disfluency detection (no verbatim/clean diff available).
- * Still cloud-based (Deepgram API) but no Google dependency.
+ * Still cloud-based but no Google dependency.
  *
  * @param {Blob} blob - Audio blob
  * @returns {Promise<object>} Result object with words array
  */
-async function runDeepgramFallback(blob) {
-  console.log('[kitchen-sink] Running Deepgram-only fallback (no disfluency detection)');
+async function runXvalFallback(blob) {
+  console.log('[kitchen-sink] Running cross-validator-only fallback (no disfluency detection)');
 
-  const xvalResult = await sendToDeepgram(blob);
+  const xvalResult = await sendToCrossValidator(blob);
 
   // Handle complete failure
   if (!xvalResult || !xvalResult.words || xvalResult.words.length === 0) {
     console.error('[kitchen-sink] Cross-validator fallback failed');
     return {
       words: [],
-      source: 'deepgram_fallback',
+      source: 'xval_fallback',
       error: 'Cross-validator transcription failed',
       _debug: {
         reverbAvailable: false,
@@ -137,12 +137,12 @@ async function runDeepgramFallback(blob) {
     isDisfluency: false,
     disfluencyType: null,
     crossValidation: 'confirmed', // Cross-validator is the only source, so "confirmed" by itself
-    source: 'deepgram'
+    source: getCrossValidatorEngine()
   }));
 
   return {
     words: wordsWithDefaults,
-    source: 'deepgram_fallback',
+    source: 'xval_fallback',
     xvalRaw: xvalResult,
     transcript: xvalResult.transcript,
     _debug: {
@@ -168,15 +168,15 @@ async function runDeepgramFallback(blob) {
  * 8. Return result with all metadata
  *
  * Fallback chain (no Google dependency):
- * - Reverb offline → Deepgram-only (no disfluency detection)
- * - Deepgram fails → Error (empty words array)
+ * - Reverb offline → cross-validator-only (no disfluency detection)
+ * - Cross-validator fails → Error (empty words array)
  *
  * @param {Blob} blob - Audio blob
  * @param {string} encoding - Audio encoding (unused, kept for API compatibility)
  * @param {number} sampleRateHertz - Sample rate (unused, kept for API compatibility)
  * @returns {Promise<object>} Pipeline result with:
  *   - words: Array of words with isDisfluency, disfluencyType, crossValidation
- *   - source: 'kitchen_sink' or 'deepgram_fallback'
+ *   - source: 'kitchen_sink' or 'xval_fallback'
  *   - reverb: Raw Reverb response (if used)
  *   - xvalRaw: Raw cross-validator response (may be null)
  *   - disfluencyStats: Statistics from disfluency-tagger
@@ -186,23 +186,23 @@ async function runDeepgramFallback(blob) {
 export async function runKitchenSinkPipeline(blob, encoding, sampleRateHertz) {
   // Step 0: Check feature flag
   if (!isKitchenSinkEnabled()) {
-    console.log('[kitchen-sink] Feature flag disabled, using Deepgram only');
-    return await runDeepgramFallback(blob);
+    console.log('[kitchen-sink] Feature flag disabled, using cross-validator only');
+    return await runXvalFallback(blob);
   }
 
   // Step 1: Check Reverb availability (3s timeout)
   const reverbUp = await isReverbAvailable();
 
   if (!reverbUp) {
-    console.log('[kitchen-sink] Reverb offline, falling back to Deepgram only');
-    return await runDeepgramFallback(blob);
+    console.log('[kitchen-sink] Reverb offline, falling back to cross-validator only');
+    return await runXvalFallback(blob);
   }
 
   // Step 2: Run Reverb + Deepgram in parallel
   // Use Promise.allSettled so one failure doesn't block the other
   const [reverbResult, xvalResult] = await Promise.allSettled([
     sendToReverbEnsemble(blob),
-    sendToDeepgram(blob)
+    sendToCrossValidator(blob)
   ]);
 
   const reverb = reverbResult.status === 'fulfilled' ? reverbResult.value : null;
@@ -210,8 +210,8 @@ export async function runKitchenSinkPipeline(blob, encoding, sampleRateHertz) {
 
   // Step 3: If Reverb failed, fall back to Deepgram only
   if (!reverb) {
-    console.log('[kitchen-sink] Reverb transcription failed, falling back to Deepgram only');
-    return await runDeepgramFallback(blob);
+    console.log('[kitchen-sink] Reverb transcription failed, falling back to cross-validator only');
+    return await runXvalFallback(blob);
   }
 
   // Step 4: Align verbatim vs clean to detect disfluencies
@@ -273,10 +273,10 @@ export async function runKitchenSinkPipeline(blob, encoding, sampleRateHertz) {
  *   - totalWords: Total word count
  *   - disfluencies: Disfluency count
  *   - disfluencyRate: Percentage string
- *   - confirmed: Words confirmed by Deepgram
- *   - unconfirmed: Words not in Deepgram (potential hallucinations)
- *   - unavailable: Words where Deepgram was unavailable
- *   - source: 'kitchen_sink' or 'deepgram_fallback'
+ *   - confirmed: Words confirmed by cross-validator
+ *   - unconfirmed: Words not in cross-validator (potential hallucinations)
+ *   - unavailable: Words where cross-validator was unavailable
+ *   - source: 'kitchen_sink' or 'xval_fallback'
  */
 export function computeKitchenSinkStats(result) {
   if (!result || !result.words) {

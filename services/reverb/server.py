@@ -4,6 +4,7 @@ Reverb ASR HTTP API Server
 Endpoints:
   POST /ensemble - Dual-pass transcription (v=1.0 verbatim + v=0.0 clean)
   POST /deepgram - Deepgram Nova-3 transcription proxy (cross-validation)
+  POST /parakeet - Parakeet TDT 0.6B v2 local transcription (cross-validation)
   GET  /health   - Health check with GPU status and model info
 
 Requirements:
@@ -11,6 +12,7 @@ Requirements:
   - Docker with NVIDIA Container Toolkit
   - 8GB+ VRAM recommended for long audio
   - DEEPGRAM_API_KEY environment variable (optional, for /deepgram endpoint)
+  - nemo_toolkit[asr] (optional, for /parakeet endpoint)
 """
 
 from fastapi import FastAPI, HTTPException
@@ -80,6 +82,34 @@ def get_deepgram_client():
     return _deepgram_client
 
 
+# Parakeet TDT model - lazy loaded on first /parakeet request
+_parakeet_model = None
+_parakeet_available = None
+
+
+def check_parakeet_available():
+    """Check if nemo_toolkit is importable (Parakeet dependency)."""
+    global _parakeet_available
+    if _parakeet_available is None:
+        try:
+            import nemo.collections.asr  # noqa: F401
+            _parakeet_available = True
+        except ImportError:
+            _parakeet_available = False
+    return _parakeet_available
+
+
+def get_parakeet_model():
+    """Get or load the Parakeet TDT 0.6B v2 model singleton. ~600MB VRAM."""
+    global _parakeet_model
+    if _parakeet_model is None:
+        import nemo.collections.asr as nemo_asr
+        print("[parakeet] Loading model nvidia/parakeet-tdt-0.6b-v2...")
+        _parakeet_model = nemo_asr.models.ASRModel.from_pretrained("nvidia/parakeet-tdt-0.6b-v2")
+        print("[parakeet] Model loaded successfully")
+    return _parakeet_model
+
+
 # =============================================================================
 # Startup Event (BACK-04: GPU verification)
 # =============================================================================
@@ -123,7 +153,8 @@ async def health():
         "status": "ok" if _model else "ready",
         "model_loaded": _model is not None,
         "gpu": gpu_info,
-        "deepgram_configured": get_deepgram_client() is not None
+        "deepgram_configured": get_deepgram_client() is not None,
+        "parakeet_configured": check_parakeet_available()
     }
 
 
@@ -182,6 +213,11 @@ class EnsembleRequest(BaseModel):
 
 class DeepgramRequest(BaseModel):
     """Request model for /deepgram endpoint."""
+    audio_base64: str
+
+
+class ParakeetRequest(BaseModel):
+    """Request model for /parakeet endpoint."""
     audio_base64: str
 
 
@@ -315,3 +351,97 @@ async def deepgram_transcribe(req: DeepgramRequest):
         import traceback
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Deepgram error: {e}")
+
+
+# =============================================================================
+# Parakeet Endpoint (Local GPU cross-validation)
+# =============================================================================
+
+@app.post("/parakeet")
+async def parakeet_transcribe(req: ParakeetRequest):
+    """
+    Transcribe audio using Parakeet TDT 0.6B v2 (local GPU).
+
+    Returns normalized word-level timestamps matching project format.
+    Model lazy-loads on first request (~600MB VRAM).
+    Shares gpu_lock with Reverb to prevent VRAM contention.
+
+    Confidence is 1.0 for all words (TDT standard output doesn't expose
+    per-word confidence — documented limitation).
+    """
+    if not check_parakeet_available():
+        raise HTTPException(
+            status_code=503,
+            detail="Parakeet not available (nemo_toolkit[asr] not installed)"
+        )
+
+    try:
+        audio_bytes = base64.b64decode(req.audio_base64)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Invalid base64: {e}")
+
+    async with gpu_lock:
+        with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as f:
+            f.write(audio_bytes)
+            temp_path = f.name
+
+        try:
+            model = get_parakeet_model()
+
+            # Transcribe with timestamps enabled (TDT native duration prediction)
+            output = model.transcribe([temp_path], timestamps=True, batch_size=1)
+
+            words = []
+            transcript = ""
+
+            # NeMo returns list of results; extract first
+            if isinstance(output, list) and len(output) > 0:
+                result = output[0]
+
+                # Extract transcript text
+                if hasattr(result, 'text'):
+                    transcript = result.text
+                elif isinstance(result, str):
+                    transcript = result
+
+                # Extract word-level timestamps from TDT output
+                if hasattr(result, 'timestamp') and result.timestamp:
+                    ts = result.timestamp
+                    word_timestamps = ts.get('word', [])
+                    for w in word_timestamps:
+                        words.append({
+                            "word": w.get('word', ''),
+                            "startTime": f"{w.get('start', 0):.3f}s",
+                            "endTime": f"{w.get('end', 0):.3f}s",
+                            "confidence": 1.0
+                        })
+
+            # Fallback: if no word timestamps, split transcript into words without timing
+            if not words and transcript:
+                print("[parakeet] Warning: no word timestamps available, falling back to transcript-only")
+                for word_text in transcript.split():
+                    words.append({
+                        "word": word_text,
+                        "startTime": "0s",
+                        "endTime": "0s",
+                        "confidence": 1.0
+                    })
+
+            if not transcript and words:
+                transcript = " ".join(w["word"] for w in words)
+
+            # Clear GPU memory after processing
+            torch.cuda.empty_cache()
+
+            return {
+                "words": words,
+                "transcript": transcript,
+                "model": "parakeet-tdt-0.6b-v2"
+            }
+
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            raise HTTPException(status_code=500, detail=f"Parakeet error: {e}")
+        finally:
+            os.unlink(temp_path)
