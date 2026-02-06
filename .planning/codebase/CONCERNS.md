@@ -1,221 +1,261 @@
 # Codebase Concerns
 
-**Analysis Date:** 2026-02-02
+**Analysis Date:** 2026-02-06
 
-## Security Issues
+## Tech Debt
 
-**API Key Exposure in Client-Side Code:**
-- Issue: API key is entered directly into the HTML form and sent via client-side JavaScript to Google Cloud. The API key is visible in the browser and can be intercepted or logged in browser history/network logs.
-- Files: `orf_assessment.html` (lines 40-42, 130-131, 164)
-- Impact: Anyone with access to the browser (or network monitoring) can extract the API key and make unauthorized API calls, incurring charges or accessing private data
-- Fix approach: Implement a backend proxy server that holds the API key securely. Frontend sends audio to the proxy, which authenticates using the backend-held credentials and forwards the request to Google Cloud
-- Priority: High - this is a critical security flaw for production use
+**Legacy Google STT Code (Unused but Present):**
+- Issue: Google STT code remains in codebase despite Kitchen Sink pipeline replacement
+- Files: `js/stt-api.js`, `js/ensemble-merger.js` (887 lines, marked legacy in comments)
+- Impact: Code confusion, maintenance burden, 1000+ lines of dead code
+- Fix approach: Remove `js/stt-api.js` and `js/ensemble-merger.js` after confirming Kitchen Sink stability. Update `js/app.js` line 4 comment that references ensemble-merger.
 
-**API Key Persistence in localStorage (Planned Feature):**
-- Issue: Phase 4 plans to "Save API key in localStorage" (PLAN.md line 66). Storing API keys in browser storage is a security anti-pattern
-- Files: `PLAN.md` (line 66), future implementation in `orf_assessment.html`
-- Impact: Compromised browser or stolen device exposes the API key persistently
-- Fix approach: Do not implement localStorage for API keys. Instead: (1) Use OAuth2 flow for user authentication, (2) backend maintains per-user API credentials, (3) frontend authenticates via session token
-- Priority: High - block this feature from being implemented
+**Hardcoded API Key in Production Code:**
+- Issue: Google Cloud API key hardcoded in `js/app.js` line 1256 for "dev/testing" but shipped in production
+- Files: `js/app.js`
+- Impact: API key exposure in public codebase, potential quota abuse
+- Current mitigation: Key appears to be for Vision API (OCR feature)
+- Recommendations: Move to environment variable or remove auto-fill entirely, use .env file pattern like Reverb service
 
-**API Error Messages Expose Service Details:**
-- Issue: API error messages are displayed directly to the user (line 168: `data.error.message`), which may leak internal Google Cloud error details
-- Files: `orf_assessment.html` (line 168)
-- Impact: Information disclosure; attackers can use error messages to probe for valid API keys or learn about backend configuration
-- Fix approach: Log full errors server-side; show generic messages to users ("An error occurred. Please try again.")
-- Priority: Medium
+**Inconsistent Timestamp Format:**
+- Issue: Three different timestamp representations across codebase (string "X.XXs", float seconds, milliseconds)
+- Files: `js/reverb-api.js` (normalizes both formats), `js/diagnostics.js` (parseTime helper), `js/ghost-detector.js` (parseTimeMs helper)
+- Impact: Conversion bugs, performance overhead, error-prone calculations
+- Fix approach: Standardize on single format (recommend float seconds) across entire pipeline
 
-## Performance Bottlenecks
+**sttLookup Canonical Mismatch:**
+- Issue: sttLookup uses canonical forms but lookup often uses raw hyp text, causing compound word failures
+- Files: `js/app.js` lines 613-618 (builds lookup), `js/ui.js` (performs lookups)
+- Impact: Compound words fail metadata lookup, requiring synthetic entry workaround (app.js ~line 620)
+- Fix approach: Refactor sttLookup to use consistent keys or normalize at lookup time
 
-**Synchronous STT Endpoint Limited to ~1 Minute Audio:**
-- Issue: Current implementation uses `v1/speech:recognize` which is synchronous and caps at ~1 minute of audio (SETTINGS.md line 62). ORF assessments can run longer than this
-- Files: `orf_assessment.html` (line 164), PLAN.md (line 42)
-- Impact: Passages longer than ~60 seconds will fail silently or truncate. This blocks assessment of longer reading passages
-- Fix approach: Implement `longrunningrecognize` endpoint with polling via `operations.get` (async). Phase 1 task already identified (PLAN.md line 42) but not yet implemented
-- Priority: High - blocks core feature for longer passages
+**No Service Worker Cache Versioning:**
+- Issue: Service worker (sw.js) lacks cache invalidation strategy when CODE_VERSION changes
+- Files: `js/app.js` line 29 (CODE_VERSION), `index.html` line 33-35 (SW registration)
+- Impact: Users may run stale JavaScript after updates
+- Fix approach: Inject CODE_VERSION into service worker, clear cache on version mismatch
 
-**Base64 Encoding of Entire Audio in Memory:**
-- Issue: `blobToBase64()` (line 176-181) loads the entire audio file into memory and converts it to base64, which inflates size by ~33%
-- Files: `orf_assessment.html` (lines 176-181)
-- Impact: Large audio files (>10MB) may cause memory issues on low-end devices; network payload is larger than necessary
-- Fix approach: When switching to async endpoint, use streaming request bodies instead of base64 strings. For synchronous endpoint, set a file size limit (e.g., 10MB)
-- Priority: Medium
-
-**Speech Context Array Construction Inefficiency:**
-- Issue: Line 140 uses regex and multiple array operations (`toLowerCase`, `replace`, `split`, `filter`) to build speech contexts. For large passages, this is done synchronously on every request
-- Files: `orf_assessment.html` (lines 139-143)
-- Impact: Large passages (e.g., >5000 words) will cause UI lag during the speech contexts extraction
-- Fix approach: Debounce or defer the passage processing. For long passages, consider caching processed contexts
-- Priority: Low - only affects edge cases with very large passages
-
-## Fragile Areas
-
-**No Error Recovery for Failed API Calls:**
-- Issue: `sendToSTT()` function (lines 129-174) catches errors but doesn't retry. If the API call fails due to transient network issues, the user must re-record/re-upload
-- Files: `orf_assessment.html` (lines 171-173)
-- Impact: Poor UX on unreliable networks; users lose their recording if a temporary network blip occurs
-- Fix approach: Implement exponential backoff retry logic (3 retries with increasing delays). Store audio in memory until successful transmission
-- Priority: Medium
-
-**Missing Input Validation:**
-- Issue: API key input (line 130) only checks for empty string with `.trim()`. No validation that it's a valid API key format
-- Files: `orf_assessment.html` (line 130)
-- Impact: Invalid keys fail at API call time with poor error messaging. No early feedback to user
-- Fix approach: Add client-side validation for API key format (should be alphanumeric + underscore, 40+ chars). Show validation error before attempting API call
-- Priority: Low - not critical but improves UX
-
-**Recording State Not Properly Cleaned Up on Errors:**
-- Issue: `startRecording()` sets `recording = true` and adds event listeners, but if `getUserMedia()` fails (line 84-106), the UI state is not reset and listeners may remain attached
-- Files: `orf_assessment.html` (lines 83-107)
-- Impact: If microphone is denied, the "Record" button stays in recording state, causing confusion
-- Fix approach: Reset UI state (button text, classes) in the catch block before displaying error
-- Priority: Low
-
-**No Handling of Empty/Silent Audio:**
-- Issue: `displayResults()` checks if `data.results` is empty (line 190) but doesn't distinguish between silence and actual error. No metadata about audio duration is available to diagnose why transcription failed
-- Files: `orf_assessment.html` (lines 184-232)
-- Impact: When a child is too quiet or background noise blocks speech, user sees "No speech detected" with no guidance on how to fix it
-- Fix approach: Log the raw API response. Add diagnostics to show audio duration, confidence scores from what WAS recognized, suggestions (move away from noise, speak louder)
-- Priority: Medium
+**Debug Logging Always Enabled:**
+- Issue: DEBUG_LOGGING flag hardcoded to `true` in production
+- Files: `js/ensemble-merger.js` line 57
+- Impact: Console pollution, potential performance overhead
+- Fix approach: Tie to localStorage flag or remove entirely for dead code
 
 ## Known Bugs
 
-**Timer Not Reset on Successful Upload:**
-- Issue: When a file is uploaded instead of recorded (line 119-127), the timer (line 53) is never reset, so it displays the last recording time even though a different audio file was processed
-- Files: `orf_assessment.html` (lines 119-127, 53)
-- Impact: UI shows confusing/incorrect elapsed time for uploaded files
-- Fix approach: Reset `seconds = 0` and update timer display in `handleFile()` function before calling `sendToSTT()`
-- Priority: Low - cosmetic, but breaks user trust
+**Reverb 100ms Timestamp Limitation:**
+- Symptoms: Single-BPE-token words always show ~100ms duration regardless of actual speech
+- Files: `services/reverb/server.py` (CTM parser), noted in MEMORY.md
+- Trigger: Any short word transcribed by Reverb ASR
+- Workaround: Multi-token words get accurate durations; system uses Deepgram timestamps as primary source
+- Root cause: Inherent to wenet's CTC alignment (g_time_stamp_gap_ms = 100)
 
-**File Input Not Reset After Upload:**
-- Issue: `document.getElementById('fileInput')` (line 56) is used in `handleFile()` but the input value is never cleared. If user uploads the same file twice, `onchange` won't fire the second time
-- Files: `orf_assessment.html` (lines 56, 119)
-- Impact: User can't re-process the same file without clearing browser cache or manually clicking file dialog twice
-- Fix approach: After `sendToSTT()` is called, reset the file input: `document.getElementById('fileInput').value = ''`
-- Priority: Low
+**Compound Word Tooltip Index Misalignment:**
+- Symptoms: Tooltips for compound words may show wrong metadata
+- Files: `js/ui.js` (tooltip rendering), `js/app.js` lines 648-660 (synthetic sttLookup entries)
+- Trigger: Student says compound word split (e.g., "every one" for "everyone")
+- Workaround: Synthetic sttLookup entries created after compound merge
+- Safe modification: Test tooltip display after any alignment.js changes
 
-**Missing Null Check on Words Array:**
-- Issue: `displayResults()` (line 202) checks `if (alt.words)` but `alt` itself is not guaranteed to have word-level detail. Some API configurations return alternatives without word-level timing data
-- Files: `orf_assessment.html` (line 202)
-- Impact: If an alternative has no words array, it silently skips the alternative without showing it in the UI
-- Fix approach: Add fallback to display transcript text even if word-level data is unavailable
-- Priority: Low
-
-## Test Coverage Gaps
-
-**No Automated Testing:**
-- Issue: The entire codebase is a single HTML file with no test suite, no unit tests, no integration tests
-- Files: `orf_assessment.html` (entire file)
-- Impact: Regressions go undetected. Changes to core functions like `displayResults()`, `sendToSTT()`, or alignment logic (planned Phase 2) will break untested
-- Recommended approach: Create a test suite for:
-  1. Mock Google Cloud API responses and test `displayResults()` parsing
-  2. Test speech context extraction with various passage formats
-  3. Test audio codec detection and encoding mapping
-  4. Test timer display logic
-  5. Integration tests for the full flow (record → API → display)
-- Priority: High - especially critical before Phase 2 (alignment algorithm) is added
-
-**No Test Plan for Edge Cases:**
-- Issue: PLAN.md and SETTINGS.md do not document testing strategy for:
-  1. Audio longer than 60 seconds (will fail with current sync endpoint)
-  2. Very large passages (>5000 words) in speech contexts
-  3. Non-English passages (languageCode is hardcoded to en-US)
-  4. API rate limiting / quota exceeded scenarios
-  5. Invalid audio files (corrupt WAV, etc.)
-- Files: `PLAN.md` (Phase 1 and Phase 3 lack test strategy), `orf_assessment.html`
-- Impact: Untested edge cases will fail in production with poor error messages
-- Priority: Medium - should be addressed in Phase 1 before going live
-
-## Missing Critical Features
-
-**No Alignment / Diff Algorithm (Core ORF Feature):**
-- Issue: Phase 2 (PLAN.md lines 44-52) is not yet implemented. The reference passage is collected but never compared to the transcript. Without alignment, the tool cannot:
-  - Classify words as correct/substitution/omission/insertion
-  - Compute WCPM (Words Correct Per Minute)
-  - Detect self-corrections
-  - Flag specific error types for clinical analysis
-- Files: `orf_assessment.html` (line 46 references passage but doesn't use it), `PLAN.md`
-- Impact: Tool currently only transcribes and shows confidence; it does NOT assess reading fluency. This is the entire clinical value proposition
-- Priority: Critical - Phase 2 must be completed for the tool to be functional as an ORF assessment
-- Fix approach: Implement Levenshtein distance or longest-common-subsequence diff algorithm to align passage words to transcript words
-
-**No ORF Scoring Metrics (WCPM, Accuracy, Error Breakdown):**
-- Issue: Phase 3 (PLAN.md lines 54-59) not implemented. Tool cannot compute:
-  - Words Correct Per Minute (WCPM) — the primary ORF metric
-  - Accuracy percentage
-  - Error counts by type (substitutions, omissions, insertions)
-  - Reading rate (words per minute regardless of accuracy)
-  - Pause/hesitation detection
-- Files: `orf_assessment.html` (word timestamps are collected but not analyzed), `PLAN.md`
-- Impact: Without these metrics, teachers cannot interpret results or compare against grade-level benchmarks
-- Priority: Critical - Phase 3 must be completed for clinical usability
-- Fix approach: After alignment is implemented, add scoring functions to compute each metric from the diff results
-
-**No Reporting / Export Functionality:**
-- Issue: Phase 4 (PLAN.md lines 61-66) not implemented. Tool cannot:
-  - Show summary dashboard with WCPM, accuracy %, error breakdown
-  - Export results as JSON/CSV
-  - Generate print-friendly reports
-  - Save assessment history
-- Files: `orf_assessment.html`, `PLAN.md`
-- Impact: Teachers cannot save assessment records or share results with students/parents
-- Priority: High - needed before tool can be used in production classroom
-
-## Dependencies at Risk
-
-**Synchronous Google Cloud STT API May Fail:**
-- Risk: `enableSpokenPunctuation` may not work on v1 endpoint; may require `v1p1beta1` (PLAN.md line 32, SETTINGS.md line 64). This setting is currently hardcoded as false but future phases may need it
-- Files: `orf_assessment.html` (line 153), `PLAN.md` (line 32)
-- Impact: If API rejects the config, requests fail with cryptic error message
-- Mitigation: Document the v1p1beta1 fallback strategy. Test with a real API key before going live
-- Priority: Medium - should test during Phase 1
-
-**Google Cloud Speech-to-Text API Rate Limits:**
-- Risk: No handling of rate limit errors (429, 503 responses from Google Cloud)
-- Files: `orf_assessment.html` (lines 162-173), `PLAN.md`
-- Impact: Under heavy load (e.g., classroom of 30 students all uploading simultaneously), users get cryptic errors with no retry mechanism
-- Mitigation: Implement exponential backoff retry logic; show user "Please wait, service is busy"
-- Priority: Medium - becomes issue with school-wide deployment
-
-**Browser API Compatibility:**
-- Risk: `navigator.mediaDevices.getUserMedia()` (line 85) requires browser support. Older browsers (IE, very old Safari) will fail
-- Files: `orf_assessment.html` (line 85)
-- Impact: Tool doesn't work on older devices commonly found in schools
-- Mitigation: Add feature detection and graceful fallback; show clear message if microphone API is not available
-- Priority: Low - affects accessibility but not core functionality
-
-## Scaling Limits
-
-**Single-File Architecture:**
-- Limit: All HTML, CSS, JavaScript in one 236-line file. As features are added (Phase 2 alignment, Phase 3 metrics, Phase 4 reporting), the file will become unmaintainable
-- Files: `orf_assessment.html`
-- Impact: Future developers cannot find code; changes risk breaking unrelated features
-- Scaling path: Modularize into separate files (alignment.js, scoring.js, ui.js, api.js) with a build step (Webpack/Vite) to bundle for deployment
-- Priority: Medium - becomes urgent after Phase 2 implementation
-
-**No Backend Infrastructure:**
-- Current state: Entire tool runs client-side. All API keys, all audio processing happens in browser
-- Limit: Cannot implement secure key storage, per-user session management, persistent storage of assessments, or server-side validation
-- Impact: Cannot deploy to production classroom without solving the API key security issue (#1)
-- Scaling path: Build a simple Node.js/Python backend that (1) authenticates users via OAuth, (2) holds API credentials server-side, (3) proxies requests to Google Cloud, (4) stores assessment history in a database
-- Priority: High - critical for production deployment
+**VAD Edge Tolerance Gaps:**
+- Symptoms: Words within first/last 300ms of audio may be incorrectly flagged as ghosts or missed
+- Files: `js/ghost-detector.js` lines 7, 30-35 (EDGE_TOLERANCE_MS)
+- Trigger: Speech starts immediately or ends at recording boundary
+- Current mitigation: Edge tolerance skips flagging, but may miss real issues
 
 ## Security Considerations
 
-**CSRF Vulnerability (If Backend is Added):**
-- Risk: When backend is added, ensure all POST requests include CSRF tokens
-- Files: `orf_assessment.html` (currently no backend)
-- Current mitigation: Not applicable yet (no backend)
-- Recommendations: When backend is added, implement SameSite cookie policy and CSRF token validation
-- Priority: Future concern - address in Phase 4 when backend is created
+**API Key Exposure:**
+- Risk: Google Cloud API key hardcoded in client-side JavaScript
+- Files: `js/app.js` line 1256, `index.html` line 24 (API key input field)
+- Current mitigation: Key is for Vision API only (OCR feature), limited scope
+- Recommendations: Implement backend proxy for Vision API like Deepgram/Reverb pattern, remove client-side key storage
 
-**Cross-Origin Audio Upload:**
-- Risk: If audio is uploaded to a different domain (e.g., CDN), ensure CORS headers are properly configured
-- Files: `orf_assessment.html` (line 163-165 already uses cross-origin Google Cloud API)
-- Current mitigation: Google Cloud API uses API key authentication, not cookies, so CSRF risk is low. However, API key is still exposed in URL
-- Recommendations: Switch to backend proxy to hide API key in Authorization header
+**LocalStorage Data Exposure:**
+- Risk: Student data stored in browser localStorage without encryption
+- Files: `js/storage.js` (STORAGE_KEY 'orf_data'), `js/audio-store.js` (IndexedDB for audio blobs)
+- Current mitigation: Data remains on device, no server transmission
+- Recommendations: Add export/import with encryption for sensitive deployments, warn users about shared device risks
+
+**CORS Wildcard in Reverb Service:**
+- Risk: Reverb service allows all origins (allow_origins=["*"])
+- Files: `services/reverb/server.py` lines 40-45
+- Current mitigation: Service runs locally on localhost:8765, not exposed to internet
+- Recommendations: Restrict to specific origins (localhost, 127.0.0.1, file://) for production deployments
+
+**Unvalidated Base64 Audio Input:**
+- Risk: Reverb/Deepgram endpoints accept arbitrary base64 without size limits
+- Files: `services/reverb/server.py` line 219 (base64 decode), `js/reverb-api.js`, `js/deepgram-api.js`
+- Current mitigation: Timeout limits (120s Reverb, 30s Deepgram) prevent infinite processing
+- Recommendations: Add MAX_AUDIO_SIZE validation in backend before decode
+
+## Performance Bottlenecks
+
+**Large File Monoliths:**
+- Problem: app.js (1478 lines), ui.js (1151 lines) contain too much logic
+- Files: `js/app.js`, `js/ui.js`
+- Cause: God object anti-pattern, insufficient separation of concerns
+- Improvement path: Extract alignment pipeline to dedicated orchestrator, split UI into view modules
+
+**Synchronous Alignment Operations:**
+- Problem: alignWords, mergeCompoundWords, resolveNearMissClusters run synchronously on main thread
+- Files: `js/alignment.js`, `js/diagnostics.js`
+- Cause: No Web Worker usage for CPU-intensive diff-match-patch operations
+- Improvement path: Move alignment pipeline to Web Worker, post results back to main thread
+
+**Excessive Console Logging:**
+- Problem: 92 console.log/warn/error statements in production build
+- Files: All JS files (grep showed 18 occurrences across 11 files for try/catch alone)
+- Cause: No logging abstraction, debug code left in production
+- Improvement path: Implement log level system, strip debug logs in production build
+
+**VAD Reprocessing on Threshold Change:**
+- Problem: Changing VAD threshold requires full audio reprocessing
+- Files: `js/vad-processor.js` (processAudio method)
+- Cause: VAD detection runs per-request, no cached segment data
+- Improvement path: Cache raw VAD probabilities, recalculate thresholds without re-decoding audio
+
+## Fragile Areas
+
+**Near-Miss Resolution Pipeline Order:**
+- Files: `js/app.js` lines 680-750 (pipeline orchestration), `js/diagnostics.js` (resolveNearMissClusters)
+- Why fragile: Pipeline order matters - omission recovery MUST run before near-miss resolution
+- Safe modification: Always test full pipeline after changing any step order, check for self-correction detection
+- Test coverage: None - manual testing required
+
+**Compound Word Detection:**
+- Files: `js/alignment.js` lines 10-60 (mergeCompoundWords), `js/app.js` lines 648-660 (synthetic lookup)
+- Why fragile: Multi-step detection with canonical form matching, easy to break with normalization changes
+- Safe modification: Test with passages containing "everyone", "hotdog", "football" after changes
+- Test coverage: None
+
+**Disfluency Classification Logic:**
+- Files: `js/disfluency-detector.js` (258 lines), `js/disfluency-tagger.js`, `js/disfluency-config.js`
+- Why fragile: Complex state machine with lookahead, temporal windows, confidence thresholds
+- Safe modification: Update `js/miscue-registry.js` first, use debug logger to trace classification
+- Test coverage: None - relies on real-world audio testing
+
+**Cross-Validation Alignment:**
+- Files: `js/deepgram-api.js` (crossValidateWithDeepgram), `js/sequence-aligner.js` (Needleman-Wunsch)
+- Why fragile: Sequence alignment with fuzzy matching, disagreement detection affects confidence display
+- Safe modification: Test with known disagreement cases (proper nouns, rare words) after changes
+- Test coverage: None
+
+**VAD Gap Analysis:**
+- Files: `js/vad-gap-analyzer.js` (289 lines), `js/diagnostics.js` (hesitation detection)
+- Why fragile: Adjusts hesitation gaps based on VAD overhang, can remove valid hesitations if threshold wrong
+- Safe modification: Check diagnostics.onsetDelays filtering logic (line 212) after VAD threshold changes
+- Test coverage: None
+
+## Scaling Limits
+
+**Browser LocalStorage (5-10MB):**
+- Current capacity: Unlimited number of students/assessments until quota hit
+- Limit: Browser-dependent (5-10MB for localStorage, larger for IndexedDB audio)
+- Scaling path: Implement quota monitoring, auto-delete old assessments, migrate to server-side storage
+
+**Reverb GPU Memory (8GB VRAM Recommended):**
+- Current capacity: Single concurrent request via gpu_lock
+- Limit: Long audio files (>5 minutes) may exceed VRAM, causing OOM
+- Scaling path: Add audio chunking for long files, implement queue system for multiple users
+
+**Client-Side Processing (Single-Threaded):**
+- Current capacity: One assessment at a time, 30-60 second passages
+- Limit: CPU-bound alignment/diagnostics blocks UI on slow devices
+- Scaling path: Migrate to Web Workers, implement progressive rendering
+
+**IndexedDB Audio Storage:**
+- Current capacity: 50MB-hundreds of MB depending on browser
+- Limit: Audio blobs consume ~1-2MB per minute of recording
+- Scaling path: Compress audio (reduce sample rate), implement LRU eviction policy
+
+## Dependencies at Risk
+
+**diff-match-patch (Unmaintained):**
+- Risk: Library last updated 2018, no active maintenance
+- Impact: Core alignment engine depends on this library
+- Migration plan: Consider alternative diff algorithms (Myers, Patience), or vendor library into codebase
+
+**VAD Web Library (@ricky0123/vad-web):**
+- Risk: Relatively new library (v0.0.29), API may change
+- Impact: Ghost detection and VAD gap analysis depend on this
+- Migration plan: Pin version, monitor for breaking changes, consider Silero VAD direct integration
+
+**ONNX Runtime Web (CDN Dependency):**
+- Risk: CDN availability affects VAD functionality (loaded from jsdelivr)
+- Impact: Ghost detection fails if CDN unreachable
+- Migration plan: Self-host ONNX runtime files, add offline fallback
+
+**Deepgram API (External Service):**
+- Risk: Pricing changes, rate limits, service deprecation
+- Impact: Cross-validation unavailable, falls back to Reverb-only (no disfluency detection)
+- Migration plan: Make Deepgram fully optional, document Reverb-only mode
+
+## Missing Critical Features
+
+**No Test Suite:**
+- Problem: Zero automated tests for 11,921 lines of JavaScript
+- Blocks: Confident refactoring, regression detection, CI/CD implementation
+- Priority: High - critical for maintaining complex alignment/diagnostic logic
+
+**No Error Boundary/Recovery:**
+- Problem: Pipeline failures crash entire assessment, no partial result recovery
+- Blocks: Using app in unreliable network conditions
+- Priority: Medium - add try/catch checkpoints, save intermediate results
+
+**No Audio Preprocessing:**
+- Problem: Background noise, volume normalization not handled before ASR
+- Blocks: Accurate transcription in noisy environments
+- Priority: Medium - add WebRTC audio processing (noise suppression, AGC)
+
+**No Offline Mode:**
+- Problem: Requires internet for Deepgram, local server for Reverb
+- Blocks: Use in schools without reliable internet
+- Priority: Low - requires bundling models locally
+
+**No Multi-User Concurrency:**
+- Problem: Reverb service processes one request at a time (gpu_lock)
+- Blocks: Multiple simultaneous assessments
+- Priority: Low - acceptable for single-teacher use case
+
+## Test Coverage Gaps
+
+**Alignment Edge Cases:**
+- What's not tested: Empty reference, all omissions, all insertions, Unicode characters
+- Files: `js/alignment.js`, `js/word-equivalences.js`
+- Risk: Alignment crashes or produces incorrect results on edge cases
+- Priority: High
+
+**Pipeline Order Invariants:**
+- What's not tested: Correct execution order (alignment → compound → omission recovery → near-miss → diagnostics)
+- Files: `js/app.js` lines 600-800 (processAudio function)
+- Risk: Reordering pipeline steps breaks self-correction detection
+- Priority: High
+
+**VAD Threshold Boundary Conditions:**
+- What's not tested: Minimum (0.15), maximum (0.60), rapid threshold changes
+- Files: `js/vad-processor.js`, `js/ghost-detector.js`
+- Risk: Ghost detection fails or flags valid words incorrectly
 - Priority: Medium
+
+**Cross-Validation Disagreement Resolution:**
+- What's not tested: All disagreement types (text mismatch, timing mismatch, one-sided detection)
+- Files: `js/deepgram-api.js` (crossValidateWithDeepgram)
+- Risk: Words incorrectly marked as confirmed/disagreed/unconfirmed
+- Priority: Medium
+
+**Error Recovery Paths:**
+- What's not tested: Reverb failure → Deepgram fallback, Deepgram unavailable, VAD failure
+- Files: `js/kitchen-sink-merger.js`, `js/app.js`
+- Risk: Fallback paths untested, may fail in production
+- Priority: Medium
+
+**LocalStorage Migration:**
+- What's not tested: Storage version upgrades (v1→v2→v3→v4→v5)
+- Files: `js/storage.js` lines 12-52 (migrate function)
+- Risk: Data loss during version migration
+- Priority: Low - migrations are append-only
 
 ---
 
-*Concerns audit: 2026-02-02*
+*Concerns audit: 2026-02-06*

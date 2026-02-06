@@ -1,139 +1,159 @@
 # External Integrations
 
-**Analysis Date:** 2026-02-02
+**Analysis Date:** 2026-02-06
 
 ## APIs & External Services
 
-**Speech Recognition:**
-- Google Cloud Speech-to-Text API v1
-  - Purpose: Convert audio (microphone recording or uploaded files) into verbatim transcripts with word-level confidence, timing, and alternative hypotheses
-  - SDK/Client: REST API via browser Fetch API (no SDK)
-  - Auth: API key authentication (user-provided)
-  - Endpoint: `https://speech.googleapis.com/v1/speech:recognize?key={API_KEY}`
-  - Configuration file reference: `orf_assessment.html` lines 163-165
+**Speech-to-Text (Primary):**
+- Reverb ASR - Local self-hosted service for verbatim transcription with disfluency detection
+  - SDK/Client: `rev-reverb==0.1.0` (Python), `js/reverb-api.js` (browser)
+  - Endpoint: `http://localhost:8765/ensemble` (dual-pass v=1.0 verbatim + v=0.0 clean)
+  - Auth: None (local service)
+  - Model: `reverb_asr_v1` via WeNet (HuggingFace model download)
+
+**Speech-to-Text (Cross-Validation):**
+- Deepgram Nova-3 - Cloud API for cross-validation against Reverb
+  - SDK/Client: `deepgram-sdk>=5.0.0,<6.0.0` (Python), `js/deepgram-api.js` (browser)
+  - Endpoint: `http://localhost:8765/deepgram` (proxy through local backend)
+  - Auth: `DEEPGRAM_API_KEY` environment variable
+  - Direct API: Not used (browser cannot call Deepgram directly due to CORS)
+
+**Speech-to-Text (Legacy):**
+- Google Cloud Speech-to-Text - Historical integration, still present in code but replaced by Kitchen Sink pipeline
+  - SDK/Client: Direct REST API calls via `fetch()` in `js/stt-api.js`
+  - Endpoints: `https://speech.googleapis.com/v1/speech:recognize`, `https://speech.googleapis.com/v1/speech:longrunningrecognize`
+  - Auth: User-provided API key via browser input (stored in `keys/GoogSTT API key.txt`)
+  - Models: `latest_long` (primary), `default` (confidence oracle in ensemble mode)
+  - Status: Code present but Kitchen Sink pipeline (`runKitchenSinkPipeline()`) is now default
+
+**Natural Language API:**
+- Google Cloud Natural Language API - Syntax and entity analysis for passage text
+  - SDK/Client: Direct REST API calls via `fetch()` in `js/nl-api.js`
+  - Endpoints: `https://language.googleapis.com/v1/documents:analyzeSyntax`, `https://language.googleapis.com/v1/documents:analyzeEntities`
+  - Auth: Same Google Cloud API key as STT
+  - Purpose: POS tagging, proper noun detection, word tier classification (sight/academic/function/proper)
+  - Caching: sessionStorage by text hash
+
+**OCR:**
+- Google Cloud Vision API - Text extraction from photographed book pages
+  - SDK/Client: Direct REST API calls via `fetch()` in `js/ocr-api.js`
+  - Endpoint: `https://vision.googleapis.com/v1/images:annotate`
+  - Auth: Same Google Cloud API key as STT
+  - Features: `DOCUMENT_TEXT_DETECTION`
+  - Usage: Optional - allows photographing passage instead of manual typing
+
+**Voice Activity Detection:**
+- Silero VAD - Ghost word detection (hallucinated words where ASR heard speech but VAD detected silence)
+  - SDK/Client: `@ricky0123/vad-web@0.0.29` via CDN (ONNX model via WASM)
+  - Endpoint: Browser-local inference (no API calls)
+  - Auth: None
+  - Integration: `js/vad-processor.js` processes audio blobs to flag ghost words
 
 ## Data Storage
 
 **Databases:**
-- None - Stateless application
+- None - all storage is browser-local
+
+**Client Storage:**
+- localStorage - Student records and assessment metadata
+  - Key: `orf_data` (JSON object with version, students[], assessments[])
+  - Implementation: `js/storage.js`
+- IndexedDB - Audio blob storage for playback
+  - Database: `orf_audio`, Store: `blobs`
+  - Implementation: `js/audio-store.js`
+- sessionStorage - NL API response caching
+  - Keys: `nl_<hash>` (passage text hash)
+  - Implementation: `js/nl-api.js`
 
 **File Storage:**
-- None - Completely client-side, no persistence layer
-- Audio blobs are processed in memory and sent directly to Google Cloud
-- Results are displayed in browser memory only
+- Local filesystem only - no cloud storage
+- API keys stored in `keys/` directory (not committed to git)
 
 **Caching:**
-- None - Each request is fresh
+- Service Worker - PWA offline support
+  - Implementation: `sw.js`
+  - Registration: `js/app.js` line 32-36
+- sessionStorage - NL API response caching (see above)
 
 ## Authentication & Identity
 
 **Auth Provider:**
-- Google Cloud (via API key)
-  - Implementation: User provides GCP API key manually via form input (`#apiKey`)
-  - API key handling: Stored in DOM, not persisted to localStorage
-  - Scope: Speech-to-Text API v1 endpoint access
-  - Reference: `orf_assessment.html` lines 40-41, 130-131, 164
+- None - single-user local application
 
-**Planned Enhancement:**
-- Save API key in localStorage (not yet implemented) - See PLAN.md Phase 4
+**API Key Management:**
+- Google Cloud API key (user-provided via browser input)
+  - Input: `index.html` line 24 (`#apiKey` field)
+  - Stored: Browser DOM only (not persisted)
+  - Backup storage: `keys/GoogSTT API key.txt` (local file, not accessed by code)
+- Deepgram API key (server-side environment variable)
+  - Variable: `DEEPGRAM_API_KEY` in `services/reverb/.env`
+  - Access: Backend only (`services/reverb/server.py`)
+- HuggingFace token (server-side environment variable)
+  - Variable: `HF_TOKEN` for model download
+  - Access: Docker git config at build time
+  - Storage: `services/reverb/.env`
 
 ## Monitoring & Observability
 
 **Error Tracking:**
-- None - Errors logged to UI status field only
+- Console logging only (`console.log`, `console.warn`, `console.error`, `console.table`)
+- No external error tracking service
 
 **Logs:**
-- Status messages displayed in DOM element `#status`
-- Error messages from API returned to user via `setStatus()` function
-- No external logging or telemetry
+- Browser console - client-side operations
+- Python uvicorn stdout - server-side ASR operations
+- Debug logger: `js/debug-logger.js` (in-memory diagnostic log, not sent externally)
 
 ## CI/CD & Deployment
 
 **Hosting:**
-- Client-side static file
-- No server required
-- Can be served from:
-  - Local filesystem (double-click to open)
-  - Any HTTP/HTTPS server (e.g., GitHub Pages, S3, Firebase Hosting)
-  - Email attachment or file sharing
+- Local development server (`python -m http.server 8080`)
+- PWA installable via `manifest.json` (runs from browser cache)
 
 **CI Pipeline:**
-- None - Single .html file, no build or deployment automation
+- None - no automated testing or deployment
+
+**Deployment Process:**
+- Manual: Run `start_services.bat` (Windows) or `start_services.sh` (Linux)
+  1. Starts Reverb ASR service in WSL via conda environment
+  2. Starts Python http.server on port 8080
+  3. Opens browser to `http://localhost:8080/index.html`
 
 ## Environment Configuration
 
-**Required env vars:**
-- Google Cloud API Key (not an environment variable - user input via form)
+**Required env vars (backend):**
+- `DEEPGRAM_API_KEY` - Deepgram Nova-3 API key (optional, for cross-validation)
+- `HF_TOKEN` - HuggingFace token for Reverb model download
+
+**Required user input (frontend):**
+- Google Cloud API key (entered in browser UI, not persisted)
 
 **Secrets location:**
-- Not stored - User must provide API key each session
-- Future plan: Store in browser localStorage (Phase 4)
+- `services/reverb/.env` - Backend environment variables (DEEPGRAM_API_KEY, HF_TOKEN)
+- `keys/` directory - Local API key backups (not accessed by code, manual reference only)
+- Note: `.env` and `keys/` are NOT committed to git (.gitignore entry assumed)
 
 ## Webhooks & Callbacks
 
 **Incoming:**
-- None
+- None - no webhook endpoints
 
 **Outgoing:**
-- One-way requests to Google Cloud Speech-to-Text API
-- No callback/webhook mechanism used
+- None - no webhook calls to external services
 
-## Request/Response Format
+## Model Downloads
 
-**Google Cloud Request:**
-- Method: POST
-- Content-Type: application/json
-- Body structure (from `orf_assessment.html` lines 146-160):
-  ```json
-  {
-    "config": {
-      "encoding": "[WEBM_OPUS|LINEAR16|FLAC|OGG_OPUS|MP3]",
-      "languageCode": "en-US",
-      "model": "latest_long",
-      "useEnhanced": true,
-      "enableAutomaticPunctuation": false,
-      "enableSpokenPunctuation": false,
-      "enableWordTimeOffsets": true,
-      "enableWordConfidence": true,
-      "maxAlternatives": 2,
-      "speechContexts": [{"phrases": [...], "boost": 5}]
-    },
-    "audio": {
-      "content": "<base64-encoded audio data>"
-    }
-  }
-  ```
+**HuggingFace:**
+- Reverb ASR model (`reverb_asr_v1`) downloaded on first request
+  - Auth: `HF_TOKEN` environment variable
+  - Client: `wenet.load_model()` in `services/reverb/server.py`
+  - Storage: HuggingFace cache directory (managed by `wenet` library)
 
-**Google Cloud Response:**
-- Format: JSON
-- Key fields parsed:
-  - `results[].alternatives[].transcript` - Full text transcription
-  - `results[].alternatives[].words[]` - Word array with confidence and timing
-  - `error.message` - Error details if API call fails
-- Response parsing: `orf_assessment.html` lines 167-169, 184-231
-
-## API Rate Limiting & Quotas
-
-**Constraints:**
-- Synchronous endpoint limit: ~1 minute of audio per request
-- speechContexts: Max 500 phrases, 100 characters per phrase (documented in PLAN.md)
-- Standard Google Cloud API quotas apply (depends on project tier)
-
-**Future Workaround:**
-- Switch to `longrunningrecognize` async endpoint for longer passages (planned Phase 1)
-
-## Audio Encoding Details
-
-**Supported Formats:**
-- WAV → LINEAR16 encoding
-- FLAC → FLAC encoding
-- OGG → OGG_OPUS encoding
-- MP3 → MP3 encoding
-- WebM → WEBM_OPUS encoding
-- Microphone recording → WEBM_OPUS encoding
-
-Reference: `orf_assessment.html` lines 119-126
+**ONNX Models:**
+- Silero VAD model downloaded by `@ricky0123/vad-web` on first use
+  - Auth: None (public CDN)
+  - Storage: Browser cache
 
 ---
 
-*Integration audit: 2026-02-02*
+*Integration audit: 2026-02-06*

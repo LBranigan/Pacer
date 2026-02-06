@@ -1,267 +1,246 @@
 # Testing Patterns
 
-**Analysis Date:** 2026-02-02
+**Analysis Date:** 2026-02-06
 
 ## Test Framework
 
 **Runner:**
-- Not configured - no test runner detected (no Jest, Vitest, Mocha, Jasmine config files)
+- None detected - no Jest, Vitest, Mocha, or other test framework present
+- No `test/` directory
+- No `.test.js` or `.spec.js` files found
 
 **Assertion Library:**
-- Not applicable - no testing framework installed
+- None detected
 
 **Run Commands:**
 ```bash
-# No test commands configured
-# Manual testing only - open orf_assessment.html in browser
+# No test commands available
 ```
 
 ## Test File Organization
 
 **Location:**
-- Not applicable - no test files present
+- No formal tests present
 
 **Naming:**
-- No test files detected (no `*.test.js`, `*.spec.js` files)
+- N/A
 
 **Structure:**
-- Not established - testing infrastructure not implemented
+```
+No test files detected
+```
 
 ## Test Structure
 
 **Suite Organization:**
-- Not applicable - no tests written
+- No formal test suites
 
 **Patterns:**
-- Not established
+- Testing appears to be manual/integration-based
+- Debug logger (`js/debug-logger.js`) captures runtime state for post-hoc analysis
+- Debug log downloadable as JSON for inspection
+
+**Manual testing artifacts:**
+```javascript
+// Debug logging used for verification
+initDebugLog();
+addStage('audio_padding', { applied: true, paddingMs: 500 });
+addWarning('Audio padding failed', err.message);
+finalizeDebugLog(assessmentData);
+saveDebugLog(); // Downloads JSON
+```
 
 ## Mocking
 
 **Framework:**
-- Not applicable - no mocking library configured
+- None detected
 
 **Patterns:**
-- Manual mocking for development: Users must provide their own GCP API key (line 40-42 in `orf_assessment.html`)
-- Local audio input testing possible via file upload (line 56 accepts `.wav`, `.flac`, `.ogg`, `.mp3`, `.webm`)
+- No mocks in codebase
+- Real services used during development (Google Cloud STT, Reverb Docker service, Deepgram API)
 
-**What to Mock (for future implementation):**
-- Google Cloud Speech-to-Text API responses - currently requires live API calls with valid key
-- MediaRecorder API - for testing audio recording logic without actual microphone
-- Fetch requests - to simulate API responses and error conditions
-- navigator.mediaDevices.getUserMedia() - to test microphone permission flows
+**What to Mock:**
+- N/A - no test infrastructure
 
-**What NOT to Mock (for future implementation):**
-- DOM manipulation - test actual DOM updates for display correctness
-- Audio encoding logic - test actual blob-to-base64 conversion
-- UI state transitions - test recording state changes (toggle, status updates, timer)
+**What NOT to Mock:**
+- N/A - no test infrastructure
 
 ## Fixtures and Factories
 
 **Test Data:**
-- Not established - no test data fixtures created
-
-**Mock Response Data** (for future tests):
-```javascript
-// Sample Google Cloud STT response structure for tests
-const mockSTTResponse = {
-  results: [
-    {
-      alternatives: [
-        {
-          transcript: "the cat sat on the mat",
-          confidence: 0.95,
-          words: [
-            {
-              word: "the",
-              startTime: "0s",
-              endTime: "0.5s",
-              confidence: 0.98
-            },
-            {
-              word: "cat",
-              startTime: "0.5s",
-              endTime: "1.0s",
-              confidence: 0.92
-            }
-            // ... more words
-          ]
-        }
-      ]
-    }
-  ]
-};
-```
+- No fixtures directory or factory functions detected
 
 **Location:**
-- Would belong in a `test/fixtures/` directory (not yet created)
+- N/A
+
+**Pattern:**
+- Manual testing likely uses real audio files and passages
+- Reference texts entered via UI (`#transcript` textarea in `index.html`)
+- Audio captured via browser MediaRecorder API (`js/recorder.js`)
 
 ## Coverage
 
 **Requirements:**
-- Not enforced - no coverage targets set
-- Coverage tooling not configured
+- None enforced
 
 **View Coverage:**
 ```bash
-# Not applicable - no coverage tooling installed
+# No coverage tooling
 ```
+
+**Current state:**
+- No formal unit test coverage
+- System tested end-to-end via UI
+- Debug logger provides runtime validation
 
 ## Test Types
 
-**Unit Tests (Not Yet Implemented):**
-- **Audio encoding**: `blobToBase64()` function - verify base64 output format
-- **Status updates**: `setStatus()` function - verify DOM element update
-- **File handling**: `handleFile()` - verify correct encoding type selected for each file extension
-- **Timer logic**: Recording duration calculation and display formatting
-- **Confidence classification**: Word color assignment logic (lines 206-207)
-  ```javascript
-  // Test these classifications:
-  // confidence >= 0.9 → "high" (green)
-  // 0.7 <= confidence < 0.9 → "mid" (yellow)
-  // confidence < 0.7 → "low" (red)
-  ```
+**Unit Tests:**
+- None present
 
-**Integration Tests (Not Yet Implemented):**
-- **Recording to API flow**: Microphone input → MediaRecorder → base64 → API call → display results
-- **File upload to API flow**: File input → encoding detection → base64 → API call → display results
-- **UI state transitions**: Start recording → timer runs → stop recording → status updates
-- **API error handling**: Invalid API key → error message displayed
-- **Speech context building**: Reference passage text → unique words extraction → speech contexts array
+**Integration Tests:**
+- None present in automated form
+- Manual integration testing via browser UI
 
-**E2E Tests (Not Yet Implemented):**
-- **Browser-based**: Open HTML file in browser, interact with UI
-- **Manual testing protocol** (currently the only QA method):
-  1. Open `orf_assessment.html` in browser
-  2. Enter valid GCP API key
-  3. Paste reference passage
-  4. Record audio or upload file
-  5. Verify transcript displays with confidence coloring
-  6. Verify JSON output contains word details
-  7. Test error scenarios (missing key, invalid audio, API errors)
+**E2E Tests:**
+- None present
 
-## Common Patterns (for future tests)
+## Testing Approach (Inferred)
+
+**Manual verification workflow:**
+1. User records or uploads audio via UI
+2. Reference passage entered manually or via OCR
+3. Click "Analyze" button to run full pipeline
+4. System processes through multiple stages:
+   - Audio padding: `js/audio-padding.js`
+   - ASR transcription: Kitchen Sink pipeline (Reverb + Deepgram)
+   - Word alignment: `js/alignment.js`
+   - Disfluency detection: `js/disfluency-detector.js`
+   - Diagnostics: `js/diagnostics.js`
+   - Metrics calculation: `js/metrics.js`
+5. Results displayed in UI via `js/ui.js`
+6. Debug log downloadable for detailed inspection
+
+**Validation mechanisms:**
+- Console logging with structured prefixes: `[ORF]`, `[Pipeline]`, `[reverb]`
+- Debug logger tracks all pipeline stages: `addStage(name, data)`
+- Version tracking for cache verification: `CODE_VERSION` constant
+- Safety checks built into pipeline: `js/safety-checker.js`
+
+**Production safeguards:**
+- Error handling with fallback behavior (graceful degradation)
+- Input validation via FastAPI Pydantic models (Python backend)
+- Frozen configuration constants prevent runtime mutation
+- Service worker for offline resilience
+
+## Common Patterns
 
 **Async Testing:**
-```javascript
-// Pattern to test async functions like startRecording() and sendToSTT()
-// Would use Jest/Vitest async test syntax:
-
-test('startRecording should initialize MediaRecorder', async () => {
-  // Mock navigator.mediaDevices.getUserMedia
-  // Call toggleRecord()
-  // Assert MediaRecorder was created
-  // Assert recording flag is true
-  // Assert UI updated with "Stop" button
-});
-
-test('sendToSTT should call fetch with correct payload', async () => {
-  // Mock fetch
-  // Call sendToSTT(blob, 'WEBM_OPUS')
-  // Assert fetch called with correct URL and body
-  // Assert response handling
-});
-```
+- N/A - no async test patterns (no test framework)
 
 **Error Testing:**
+- N/A - no error test patterns (no test framework)
+
+**Runtime verification:**
 ```javascript
-// Pattern to test error scenarios
-// Would test these current error cases:
-
-test('startRecording should handle microphone permission denied', async () => {
-  // Mock getUserMedia to reject with permission error
-  // Call toggleRecord()
-  // Assert error message displayed via setStatus()
-});
-
-test('sendToSTT should handle missing API key', async () => {
-  // Leave API key field empty
-  // Call sendToSTT()
-  // Assert "Please enter your API key." message shown
-});
-
-test('sendToSTT should handle API error response', async () => {
-  // Mock fetch to return error object
-  // Verify error message displays from response.error.message
-});
-
-test('displayResults should handle no speech detected', async () => {
-  // Call displayResults({ results: [] })
-  // Assert "No speech detected." message shown
-});
+// Typical error handling pattern that would need testing
+try {
+  const result = await someAsyncOperation();
+  addStage('operation_success', result);
+  return result;
+} catch (err) {
+  console.warn('[ORF] Operation failed:', err.message);
+  addError('Operation failed', { error: err.message });
+  return fallbackValue;
+}
 ```
 
-**DOM Testing Pattern:**
+**Validation pattern (would be testable):**
 ```javascript
-// For testing DOM updates like displayResults()
-test('displayResults should render color-coded words', () => {
-  const data = {
-    results: [{
-      alternatives: [{
-        transcript: "test word",
-        words: [
-          { word: "test", confidence: 0.95, startTime: "0s", endTime: "0.5s" },
-          { word: "word", confidence: 0.65, startTime: "0.5s", endTime: "1.0s" }
-        ]
-      }]
-    }]
-  };
-  displayResults(data);
-
-  // Assert high confidence word has class "word high"
-  // Assert low confidence word has class "word low"
-  // Assert tooltip text contains confidence percentage
-});
+// Pure function suitable for unit testing
+export function computeAccuracy(alignmentResult, options = {}) {
+  let correctCount = 0, substitutions = 0, omissions = 0;
+  for (const w of alignmentResult) {
+    switch (w.type) {
+      case 'correct': correctCount++; break;
+      case 'substitution': substitutions++; break;
+      case 'omission': omissions++; break;
+    }
+  }
+  const totalRefWords = correctCount + substitutions + omissions;
+  const accuracy = totalRefWords === 0 ? 0 : Math.round((correctCount / totalRefWords) * 1000) / 10;
+  return { accuracy, correctCount, totalRefWords, substitutions, omissions };
+}
 ```
 
-## Manual Testing Checklist
+## Testability Characteristics
 
-Since no automated tests exist, manual testing is the current QA method:
+**Well-structured for testing:**
+- Pure functions in `js/metrics.js`: `computeWCPM()`, `computeAccuracy()`
+- Stateless utilities: `js/word-equivalences.js`, `js/text-normalize.js`
+- Clear input/output contracts with JSDoc type annotations
+- Modular design: each file has single responsibility
+- Configuration separated from implementation
 
-**Basic Functionality:**
-- [ ] Open `orf_assessment.html` in browser (no server required)
-- [ ] Test with valid GCP API key for Speech-to-Text API
-- [ ] Record audio via microphone, verify timer counts up
-- [ ] Verify transcript displays with color-coded confidence
-- [ ] Verify JSON output contains all word details (word, confidence, startTime, endTime)
+**Challenges for testing:**
+- Heavy browser API dependencies: `MediaRecorder`, `AudioContext`, `localStorage`, `IndexedDB`
+- External service integration: Google Cloud STT, Deepgram, Docker-hosted Reverb
+- Complex pipeline orchestration in `js/app.js`
+- No dependency injection - services imported directly
+- Global state in some modules: `_model` singleton (Python), `debugLog` (JS)
 
-**Audio Input Methods:**
-- [ ] Test microphone recording (WebM/Opus format)
-- [ ] Test WAV file upload and encoding detection
-- [ ] Test FLAC file upload
-- [ ] Test OGG file upload
-- [ ] Test MP3 file upload
-- [ ] Test WebM file upload
+**Testable modules (if tests were added):**
+- `js/alignment.js` - Pure diff algorithm
+- `js/metrics.js` - Pure calculations
+- `js/word-equivalences.js` - Pure lookups
+- `js/diagnostics.js` - Analysis functions (given mock data)
+- `js/text-normalize.js` - String transformations
 
-**Reference Passage Feature:**
-- [ ] Enter reference passage text
-- [ ] Verify unique words extracted and sent as speechContexts
-- [ ] Verify boost value set to 5
-- [ ] Test with and without reference passage
+**Requires mocking for testing:**
+- `js/stt-api.js` - HTTP calls to Google Cloud
+- `js/reverb-api.js` - HTTP calls to local Docker service
+- `js/deepgram-api.js` - HTTP calls to Deepgram
+- `js/recorder.js` - MediaRecorder API
+- `js/storage.js` - localStorage API
+- `js/vad-processor.js` - ONNX Runtime + Web Audio API
+- `services/reverb/server.py` - PyTorch + CUDA GPU
 
-**Error Scenarios:**
-- [ ] Missing API key - should show "Please enter your API key."
-- [ ] Invalid API key - should show API error message
-- [ ] Microphone permission denied - should show "Microphone access denied"
-- [ ] Empty audio file - should show "No speech detected."
+## Recommendations (if adding tests)
 
-**Display Accuracy:**
-- [ ] Confidence >= 0.9 words show green background
-- [ ] Confidence 0.7-0.9 words show yellow background
-- [ ] Confidence < 0.7 words show red background
-- [ ] Hover tooltip shows correct confidence percentage and timestamps
-- [ ] Plain text output matches transcript (space-separated words)
-- [ ] JSON output valid and formatted with 2-space indent
+**Start with:**
+1. Unit tests for pure functions:
+   - `js/metrics.js`: `computeWCPM()`, `computeAccuracy()`
+   - `js/word-equivalences.js`: `getCanonical()`, `getAllEquivalents()`
+   - `js/text-normalize.js`: `normalizeText()`, `filterDisfluencies()`
+   - `js/diagnostics.js`: `isNearMiss()`, `parseTime()`
 
-## Future Testing Strategy
+2. Integration tests for pipeline stages (with mocked I/O):
+   - `js/alignment.js`: Word alignment with known inputs
+   - `js/disfluency-detector.js`: Disfluency detection patterns
+   - `js/confidence-classifier.js`: Confidence classification logic
 
-**Recommended approach** when tests are implemented:
+3. E2E tests (Playwright/Cypress):
+   - Record → Analyze → View Results workflow
+   - Student management (add/delete/history)
+   - OCR passage extraction
+   - Audio playback synchronization
 
-1. **Framework choice**: Jest or Vitest for JavaScript unit/integration tests
-2. **Mock setup**: Mock `fetch()` for API calls, `navigator.mediaDevices` for audio
-3. **Test coverage targets**: Start with core functions (60% minimum)
-4. **CI/CD integration**: Add test script to npm or build process
-5. **Browser automation** (optional): Playwright or Cypress for E2E testing of actual HTML file
+**Framework recommendation:**
+- **Vitest** - Fast, ESM-native, works with browser APIs via `happy-dom` or `jsdom`
+- **Jest** - Mature ecosystem, good mocking support
+- **Playwright** - For E2E tests requiring real browser + Media APIs
+
+**Mocking strategy:**
+- Mock external APIs: `fetch()` calls to Google/Deepgram/Reverb
+- Mock browser APIs: `MediaRecorder`, `AudioContext`, `localStorage`
+- Use real implementations for pure functions (no mocking needed)
+
+**Coverage goals:**
+- Pure functions: 100% (easy to test)
+- API/service layers: 80%+ (mock HTTP)
+- UI rendering: 60%+ (E2E tests)
+- Overall target: 70%+ line coverage
 
 ---
 
-*Testing analysis: 2026-02-02*
+*Testing analysis: 2026-02-06*

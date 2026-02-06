@@ -1,194 +1,241 @@
 # Architecture
 
-**Analysis Date:** 2026-02-02
+**Analysis Date:** 2026-02-06
 
 ## Pattern Overview
 
-**Overall:** Client-side single-page application (SPA) with external API integration
+**Overall:** Pipeline-based data flow architecture with multi-stage ASR processing
 
 **Key Characteristics:**
-- Monolithic single-file HTML/CSS/JavaScript application
-- Browser-native Web APIs for audio capture and processing
-- Direct HTTP integration with Google Cloud Speech-to-Text REST API
-- Stateless processing model: record/upload → send to STT → display results
-- No backend server, no database, no state persistence
+- Kitchen Sink pipeline combining multiple ASR sources (Reverb + Deepgram)
+- Sequence alignment for disfluency detection and cross-validation
+- Browser-based SPA with backend microservices for GPU-intensive ASR
+- Event-driven UI updates with modular rendering
+- LocalStorage persistence with IndexedDB for audio blobs
 
 ## Layers
 
 **Presentation Layer:**
-- Purpose: UI rendering, user input collection, results display
-- Location: `orf_assessment.html` (lines 7-72, CSS + HTML markup)
-- Contains: HTML structure, CSS styling for buttons/inputs/result boxes, display methods
-- Depends on: JavaScript function calls (displayResults, setStatus)
-- Used by: User directly through browser
+- Purpose: User interface rendering and interaction handling
+- Location: `index.html`, `js/ui.js`, `style.css`, `playback.html`
+- Contains: DOM manipulation, event handlers, result visualization
+- Depends on: Application layer for data, metrics layer for calculations
+- Used by: End users (teachers/students)
 
-**Audio Acquisition Layer:**
-- Purpose: Capture audio from microphone or accept file uploads
-- Location: `orf_assessment.html` (lines 79-127, functions: startRecording, stopRecording, handleFile)
-- Contains: WebRTC MediaRecorder API, file input handling, audio encoding detection
-- Depends on: Web Audio API, File API, MediaRecorder API
-- Used by: Main application controller
+**Application Layer:**
+- Purpose: Core orchestration and business logic
+- Location: `js/app.js` (main orchestrator, ~1800 lines)
+- Contains: Pipeline coordination, state management, feature flag control
+- Depends on: All service modules (STT, alignment, diagnostics, storage)
+- Used by: UI layer
 
-**Audio Preparation & Encoding Layer:**
-- Purpose: Convert audio blob to Base64 for API transmission
-- Location: `orf_assessment.html` (lines 176-182, function: blobToBase64)
-- Contains: FileReader API, Base64 encoding conversion
-- Depends on: JavaScript Blob/FileReader APIs
-- Used by: STT integration layer
+**ASR Services Layer:**
+- Purpose: Speech-to-text transcription via multiple engines
+- Location: `js/reverb-api.js`, `js/deepgram-api.js`, `js/kitchen-sink-merger.js`, `services/reverb/`
+- Contains: HTTP clients for ASR APIs, dual-pass transcription (verbatim + clean), cross-validation logic
+- Depends on: Backend services (Docker container at localhost:8765)
+- Used by: Application layer
 
-**Context Building Layer:**
-- Purpose: Extract reference passage words and prepare speech contexts for API
-- Location: `orf_assessment.html` (lines 136-144, inline in sendToSTT function)
-- Contains: Text parsing, word deduplication, speech context array construction
-- Depends on: Reference passage textarea input
-- Used by: STT API payload construction
+**Alignment & Analysis Layer:**
+- Purpose: Word-level alignment, disfluency detection, error classification
+- Location: `js/alignment.js`, `js/sequence-aligner.js`, `js/disfluency-tagger.js`, `js/diagnostics.js`
+- Contains: Needleman-Wunsch algorithm, diff-match-patch integration, near-miss resolution, struggle detection
+- Depends on: Word equivalences, NL API for linguistic analysis
+- Used by: Application layer, metrics layer
 
-**STT Integration Layer:**
-- Purpose: Format and send request to Google Cloud Speech-to-Text API, handle response
-- Location: `orf_assessment.html` (lines 129-174, function: sendToSTT)
-- Contains: API configuration object assembly, HTTP fetch, error handling, response parsing
-- Depends on: Google Cloud STT API endpoint, user API key
-- Used by: Application controller (triggered on record stop or file upload)
+**Metrics Layer:**
+- Purpose: Fluency metrics computation (WCPM, accuracy)
+- Location: `js/metrics.js`
+- Contains: WCPM calculation, accuracy computation, error breakdown
+- Depends on: Alignment results
+- Used by: Application layer, UI layer
 
-**Results Processing & Display Layer:**
-- Purpose: Transform API response into displayable format with confidence visualization
-- Location: `orf_assessment.html` (lines 184-232, function: displayResults)
-- Contains: Result aggregation, word confidence color coding, JSON serialization
-- Depends on: STT API response data structure
-- Used by: Presentation layer (DOM updates)
+**Utilities Layer:**
+- Purpose: Cross-cutting concerns and helper functions
+- Location: `js/word-equivalences.js`, `js/text-normalize.js`, `js/nl-api.js`, `js/phonetic-utils.js`, `js/miscue-registry.js`
+- Contains: Canonical word forms, text normalization, POS tagging, Levenshtein distance
+- Depends on: External APIs (Google NL API)
+- Used by: All layers
+
+**Persistence Layer:**
+- Purpose: Data storage and retrieval
+- Location: `js/storage.js`, `js/audio-store.js`
+- Contains: LocalStorage CRUD for students/assessments, IndexedDB for audio blobs
+- Depends on: Browser storage APIs
+- Used by: Application layer
+
+**Backend Services:**
+- Purpose: GPU-accelerated ASR processing
+- Location: `services/reverb/server.py`
+- Contains: Reverb ASR model (WeNet), Deepgram API proxy, dual-pass transcription
+- Depends on: CUDA, Docker, NVIDIA Container Toolkit
+- Used by: ASR services layer
 
 ## Data Flow
 
-**Recording Path:**
-1. User clicks "Record" button
-2. `startRecording()` requests microphone permission via getUserMedia
-3. MediaRecorder captures audio as WEBM/Opus chunks
-4. User clicks "Stop", mediaRecorder fires `onstop` event
-5. Audio chunks assembled into Blob
-6. Blob + encoding ("WEBM_OPUS") passed to `sendToSTT()`
+**Assessment Recording Flow:**
 
-**Upload Path:**
-1. User selects file via file input
-2. `handleFile()` extracts file extension and maps to encoding (WAV→LINEAR16, FLAC→FLAC, etc.)
-3. File blob + detected encoding passed to `sendToSTT()`
-
-**STT Processing Path:**
-1. `sendToSTT()` validates API key presence
-2. Blob converted to Base64 via `blobToBase64()`
-3. Reference passage extracted from textarea, unique words collected
-4. Speech contexts array built (if passage provided)
-5. API payload assembled with config + Base64 audio
-6. HTTP POST to `https://speech.googleapis.com/v1/speech:recognize`
-7. Response JSON parsed
-8. On success, `displayResults()` called
-9. On error, error message set via `setStatus()`
-
-**Results Display Path:**
-1. `displayResults()` iterates over STT results
-2. Each result's primary alternative transcript extracted
-3. Word details (confidence, timestamps) extracted
-4. Color-coded span elements created (high/mid/low confidence classes)
-5. Plain text transcript concatenated
-6. JSON structure with word array + alternative transcripts serialized
-7. Three output boxes populated: colored words, plain text, JSON
+1. User clicks Record button → `js/recorder.js` captures audio via MediaRecorder API
+2. Audio blob stored in `appState.audioBlob` → Analyze button enabled
+3. User clicks Analyze → `js/app.js` orchestrates pipeline
+4. VAD processing (optional) → `js/vad-processor.js` detects speech segments
+5. Kitchen Sink pipeline invoked → `js/kitchen-sink-merger.js`
+6. Reverb dual-pass transcription → `js/reverb-api.js` → `services/reverb/server.py`
+   - v=1.0 (verbatim): includes disfluencies
+   - v=0.0 (clean): disfluencies removed
+7. Sequence alignment → `js/sequence-aligner.js` (Needleman-Wunsch)
+8. Disfluency tagging → `js/disfluency-tagger.js` (fillers, repetitions, false starts)
+9. Deepgram cross-validation → `js/deepgram-api.js` → `services/reverb/server.py` (proxy)
+10. Merged words array created with disfluency and cross-validation metadata
+11. Word-level alignment → `js/alignment.js` (diff-match-patch)
+12. Omission recovery → unconsumed Deepgram words matched to reference gaps
+13. Near-miss resolution → `js/diagnostics.js` resolves struggle clusters
+14. Diagnostics → `js/diagnostics.js` detects hesitations, pauses, morphological errors
+15. Metrics computation → `js/metrics.js` calculates WCPM, accuracy
+16. Results stored → `js/storage.js` (LocalStorage), `js/audio-store.js` (IndexedDB)
+17. UI rendering → `js/ui.js` displays alignment, confidence view, disfluencies
 
 **State Management:**
-- Recording state: `recording` boolean, `timerInterval` reference, `audioChunks` array
-- UI state: button text, CSS classes, timer display
-- All state is ephemeral (session-based, no persistence)
+- Centralized in `appState` object in `js/app.js`
+- Properties: `audioBlob`, `audioEncoding`, `elapsedSeconds`, `referenceIsFromOCR`, `selectedStudentId`
+- No reactive framework - direct DOM manipulation
+
+**OCR Flow (Optional):**
+
+1. User uploads book page image → `js/file-handler.js`
+2. Image resized if >2048px → `js/ocr-api.js`
+3. Google Vision API called → text extracted
+4. Text inserted into reference passage textarea
 
 ## Key Abstractions
 
-**Config Object:**
-- Purpose: Encapsulate Google Cloud STT API configuration parameters
-- Examples: Lines 147-158 in orf_assessment.html
-- Pattern: Declarative object with encoding, languageCode, model, feature flags (enableWordTimeOffsets, enableWordConfidence, etc.), speechContexts array
+**Kitchen Sink Result:**
+- Purpose: Unified output from multi-engine ASR pipeline
+- Examples: `kitchenSinkResult` in `js/app.js`, returned by `runKitchenSinkPipeline()`
+- Pattern: Contains `mergedWords`, `disfluencyStats`, `unconsumedDeepgram`, `verbatim`, `clean`, `deepgram`
 
-**Word Object (from API):**
-- Purpose: Represent a single recognized word with metadata
-- Structure: `{ word: string, confidence: number, startTime: string, endTime: string }`
-- Used by: displayResults for confidence-based coloring and tooltip generation
+**Alignment Entry:**
+- Purpose: Represents word-level comparison between reference and transcript
+- Examples: Output of `alignWords()` in `js/alignment.js`
+- Pattern: `{ ref: string|null, hyp: string|null, type: 'correct'|'substitution'|'omission'|'insertion', compound?: boolean }`
 
-**Result Object (API Response):**
-- Purpose: Structure Google Cloud STT response with utterance-level data
-- Structure: `{ results: [{ alternatives: [{ transcript: string, words: Array<WordObject> }] }] }`
-- Pattern: Array of results (one per utterance), each with alternatives array
+**Merged Word:**
+- Purpose: Single word with timestamps, confidence, disfluency flags, cross-validation status
+- Examples: Elements in `mergedWords` array throughout pipeline
+- Pattern:
+  ```javascript
+  {
+    word: string,
+    startTime: string,  // "1.234s"
+    endTime: string,
+    confidence: number,
+    isDisfluency: boolean,
+    disfluencyType: 'filler'|'repetition'|'false_start'|null,
+    crossValidation: 'confirmed'|'disagreed'|'unconfirmed'|'unavailable',
+    _deepgramStartTime: string,
+    _reverbStartTime: string,
+    _reverbCleanStartTime: string,
+    _vadAnalysis: object
+  }
+  ```
 
-**Speech Context Array:**
-- Purpose: Encode passage-aware vocabulary boosting for STT
-- Structure: `[{ phrases: string[], boost: number }]`
-- Pattern: Dynamic construction from reference passage textarea, with static boost value of 5
+**Diagnostic Result:**
+- Purpose: Detected reading issues (hesitations, pauses, morphological errors, struggles)
+- Examples: Output of `runDiagnostics()` in `js/diagnostics.js`
+- Pattern: Array of objects with `{ type: string, wordIndex: number, gap?: number, severity?: string }`
+
+**Assessment Record:**
+- Purpose: Persisted student assessment with full metadata
+- Examples: Stored by `saveAssessment()` in `js/storage.js`
+- Pattern:
+  ```javascript
+  {
+    id: string,
+    studentId: string,
+    date: ISO8601,
+    wcpm: number,
+    accuracy: number,
+    errorBreakdown: object,
+    alignment: array,
+    sttWords: array,
+    audioRef: string,
+    gamification: object,
+    nlAnnotations: array
+  }
+  ```
 
 ## Entry Points
 
-**Browser Load:**
-- Location: `orf_assessment.html` (entire file)
-- Triggers: User opens file in browser or double-clicks HTML file
-- Responsibilities: Page load, CSS application, form initialization, event handler attachment
+**Main Application:**
+- Location: `index.html` → loads `js/app.js` as ES module
+- Triggers: Page load
+- Responsibilities: Initialize app, register service worker, set up event listeners
 
-**Record Button Click:**
-- Location: `orf_assessment.html` (line 52, onclick="toggleRecord()")
-- Triggers: User clicks "Record" button
-- Responsibilities: Toggle recording state, start/stop MediaRecorder, update UI timer
+**Service Worker:**
+- Location: `sw.js`
+- Triggers: Registered on first page load
+- Responsibilities: PWA support, offline caching
 
-**File Upload:**
-- Location: `orf_assessment.html` (line 56, onchange="handleFile(event)")
-- Triggers: User selects file from file input
-- Responsibilities: Detect file type, map to encoding, initiate STT call
+**Backend Service:**
+- Location: `services/reverb/server.py`
+- Triggers: Started via `start_services.bat` (Windows) or direct Docker command
+- Responsibilities: FastAPI server on localhost:8765, ASR endpoints (/ensemble, /deepgram, /health)
 
-**STT Response Processing:**
-- Location: `orf_assessment.html` (function displayResults, called from sendToSTT line 169)
-- Triggers: Successful API response reception
-- Responsibilities: Parse word-level data, color-code by confidence, render three output formats
+**Student Playback:**
+- Location: `playback.html`
+- Triggers: Opened in popup window from "Watch Your Reading Adventure!" button
+- Responsibilities: Animated gamified playback of assessment results
+
+**Dashboard:**
+- Location: Referenced by `js/dashboard.js`, opened via "Dashboard" button
+- Triggers: User navigation from history section
+- Responsibilities: Student progress visualization, celeration charts
 
 ## Error Handling
 
-**Strategy:** Graceful degradation with user-visible status messages
+**Strategy:** Graceful degradation with fallbacks
 
 **Patterns:**
+- ASR service unavailable → fallback to alternative engine (Reverb fails → Deepgram-only)
+- API key missing → disable optional features (OCR, NL API)
+- Storage full → warn user but continue session
+- Network timeout → retry with exponential backoff (not implemented, fail fast)
+- Invalid audio format → display user-friendly error message
+- Reference text missing → skip alignment, show raw transcription only
 
-1. **Microphone Access Denial:**
-   - Location: Line 105-106
-   - Caught: try/catch around getUserMedia
-   - Response: Set status message "Microphone access denied: [error]"
-
-2. **Missing API Key:**
-   - Location: Line 131
-   - Check: Trim and validate apiKey input
-   - Response: Set status "Please enter your API key."
-
-3. **API Error Response:**
-   - Location: Line 168
-   - Check: data.error object present in response
-   - Response: Set status "API Error: [error message]"
-
-4. **Network Request Failure:**
-   - Location: Line 171-172
-   - Caught: try/catch around fetch
-   - Response: Set status "Request failed: [error message]"
-
-5. **No Speech Detected:**
-   - Location: Line 190-192
-   - Check: Empty results array
-   - Response: Display "No speech detected." in result box
+**Error propagation:**
+- Backend services return `null` on failure → caller checks and falls back
+- UI layer displays errors via `setStatus()` and result boxes
+- Debug logger (`js/debug-logger.js`) captures full pipeline state for troubleshooting
 
 ## Cross-Cutting Concerns
 
 **Logging:**
-- Approach: User-visible status messages via `setStatus()` function (line 77)
-- Status updates: recording start, file upload progress, STT processing, completion, errors
-- No server-side logging or debugging output
+- Console logging throughout (`console.log`, `console.warn`, `console.error`)
+- Debug logger in `js/debug-logger.js` captures pipeline stages
+- VAD calibration logs in `js/vad-processor.js`
 
 **Validation:**
-- API key: Non-empty string check before API call (line 131)
-- File selection: Handled implicitly by file input accept attribute (line 56: .wav,.flac,.ogg,.mp3,.webm)
-- Audio encoding: Mapped from file extension, with fallback to ENCODING_UNSPECIFIED (line 123-124)
+- Input sanitization in `js/text-normalize.js`
+- API key presence checks before external calls
+- Audio format validation in recorder/file handler
+- Student name trimming and deduplication in `js/storage.js`
 
 **Authentication:**
-- Approach: User-provided Google Cloud API key passed as URL parameter
-- Implementation: Stored in DOM input field, injected into API URL as query parameter (line 164)
-- Security model: Client-side only, no token refresh, no session management
+- No user authentication system
+- API keys stored in localStorage (Google Cloud API key for Vision/NL APIs)
+- Backend Deepgram key in `.env` file (not committed)
+
+**Caching:**
+- Service worker caches static assets
+- NL API results cached in sessionStorage (keyed by text hash)
+- Audio blobs stored in IndexedDB for playback
+- VAD calibration results persisted in localStorage
+
+**Feature Flags:**
+- Kitchen Sink enabled by default (`localStorage.getItem('orf_use_kitchen_sink') !== 'false'`)
+- Dev mode toggle for VAD threshold controls (`#devModeToggle` button)
 
 ---
 
-*Architecture analysis: 2026-02-02*
+*Architecture analysis: 2026-02-06*
