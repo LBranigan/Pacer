@@ -173,6 +173,12 @@ const DIAGNOSTIC_MISCUES = {
       after_comma_threshold_ms: 800,    // More time allowed after comma
       max_before_long_pause_ms: 3000    // Above 3s becomes "long pause"
     },
+    vadOverhangCorrection: {
+      description: 'vad-gap-analyzer.js → adjustGapsWithVADOverhang(): corrects gap values where STT under-timed word endpoints',
+      criterion: 'VAD speech segment must overlap with previous word AND extend past its STT end time',
+      effect: 'Gap recalculated using VAD segment end as "real" word end; hesitations below threshold after correction are removed',
+      safety: 'Segment must originate during the word (not start fresh in the gap) — rules out false starts, fillers, background noise'
+    },
     example: {
       context: 'Word ends at 2.0s, next word starts at 2.8s',
       result: '800ms gap flagged as hesitation (default threshold 500ms)'

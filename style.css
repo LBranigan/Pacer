@@ -381,6 +381,12 @@ body.dev-mode .dev-mode-toggle {
   font-weight: 600;
 }
 
+/* When a word is both a hesitation and a struggle word, preserve the orange left border */
+.word-hesitation.word-struggle {
+  border-left: 3px solid #ff9800;
+  padding-left: 4px;
+}
+
 /* VAD Gap UI Display (Phase 19)
  * Orange color for pause/hesitation indicators with VAD speech >= 30%
  * Helps teachers distinguish gaps with speech activity from true silence

@@ -129,6 +129,101 @@ export function enrichDiagnosticsWithVAD(diagnostics, transcriptWords, vadSegmen
 }
 
 /**
+ * Adjust hesitation gap values using VAD overhang detection.
+ *
+ * Problem: STT sometimes under-reports word end timestamps (e.g. "soak-ed"
+ * where the "-ed" continues past the STT endpoint). This inflates the apparent
+ * gap before the next word, creating false or exaggerated hesitations.
+ *
+ * Solution: If a VAD speech segment overlaps with the previous word AND extends
+ * past its STT end time, use the VAD segment end as the "real" word end.
+ *
+ * Safety criterion: The VAD segment must OVERLAP with the previous word's
+ * timespan (seg.start < wordEnd). This ensures we're seeing the same utterance
+ * continuing, not a new vocalization (false start, filler) that began in the gap.
+ *
+ * After adjustment, hesitations whose corrected gap falls below threshold are
+ * removed — this is the existing threshold logic working with better data,
+ * not a new dismissal mechanism.
+ *
+ * Mutates diagnostics.onsetDelays in place.
+ *
+ * @param {Object} diagnostics - From runDiagnostics(), already VAD-enriched
+ * @param {Array} transcriptWords - STT words with startTime/endTime
+ * @param {Array<{start: number, end: number}>} vadSegments - VAD speech segments (ms)
+ * @returns {{ adjustments: Array, removedCount: number }} Debug info
+ */
+export function adjustGapsWithVADOverhang(diagnostics, transcriptWords, vadSegments) {
+  if (!diagnostics.onsetDelays || !vadSegments?.length) return { adjustments: [], removedCount: 0 };
+
+  const adjustments = [];
+
+  for (const delay of diagnostics.onsetDelays) {
+    if (delay.wordIndex === 0) continue;
+
+    const prevWord = transcriptWords[delay.wordIndex - 1];
+    const currentWord = transcriptWords[delay.wordIndex];
+    if (!prevWord || !currentWord) continue;
+
+    const prevWordEndMs = parseTimeMs(prevWord.endTime);
+    const currentWordStartMs = parseTimeMs(currentWord.startTime);
+
+    // Find the VAD segment that overlaps with the previous word and extends
+    // furthest into the gap. "Overlaps" means the segment started before the
+    // word's STT endpoint — it's the same continuous utterance.
+    let bestOverhang = null;
+    for (const seg of vadSegments) {
+      const overlapsWithWord = seg.start < prevWordEndMs;
+      const extendsPastWord = seg.end > prevWordEndMs;
+
+      if (overlapsWithWord && extendsPastWord) {
+        // Cap at next word start — overhang can't extend past the next word
+        const effectiveEndMs = Math.min(seg.end, currentWordStartMs);
+        const overhangMs = Math.round(effectiveEndMs - prevWordEndMs);
+
+        if (overhangMs > 0 && (!bestOverhang || overhangMs > bestOverhang.overhangMs)) {
+          bestOverhang = {
+            overhangMs,
+            originalGapMs: Math.round(delay.gap * 1000),
+            adjustedGapMs: Math.round(currentWordStartMs - effectiveEndMs),
+            vadSegmentStart: seg.start,
+            vadSegmentEnd: seg.end
+          };
+        }
+      }
+    }
+
+    if (bestOverhang) {
+      delay._vadOverhang = bestOverhang;
+      delay.gap = bestOverhang.adjustedGapMs / 1000;
+
+      adjustments.push({
+        wordIndex: delay.wordIndex,
+        word: delay.word,
+        prevWord: prevWord.word,
+        ...bestOverhang
+      });
+    }
+  }
+
+  // Let existing threshold logic work with corrected data:
+  // remove hesitations whose adjusted gap now falls below threshold
+  const beforeCount = diagnostics.onsetDelays.length;
+  diagnostics.onsetDelays = diagnostics.onsetDelays.filter(d => d.gap >= d.threshold);
+  const removedCount = beforeCount - diagnostics.onsetDelays.length;
+
+  if (adjustments.length > 0) {
+    console.log(`[VAD Overhang] Adjusted ${adjustments.length} gap(s):`,
+      adjustments.map(a => `${a.prevWord}→${a.word}: ${a.originalGapMs}ms → ${a.adjustedGapMs}ms (overhang ${a.overhangMs}ms)`).join(', '));
+  }
+  if (removedCount > 0) {
+    console.log(`[VAD Overhang] Removed ${removedCount} hesitation(s) — adjusted gap fell below threshold`);
+  }
+
+  return { adjustments, removedCount };
+}
+
+/**
  * Compute summary counts by acoustic label for debug logging.
  * DBG-01: Debug log includes VAD gap analysis stage with counts by acoustic label
  *

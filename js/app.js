@@ -23,7 +23,7 @@ import { applySafetyChecks } from './safety-checker.js';
 import { runKitchenSinkPipeline, isKitchenSinkEnabled, computeKitchenSinkStats } from './kitchen-sink-merger.js';
 import { checkTerminalLeniency } from './phonetic-utils.js';
 import { padAudioWithSilence } from './audio-padding.js';
-import { enrichDiagnosticsWithVAD, computeVADGapSummary } from './vad-gap-analyzer.js';
+import { enrichDiagnosticsWithVAD, computeVADGapSummary, adjustGapsWithVADOverhang } from './vad-gap-analyzer.js';
 
 // Code version for cache verification
 const CODE_VERSION = 'v35-2026-02-05';
@@ -360,7 +360,12 @@ async function runAnalysis() {
       addStage('vad_processing', {
         segmentCount: vadResult.segments.length,
         durationMs: vadResult.durationMs,
-        error: vadResult.error
+        error: vadResult.error,
+        segments: vadResult.segments.map(s => ({
+          start: s.start,
+          end: s.end,
+          duration: s.end - s.start
+        }))
       });
     }
 
@@ -564,12 +569,18 @@ async function runAnalysis() {
     }
   });
 
+  const compoundWords = alignment.filter(a => a.compound);
   addStage('alignment', {
     totalEntries: alignment.length,
     correct: alignment.filter(a => a.type === 'correct').length,
     substitutions: alignment.filter(a => a.type === 'substitution').length,
     omissions: alignment.filter(a => a.type === 'omission').length,
-    insertions: alignment.filter(a => a.type === 'insertion').length
+    insertions: alignment.filter(a => a.type === 'insertion').length,
+    compoundWords: compoundWords.length,
+    compoundDetails: compoundWords.map(a => ({
+      ref: a.ref,
+      parts: a.parts
+    }))
   });
 
   // Run diagnostics first so we can heal self-corrections
@@ -597,8 +608,23 @@ async function runAnalysis() {
   if (vadResult.segments && vadResult.segments.length > 0) {
     enrichDiagnosticsWithVAD(diagnostics, transcriptWords, vadResult.segments);
 
-    // Debug logging (DBG-01)
+    // VAD speech overlap per hesitation (BEFORE overhang adjustment)
     const vadGapSummary = computeVADGapSummary(diagnostics);
+    const preAdjustmentVAD = diagnostics.onsetDelays?.filter(d => d._vadAnalysis).map(d => ({
+      wordIndex: d.wordIndex,
+      word: d.word,
+      gap: d.gap,
+      speechPercent: d._vadAnalysis.speechPercent,
+      label: d._vadAnalysis.label
+    })) || [];
+
+    // VAD Overhang Adjustment: correct gap values where STT under-timed word endpoints.
+    // If a VAD speech segment overlaps with the previous word AND extends past its STT end,
+    // the extension is speech overhang (e.g. "soak-ed" where "-ed" continues past STT endpoint).
+    // We use the VAD segment end as the "real" word end for gap calculation.
+    // Hesitations whose corrected gap falls below threshold are removed.
+    const overhangResult = adjustGapsWithVADOverhang(diagnostics, transcriptWords, vadResult.segments);
+
     addStage('vad_gap_analysis', {
       longPausesAnalyzed: vadGapSummary.longPausesAnalyzed,
       hesitationsAnalyzed: vadGapSummary.hesitationsAnalyzed,
@@ -608,7 +634,24 @@ async function runAnalysis() {
         mixedSignal: vadGapSummary.mixedSignal,
         speechDetected: vadGapSummary.speechDetected,
         continuousSpeech: vadGapSummary.continuousSpeech
-      }
+      },
+      hesitationVAD_beforeAdjustment: preAdjustmentVAD,
+      vadOverhangAdjustments: overhangResult.adjustments.length > 0 ? overhangResult.adjustments : 'none',
+      hesitationsRemovedByOverhang: overhangResult.removedCount,
+      hesitationsAfterAdjustment: diagnostics.onsetDelays?.map(d => ({
+        wordIndex: d.wordIndex,
+        word: d.word,
+        gap: d.gap,
+        threshold: d.threshold,
+        vadOverhang: d._vadOverhang ? `${d._vadOverhang.overhangMs}ms (${d._vadOverhang.originalGapMs}ms → ${d._vadOverhang.adjustedGapMs}ms)` : null
+      })) || [],
+      longPauseVAD: diagnostics.longPauses?.filter(p => p._vadAnalysis).map(p => ({
+        afterWordIndex: p.afterWordIndex,
+        afterWord: transcriptWords[p.afterWordIndex]?.word || '?',
+        gap: p.gap,
+        speechPercent: p._vadAnalysis.speechPercent,
+        label: p._vadAnalysis.label
+      })) || []
     });
   }
 

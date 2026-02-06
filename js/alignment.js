@@ -103,55 +103,59 @@ export function alignWords(referenceText, transcriptWords) {
   const dmp = new diff_match_patch();
   const diffs = dmp.diff_main(refEncoded, hypEncoded);
 
-  // Build reverse map: char -> word
-  const charToWord = new Map();
-  for (const [word, char] of wordMap) {
-    charToWord.set(char, word);
-  }
-
-  // Decode diffs into classified word list, merging adjacent DELETE+INSERT into substitutions
+  // Decode diffs into classified word list using original word forms (not canonical).
+  // Track indices into refWords/hypWords so output preserves what was actually said.
   const result = [];
+  let refIdx = 0;
+  let hypIdx = 0;
   let i = 0;
 
   while (i < diffs.length) {
     const [op, text] = diffs[i];
+    const count = [...text].length;
 
     if (op === DIFF_EQUAL) {
-      for (const ch of text) {
-        const w = charToWord.get(ch);
-        result.push({ ref: w, hyp: w, type: 'correct' });
+      for (let j = 0; j < count; j++) {
+        result.push({ ref: refWords[refIdx], hyp: hypWords[hypIdx], type: 'correct' });
+        refIdx++;
+        hypIdx++;
       }
       i++;
     } else if (op === DIFF_DELETE) {
-      const delWords = [...text].map(ch => charToWord.get(ch));
       // Check if next diff is INSERT (substitution merge)
       if (i + 1 < diffs.length && diffs[i + 1][0] === DIFF_INSERT) {
-        const insWords = [...diffs[i + 1][1]].map(ch => charToWord.get(ch));
-        const pairCount = Math.min(delWords.length, insWords.length);
+        const insCount = [...diffs[i + 1][1]].length;
+        const pairCount = Math.min(count, insCount);
         // Pair 1:1 as substitutions
         for (let j = 0; j < pairCount; j++) {
-          result.push({ ref: delWords[j], hyp: insWords[j], type: 'substitution' });
+          result.push({ ref: refWords[refIdx], hyp: hypWords[hypIdx], type: 'substitution' });
+          refIdx++;
+          hypIdx++;
         }
         // Excess deletes become omissions
-        for (let j = pairCount; j < delWords.length; j++) {
-          result.push({ ref: delWords[j], hyp: null, type: 'omission' });
+        for (let j = pairCount; j < count; j++) {
+          result.push({ ref: refWords[refIdx], hyp: null, type: 'omission' });
+          refIdx++;
         }
         // Excess inserts become insertions
-        for (let j = pairCount; j < insWords.length; j++) {
-          result.push({ ref: null, hyp: insWords[j], type: 'insertion' });
+        for (let j = pairCount; j < insCount; j++) {
+          result.push({ ref: null, hyp: hypWords[hypIdx], type: 'insertion' });
+          hypIdx++;
         }
         i += 2;
       } else {
         // Pure omissions
-        for (const w of delWords) {
-          result.push({ ref: w, hyp: null, type: 'omission' });
+        for (let j = 0; j < count; j++) {
+          result.push({ ref: refWords[refIdx], hyp: null, type: 'omission' });
+          refIdx++;
         }
         i++;
       }
     } else if (op === DIFF_INSERT) {
       // Pure insertions (no preceding DELETE)
-      for (const ch of text) {
-        result.push({ ref: null, hyp: charToWord.get(ch), type: 'insertion' });
+      for (let j = 0; j < count; j++) {
+        result.push({ ref: null, hyp: hypWords[hypIdx], type: 'insertion' });
+        hypIdx++;
       }
       i++;
     }

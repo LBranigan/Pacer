@@ -407,7 +407,10 @@ export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, di
     }
     if (item.type !== 'omission') {
       sttToHypIndex.set(sttIdx, renderHypIdx);
-      sttIdx++;
+      // Compound words (e.g. "every"+"one" → "everyone") consume multiple STT words
+      // but produce a single alignment entry — advance sttIdx by parts count
+      const partsCount = item.compound && item.parts ? item.parts.length : 1;
+      sttIdx += partsCount;
       renderHypIdx++;
     }
   }
@@ -557,6 +560,11 @@ export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, di
       }
       // Add VAD info to tooltip
       hesitationNote += buildVADTooltipInfo(delay._vadAnalysis);
+      // Show VAD overhang adjustment if gap was corrected
+      if (delay._vadOverhang) {
+        hesitationNote += '\nVAD overhang: ' + delay._vadOverhang.overhangMs + 'ms'
+          + ' (STT gap ' + delay._vadOverhang.originalGapMs + 'ms → adjusted ' + delay._vadOverhang.adjustedGapMs + 'ms)';
+      }
       span.title += hesitationNote;
     }
 
@@ -579,6 +587,12 @@ export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, di
       };
       const label = typeLabels[sttWord.disfluencyType] || 'Disfluency';
       span.title += '\n' + label + ' — not an error';
+    }
+
+    // Compound word indicator (e.g. "every"+"one" → "everyone")
+    // Shows when STT split a word at a morpheme boundary and compound merger healed it
+    if (item.compound && item.parts) {
+      span.title += '\nCompound: student said "' + item.parts.join('" + "') + '"';
     }
 
     // Insert pause indicator before this word if previous hyp word had a long pause
