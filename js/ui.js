@@ -160,9 +160,9 @@ function buildEnhancedTooltip(item, sttWord) {
       lines.push(`  Decoding: ${attempts.length} failed attempts (${attempts.join(', ')})`);
     }
 
-    // Path 3: Abandoned Attempt — only verbatim STT detected, Deepgram N/A
+    // Path 3: Abandoned Attempt — only verbatim STT detected, cross-validator N/A
     if (item._abandonedAttempt) {
-      lines.push(`  Abandoned attempt: partial "${item.hyp}" (Deepgram N/A, verbatim-only)`);
+      lines.push(`  Abandoned attempt: partial "${item.hyp}" (cross-validator N/A, verbatim-only)`);
     }
   } else if (item.type === 'omission') {
     lines.push('Omitted (not read)');
@@ -180,8 +180,8 @@ function buildEnhancedTooltip(item, sttWord) {
     lines.push(`Time: ${start.toFixed(2)}s - ${end.toFixed(2)}s (${durationMs}ms)`);
 
     // All three timestamp sources for clinical comparison
-    const dgStart = sttWord._deepgramStartTime != null ? parseSttTime(sttWord._deepgramStartTime) : null;
-    const dgEnd = sttWord._deepgramEndTime != null ? parseSttTime(sttWord._deepgramEndTime) : null;
+    const xvStart = sttWord._xvalStartTime != null ? parseSttTime(sttWord._xvalStartTime) : null;
+    const xvEnd = sttWord._xvalEndTime != null ? parseSttTime(sttWord._xvalEndTime) : null;
     const rvStart = sttWord._reverbStartTime != null ? parseSttTime(sttWord._reverbStartTime) : null;
     const rvEnd = sttWord._reverbEndTime != null ? parseSttTime(sttWord._reverbEndTime) : null;
     const rcStart = sttWord._reverbCleanStartTime != null ? parseSttTime(sttWord._reverbCleanStartTime) : null;
@@ -192,18 +192,19 @@ function buildEnhancedTooltip(item, sttWord) {
       const dur = Math.round((e - s) * 1000);
       return `${s.toFixed(2)}s-${e.toFixed(2)}s (${dur}ms)`;
     };
-    lines.push(`  Deepgram:    ${fmtTs(dgStart, dgEnd)}`);
+    const xvalLabel = sttWord._xvalEngine ? sttWord._xvalEngine.charAt(0).toUpperCase() + sttWord._xvalEngine.slice(1) : 'Cross-val';
+    lines.push(`  ${xvalLabel}:    ${fmtTs(xvStart, xvEnd)}`);
     lines.push(`  Reverb v1.0: ${fmtTs(rvStart, rvEnd)}`);
     lines.push(`  Reverb v0.0: ${fmtTs(rcStart, rcEnd)}`);
 
     // What each model heard (word text, not confidence %)
     const reverbWord = sttWord._alignment?.verbatim || sttWord.word;
-    const deepgramWord = sttWord._deepgramWord;
-    if (deepgramWord) {
-      lines.push(`Deepgram heard: "${deepgramWord}"`);
+    const xvalWord = sttWord._xvalWord;
+    if (xvalWord) {
+      lines.push(`${xvalLabel} heard: "${xvalWord}"`);
       lines.push(`Reverb heard: "${reverbWord}"`);
-    } else if (deepgramWord === null) {
-      lines.push(`Deepgram heard: [null]`);
+    } else if (xvalWord === null) {
+      lines.push(`${xvalLabel} heard: [null]`);
       lines.push(`Reverb heard: "${reverbWord}"`);
     } else {
       lines.push(`Reverb heard: "${reverbWord}"`);
@@ -215,8 +216,8 @@ function buildEnhancedTooltip(item, sttWord) {
       const xvalLabels = {
         confirmed: ' (both agree)',
         disagreed: ' (models heard different words)',
-        unconfirmed: ' (Reverb only — Deepgram heard nothing)',
-        unavailable: ' (Deepgram offline)'
+        unconfirmed: ` (Reverb only — ${xvalLabel} heard nothing)`,
+        unavailable: ` (${xvalLabel} offline)`
       };
       lines.push(`Cross-validation: ${xval}${xvalLabels[xval] || ''}`);
     }
@@ -528,7 +529,9 @@ export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, di
       continue;
     }
     const span = document.createElement('span');
-    span.className = 'word word-' + item.type;
+    // Forgiven words (proper nouns) render as correct — they don't count as errors
+    const displayType = item.forgiven ? 'correct' : item.type;
+    span.className = 'word word-' + displayType;
     span.textContent = item.ref || '';
 
     // Look up STT word metadata for tooltip
@@ -813,10 +816,11 @@ export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, di
       const start = parseSttTime(w.startTime);
       const end = parseSttTime(w.endTime);
       const xval = w.crossValidation || 'N/A';
-      const dgWord = w._deepgramWord ? `Deepgram heard: "${w._deepgramWord}"` : '';
+      const xvLabel = w._xvalEngine ? w._xvalEngine.charAt(0).toUpperCase() + w._xvalEngine.slice(1) : 'Cross-val';
+      const xvWordText = w._xvalWord ? `${xvLabel} heard: "${w._xvalWord}"` : '';
       const rvWord = w._alignment?.verbatim ? `Reverb heard: "${w._alignment.verbatim}"` : '';
       const confPct = conf != null ? `Confidence: ${Math.round(conf * 100)}%` : '';
-      span.title = [w.word, dgWord, rvWord, `Cross-validation: ${xval}`, confPct, `${start.toFixed(2)}s – ${end.toFixed(2)}s`].filter(Boolean).join('\n');
+      span.title = [w.word, xvWordText, rvWord, `Cross-validation: ${xval}`, confPct, `${start.toFixed(2)}s – ${end.toFixed(2)}s`].filter(Boolean).join('\n');
 
       confWordsDiv.appendChild(span);
       confWordsDiv.appendChild(document.createTextNode(' '));

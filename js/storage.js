@@ -6,7 +6,7 @@ import { deleteAudioBlobsForStudent } from './audio-store.js';
 const STORAGE_KEY = 'orf_data';
 
 function defaultData() {
-  return { version: 5, students: [], assessments: [] };
+  return { version: 6, students: [], assessments: [] };
 }
 
 function migrate(data) {
@@ -47,6 +47,23 @@ function migrate(data) {
       if (a.nlAnnotations === undefined) a.nlAnnotations = null;
     }
     data.version = 5;
+  }
+
+  // v5 -> v6: rename _deepgram* → _xval* on saved sttWords (cross-validator refactor)
+  if (data.version === 5) {
+    for (const a of data.assessments) {
+      if (Array.isArray(a.sttWords)) {
+        for (const w of a.sttWords) {
+          if ('_deepgramStartTime' in w) { w._xvalStartTime = w._deepgramStartTime; delete w._deepgramStartTime; }
+          if ('_deepgramEndTime' in w)   { w._xvalEndTime = w._deepgramEndTime;     delete w._deepgramEndTime; }
+          if ('_deepgramConfidence' in w) { w._xvalConfidence = w._deepgramConfidence; delete w._deepgramConfidence; }
+          if ('_deepgramWord' in w)       { w._xvalWord = w._deepgramWord;           delete w._deepgramWord; }
+          // Add engine tag to migrated words
+          if (w._xvalStartTime != null) w._xvalEngine = 'deepgram';
+        }
+      }
+    }
+    data.version = 6;
   }
 
   return data;

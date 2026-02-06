@@ -5,10 +5,18 @@
  * Provides cross-validation against Reverb ASR using Needleman-Wunsch sequence alignment.
  *
  * Cross-validation statuses:
- *   confirmed  — both engines produced the same word (text match)
- *   disagreed  — both engines heard something, but different words (mismatch)
- *   unconfirmed — only Reverb produced a word; Deepgram had nothing at this position
- *   unavailable — Deepgram service was offline
+ *   confirmed  — both engines produced the same word (text match, fuzzy match, or near-match)
+ *   disagreed  — both engines heard something, but different words (mismatch, edit distance > 1)
+ *   unconfirmed — only Reverb produced a word; cross-validator had nothing at this position
+ *   unavailable — cross-validator service was offline
+ *
+ * Near-match resolution (edit distance ≤ 1):
+ *   When engines disagree by a single character (e.g., Reverb "you" vs Deepgram "your"),
+ *   this is phonetic parsing noise — not a student error. In connected speech, trailing
+ *   sounds like 'r', 's', or 't' are often reduced and parsed differently by each engine.
+ *   For these near-matches, we use Deepgram's word text (1 char away from Reverb's,
+ *   negligible difference) since Deepgram generally has slightly higher word-level accuracy.
+ *   This is NOT reference-biased — we don't look at the reference text at all.
  *
  * Requirements covered:
  * - XVAL-01: Deepgram Nova-3 called for cross-validation
@@ -108,8 +116,8 @@ function _normalizeWord(word) {
 const XVAL_OPTIONS = {
   match: 2,        // Same word in both engines
   mismatch: 0,     // Different word at same position (e.g. "jued"/"jumped")
-  gapInsert: -1,   // Reverb word with no Deepgram counterpart
-  gapDelete: -1    // Deepgram word with no Reverb counterpart
+  gapInsert: -1,   // Reverb word with no cross-validator counterpart
+  gapDelete: -1    // Cross-validator word with no Reverb counterpart
 };
 
 /**
@@ -126,108 +134,145 @@ const XVAL_OPTIONS = {
  * (Reverb CTM hardcodes 100ms durations). Both confidence values are preserved.
  *
  * @param {Array} reverbWords - Merged words from Reverb ensemble (after NW + disfluency tagging)
- * @param {Array|null} deepgramWords - Words from Deepgram Nova-3, or null if unavailable
- * @returns {Array} Reverb words annotated with crossValidation status and Deepgram data
+ * @param {Array|null} xvalWords - Words from cross-validator (e.g. Deepgram Nova-3), or null if unavailable
+ * @returns {Array} Reverb words annotated with crossValidation status and cross-validator data
  */
-export function crossValidateWithDeepgram(reverbWords, deepgramWords) {
-  // If Deepgram unavailable, mark all as unavailable (graceful degradation)
-  if (!deepgramWords || deepgramWords.length === 0) {
+export function crossValidateTranscripts(reverbWords, xvalWords) {
+  // If cross-validator unavailable, mark all as unavailable (graceful degradation)
+  if (!xvalWords || xvalWords.length === 0) {
     return {
       words: reverbWords.map(word => ({
         ...word,
         crossValidation: 'unavailable'
       })),
-      unconsumedDeepgram: []
+      unconsumedXval: []
     };
   }
 
-  // Run NW sequence alignment: Reverb (A) vs Deepgram (B)
-  const alignment = alignSequences(reverbWords, deepgramWords, XVAL_OPTIONS);
+  // Run NW sequence alignment: Reverb (A) vs cross-validator (B)
+  const alignment = alignSequences(reverbWords, xvalWords, XVAL_OPTIONS);
 
   const result = [];
   const timestampComparison = [];
-  const unconsumedDg = [];
+  const unconsumedXv = [];
 
   for (const entry of alignment) {
     if (entry.type === 'deletion') {
-      // Deepgram word with no Reverb counterpart — log but don't add to word list
-      unconsumedDg.push(entry.wordBData);
+      // Cross-validator word with no Reverb counterpart — log but don't add to word list
+      unconsumedXv.push(entry.wordBData);
       continue;
     }
 
     const reverbWord = entry.wordAData;
 
     if (entry.type === 'insertion') {
-      // Reverb-only word — Deepgram had nothing at this position (true null)
+      // Reverb-only word — cross-validator had nothing at this position (true null)
       result.push({
         ...reverbWord,
         crossValidation: 'unconfirmed',
         _reverbConfidence: reverbWord.confidence,
         _reverbStartTime: reverbWord.startTime,
         _reverbEndTime: reverbWord.endTime,
-        _deepgramStartTime: null,
-        _deepgramEndTime: null,
-        _deepgramWord: null
+        _xvalStartTime: null,
+        _xvalEndTime: null,
+        _xvalWord: null
       });
       continue;
     }
 
-    // match or mismatch — Deepgram has a paired word
-    const dgWord = entry.wordBData;
+    // match or mismatch — cross-validator has a paired word
+    const xvWord = entry.wordBData;
     let status;
     let fuzzyMatch = null;
+    let nearMatch = null;
     if (entry.type === 'match') {
       status = 'confirmed';
     } else {
-      // Mismatch: check fuzzy similarity for spelling variants (e.g. "shelly" vs "shelley")
+      // Mismatch: both engines heard something, but text differs.
+      // Three tiers of similarity determine how we handle it:
       const normA = _normalizeWord(reverbWord.word);
-      const normB = _normalizeWord(dgWord.word);
+      const normB = _normalizeWord(xvWord.word);
       const similarity = levenshteinRatio(normA, normB);
+
       if (similarity >= 0.8) {
+        // Tier 1 — High similarity (e.g., "shelly"/"shelley"): spelling variant.
+        // Keep Reverb's word text, mark confirmed.
         status = 'confirmed';
-        fuzzyMatch = { reverbWord: reverbWord.word, deepgramWord: dgWord.word, similarity: Math.round(similarity * 1000) / 1000 };
+        fuzzyMatch = { reverbWord: reverbWord.word, xvalWord: xvWord.word, similarity: Math.round(similarity * 1000) / 1000 };
       } else {
-        status = 'disagreed';
+        // Check edit distance for near-match detection.
+        // Derive from similarity: dist = (1 - ratio) * maxLen
+        const maxLen = Math.max(normA.length, normB.length);
+        const editDist = maxLen > 0 ? Math.round((1 - similarity) * maxLen) : 0;
+
+        if (editDist <= 1 && maxLen >= 2) {
+          // Tier 2 — Near-match (edit distance ≤ 1, e.g., "you"/"your", "cat"/"cats").
+          // A single-character difference between two ASR engines is phonetic parsing
+          // noise, not a meaningful disagreement. In connected speech, trailing sounds
+          // like 'r', 's', 't' are often reduced and each engine parses the boundary
+          // differently. We confirm the match and use Deepgram's word text since it's
+          // only 1 char different and Deepgram generally has higher word-level accuracy.
+          // This is NOT reference-biased — we don't look at the reference at all.
+          status = 'confirmed';
+          nearMatch = {
+            reverbWord: reverbWord.word,
+            xvalWord: xvWord.word,
+            editDistance: editDist,
+            similarity: Math.round(similarity * 1000) / 1000
+          };
+        } else {
+          // Tier 3 — True disagreement (edit distance > 1).
+          // Engines heard genuinely different words.
+          status = 'disagreed';
+        }
       }
     }
 
     // Collect timestamp comparison for diagnostic logging
     timestampComparison.push({
       word: reverbWord.word,
-      dgWord: dgWord.word,
+      xvWord: xvWord.word,
       status,
+      ...(nearMatch ? { nearMatch: true, editDist: nearMatch.editDistance } : {}),
       reverbStart: reverbWord.startTime,
       reverbEnd: reverbWord.endTime,
-      deepgramStart: dgWord.startTime,
-      deepgramEnd: dgWord.endTime,
+      xvalStart: xvWord.startTime,
+      xvalEnd: xvWord.endTime,
       reverbDurMs: Math.round((_parseTs(reverbWord.endTime) - _parseTs(reverbWord.startTime)) * 1000),
-      deepgramDurMs: Math.round((_parseTs(dgWord.endTime) - _parseTs(dgWord.startTime)) * 1000),
+      xvalDurMs: Math.round((_parseTs(xvWord.endTime) - _parseTs(xvWord.startTime)) * 1000),
     });
+
+    // For near-matches, use cross-validator's word text (normalized to match Reverb format).
+    // For all other cases, keep Reverb's word text via ...reverbWord spread.
+    const wordOverride = nearMatch ? { word: _normalizeWord(xvWord.word) } : {};
 
     result.push({
       ...reverbWord,
+      ...wordOverride,
       crossValidation: status,
-      // Deepgram timestamps as primary timekeeper
-      startTime: dgWord.startTime,
-      endTime: dgWord.endTime,
+      // Cross-validator timestamps as primary timekeeper
+      startTime: xvWord.startTime,
+      endTime: xvWord.endTime,
       // All three timestamp sources preserved for display
       _reverbStartTime: reverbWord.startTime,
       _reverbEndTime: reverbWord.endTime,
-      _deepgramStartTime: dgWord.startTime,
-      _deepgramEndTime: dgWord.endTime,
+      _xvalStartTime: xvWord.startTime,
+      _xvalEndTime: xvWord.endTime,
       // _reverbCleanStartTime/_reverbCleanEndTime carried through via ...reverbWord
-      // Deepgram confidence as primary
-      confidence: dgWord.confidence,
+      // Cross-validator confidence as primary
+      confidence: xvWord.confidence,
       _reverbConfidence: reverbWord.confidence,
-      _deepgramConfidence: dgWord.confidence,
+      _xvalConfidence: xvWord.confidence,
       ...(fuzzyMatch ? { _fuzzyMatch: fuzzyMatch } : {}),
-      _deepgramWord: dgWord.word
+      ...(nearMatch ? { _nearMatch: nearMatch } : {}),
+      _xvalWord: xvWord.word,
+      _xvalEngine: 'deepgram'
     });
   }
 
   // Diagnostic logging
   if (timestampComparison.length > 0) {
-    console.log('[cross-validation] Reverb vs Deepgram alignment (NW sequence):');
+    console.log('[cross-validation] Reverb vs cross-validator alignment (NW sequence):');
     console.table(timestampComparison);
 
     const gapComparison = [];
@@ -235,24 +280,24 @@ export function crossValidateWithDeepgram(reverbWords, deepgramWords) {
       const prev = timestampComparison[i - 1];
       const curr = timestampComparison[i];
       const reverbGap = Math.round((_parseTs(curr.reverbStart) - _parseTs(prev.reverbEnd)) * 1000);
-      const deepgramGap = Math.round((_parseTs(curr.deepgramStart) - _parseTs(prev.deepgramEnd)) * 1000);
+      const xvalGap = Math.round((_parseTs(curr.xvalStart) - _parseTs(prev.xvalEnd)) * 1000);
       gapComparison.push({
         between: `"${prev.word}" → "${curr.word}"`,
         reverbGapMs: reverbGap,
-        deepgramGapMs: deepgramGap,
-        diffMs: reverbGap - deepgramGap
+        xvalGapMs: xvalGap,
+        diffMs: reverbGap - xvalGap
       });
     }
     console.log('[cross-validation] Inter-word gap comparison:');
     console.table(gapComparison);
   }
 
-  if (unconsumedDg.length > 0) {
-    console.log('[cross-validation] Unconsumed Deepgram words (heard by DG but not Reverb):');
-    console.table(unconsumedDg.map(w => ({ word: w.word, start: w.startTime, end: w.endTime, conf: w.confidence })));
+  if (unconsumedXv.length > 0) {
+    console.log('[cross-validation] Unconsumed cross-validator words (heard by xval but not Reverb):');
+    console.table(unconsumedXv.map(w => ({ word: w.word, start: w.startTime, end: w.endTime, conf: w.confidence })));
   }
 
-  return { words: result, unconsumedDeepgram: unconsumedDg };
+  return { words: result, unconsumedXval: unconsumedXv };
 }
 
 /** Parse timestamp string "1.234s" to float seconds. */

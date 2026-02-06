@@ -59,6 +59,103 @@ function mergeCompoundWords(alignment) {
   return result;
 }
 
+/**
+ * Post-process alignment to detect ASR merging two reference words into one.
+ * Mirror of mergeCompoundWords — handles the reverse direction.
+ *
+ * Two sub-patterns:
+ *
+ * 1. Contraction via equivalence: ref "you will" → hyp "you'll"
+ *    Uses getCanonical() to match known multi-word equivalences.
+ *
+ * 2. Pure concatenation: ref "long" + "term" → hyp "longterm"
+ *    ASR fused adjacent words without any linguistic transformation.
+ *
+ * Layout: substitution(ref=X, hyp=C) + omission(ref=Y), or the reverse.
+ * Both ref words are re-marked as 'correct' with compound: true.
+ */
+function mergeContractions(alignment) {
+  const result = [];
+  let i = 0;
+
+  while (i < alignment.length) {
+    const current = alignment[i];
+    const next = i + 1 < alignment.length ? alignment[i + 1] : null;
+
+    // Pattern A: substitution + omission
+    // e.g., sub(ref="you", hyp="you'll") + omission(ref="will")
+    // e.g., sub(ref="long", hyp="longterm") + omission(ref="term")
+    if (current.type === 'substitution' && current.ref && current.hyp &&
+        next && next.type === 'omission' && next.ref) {
+      const hypCanon = getCanonical(current.hyp).replace(/'/g, '');
+
+      // Check 1: equivalence match (contractions like you'll = you will)
+      const spaced = current.ref + ' ' + next.ref;
+      const spacedCanon = getCanonical(spaced).replace(/'/g, '');
+
+      // Check 2: pure concatenation (ASR fusion like longterm = long + term)
+      const concat = current.ref + next.ref;
+      const concatCanon = getCanonical(concat).replace(/'/g, '');
+
+      if (spacedCanon === hypCanon || concatCanon === hypCanon) {
+        result.push({
+          ref: current.ref,
+          hyp: current.hyp,
+          type: 'correct',
+          compound: true,
+          _mergedFrom: spaced
+        });
+        result.push({
+          ref: next.ref,
+          hyp: current.hyp,
+          type: 'correct',
+          compound: true,
+          _mergedInto: current.hyp
+        });
+        i += 2;
+        continue;
+      }
+    }
+
+    // Pattern B: omission + substitution (less common order)
+    // e.g., omission(ref="do") + sub(ref="not", hyp="don't")
+    if (current.type === 'omission' && current.ref &&
+        next && next.type === 'substitution' && next.ref && next.hyp) {
+      const hypCanon = getCanonical(next.hyp).replace(/'/g, '');
+
+      const spaced = current.ref + ' ' + next.ref;
+      const spacedCanon = getCanonical(spaced).replace(/'/g, '');
+
+      const concat = current.ref + next.ref;
+      const concatCanon = getCanonical(concat).replace(/'/g, '');
+
+      if (spacedCanon === hypCanon || concatCanon === hypCanon) {
+        result.push({
+          ref: current.ref,
+          hyp: next.hyp,
+          type: 'correct',
+          compound: true,
+          _mergedFrom: spaced
+        });
+        result.push({
+          ref: next.ref,
+          hyp: next.hyp,
+          type: 'correct',
+          compound: true,
+          _mergedInto: next.hyp
+        });
+        i += 2;
+        continue;
+      }
+    }
+
+    result.push(current);
+    i++;
+  }
+
+  return result;
+}
+
 /* diff-match-patch constants */
 const DIFF_DELETE = -1;
 const DIFF_INSERT = 1;
@@ -88,10 +185,11 @@ export function alignWords(referenceText, transcriptWords) {
     let encoded = '';
     for (const w of words) {
       const canon = getCanonical(w);
-      if (!wordMap.has(canon)) {
-        wordMap.set(canon, String.fromCharCode(nextChar++));
+      const compareKey = canon.replace(/'/g, '');  // Apostrophe-blind comparison
+      if (!wordMap.has(compareKey)) {
+        wordMap.set(compareKey, String.fromCharCode(nextChar++));
       }
-      encoded += wordMap.get(canon);
+      encoded += wordMap.get(compareKey);
     }
     return encoded;
   }
@@ -161,6 +259,8 @@ export function alignWords(referenceText, transcriptWords) {
     }
   }
 
-  // Merge compound words split by ASR (e.g., "hotdog" → "hot" + "dog")
-  return mergeCompoundWords(result);
+  // Post-process: merge compound words split by ASR (e.g., "hotdog" → "hot" + "dog")
+  // then merge contractions spanning two ref words (e.g., "you will" → "you'll")
+  const merged = mergeCompoundWords(result);
+  return mergeContractions(merged);
 }

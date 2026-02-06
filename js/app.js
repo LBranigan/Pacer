@@ -188,7 +188,7 @@ async function runAnalysis() {
       totalWords: mergedWords.length,
       disfluencies: kitchenSinkResult.disfluencyStats?.total || 0,
       disfluencyBreakdown: kitchenSinkResult.disfluencyStats?.byType || null,
-      crossValidated: kitchenSinkResult._debug?.deepgramAvailable || false,
+      crossValidated: kitchenSinkResult._debug?.xvalAvailable || false,
       stats: ensembleStats
     });
 
@@ -209,11 +209,11 @@ async function runAnalysis() {
       agreementRate: ensembleStats.agreementRate
     });
 
-    // Raw Deepgram words (before cross-validation filtering)
-    if (kitchenSinkResult.deepgram?.words) {
-      addStage('deepgram_raw', {
-        totalWords: kitchenSinkResult.deepgram.words.length,
-        words: kitchenSinkResult.deepgram.words.map((w, i) => ({
+    // Raw cross-validator words (before cross-validation filtering)
+    if (kitchenSinkResult.xvalRaw?.words) {
+      addStage('xval_raw', {
+        totalWords: kitchenSinkResult.xvalRaw.words.length,
+        words: kitchenSinkResult.xvalRaw.words.map((w, i) => ({
           idx: i,
           word: w.word,
           start: w.startTime,
@@ -223,11 +223,11 @@ async function runAnalysis() {
       });
     }
 
-    // Unconsumed Deepgram words (heard by Deepgram but not Reverb — dropped during cross-validation)
-    if (kitchenSinkResult.unconsumedDeepgram?.length > 0) {
-      addStage('deepgram_unconsumed', {
-        count: kitchenSinkResult.unconsumedDeepgram.length,
-        words: kitchenSinkResult.unconsumedDeepgram.map(w => ({
+    // Unconsumed cross-validator words (heard by xval but not Reverb — dropped during cross-validation)
+    if (kitchenSinkResult.unconsumedXval?.length > 0) {
+      addStage('xval_unconsumed', {
+        count: kitchenSinkResult.unconsumedXval.length,
+        words: kitchenSinkResult.unconsumedXval.map(w => ({
           word: w.word,
           start: w.startTime,
           end: w.endTime,
@@ -239,18 +239,18 @@ async function runAnalysis() {
     // Per-word timestamp comparison: all three sources
     const _parseTs = t => parseFloat(String(t).replace('s', '')) || 0;
     addStage('timestamp_sources', {
-      description: 'All timestamp sources per word (Deepgram=primary, Reverb v1.0=verbatim, Reverb v0.0=clean)',
+      description: 'All timestamp sources per word (cross-validator=primary, Reverb v1.0=verbatim, Reverb v0.0=clean)',
       words: mergedWords.map(w => {
         const entry = { word: w.word, crossValidation: w.crossValidation };
-        // Primary (Deepgram for confirmed/disagreed, Reverb for unconfirmed)
+        // Primary (cross-validator for confirmed/disagreed, Reverb for unconfirmed)
         entry.primary = { start: w.startTime, end: w.endTime };
-        // Deepgram
-        if (w._deepgramStartTime != null) {
-          const ds = _parseTs(w._deepgramStartTime);
-          const de = _parseTs(w._deepgramEndTime);
-          entry.deepgram = { start: w._deepgramStartTime, end: w._deepgramEndTime, durMs: Math.round((de - ds) * 1000) };
+        // Cross-validator
+        if (w._xvalStartTime != null) {
+          const ds = _parseTs(w._xvalStartTime);
+          const de = _parseTs(w._xvalEndTime);
+          entry.xval = { start: w._xvalStartTime, end: w._xvalEndTime, durMs: Math.round((de - ds) * 1000) };
         } else {
-          entry.deepgram = null;
+          entry.xval = null;
         }
         // Reverb v=1.0 (verbatim)
         if (w._reverbStartTime != null) {
@@ -448,7 +448,7 @@ async function runAnalysis() {
       _classification: null,  // Legacy confidence classification disabled
       _kitchenSink: {
         disfluencyStats: kitchenSinkResult.disfluencyStats || null,
-        unconsumedDeepgram: kitchenSinkResult.unconsumedDeepgram || []
+        unconsumedXval: kitchenSinkResult.unconsumedXval || []
       },
       _disfluency: null,      // Legacy Phase 14 disfluency detection disabled
       _safety: null            // Legacy safety checks disabled
@@ -517,7 +517,7 @@ async function runAnalysis() {
       duration: (endSec - startSec).toFixed(3) + 's',
       confidence: w.confidence,
       _reverbConfidence: w._reverbConfidence,
-      _deepgramConfidence: w._deepgramConfidence,
+      _xvalConfidence: w._xvalConfidence,
       crossValidation: w.crossValidation,
       source: w.source,
       isDisfluency: w.isDisfluency || false,
@@ -551,7 +551,7 @@ async function runAnalysis() {
       end: w.endTime,
       confidence: w.confidence,
       _reverbConfidence: w._reverbConfidence,
-      _deepgramConfidence: w._deepgramConfidence,
+      _xvalConfidence: w._xvalConfidence,
       crossValidation: w.crossValidation,
       source: w.source,
       isDisfluency: w.isDisfluency || false,
@@ -673,48 +673,49 @@ async function runAnalysis() {
           word: item.hyp,
           // Span from first part start to last part end (all timestamp sources)
           endTime: last.endTime,
-          _deepgramEndTime: last._deepgramEndTime || last.endTime,
+          _xvalEndTime: last._xvalEndTime || last.endTime,
           _reverbEndTime: last._reverbEndTime || last.endTime,
           _reverbCleanEndTime: last._reverbCleanEndTime || null,
-          // Show what Deepgram heard (individual parts)
-          _deepgramWord: partWords.map(w => w._deepgramWord || w.word).join(' + '),
+          // Show what cross-validator heard (individual parts)
+          _xvalWord: partWords.map(w => w._xvalWord || w.word).join(' + '),
           _compoundParts: partWords
         });
       }
     }
   }
 
-  // Recover omissions from unconsumed Deepgram words.
-  // If Deepgram heard a word that matches an omitted reference word,
+  // Recover omissions from unconsumed cross-validator words.
+  // If the cross-validator heard a word that matches an omitted reference word,
   // the student DID say it — Reverb just missed it. Insert the word
-  // into transcriptWords with Deepgram timestamps so gap calculations
+  // into transcriptWords with cross-validator timestamps so gap calculations
   // also heal (no false hesitations around recovered words).
-  const unconsumedDg = data._kitchenSink?.unconsumedDeepgram || [];
-  if (unconsumedDg.length > 0) {
+  const unconsumedXv = data._kitchenSink?.unconsumedXval || [];
+  if (unconsumedXv.length > 0) {
     const _norm = (w) => w.toLowerCase().replace(/[^a-z'-]/g, '');
     // Build consumable pool
-    const dgPool = unconsumedDg.map(w => ({ ...w, _norm: _norm(w.word) }));
+    const xvPool = unconsumedXv.map(w => ({ ...w, _norm: _norm(w.word) }));
 
     const recovered = [];
     for (const entry of alignment) {
       if (entry.type !== 'omission') continue;
       const refNorm = _norm(entry.ref);
-      const matchIdx = dgPool.findIndex(dg => dg._norm === refNorm);
+      const matchIdx = xvPool.findIndex(xv => xv._norm === refNorm);
       if (matchIdx === -1) continue;
 
-      const dgWord = dgPool.splice(matchIdx, 1)[0];
+      const xvWord = xvPool.splice(matchIdx, 1)[0];
 
-      // Build recovered word with Deepgram timestamps
+      // Build recovered word with cross-validator timestamps
       const recoveredWord = {
-        word: dgWord.word,
-        startTime: dgWord.startTime,
-        endTime: dgWord.endTime,
-        confidence: dgWord.confidence,
+        word: xvWord.word,
+        startTime: xvWord.startTime,
+        endTime: xvWord.endTime,
+        confidence: xvWord.confidence,
         crossValidation: 'recovered',
-        _deepgramStartTime: dgWord.startTime,
-        _deepgramEndTime: dgWord.endTime,
-        _deepgramConfidence: dgWord.confidence,
-        _deepgramWord: dgWord.word,
+        _xvalStartTime: xvWord.startTime,
+        _xvalEndTime: xvWord.endTime,
+        _xvalConfidence: xvWord.confidence,
+        _xvalWord: xvWord.word,
+        _xvalEngine: 'deepgram',
         _reverbStartTime: null,
         _reverbEndTime: null,
         _reverbConfidence: null,
@@ -724,10 +725,10 @@ async function runAnalysis() {
       };
 
       // Insert into transcriptWords at correct timestamp position
-      const dgStart = parseT(dgWord.startTime);
+      const xvStart = parseT(xvWord.startTime);
       let insertIdx = transcriptWords.length;
       for (let i = 0; i < transcriptWords.length; i++) {
-        if (parseT(transcriptWords[i].startTime) > dgStart) {
+        if (parseT(transcriptWords[i].startTime) > xvStart) {
           insertIdx = i;
           break;
         }
@@ -736,19 +737,19 @@ async function runAnalysis() {
 
       // Heal alignment: omission → correct
       entry.type = 'correct';
-      entry.hyp = dgWord.word;
+      entry.hyp = xvWord.word;
       entry._recovered = true;
 
       // Add to sttLookup so tooltip works
-      const lookupKey = getCanonical(dgWord.word.toLowerCase().replace(/^[^\w'-]+|[^\w'-]+$/g, ''));
+      const lookupKey = getCanonical(xvWord.word.toLowerCase().replace(/^[^\w'-]+|[^\w'-]+$/g, ''));
       if (!sttLookup.has(lookupKey)) sttLookup.set(lookupKey, []);
       sttLookup.get(lookupKey).push(recoveredWord);
 
       recovered.push({
-        word: dgWord.word,
-        start: dgWord.startTime,
-        end: dgWord.endTime,
-        confidence: dgWord.confidence,
+        word: xvWord.word,
+        start: xvWord.startTime,
+        end: xvWord.endTime,
+        confidence: xvWord.confidence,
         insertedAt: insertIdx
       });
     }
@@ -757,9 +758,9 @@ async function runAnalysis() {
       addStage('omission_recovery', {
         recoveredCount: recovered.length,
         recovered,
-        remainingUnconsumed: dgPool.length
+        remainingUnconsumed: xvPool.length
       });
-      console.log(`[omission-recovery] Recovered ${recovered.length} omissions from unconsumed Deepgram words:`,
+      console.log(`[omission-recovery] Recovered ${recovered.length} omissions from unconsumed cross-validator words:`,
         recovered.map(r => r.word));
     }
   }
@@ -1188,7 +1189,7 @@ async function runAnalysis() {
     transcriptWords,
     tierBreakdown,
     // Prefer Kitchen Sink disfluencyStats (Phase 24) over Phase 14 severity summary
-    data._kitchenSink?.disfluencyStats || data._disfluency?.summary || null,
+    data._kitchenSink?.disfluencyStats || null,
     data._safety || null                   // Collapse state and safety flags
   );
 

@@ -22,7 +22,7 @@
 import { isReverbAvailable, sendToReverbEnsemble } from './reverb-api.js';
 import { alignTranscripts } from './sequence-aligner.js';
 import { tagDisfluencies, computeDisfluencyStats } from './disfluency-tagger.js';
-import { sendToDeepgram, crossValidateWithDeepgram } from './deepgram-api.js';
+import { sendToDeepgram, crossValidateTranscripts } from './deepgram-api.js';
 
 // Feature flag stored in localStorage for A/B comparison
 const FEATURE_FLAG_KEY = 'orf_use_kitchen_sink';
@@ -113,42 +113,42 @@ function buildMergedWordsFromAlignment(verbatimWords, taggedAlignment) {
 async function runDeepgramFallback(blob) {
   console.log('[kitchen-sink] Running Deepgram-only fallback (no disfluency detection)');
 
-  const deepgramResult = await sendToDeepgram(blob);
+  const xvalResult = await sendToDeepgram(blob);
 
   // Handle complete failure
-  if (!deepgramResult || !deepgramResult.words || deepgramResult.words.length === 0) {
-    console.error('[kitchen-sink] Deepgram fallback failed');
+  if (!xvalResult || !xvalResult.words || xvalResult.words.length === 0) {
+    console.error('[kitchen-sink] Cross-validator fallback failed');
     return {
       words: [],
       source: 'deepgram_fallback',
-      error: 'Deepgram transcription failed',
+      error: 'Cross-validator transcription failed',
       _debug: {
         reverbAvailable: false,
-        deepgramAvailable: false,
-        fallbackReason: 'Both Reverb and Deepgram failed'
+        xvalAvailable: false,
+        fallbackReason: 'Both Reverb and cross-validator failed'
       }
     };
   }
 
   // Add placeholder properties for consistency with Kitchen Sink output
   // No disfluency detection without Reverb's verbatim/clean diff
-  const wordsWithDefaults = deepgramResult.words.map(w => ({
+  const wordsWithDefaults = xvalResult.words.map(w => ({
     ...w,
     isDisfluency: false,
     disfluencyType: null,
-    crossValidation: 'confirmed', // Deepgram is the only source, so "confirmed" by itself
+    crossValidation: 'confirmed', // Cross-validator is the only source, so "confirmed" by itself
     source: 'deepgram'
   }));
 
   return {
     words: wordsWithDefaults,
     source: 'deepgram_fallback',
-    deepgram: deepgramResult,
-    transcript: deepgramResult.transcript,
+    xvalRaw: xvalResult,
+    transcript: xvalResult.transcript,
     _debug: {
       reverbAvailable: false,
-      deepgramAvailable: true,
-      fallbackReason: 'Reverb service unavailable, using Deepgram only',
+      xvalAvailable: true,
+      fallbackReason: 'Reverb service unavailable, using cross-validator only',
       wordCount: wordsWithDefaults.length
     }
   };
@@ -178,7 +178,7 @@ async function runDeepgramFallback(blob) {
  *   - words: Array of words with isDisfluency, disfluencyType, crossValidation
  *   - source: 'kitchen_sink' or 'deepgram_fallback'
  *   - reverb: Raw Reverb response (if used)
- *   - deepgram: Raw Deepgram response (may be null)
+ *   - xvalRaw: Raw cross-validator response (may be null)
  *   - disfluencyStats: Statistics from disfluency-tagger
  *   - alignment: Tagged alignment result
  *   - _debug: Debug metadata
@@ -200,13 +200,13 @@ export async function runKitchenSinkPipeline(blob, encoding, sampleRateHertz) {
 
   // Step 2: Run Reverb + Deepgram in parallel
   // Use Promise.allSettled so one failure doesn't block the other
-  const [reverbResult, deepgramResult] = await Promise.allSettled([
+  const [reverbResult, xvalResult] = await Promise.allSettled([
     sendToReverbEnsemble(blob),
     sendToDeepgram(blob)
   ]);
 
   const reverb = reverbResult.status === 'fulfilled' ? reverbResult.value : null;
-  const deepgram = deepgramResult.status === 'fulfilled' ? deepgramResult.value : null;
+  const xvalRaw = xvalResult.status === 'fulfilled' ? xvalResult.value : null;
 
   // Step 3: If Reverb failed, fall back to Deepgram only
   if (!reverb) {
@@ -232,31 +232,31 @@ export async function runKitchenSinkPipeline(blob, encoding, sampleRateHertz) {
     taggedAlignment
   );
 
-  // Step 8: Apply cross-validation against Deepgram
+  // Step 8: Apply cross-validation against cross-validator
   // Words in both sources are 'confirmed', Reverb-only are 'unconfirmed'
-  const deepgramWords = deepgram?.words || null;
-  const xvalResult = crossValidateWithDeepgram(mergedWords, deepgramWords);
-  const validatedWords = xvalResult.words;
-  const unconsumedDeepgram = xvalResult.unconsumedDeepgram;
+  const xvalWords = xvalRaw?.words || null;
+  const xvalCrossResult = crossValidateTranscripts(mergedWords, xvalWords);
+  const validatedWords = xvalCrossResult.words;
+  const unconsumedXval = xvalCrossResult.unconsumedXval;
 
   console.log('[kitchen-sink] Pipeline complete:', {
     verbatimWords: reverb.verbatim.words.length,
     cleanWords: reverb.clean.words.length,
     disfluencies: disfluencyStats.total,
-    crossValidated: !!deepgram
+    crossValidated: !!xvalRaw
   });
 
   return {
     words: validatedWords,
-    unconsumedDeepgram: unconsumedDeepgram,
+    unconsumedXval: unconsumedXval,
     source: 'kitchen_sink',
     reverb: reverb,
-    deepgram: deepgram,
+    xvalRaw: xvalRaw,
     disfluencyStats: disfluencyStats,
     alignment: taggedAlignment,
     _debug: {
       reverbAvailable: true,
-      deepgramAvailable: !!deepgram,
+      xvalAvailable: !!xvalRaw,
       verbatimWordCount: reverb.verbatim.words.length,
       cleanWordCount: reverb.clean.words.length,
       disfluenciesDetected: disfluencyStats.total,

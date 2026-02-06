@@ -16,11 +16,26 @@ const DISFLUENCIES = new Set([
  */
 export function normalizeText(text) {
   if (!text || typeof text !== 'string') return [];
-  return text
+  const tokens = text
+    .replace(/-\s*\n\s*/g, '')   // Rejoin line-break hyphens when newlines survive
     .toLowerCase()
     .split(/\s+/)
     .map(w => w.replace(/^[^\w'-]+|[^\w'-]+$/g, ''))
     .filter(w => w.length > 0);
+
+  // Merge trailing-hyphen tokens with next token (line-break artifacts from OCR).
+  // e.g., ["spread-", "sheet"] → ["spreadsheet"]
+  // Real hyphenated words like "mother-in-law" have internal hyphens, never trailing.
+  const merged = [];
+  for (let i = 0; i < tokens.length; i++) {
+    if (tokens[i].endsWith('-') && i + 1 < tokens.length) {
+      merged.push(tokens[i].slice(0, -1) + tokens[i + 1]);
+      i++; // skip next token
+    } else {
+      merged.push(tokens[i]);
+    }
+  }
+  return merged;
 }
 
 /**

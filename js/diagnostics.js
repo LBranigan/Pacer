@@ -204,7 +204,7 @@ export function detectOnsetDelays(transcriptWords, referenceText, alignment) {
 
     // Skip unconfirmed words — they have unreliable Reverb timestamps (100ms BPE)
     // and shouldn't be used as gap boundaries or flagged as hesitations.
-    // Deepgram is the primary timekeeper; unconfirmed words lack Deepgram timestamps.
+    // Cross-validator is the primary timekeeper; unconfirmed words lack cross-validator timestamps.
     if (w.crossValidation === 'unconfirmed') {
       continue;
     }
@@ -519,7 +519,7 @@ export function computeTierBreakdown(alignment) {
  * Detect "struggle" words via Path 1 (hesitation) and Path 3 (abandoned attempt).
  *
  * Path 1: substitution with a long pause (>= 3s) before the word.
- * Path 3: substitution where Deepgram had no response (unconfirmed) AND
+ * Path 3: substitution where cross-validator had no response (unconfirmed) AND
  *          the hyp is a near-miss of the ref — indicating the student made
  *          a partial/garbled attempt that only verbatim STT detected.
  *
@@ -591,9 +591,9 @@ export function detectStruggleWords(transcriptWords, referenceText, alignment) {
         });
       }
 
-      // ── Path 3: Abandoned Attempt (Deepgram N/A + near-miss) ──
+      // ── Path 3: Abandoned Attempt (cross-validator N/A + near-miss) ──
       // The student made a partial/garbled attempt that only verbatim STT detected.
-      // Deepgram didn't hear it (crossValidation: unconfirmed) and it's a near-miss
+      // Cross-validator didn't hear it (crossValidation: unconfirmed) and it's a near-miss
       // of the reference word (shared prefix/suffix/Levenshtein).
       const sttWord = transcriptWords[hypIndex];
       if (sttWord && sttWord.crossValidation === 'unconfirmed' &&

@@ -225,9 +225,9 @@ export function createSyncedPlayback(containerEl) {
 
     // Find the single best word to highlight: among all words whose time range
     // contains the playhead, pick the one with the latest start time.
-    // This handles overlapping timestamps from mixed Reverb/Deepgram sources —
+    // This handles overlapping timestamps from mixed Reverb/cross-validator sources —
     // when an unconfirmed word overlaps with a confirmed word's extended
-    // Deepgram timestamps, the most recently started word wins.
+    // cross-validator timestamps, the most recently started word wins.
     let activeIdx = -1;
     let latestStart = -1;
     for (let i = 0; i < wordEls.length; i++) {

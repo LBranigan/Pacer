@@ -212,10 +212,27 @@ export function trimPassageToAttempted(ocrText, transcriptWords) {
   const origStart = normToOrigIndex[firstIndex];
   const origEnd = normToOrigIndex[lastIndex];
 
-  // No buffer — the DP already found the precise matched boundaries.
-  // Adding extra words from a dense OCR page creates false omissions.
+  // ASR fusion detection at the end boundary.
+  // When ASR fuses the last word with subsequent ones (e.g., "long"+"term" →
+  // "longterm"), the DP matches the fused word to the first half and stops there,
+  // cutting off the rest. Detect this by checking if the last spoken word is a
+  // concatenation of the boundary OCR word + following OCR word(s). Only extend
+  // the boundary when there's concrete evidence of fusion — no blind buffer.
   const start = origStart;
-  const end = origEnd;
+  let end = origEnd;
+
+  const lastSpoken = sttNorm[sttNorm.length - 1];
+  const lastMatchedOCR = ocrNorm[lastIndex];
+  if (lastSpoken !== lastMatchedOCR && lastIndex + 1 < ocrNorm.length) {
+    let combined = lastMatchedOCR;
+    for (let k = lastIndex + 1; k < Math.min(lastIndex + 3, ocrNorm.length); k++) {
+      combined += ocrNorm[k];
+      if (combined === lastSpoken) {
+        end = normToOrigIndex[k];
+        break;
+      }
+    }
+  }
 
   return ocrTokens.slice(start, end + 1).join(' ');
 }
