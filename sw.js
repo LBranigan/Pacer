@@ -1,4 +1,4 @@
-const CACHE_NAME = 'orf-v33';
+const CACHE_NAME = 'orf-v37';
 
 const SHELL = [
   './',
@@ -9,7 +9,7 @@ const SHELL = [
   './js/ui.js',
   './js/recorder.js',
   './js/file-handler.js',
-  './js/stt-api.js',
+  // './js/stt-api.js',  // Google STT — no longer used
   './js/ocr-api.js',
   './js/passage-trimmer.js',
   './js/word-equivalences.js',

@@ -513,22 +513,19 @@ export function computeTierBreakdown(alignment) {
   return tiers;
 }
 
-// ── DIAG-07: Struggle Words (Path 1 — Pause Struggle) ──────────────
+// ── DIAG-07: Struggle Words (Path 1 — Hesitation, Path 3 — Abandoned Attempt) ─
 
 /**
- * Detect "struggle" words — substitutions preceded by a long pause (>= 3s).
+ * Detect "struggle" words via Path 1 (hesitation) and Path 3 (abandoned attempt).
  *
- * Path 1 of the "substitution+" model: a substitution with a long pause
- * indicates the student tried to decode the word and failed.
+ * Path 1: substitution with a long pause (>= 3s) before the word.
+ * Path 3: substitution where Deepgram had no response (unconfirmed) AND
+ *          the hyp is a near-miss of the ref — indicating the student made
+ *          a partial/garbled attempt that only verbatim STT detected.
  *
  * Operates on alignment entries (not transcriptWords). For entries already
- * upgraded to 'struggle' by Path 2 (resolveNearMissClusters), adds hesitation
+ * upgraded to 'struggle' by Path 2 (resolveNearMissClusters), adds additional
  * evidence instead of re-upgrading.
- *
- * Criteria:
- * 1. Alignment entry is 'substitution' or 'struggle' (from Path 2)
- * 2. Pause >= 3s before the word (from transcriptWords timing data)
- * 3. Reference word > 3 characters
  *
  * @param {Array} transcriptWords - STT words with timestamps
  * @param {string} referenceText - Reference passage text
@@ -569,6 +566,7 @@ export function detectStruggleWords(transcriptWords, referenceText, alignment) {
     if (entry.type === 'substitution' || entry.type === 'struggle') {
       const refClean = (entry.ref || '').toLowerCase().replace(/[^a-z'-]/g, '');
 
+      // ── Path 1: Hesitation (pause >= 3s before a substitution) ──
       if (refClean.length > 3 && pauseBeforeIndex.has(hypIndex)) {
         const gap = pauseBeforeIndex.get(hypIndex);
 
@@ -590,6 +588,33 @@ export function detectStruggleWords(transcriptWords, referenceText, alignment) {
           hyp: entry.hyp,
           gap: Math.round(gap * 1000) / 1000,
           path: entry._strugglePath || 'hesitation'
+        });
+      }
+
+      // ── Path 3: Abandoned Attempt (Deepgram N/A + near-miss) ──
+      // The student made a partial/garbled attempt that only verbatim STT detected.
+      // Deepgram didn't hear it (crossValidation: unconfirmed) and it's a near-miss
+      // of the reference word (shared prefix/suffix/Levenshtein).
+      const sttWord = transcriptWords[hypIndex];
+      if (sttWord && sttWord.crossValidation === 'unconfirmed' &&
+          isNearMiss(entry.hyp, entry.ref)) {
+        if (entry.type === 'substitution') {
+          // Upgrade substitution to struggle (Path 3)
+          entry._originalType = 'substitution';
+          entry.type = 'struggle';
+          entry._strugglePath = 'abandoned';
+          entry._abandonedAttempt = true;
+        } else {
+          // Already struggle from Path 1 or 2 — add abandoned evidence
+          entry._abandonedAttempt = true;
+        }
+
+        results.push({
+          hypIndex,
+          word: entry.ref,
+          hyp: entry.hyp,
+          crossValidation: 'unconfirmed',
+          path: 'abandoned'
         });
       }
     }

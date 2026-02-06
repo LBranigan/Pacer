@@ -232,8 +232,8 @@ const DIAGNOSTIC_MISCUES = {
   },
 
   struggle: {
-    description: 'Substitution+ — student failed to produce the word, with additional evidence of decoding difficulty (long pause and/or near-miss fragments). Always an error.',
-    detector: 'diagnostics.js → resolveNearMissClusters() (Path 2: decoding) + detectStruggleWords() (Path 1: hesitation)',
+    description: 'Substitution+ — student failed to produce the word, with additional evidence of decoding difficulty (long pause, near-miss fragments, and/or abandoned attempt). Always an error.',
+    detector: 'diagnostics.js → resolveNearMissClusters() (Path 2: decoding) + detectStruggleWords() (Path 1: hesitation, Path 3: abandoned attempt)',
     countsAsError: true, // Struggle = substitution+ = always an error
     config: {
       // Path 1: substitution + pause >= 3s + ref word > 3 chars
@@ -241,14 +241,21 @@ const DIAGNOSTIC_MISCUES = {
       // Path 2: substitution + near-miss insertions + ref word >= 3 chars
       near_miss_min_shared_affix: 3,     // Shared prefix or suffix >= 3 chars
       near_miss_levenshtein_threshold: 0.4, // Or Levenshtein ratio >= 0.4
-      min_word_length: 4                 // Reference word > 3 chars (4+)
+      min_word_length: 4,                // Reference word > 3 chars (4+)
+      // Path 3: substitution + crossValidation 'unconfirmed' (Deepgram N/A) + near-miss
+      // No min_word_length gate — near-miss check provides sufficient signal
     },
     example: {
-      context: 'Student says "sta", "tieion", "staion" for reference word "station"',
-      result: 'Substitution "sta" upgraded to struggle — 2 near-miss insertions detected (tieion, staion)'
+      context: 'Path 2: Student says "sta", "tieion", "staion" for "station". Path 3: Student says "cont" for "content\'s" — only verbatim STT detected it, Deepgram heard nothing.',
+      result: 'Substitution upgraded to struggle via matching pathway(s)'
     },
     uiClass: 'word-struggle',
-    note: 'The struggle alignment type is always "substitution+". It only exists when the student failed to produce the word. Correct words with hesitation do not become struggle — they remain correct with onset delay information (DIAG-05).'
+    pathways: {
+      hesitation: 'Path 1: substitution + 3s+ pause before the word → student hesitated then failed',
+      decoding: 'Path 2: substitution + near-miss insertions around it → multiple failed decoding attempts',
+      abandoned: 'Path 3: substitution + Deepgram N/A + near-miss match → partial/garbled attempt only verbatim STT detected'
+    },
+    note: 'The struggle alignment type is always "substitution+". It only exists when the student failed to produce the word. A word can match multiple pathways simultaneously. Correct words with hesitation do not become struggle — they remain correct with onset delay information (DIAG-05).'
   }
 };
 
@@ -446,7 +453,7 @@ export function getDetectorLocation(type) {
  * ERRORS (affect accuracy):
  * - omission: Skipped a word
  * - substitution: Wrong word
- * - struggle: Substitution+ with decoding difficulty evidence (near-miss fragments or long pause)
+ * - struggle: Substitution+ with decoding difficulty evidence (hesitation / near-miss fragments / abandoned attempt)
  * - longPause: Stuck for 3+ seconds
  * - morphological: Wrong word ending
  *

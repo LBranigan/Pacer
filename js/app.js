@@ -1,8 +1,7 @@
 import { initRecorder, setOnComplete as recorderSetOnComplete } from './recorder.js';
 import { initFileHandler, setOnComplete as fileHandlerSetOnComplete } from './file-handler.js';
-import { sendToSTT, sendToAsyncSTT, sendChunkedSTT, sendEnsembleSTT } from './stt-api.js';
-// Note: ensemble-merger.js still exists for legacy/reference but is no longer used
-// Kitchen Sink pipeline (Reverb + Deepgram) fully replaces Google STT ensemble
+// Google Cloud STT — commented out, no longer used (Kitchen Sink pipeline replaces it)
+// import { sendToSTT, sendToAsyncSTT, sendChunkedSTT, sendEnsembleSTT } from './stt-api.js';
 import { alignWords } from './alignment.js';
 import { getCanonical } from './word-equivalences.js';
 import { computeWCPM, computeAccuracy, computeWCPMRange } from './metrics.js';
@@ -26,7 +25,7 @@ import { padAudioWithSilence } from './audio-padding.js';
 import { enrichDiagnosticsWithVAD, computeVADGapSummary, adjustGapsWithVADOverhang } from './vad-gap-analyzer.js';
 
 // Code version for cache verification
-const CODE_VERSION = 'v35-2026-02-05';
+const CODE_VERSION = 'v37-2026-02-06';
 console.log('[ORF] Code version:', CODE_VERSION);
 
 if ('serviceWorker' in navigator) {
@@ -136,23 +135,26 @@ async function runAnalysis() {
   // consumed by VAD Gap Analysis (Phase 18) after the if/else block
   let vadResult = { segments: [], durationMs: 0, error: 'VAD not initialized' };
 
-  if (appState.elapsedSeconds != null && appState.elapsedSeconds > 55) {
-    setStatus('Processing long recording via async STT...');
-    try {
-      data = await sendToAsyncSTT(paddedAudioBlob, effectiveEncoding, (pct) => {
-        setStatus(`Processing long recording... ${pct}%`);
-      });
-    } catch (err) {
-      if (err.code === 'INLINE_REJECTED') {
-        setStatus('Async STT unavailable for inline audio. Using chunked processing...');
-        data = await sendChunkedSTT(paddedAudioBlob, effectiveEncoding);
-      } else {
-        setStatus('Async STT error: ' + err.message);
-        analyzeBtn.disabled = false;
-        return;
-      }
-    }
-  } else {
+  // Google STT async path for >55s recordings — commented out, Kitchen Sink handles all lengths now
+  // if (appState.elapsedSeconds != null && appState.elapsedSeconds > 55) {
+  //   setStatus('Processing long recording via async STT...');
+  //   try {
+  //     data = await sendToAsyncSTT(paddedAudioBlob, effectiveEncoding, (pct) => {
+  //       setStatus(`Processing long recording... ${pct}%`);
+  //     });
+  //   } catch (err) {
+  //     if (err.code === 'INLINE_REJECTED') {
+  //       setStatus('Async STT unavailable for inline audio. Using chunked processing...');
+  //       data = await sendChunkedSTT(paddedAudioBlob, effectiveEncoding);
+  //     } else {
+  //       setStatus('Async STT error: ' + err.message);
+  //       analyzeBtn.disabled = false;
+  //       return;
+  //     }
+  //   }
+  // } else {
+
+  {
     // Run Kitchen Sink pipeline (Reverb + Deepgram + disfluency detection)
     // Falls back to Deepgram-only automatically when Reverb unavailable
     setStatus('Running Kitchen Sink ensemble analysis...');
@@ -1171,6 +1173,7 @@ async function runAnalysis() {
       partOfForgiven: a.partOfForgiven,
       _strugglePath: a._strugglePath || null,
       _nearMissEvidence: a._nearMissEvidence || null,
+      _abandonedAttempt: a._abandonedAttempt || false,
       _isSelfCorrection: a._isSelfCorrection || false,
       _partOfStruggle: a._partOfStruggle || false
     }))

@@ -143,16 +143,26 @@ function buildEnhancedTooltip(item, sttWord) {
     lines.push(`Expected: ${item.ref}, Said: ${item.hyp}`);
   } else if (item.type === 'struggle') {
     lines.push(`Expected: ${item.ref}, Said: ${item.hyp}`);
-    if (item._strugglePath === 'decoding' && item._nearMissEvidence) {
-      const attempts = [item.hyp, ...item._nearMissEvidence];
-      lines.push(`Struggle (decoding error): ${attempts.length} attempts (${attempts.join(', ')})`);
-    } else if (item._strugglePath === 'hesitation') {
-      const gapMs = Math.round((item._hesitationGap || 0) * 1000);
-      lines.push(`Struggle (hesitation): ${gapMs}ms pause before failed word`);
-    }
-    if (item._hasHesitation && item._hesitationGap) {
+    lines.push('');
+    lines.push('Struggle pathways:');
+
+    // Path 1: Hesitation — long pause before the word
+    const hasHesitationPath = item._strugglePath === 'hesitation' || item._hasHesitation;
+    if (hasHesitationPath && item._hesitationGap) {
       const gapMs = Math.round(item._hesitationGap * 1000);
-      lines.push(`${gapMs}ms pause before word`);
+      lines.push(`  Hesitation: ${gapMs}ms pause before failed word`);
+    }
+
+    // Path 2: Decoding — near-miss insertions around the word
+    const hasDecodingPath = item._strugglePath === 'decoding' || (item._nearMissEvidence && item._nearMissEvidence.length > 0);
+    if (hasDecodingPath && item._nearMissEvidence) {
+      const attempts = [item.hyp, ...item._nearMissEvidence];
+      lines.push(`  Decoding: ${attempts.length} failed attempts (${attempts.join(', ')})`);
+    }
+
+    // Path 3: Abandoned Attempt — only verbatim STT detected, Deepgram N/A
+    if (item._abandonedAttempt) {
+      lines.push(`  Abandoned attempt: partial "${item.hyp}" (Deepgram N/A, verbatim-only)`);
     }
   } else if (item.type === 'omission') {
     lines.push('Omitted (not read)');
@@ -430,24 +440,49 @@ export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, di
 
   plainDiv.appendChild(metricsBar);
 
-  // Build mapping from STT word index to alignment hypIndex (for rendering)
-  // STT indexes include insertions, but UI hypIndex skips insertions
+  // Build mapping from raw transcriptWords index → alignment render hypIndex.
+  // Diagnostics (onset delays, long pauses) return indices into the full
+  // transcriptWords array (which includes disfluency fillers like "uh").
+  // But alignWords() calls filterDisfluencies() before diffing, so the
+  // alignment's internal word positions are offset from transcriptWords.
+  // We bridge the gap by first identifying which transcriptWords entries
+  // survived filtering, then walking alignment to pair them up.
+  const DISFLUENCY_WORDS = new Set(['um', 'uh', 'uh-huh', 'mm', 'hmm', 'er', 'ah']); // must match text-normalize.js
   const sttToHypIndex = new Map();
-  let sttIdx = 0;
+
+  // Step 1: Collect raw indices of non-disfluent words (matches filterDisfluencies output)
+  const nonDisfluencyIndices = [];
+  if (transcriptWords) {
+    for (let i = 0; i < transcriptWords.length; i++) {
+      const wordNorm = (transcriptWords[i].word || '').toLowerCase().replace(/^[^\w'-]+|[^\w'-]+$/g, '');
+      if (!DISFLUENCY_WORDS.has(wordNorm)) {
+        nonDisfluencyIndices.push(i);
+      }
+    }
+  }
+
+  // Step 2: Walk alignment consuming filtered indices for non-omission entries
+  let filteredIdx = 0;   // index into nonDisfluencyIndices
   let renderHypIdx = 0;
   for (const item of alignment) {
-    if (item.type === 'insertion') {
-      sttIdx++;
+    if (item.type === 'omission') {
+      // Ref word with no STT word — don't consume any index
       continue;
     }
-    if (item.type !== 'omission') {
-      sttToHypIndex.set(sttIdx, renderHypIdx);
-      // Compound words (e.g. "every"+"one" → "everyone") consume multiple STT words
-      // but produce a single alignment entry — advance sttIdx by parts count
-      const partsCount = item.compound && item.parts ? item.parts.length : 1;
-      sttIdx += partsCount;
-      renderHypIdx++;
+    if (item.type === 'insertion') {
+      // STT word not in reference — consume filtered index, no render position
+      filteredIdx++;
+      continue;
     }
+    // correct, substitution, struggle, self-correction — map raw STT index to render position
+    if (filteredIdx < nonDisfluencyIndices.length) {
+      const rawSttIdx = nonDisfluencyIndices[filteredIdx];
+      sttToHypIndex.set(rawSttIdx, renderHypIdx);
+      // Compound words consume multiple STT words
+      const partsCount = item.compound && item.parts ? item.parts.length : 1;
+      filteredIdx += partsCount;
+    }
+    renderHypIdx++;
   }
 
   // Build diagnostic lookup structures
