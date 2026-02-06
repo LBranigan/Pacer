@@ -24,7 +24,7 @@ export function computeWCPM(alignmentResult, elapsedSeconds) {
  * @returns {{ accuracy: number, correctCount: number, totalRefWords: number, substitutions: number, omissions: number, insertions: number }}
  */
 export function computeAccuracy(alignmentResult, options = {}) {
-  let correctCount = 0, substitutions = 0, omissions = 0, insertions = 0, forgiven = 0;
+  let correctCount = 0, substitutions = 0, omissions = 0, insertions = 0, struggles = 0, forgiven = 0;
   for (const w of alignmentResult) {
     switch (w.type) {
       case 'correct':
@@ -39,6 +39,10 @@ export function computeAccuracy(alignmentResult, options = {}) {
           substitutions++;
         }
         break;
+      case 'struggle':
+        // Substitution+ — student failed with additional evidence of decoding difficulty
+        struggles++;
+        break;
       case 'omission':
         // Proper noun forgiveness for omissions too
         if (w.forgiven) {
@@ -48,14 +52,19 @@ export function computeAccuracy(alignmentResult, options = {}) {
           omissions++;
         }
         break;
-      case 'insertion': insertions++; break;
+      case 'insertion':
+        // Exclude claimed insertions — they're accounted for under struggle/self-correction
+        if (!w._partOfStruggle && !w._isSelfCorrection) {
+          insertions++;
+        }
+        break;
     }
   }
-  const totalRefWords = correctCount + substitutions + omissions;
+  const totalRefWords = correctCount + substitutions + omissions + struggles;
   const accuracy = totalRefWords === 0
     ? 0
     : Math.round((correctCount / totalRefWords) * 1000) / 10;
-  return { accuracy, correctCount, totalRefWords, substitutions, omissions, insertions, forgiven };
+  return { accuracy, correctCount, totalRefWords, substitutions, omissions, insertions, struggles, forgiven };
 }
 
 /**

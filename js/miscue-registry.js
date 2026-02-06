@@ -201,16 +201,16 @@ const DIAGNOSTIC_MISCUES = {
   },
 
   selfCorrection: {
-    description: 'Student repeated a word or phrase (detected post-alignment)',
-    detector: 'diagnostics.js → detectSelfCorrections()',
+    description: 'Student repeated a word/phrase or made a near-miss attempt before producing the word correctly',
+    detector: 'diagnostics.js → detectSelfCorrections() (DIAG-03: word/phrase repeats) + resolveNearMissClusters() (near-miss insertion before correct word)',
     countsAsError: false, // Shows effort to correct, not penalized
     config: null,
     example: {
-      spoken: 'the dog the dog ran',
-      result: 'Phrase "the dog" repeated - self-correction detected'
+      spoken: '"epi-" then "epiphany" — near-miss insertion before correct word',
+      result: 'Insertion "epi-" flagged as self-correction (near-miss for following correct "epiphany")'
     },
     uiClass: 'word-self-correction',
-    note: 'Detects both single-word and 2-word phrase repeats'
+    note: 'Two detection paths: DIAG-03 detects word/phrase repeats in transcript; resolveNearMissClusters detects near-miss insertions (shared prefix/suffix/Levenshtein) before a correct word.'
   },
 
   morphological: {
@@ -232,25 +232,23 @@ const DIAGNOSTIC_MISCUES = {
   },
 
   struggle: {
-    description: 'Word where student showed decoding difficulty (pause + cross-validation uncertainty)',
-    detector: 'diagnostics.js → detectStruggleWords()',
-    countsAsError: false, // Diagnostic only - helps identify words needing practice
+    description: 'Substitution+ — student failed to produce the word, with additional evidence of decoding difficulty (long pause and/or near-miss fragments). Always an error.',
+    detector: 'diagnostics.js → resolveNearMissClusters() (Path 2: decoding) + detectStruggleWords() (Path 1: hesitation)',
+    countsAsError: true, // Struggle = substitution+ = always an error
     config: {
-      // Condition 1: Pause (>=3s) or hesitation (>=threshold) before word
-      // Condition 2: Cross-validation !== 'confirmed' (engines disagree or Deepgram had nothing)
-      //   'confirmed' = both agree → not a struggle
-      //   'disagreed' = engines heard different words → mispronunciation
-      //   'unconfirmed' = Reverb only, Deepgram had no word → possible garble
-      //   'unavailable' = Deepgram offline → uncertain
-      // Condition 3: Word length > 3 characters (not a common sight word)
-      min_word_length: 4                 // Words with >3 chars (4+)
+      // Path 1: substitution + pause >= 3s + ref word > 3 chars
+      pause_threshold_s: 3,
+      // Path 2: substitution + near-miss insertions + ref word >= 3 chars
+      near_miss_min_shared_affix: 3,     // Shared prefix or suffix >= 3 chars
+      near_miss_levenshtein_threshold: 0.4, // Or Levenshtein ratio >= 0.4
+      min_word_length: 4                 // Reference word > 3 chars (4+)
     },
     example: {
-      context: '3.8s pause before "jued" (ref: "jumped") + crossValidation: disagreed + 4 chars',
-      result: 'Flagged as struggle word — Deepgram heard "jumped", Reverb heard "jued"'
+      context: 'Student says "sta", "tieion", "staion" for reference word "station"',
+      result: 'Substitution "sta" upgraded to struggle — 2 near-miss insertions detected (tieion, staion)'
     },
     uiClass: 'word-struggle',
-    note: 'Helps teachers identify words the student found difficult to decode. Not penalized — used for targeted instruction.'
+    note: 'The struggle alignment type is always "substitution+". It only exists when the student failed to produce the word. Correct words with hesitation do not become struggle — they remain correct with onset delay information (DIAG-05).'
   }
 };
 
@@ -448,6 +446,7 @@ export function getDetectorLocation(type) {
  * ERRORS (affect accuracy):
  * - omission: Skipped a word
  * - substitution: Wrong word
+ * - struggle: Substitution+ with decoding difficulty evidence (near-miss fragments or long pause)
  * - longPause: Stuck for 3+ seconds
  * - morphological: Wrong word ending
  *
@@ -456,12 +455,11 @@ export function getDetectorLocation(type) {
  * - fragment: False start (merged into target)
  * - repetition: Self-correction attempt
  * - hesitation: Brief pause (< 3s)
- * - selfCorrection: Repeated word/phrase
+ * - selfCorrection: Repeated word/phrase or near-miss attempt before correct word
  * - ghost: STT hallucination (filtered)
  * - possibleInsertion: Uncertain extra word
  * - properNounForgiveness: Close attempt at name
  * - terminalLeniency: Recording cut off
- * - struggle: Pause/hesitation + low confidence + multi-syllable word
  * - reverb_filler: Filler word (um, uh) via Reverb model diff
  * - reverb_repetition: Word repetition via Reverb model diff
  * - reverb_false_start: False start via Reverb model diff

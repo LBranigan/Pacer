@@ -141,6 +141,19 @@ function buildEnhancedTooltip(item, sttWord) {
   // Existing type info
   if (item.type === 'substitution') {
     lines.push(`Expected: ${item.ref}, Said: ${item.hyp}`);
+  } else if (item.type === 'struggle') {
+    lines.push(`Expected: ${item.ref}, Said: ${item.hyp}`);
+    if (item._strugglePath === 'decoding' && item._nearMissEvidence) {
+      const attempts = [item.hyp, ...item._nearMissEvidence];
+      lines.push(`Struggle (decoding error): ${attempts.length} attempts (${attempts.join(', ')})`);
+    } else if (item._strugglePath === 'hesitation') {
+      const gapMs = Math.round((item._hesitationGap || 0) * 1000);
+      lines.push(`Struggle (hesitation): ${gapMs}ms pause before failed word`);
+    }
+    if (item._hasHesitation && item._hesitationGap) {
+      const gapMs = Math.round(item._hesitationGap * 1000);
+      lines.push(`${gapMs}ms pause before word`);
+    }
   } else if (item.type === 'omission') {
     lines.push('Omitted (not read)');
   } else if (item.type === 'self-correction') {
@@ -376,10 +389,15 @@ export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, di
 
   const errBox = document.createElement('div');
   errBox.className = 'metric-box metric-box-errors';
-  errBox.innerHTML = '<span class="metric-label">' +
-    accuracy.substitutions + ' substitutions, ' +
-    accuracy.omissions + ' omissions, ' +
-    accuracy.insertions + ' insertions</span>';
+  const errParts = [
+    accuracy.substitutions + ' substitution' + (accuracy.substitutions !== 1 ? 's' : ''),
+    accuracy.omissions + ' omission' + (accuracy.omissions !== 1 ? 's' : '')
+  ];
+  if (accuracy.struggles > 0) {
+    errParts.push(accuracy.struggles + ' struggle' + (accuracy.struggles !== 1 ? 's' : ''));
+  }
+  errParts.push(accuracy.insertions + ' insertion' + (accuracy.insertions !== 1 ? 's' : ''));
+  errBox.innerHTML = '<span class="metric-label">' + errParts.join(', ') + '</span>';
   metricsBar.appendChild(errBox);
 
   if (diagnostics && diagnostics.prosodyProxy) {
@@ -436,7 +454,6 @@ export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, di
   const onsetDelayMap = new Map(); // hypIndex -> {gap, threshold, punctuationType}
   const longPauseMap = new Map(); // afterHypIndex -> {gap}
   const morphErrorMap = new Map(); // "ref|hyp" lowercase -> morphological result
-  const struggleWordSet = new Set(); // STT word indices flagged as struggle words
   if (diagnostics) {
     if (diagnostics.onsetDelays) {
       for (const d of diagnostics.onsetDelays) {
@@ -463,16 +480,6 @@ export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, di
     if (diagnostics.morphologicalErrors) {
       for (const m of diagnostics.morphologicalErrors) {
         morphErrorMap.set((m.ref || '').toLowerCase() + '|' + (m.hyp || '').toLowerCase(), m);
-      }
-    }
-    // Struggle words: words with pause/hesitation + low confidence + not sight word
-    if (diagnostics.struggleWords) {
-      for (const s of diagnostics.struggleWords) {
-        // Convert STT wordIndex to render hypIndex
-        const hypIdx = sttToHypIndex.get(s.wordIndex);
-        if (hypIdx !== undefined) {
-          struggleWordSet.add(hypIdx);
-        }
       }
     }
   }
@@ -533,7 +540,7 @@ export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, di
     span.title = buildEnhancedTooltip(item, sttWord);
 
     // Additional context for specific types
-    if (item.type === 'substitution') {
+    if (item.type === 'substitution' || item.type === 'struggle') {
       // Proper noun forgiveness indicator (phonetic proximity check passed)
       // Check this FIRST - forgiven words should NOT be marked as morphological errors
       if (item.forgiven) {
@@ -583,13 +590,6 @@ export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, di
           + ' (STT gap ' + delay._vadOverhang.originalGapMs + 'ms → adjusted ' + delay._vadOverhang.adjustedGapMs + 'ms)';
       }
       span.title += hesitationNote;
-    }
-
-    // Struggle word overlay (pause/hesitation + low confidence + not sight word)
-    // Highlights words where student showed decoding difficulty
-    if (currentHypIndex !== null && struggleWordSet.has(currentHypIndex)) {
-      span.classList.add('word-struggle');
-      span.title += '\n⚠ Struggle word: pause/hesitation + low confidence + multi-syllable';
     }
 
     // Kitchen Sink disfluency dot marker (Phase 24)
@@ -665,6 +665,8 @@ export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, di
   // Disfluent words are expected speech patterns, not unexpected insertions
   const regularInsertions = insertions.filter(ins => {
     if (ins.partOfForgiven) return false;
+    if (ins._isSelfCorrection) return false;
+    if (ins._partOfStruggle) return false;
     // Check if the corresponding STT word is a disfluency
     if (ins.hyp && sttLookup) {
       const queue = sttLookup.get(ins.hyp);
@@ -719,6 +721,27 @@ export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, di
       scSection.appendChild(document.createTextNode(' '));
     }
     wordsDiv.appendChild(scSection);
+  }
+
+  // Near-miss self-corrections (e.g., "epi-" → "epiphany")
+  const nearMissSC = alignment.filter(a => a._isSelfCorrection);
+  if (nearMissSC.length > 0) {
+    const nmscSection = document.createElement('div');
+    nmscSection.style.marginTop = '1rem';
+    const nmscLabel = document.createElement('div');
+    nmscLabel.style.fontWeight = '600';
+    nmscLabel.style.marginBottom = '0.25rem';
+    nmscLabel.textContent = 'Near-miss self-corrections (not counted as errors):';
+    nmscSection.appendChild(nmscLabel);
+    for (const sc of nearMissSC) {
+      const span = document.createElement('span');
+      span.className = 'word word-self-correction';
+      span.textContent = `"${sc.hyp}" \u2192 "${sc._nearMissTarget}"`;
+      span.title = `Near-miss self-correction: student said "${sc.hyp}", then correctly said "${sc._nearMissTarget}"`;
+      nmscSection.appendChild(span);
+      nmscSection.appendChild(document.createTextNode(' '));
+    }
+    wordsDiv.appendChild(nmscSection);
   }
 
   // ─────────────────────────────────────────────────────────────────────────

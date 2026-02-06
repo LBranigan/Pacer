@@ -1,4 +1,6 @@
-// diagnostics.js — Five fluency diagnostic analyzers plus orchestrator
+// diagnostics.js — Fluency diagnostic analyzers, near-miss resolution, plus orchestrator
+
+import { levenshteinRatio } from './nl-api.js';
 
 // ── Helpers ──────────────────────────────────────────────────────────
 
@@ -43,13 +45,132 @@ export function buildHypToRefMap(alignment) {
       // ref word with no hyp counterpart
       refIndex++;
     } else {
-      // correct or substitution — both advance
+      // correct, substitution, or struggle — all advance both indices
       map.set(hypIndex, refIndex);
       refIndex++;
       hypIndex++;
     }
   }
   return map;
+}
+
+// ── Near-Miss Detection ─────────────────────────────────────────────
+
+/**
+ * Check if an insertion is a near-miss for a reference word.
+ * Near-miss = phonetically/morphologically similar (student was attempting the word).
+ *
+ * @param {string} insertionText - The inserted word text
+ * @param {string} referenceWord - The reference word to compare against
+ * @returns {boolean} True if the insertion is a near-miss for the reference word
+ */
+export function isNearMiss(insertionText, referenceWord) {
+  const cleanA = (insertionText || '').toLowerCase().replace(/[^a-z']/g, '');
+  const cleanB = (referenceWord || '').toLowerCase().replace(/[^a-z']/g, '');
+
+  // Hard gate: both must be >= 3 chars
+  if (cleanA.length < 3 || cleanB.length < 3) return false;
+
+  const minLen = Math.min(cleanA.length, cleanB.length);
+
+  // Check shared prefix >= 3 chars
+  let prefixLen = 0;
+  while (prefixLen < minLen && cleanA[prefixLen] === cleanB[prefixLen]) {
+    prefixLen++;
+  }
+  if (prefixLen >= 3) return true;
+
+  // Check shared suffix >= 3 chars
+  let suffixLen = 0;
+  while (suffixLen < minLen && cleanA[cleanA.length - 1 - suffixLen] === cleanB[cleanB.length - 1 - suffixLen]) {
+    suffixLen++;
+  }
+  if (suffixLen >= 3) return true;
+
+  // Check Levenshtein ratio >= 0.4
+  if (levenshteinRatio(cleanA, cleanB) >= 0.4) return true;
+
+  return false;
+}
+
+/**
+ * Single-pass cluster resolution: detect near-miss insertions around substitutions
+ * and upgrade substitutions to 'struggle' (Path 2: decoding struggle).
+ *
+ * Also detects near-miss self-corrections (insertion before a correct word).
+ *
+ * Must run AFTER omission recovery so recovered words can serve as self-correction anchors.
+ *
+ * @param {Array} alignment - Alignment entries (mutated in place)
+ */
+export function resolveNearMissClusters(alignment) {
+  const clean = (text) => (text || '').toLowerCase().replace(/[^a-z']/g, '');
+
+  for (let i = 0; i < alignment.length; i++) {
+    const entry = alignment[i];
+    if (entry.type !== 'insertion') continue;
+
+    const cleanedHyp = clean(entry.hyp);
+    if (cleanedHyp.length < 3) continue;
+
+    // Find nearest preceding non-insertion entry
+    let prevEntry = null;
+    for (let j = i - 1; j >= 0; j--) {
+      if (alignment[j].type !== 'insertion') {
+        prevEntry = alignment[j];
+        break;
+      }
+    }
+
+    // Find nearest following non-insertion entry
+    let nextEntry = null;
+    for (let j = i + 1; j < alignment.length; j++) {
+      if (alignment[j].type !== 'insertion') {
+        nextEntry = alignment[j];
+        break;
+      }
+    }
+
+    // PRIORITY 1 — Self-correction (look ahead for success)
+    if (nextEntry && nextEntry.type === 'correct' &&
+        clean(nextEntry.ref).length >= 3 &&
+        isNearMiss(entry.hyp, nextEntry.ref)) {
+      entry._isSelfCorrection = true;
+      entry._nearMissTarget = nextEntry.ref;
+      continue;
+    }
+
+    // PRIORITY 2 — Pre-struggle (look ahead for failure)
+    if (nextEntry && nextEntry.type === 'substitution' &&
+        clean(nextEntry.ref).length >= 3 &&
+        isNearMiss(entry.hyp, nextEntry.ref)) {
+      entry._partOfStruggle = true;
+      entry._nearMissTarget = nextEntry.ref;
+      if (!nextEntry._nearMissEvidence) nextEntry._nearMissEvidence = [];
+      nextEntry._nearMissEvidence.push(entry.hyp);
+      continue;
+    }
+
+    // PRIORITY 3 — Post-struggle (look behind for failure)
+    if (prevEntry && prevEntry.type === 'substitution' &&
+        clean(prevEntry.ref).length >= 3 &&
+        isNearMiss(entry.hyp, prevEntry.ref)) {
+      entry._partOfStruggle = true;
+      entry._nearMissTarget = prevEntry.ref;
+      if (!prevEntry._nearMissEvidence) prevEntry._nearMissEvidence = [];
+      prevEntry._nearMissEvidence.push(entry.hyp);
+      continue;
+    }
+  }
+
+  // After the pass — upgrade substitutions with near-miss evidence
+  for (const entry of alignment) {
+    if (entry._nearMissEvidence && entry._nearMissEvidence.length > 0) {
+      entry._originalType = entry.type;
+      entry.type = 'struggle';
+      entry._strugglePath = 'decoding';
+    }
+  }
 }
 
 // ── DIAG-01: Onset Delays (Hesitations) ─────────────────────────────
@@ -278,7 +399,7 @@ export function detectMorphologicalErrors(alignment, transcriptWords) {
       continue;
     }
 
-    if (type === 'substitution') {
+    if (type === 'substitution' || type === 'struggle') {
       const ref = (op.ref || op.reference || '').toLowerCase();
       const hyp = (op.hyp || op.hypothesis || '').toLowerCase();
 
@@ -385,77 +506,97 @@ export function computeTierBreakdown(alignment) {
     if (!tiers[tier]) continue;
     if (entry.type === 'correct') {
       tiers[tier].correct++;
-    } else if (entry.type === 'substitution' || entry.type === 'omission') {
+    } else if (entry.type === 'substitution' || entry.type === 'omission' || entry.type === 'struggle') {
       tiers[tier].errors++;
     }
   }
   return tiers;
 }
 
-// ── DIAG-07: Struggle Words ─────────────────────────────────────────
+// ── DIAG-07: Struggle Words (Path 1 — Pause Struggle) ──────────────
 
 /**
- * Detect "struggle" words — words the student had difficulty decoding.
+ * Detect "struggle" words — substitutions preceded by a long pause (>= 3s).
  *
- * A word is flagged as a struggle when ALL three conditions are met:
- * 1. Pause or hesitation before the word (gap >= threshold OR gap >= 3s)
- * 2. Cross-validation indicates uncertainty (not 'confirmed' by both engines)
- *    - 'confirmed' = both engines agree → not a struggle
- *    - 'disagreed' = engines heard different words → likely mispronunciation
- *    - 'unconfirmed' = only Reverb heard something → Deepgram found nothing
- *    - 'unavailable' = Deepgram was down → can't confirm either way
- * 3. Not a sight word (word length > 3 characters)
+ * Path 1 of the "substitution+" model: a substitution with a long pause
+ * indicates the student tried to decode the word and failed.
  *
- * Struggle words are diagnostic indicators that highlight decoding difficulty.
- * They do NOT count as errors — they help teachers identify words that need practice.
+ * Operates on alignment entries (not transcriptWords). For entries already
+ * upgraded to 'struggle' by Path 2 (resolveNearMissClusters), adds hesitation
+ * evidence instead of re-upgrading.
  *
- * Returns array of { wordIndex, word, gap, confidence, crossValidation }.
+ * Criteria:
+ * 1. Alignment entry is 'substitution' or 'struggle' (from Path 2)
+ * 2. Pause >= 3s before the word (from transcriptWords timing data)
+ * 3. Reference word > 3 characters
+ *
+ * @param {Array} transcriptWords - STT words with timestamps
+ * @param {string} referenceText - Reference passage text
+ * @param {Array} alignment - Alignment entries (mutated in place)
+ * @returns {Array} Results for diagnostics logging
  */
 export function detectStruggleWords(transcriptWords, referenceText, alignment) {
   const results = [];
 
-  // Get onset delays (hesitations) for cross-reference
-  const onsetDelays = detectOnsetDelays(transcriptWords, referenceText, alignment);
-  const delayIndices = new Set(onsetDelays.map(d => d.wordIndex));
-
-  // Get long pauses for cross-reference (pause AFTER word index means struggle on NEXT word)
+  // Get long pauses (>= 3s) for cross-reference
   const longPauses = detectLongPauses(transcriptWords);
-  const pauseBeforeIndices = new Set(longPauses.map(p => p.afterWordIndex + 1));
 
-  for (let i = 0; i < transcriptWords.length; i++) {
-    const w = transcriptWords[i];
-    const word = (w.word || '').toLowerCase();
+  // Build map: STT word index that follows a pause -> gap value
+  // Must skip unconfirmed words to find the actual next word after the pause
+  const pauseBeforeIndex = new Map();
+  for (const p of longPauses) {
+    let nextIdx = p.afterWordIndex + 1;
+    while (nextIdx < transcriptWords.length && transcriptWords[nextIdx].crossValidation === 'unconfirmed') {
+      nextIdx++;
+    }
+    if (nextIdx < transcriptWords.length) {
+      pauseBeforeIndex.set(nextIdx, p.gap);
+    }
+  }
 
-    // Condition 1: Pause or hesitation before this word
-    const hasPauseOrHesitation = delayIndices.has(i) || pauseBeforeIndices.has(i);
-    if (!hasPauseOrHesitation) continue;
-
-    // Condition 2: Cross-validation indicates uncertainty
-    // If both engines agree on the word, it's not a struggle regardless of confidence
-    const xval = w.crossValidation;
-    if (xval === 'confirmed') continue;
-
-    // Condition 3: Not a sight word (word length > 3 characters)
-    if (word.length <= 3) continue;
-
-    // All conditions met — this is a struggle word
-    // Find the gap value from whichever source detected it
-    let gap = 0;
-    const delayEntry = onsetDelays.find(d => d.wordIndex === i);
-    if (delayEntry) {
-      gap = delayEntry.gap;
-    } else {
-      const pauseEntry = longPauses.find(p => p.afterWordIndex + 1 === i);
-      if (pauseEntry) gap = pauseEntry.gap;
+  // Walk alignment entries, tracking hypIndex (maps to transcriptWords index)
+  let hypIndex = 0;
+  for (const entry of alignment) {
+    if (entry.type === 'insertion') {
+      hypIndex++;
+      continue;
+    }
+    if (entry.type === 'omission') {
+      continue;
     }
 
-    results.push({
-      wordIndex: i,
-      word: w.word,
-      gap: Math.round(gap * 1000) / 1000,
-      confidence: Math.round((w.confidence ?? 0) * 1000) / 1000,
-      crossValidation: xval || 'unavailable'
-    });
+    // Only process substitutions and existing struggles (from Path 2)
+    if (entry.type === 'substitution' || entry.type === 'struggle') {
+      const refClean = (entry.ref || '').toLowerCase().replace(/[^a-z'-]/g, '');
+
+      if (refClean.length > 3 && pauseBeforeIndex.has(hypIndex)) {
+        const gap = pauseBeforeIndex.get(hypIndex);
+
+        if (entry.type === 'substitution') {
+          // Upgrade substitution to struggle (Path 1)
+          entry._originalType = 'substitution';
+          entry.type = 'struggle';
+          entry._strugglePath = 'hesitation';
+          entry._hesitationGap = gap;
+        } else {
+          // Already struggle from Path 2 — add hesitation evidence
+          entry._hasHesitation = true;
+          entry._hesitationGap = gap;
+        }
+
+        results.push({
+          hypIndex,
+          word: entry.ref,
+          hyp: entry.hyp,
+          gap: Math.round(gap * 1000) / 1000,
+          path: entry._strugglePath || 'hesitation'
+        });
+      }
+    }
+
+    // Advance hypIndex — compound words consume multiple STT words
+    const partsCount = entry.compound && entry.parts ? entry.parts.length : 1;
+    hypIndex += partsCount;
   }
 
   return results;

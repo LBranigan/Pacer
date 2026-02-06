@@ -7,7 +7,7 @@ import { alignWords } from './alignment.js';
 import { getCanonical } from './word-equivalences.js';
 import { computeWCPM, computeAccuracy, computeWCPMRange } from './metrics.js';
 import { setStatus, displayResults, displayAlignmentResults, showAudioPlayback, renderStudentSelector, renderHistory } from './ui.js';
-import { runDiagnostics, computeTierBreakdown } from './diagnostics.js';
+import { runDiagnostics, computeTierBreakdown, resolveNearMissClusters } from './diagnostics.js';
 import { extractTextFromImage } from './ocr-api.js';
 import { trimPassageToAttempted } from './passage-trimmer.js';
 import { analyzePassageText, levenshteinRatio } from './nl-api.js';
@@ -762,7 +762,28 @@ async function runAnalysis() {
     }
   }
 
-  // Run diagnostics first so we can heal self-corrections
+  // Resolve near-miss clusters — Path 2: decoding struggle (single pass)
+  // Runs AFTER omission recovery so recovered 'correct' words can serve as
+  // self-correction anchors (e.g., ins(epi-) → recovered correct(epiphany))
+  resolveNearMissClusters(alignment);
+
+  const nearMissStruggles = alignment.filter(a => a.type === 'struggle' && a._strugglePath === 'decoding');
+  const nearMissSelfCorrections = alignment.filter(a => a._isSelfCorrection);
+  if (nearMissStruggles.length > 0 || nearMissSelfCorrections.length > 0) {
+    addStage('near_miss_resolution', {
+      struggles: nearMissStruggles.map(a => ({
+        ref: a.ref,
+        hyp: a.hyp,
+        evidence: a._nearMissEvidence
+      })),
+      selfCorrections: nearMissSelfCorrections.map(a => ({
+        hyp: a.hyp,
+        target: a._nearMissTarget
+      }))
+    });
+  }
+
+  // Run diagnostics (includes Path 1: pause struggle via modified detectStruggleWords)
   const diagnostics = runDiagnostics(transcriptWords, alignment, referenceText);
 
   addStage('diagnostics', {
@@ -858,7 +879,7 @@ async function runAnalysis() {
     let hypIdx = 0;
     for (const entry of alignment) {
       if (entry.type === 'insertion') {
-        if (scHypIndices.has(hypIdx)) {
+        if (!entry._isSelfCorrection && !entry._partOfStruggle && scHypIndices.has(hypIdx)) {
           entry.type = 'self-correction';
         }
         hypIdx++;
@@ -1138,6 +1159,7 @@ async function runAnalysis() {
     totalRefWords: accuracy.totalRefWords,
     substitutions: accuracy.substitutions,
     omissions: accuracy.omissions,
+    struggles: accuracy.struggles,
     insertions: accuracy.insertions,
     forgiven: accuracy.forgiven,
     forgivenessEnabled: accuracy.forgivenessEnabled,
@@ -1146,7 +1168,11 @@ async function runAnalysis() {
       hyp: a.hyp,
       type: a.type,
       forgiven: a.forgiven,
-      partOfForgiven: a.partOfForgiven
+      partOfForgiven: a.partOfForgiven,
+      _strugglePath: a._strugglePath || null,
+      _nearMissEvidence: a._nearMissEvidence || null,
+      _isSelfCorrection: a._isSelfCorrection || false,
+      _partOfStruggle: a._partOfStruggle || false
     }))
   });
 
