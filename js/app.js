@@ -207,6 +207,33 @@ async function runAnalysis() {
       agreementRate: ensembleStats.agreementRate
     });
 
+    // Raw Deepgram words (before cross-validation filtering)
+    if (kitchenSinkResult.deepgram?.words) {
+      addStage('deepgram_raw', {
+        totalWords: kitchenSinkResult.deepgram.words.length,
+        words: kitchenSinkResult.deepgram.words.map((w, i) => ({
+          idx: i,
+          word: w.word,
+          start: w.startTime,
+          end: w.endTime,
+          confidence: w.confidence
+        }))
+      });
+    }
+
+    // Unconsumed Deepgram words (heard by Deepgram but not Reverb — dropped during cross-validation)
+    if (kitchenSinkResult.unconsumedDeepgram?.length > 0) {
+      addStage('deepgram_unconsumed', {
+        count: kitchenSinkResult.unconsumedDeepgram.length,
+        words: kitchenSinkResult.unconsumedDeepgram.map(w => ({
+          word: w.word,
+          start: w.startTime,
+          end: w.endTime,
+          confidence: w.confidence
+        }))
+      });
+    }
+
     // Per-word timestamp comparison: all three sources
     const _parseTs = t => parseFloat(String(t).replace('s', '')) || 0;
     addStage('timestamp_sources', {
@@ -418,7 +445,8 @@ async function runAnalysis() {
       _vad: null,             // Legacy ghost detection disabled
       _classification: null,  // Legacy confidence classification disabled
       _kitchenSink: {
-        disfluencyStats: kitchenSinkResult.disfluencyStats || null
+        disfluencyStats: kitchenSinkResult.disfluencyStats || null,
+        unconsumedDeepgram: kitchenSinkResult.unconsumedDeepgram || []
       },
       _disfluency: null,      // Legacy Phase 14 disfluency detection disabled
       _safety: null            // Legacy safety checks disabled
@@ -651,6 +679,86 @@ async function runAnalysis() {
           _compoundParts: partWords
         });
       }
+    }
+  }
+
+  // Recover omissions from unconsumed Deepgram words.
+  // If Deepgram heard a word that matches an omitted reference word,
+  // the student DID say it — Reverb just missed it. Insert the word
+  // into transcriptWords with Deepgram timestamps so gap calculations
+  // also heal (no false hesitations around recovered words).
+  const unconsumedDg = data._kitchenSink?.unconsumedDeepgram || [];
+  if (unconsumedDg.length > 0) {
+    const _norm = (w) => w.toLowerCase().replace(/[^a-z'-]/g, '');
+    // Build consumable pool
+    const dgPool = unconsumedDg.map(w => ({ ...w, _norm: _norm(w.word) }));
+
+    const recovered = [];
+    for (const entry of alignment) {
+      if (entry.type !== 'omission') continue;
+      const refNorm = _norm(entry.ref);
+      const matchIdx = dgPool.findIndex(dg => dg._norm === refNorm);
+      if (matchIdx === -1) continue;
+
+      const dgWord = dgPool.splice(matchIdx, 1)[0];
+
+      // Build recovered word with Deepgram timestamps
+      const recoveredWord = {
+        word: dgWord.word,
+        startTime: dgWord.startTime,
+        endTime: dgWord.endTime,
+        confidence: dgWord.confidence,
+        crossValidation: 'recovered',
+        _deepgramStartTime: dgWord.startTime,
+        _deepgramEndTime: dgWord.endTime,
+        _deepgramConfidence: dgWord.confidence,
+        _deepgramWord: dgWord.word,
+        _reverbStartTime: null,
+        _reverbEndTime: null,
+        _reverbConfidence: null,
+        _recovered: true,
+        isDisfluency: false,
+        disfluencyType: null
+      };
+
+      // Insert into transcriptWords at correct timestamp position
+      const dgStart = parseT(dgWord.startTime);
+      let insertIdx = transcriptWords.length;
+      for (let i = 0; i < transcriptWords.length; i++) {
+        if (parseT(transcriptWords[i].startTime) > dgStart) {
+          insertIdx = i;
+          break;
+        }
+      }
+      transcriptWords.splice(insertIdx, 0, recoveredWord);
+
+      // Heal alignment: omission → correct
+      entry.type = 'correct';
+      entry.hyp = dgWord.word;
+      entry._recovered = true;
+
+      // Add to sttLookup so tooltip works
+      const lookupKey = getCanonical(dgWord.word.toLowerCase().replace(/^[^\w'-]+|[^\w'-]+$/g, ''));
+      if (!sttLookup.has(lookupKey)) sttLookup.set(lookupKey, []);
+      sttLookup.get(lookupKey).push(recoveredWord);
+
+      recovered.push({
+        word: dgWord.word,
+        start: dgWord.startTime,
+        end: dgWord.endTime,
+        confidence: dgWord.confidence,
+        insertedAt: insertIdx
+      });
+    }
+
+    if (recovered.length > 0) {
+      addStage('omission_recovery', {
+        recoveredCount: recovered.length,
+        recovered,
+        remainingUnconsumed: dgPool.length
+      });
+      console.log(`[omission-recovery] Recovered ${recovered.length} omissions from unconsumed Deepgram words:`,
+        recovered.map(r => r.word));
     }
   }
 

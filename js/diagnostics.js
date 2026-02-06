@@ -81,13 +81,28 @@ export function detectOnsetDelays(transcriptWords, referenceText, alignment) {
       continue;
     }
 
-    const prevEnd = parseTime(transcriptWords[i - 1].endTime);
+    // Skip unconfirmed words — they have unreliable Reverb timestamps (100ms BPE)
+    // and shouldn't be used as gap boundaries or flagged as hesitations.
+    // Deepgram is the primary timekeeper; unconfirmed words lack Deepgram timestamps.
+    if (w.crossValidation === 'unconfirmed') {
+      continue;
+    }
+
+    // Find the effective previous word by skipping over unconfirmed words
+    // (their timestamps are unreliable for gap calculation)
+    let prevIdx = i - 1;
+    while (prevIdx >= 0 && transcriptWords[prevIdx].crossValidation === 'unconfirmed') {
+      prevIdx--;
+    }
+    if (prevIdx < 0) continue; // All preceding words were unconfirmed
+
+    const prevEnd = parseTime(transcriptWords[prevIdx].endTime);
     gap = start - prevEnd;
 
     // Determine threshold based on punctuation after previous word
     let threshold = 0.5; // 500ms default
     let punctuationType = null;
-    const prevRefIdx = hypToRef.get(i - 1);
+    const prevRefIdx = hypToRef.get(prevIdx);
     if (prevRefIdx !== undefined && punctMap.has(prevRefIdx)) {
       punctuationType = punctMap.get(prevRefIdx);
       if (punctuationType === 'period') {
@@ -122,8 +137,18 @@ export function detectLongPauses(transcriptWords) {
   const results = [];
 
   for (let i = 0; i < transcriptWords.length - 1; i++) {
+    // Skip unconfirmed words as gap start — unreliable Reverb timestamps
+    if (transcriptWords[i].crossValidation === 'unconfirmed') continue;
+
+    // Find next non-unconfirmed word for gap end
+    let nextIdx = i + 1;
+    while (nextIdx < transcriptWords.length && transcriptWords[nextIdx].crossValidation === 'unconfirmed') {
+      nextIdx++;
+    }
+    if (nextIdx >= transcriptWords.length) continue;
+
     const end = parseTime(transcriptWords[i].endTime);
-    const nextStart = parseTime(transcriptWords[i + 1].startTime);
+    const nextStart = parseTime(transcriptWords[nextIdx].startTime);
     const gap = nextStart - end;
 
     if (gap >= 3) {

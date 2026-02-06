@@ -235,7 +235,9 @@ export async function runKitchenSinkPipeline(blob, encoding, sampleRateHertz) {
   // Step 8: Apply cross-validation against Deepgram
   // Words in both sources are 'confirmed', Reverb-only are 'unconfirmed'
   const deepgramWords = deepgram?.words || null;
-  const validatedWords = crossValidateWithDeepgram(mergedWords, deepgramWords);
+  const xvalResult = crossValidateWithDeepgram(mergedWords, deepgramWords);
+  const validatedWords = xvalResult.words;
+  const unconsumedDeepgram = xvalResult.unconsumedDeepgram;
 
   console.log('[kitchen-sink] Pipeline complete:', {
     verbatimWords: reverb.verbatim.words.length,
@@ -246,6 +248,7 @@ export async function runKitchenSinkPipeline(blob, encoding, sampleRateHertz) {
 
   return {
     words: validatedWords,
+    unconsumedDeepgram: unconsumedDeepgram,
     source: 'kitchen_sink',
     reverb: reverb,
     deepgram: deepgram,

@@ -18,6 +18,7 @@
  */
 
 import { alignSequences } from './sequence-aligner.js';
+import { levenshteinRatio } from './nl-api.js';
 
 const BACKEND_BASE_URL = 'http://localhost:8765';
 
@@ -96,6 +97,12 @@ export function extractWordsFromDeepgram(deepgramResponse) {
   return deepgramResponse.words;
 }
 
+/** Normalize a word for comparison (lowercase, strip punctuation). */
+function _normalizeWord(word) {
+  if (!word) return '';
+  return word.toLowerCase().replace(/[^a-z'-]/g, '');
+}
+
 // NW scoring tuned for cross-validation: symmetric gaps, cheap mismatches
 // so the aligner pairs words positionally even when text differs
 const XVAL_OPTIONS = {
@@ -125,10 +132,13 @@ const XVAL_OPTIONS = {
 export function crossValidateWithDeepgram(reverbWords, deepgramWords) {
   // If Deepgram unavailable, mark all as unavailable (graceful degradation)
   if (!deepgramWords || deepgramWords.length === 0) {
-    return reverbWords.map(word => ({
-      ...word,
-      crossValidation: 'unavailable'
-    }));
+    return {
+      words: reverbWords.map(word => ({
+        ...word,
+        crossValidation: 'unavailable'
+      })),
+      unconsumedDeepgram: []
+    };
   }
 
   // Run NW sequence alignment: Reverb (A) vs Deepgram (B)
@@ -164,7 +174,22 @@ export function crossValidateWithDeepgram(reverbWords, deepgramWords) {
 
     // match or mismatch — Deepgram has a paired word
     const dgWord = entry.wordBData;
-    const status = entry.type === 'match' ? 'confirmed' : 'disagreed';
+    let status;
+    let fuzzyMatch = null;
+    if (entry.type === 'match') {
+      status = 'confirmed';
+    } else {
+      // Mismatch: check fuzzy similarity for spelling variants (e.g. "shelly" vs "shelley")
+      const normA = _normalizeWord(reverbWord.word);
+      const normB = _normalizeWord(dgWord.word);
+      const similarity = levenshteinRatio(normA, normB);
+      if (similarity >= 0.8) {
+        status = 'confirmed';
+        fuzzyMatch = { reverbWord: reverbWord.word, deepgramWord: dgWord.word, similarity: Math.round(similarity * 1000) / 1000 };
+      } else {
+        status = 'disagreed';
+      }
+    }
 
     // Collect timestamp comparison for diagnostic logging
     timestampComparison.push({
@@ -195,6 +220,7 @@ export function crossValidateWithDeepgram(reverbWords, deepgramWords) {
       confidence: dgWord.confidence,
       _reverbConfidence: reverbWord.confidence,
       _deepgramConfidence: dgWord.confidence,
+      ...(fuzzyMatch ? { _fuzzyMatch: fuzzyMatch } : {}),
       _deepgramWord: dgWord.word
     });
   }
@@ -226,7 +252,7 @@ export function crossValidateWithDeepgram(reverbWords, deepgramWords) {
     console.table(unconsumedDg.map(w => ({ word: w.word, start: w.startTime, end: w.endTime, conf: w.confidence })));
   }
 
-  return result;
+  return { words: result, unconsumedDeepgram: unconsumedDg };
 }
 
 /** Parse timestamp string "1.234s" to float seconds. */
