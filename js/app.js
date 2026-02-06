@@ -207,6 +207,40 @@ async function runAnalysis() {
       agreementRate: ensembleStats.agreementRate
     });
 
+    // Per-word timestamp comparison: all three sources
+    const _parseTs = t => parseFloat(String(t).replace('s', '')) || 0;
+    addStage('timestamp_sources', {
+      description: 'All timestamp sources per word (Deepgram=primary, Reverb v1.0=verbatim, Reverb v0.0=clean)',
+      words: mergedWords.map(w => {
+        const entry = { word: w.word, crossValidation: w.crossValidation };
+        // Primary (Deepgram for confirmed/disagreed, Reverb for unconfirmed)
+        entry.primary = { start: w.startTime, end: w.endTime };
+        // Deepgram
+        if (w._deepgramStartTime != null) {
+          const ds = _parseTs(w._deepgramStartTime);
+          const de = _parseTs(w._deepgramEndTime);
+          entry.deepgram = { start: w._deepgramStartTime, end: w._deepgramEndTime, durMs: Math.round((de - ds) * 1000) };
+        } else {
+          entry.deepgram = null;
+        }
+        // Reverb v=1.0 (verbatim)
+        if (w._reverbStartTime != null) {
+          const rs = _parseTs(w._reverbStartTime);
+          const re = _parseTs(w._reverbEndTime);
+          entry.reverbV1 = { start: w._reverbStartTime, end: w._reverbEndTime, durMs: Math.round((re - rs) * 1000) };
+        }
+        // Reverb v=0.0 (clean)
+        if (w._reverbCleanStartTime != null) {
+          const cs = _parseTs(w._reverbCleanStartTime);
+          const ce = _parseTs(w._reverbCleanEndTime);
+          entry.reverbV0 = { start: w._reverbCleanStartTime, end: w._reverbCleanEndTime, durMs: Math.round((ce - cs) * 1000) };
+        } else {
+          entry.reverbV0 = null;
+        }
+        return entry;
+      })
+    });
+
     // =========================================================================
     // LEGACY v1.1 PIPELINE — COMMENTED OUT (2026-02-05)
     // =========================================================================
@@ -582,6 +616,43 @@ async function runAnalysis() {
       parts: a.parts
     }))
   });
+
+  // Create synthetic sttLookup entries for compound words
+  // Compound merger creates items like { hyp: "everyone", parts: ["every", "one"] }
+  // but sttLookup only has entries for canonical("every") and canonical("one")="1".
+  // Without this fix, tooltip for compound words shows no STT metadata.
+  for (const item of alignment) {
+    if (item.compound && item.parts) {
+      const partWords = [];
+      for (const part of item.parts) {
+        const partKey = getCanonical(part.toLowerCase().replace(/^[^\w'-]+|[^\w'-]+$/g, ''));
+        const queue = sttLookup.get(partKey);
+        if (queue && queue.length > 0) {
+          partWords.push(queue.shift());
+        }
+      }
+      if (partWords.length > 0) {
+        const first = partWords[0];
+        const last = partWords[partWords.length - 1];
+        // Store under the raw hyp key (ui.js looks up by item.hyp, not canonical)
+        if (!sttLookup.has(item.hyp)) {
+          sttLookup.set(item.hyp, []);
+        }
+        sttLookup.get(item.hyp).push({
+          ...first,
+          word: item.hyp,
+          // Span from first part start to last part end (all timestamp sources)
+          endTime: last.endTime,
+          _deepgramEndTime: last._deepgramEndTime || last.endTime,
+          _reverbEndTime: last._reverbEndTime || last.endTime,
+          _reverbCleanEndTime: last._reverbCleanEndTime || null,
+          // Show what Deepgram heard (individual parts)
+          _deepgramWord: partWords.map(w => w._deepgramWord || w.word).join(' + '),
+          _compoundParts: partWords
+        });
+      }
+    }
+  }
 
   // Run diagnostics first so we can heal self-corrections
   const diagnostics = runDiagnostics(transcriptWords, alignment, referenceText);

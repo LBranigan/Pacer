@@ -235,11 +235,13 @@ async def ensemble(req: EnsembleRequest):
             # ~20-50% slower but more accurate transcription + real confidence
             verbatim_ctm = model.transcribe(temp_path, verbatimicity=1.0, format="ctm",
                                             mode="attention_rescoring")
+            print(f"[reverb] Raw CTM v=1.0 (verbatim):\n{verbatim_ctm}")
             verbatim_words = parse_ctm(verbatim_ctm)
 
             # Pass 2: Clean (v=0.0) - removes disfluencies
             clean_ctm = model.transcribe(temp_path, verbatimicity=0.0, format="ctm",
                                          mode="attention_rescoring")
+            print(f"[reverb] Raw CTM v=0.0 (clean):\n{clean_ctm}")
             clean_words = parse_ctm(clean_ctm)
 
             # Clear GPU memory after processing

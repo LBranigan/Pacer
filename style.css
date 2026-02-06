@@ -361,6 +361,12 @@ body.dev-mode .dev-mode-toggle {
   color: #c62828;
 }
 
+.conf-disagreed {
+  background: #fff9c4;
+  color: #f57f17;
+  border: 1px dashed #fbc02d;
+}
+
 .conf-ghost {
   background: #e0e0e0;
   color: #757575;

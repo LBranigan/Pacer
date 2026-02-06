@@ -156,6 +156,23 @@ function buildEnhancedTooltip(item, sttWord) {
     const durationMs = Math.round((end - start) * 1000);
     lines.push(`Time: ${start.toFixed(2)}s - ${end.toFixed(2)}s (${durationMs}ms)`);
 
+    // All three timestamp sources for clinical comparison
+    const dgStart = sttWord._deepgramStartTime != null ? parseSttTime(sttWord._deepgramStartTime) : null;
+    const dgEnd = sttWord._deepgramEndTime != null ? parseSttTime(sttWord._deepgramEndTime) : null;
+    const rvStart = sttWord._reverbStartTime != null ? parseSttTime(sttWord._reverbStartTime) : null;
+    const rvEnd = sttWord._reverbEndTime != null ? parseSttTime(sttWord._reverbEndTime) : null;
+    const rcStart = sttWord._reverbCleanStartTime != null ? parseSttTime(sttWord._reverbCleanStartTime) : null;
+    const rcEnd = sttWord._reverbCleanEndTime != null ? parseSttTime(sttWord._reverbCleanEndTime) : null;
+
+    const fmtTs = (s, e) => {
+      if (s == null || e == null) return 'N/A';
+      const dur = Math.round((e - s) * 1000);
+      return `${s.toFixed(2)}s-${e.toFixed(2)}s (${dur}ms)`;
+    };
+    lines.push(`  Deepgram:    ${fmtTs(dgStart, dgEnd)}`);
+    lines.push(`  Reverb v1.0: ${fmtTs(rvStart, rvEnd)}`);
+    lines.push(`  Reverb v0.0: ${fmtTs(rcStart, rcEnd)}`);
+
     // What each model heard (word text, not confidence %)
     const reverbWord = sttWord._alignment?.verbatim || sttWord.word;
     const deepgramWord = sttWord._deepgramWord;
@@ -714,12 +731,16 @@ export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, di
     for (const w of transcriptWords) {
       const span = document.createElement('span');
 
-      // Determine confidence class from real confidence scores
-      // Primary confidence = Deepgram (confirmed words) or Reverb (unconfirmed)
+      // Determine confidence class
+      // Priority: disagreed overrides confidence score (models heard different words)
+      // Otherwise: confidence score thresholds apply
       let confClass = 'conf-low';
       const conf = w.confidence;
 
-      if (conf != null && conf >= 0.93) {
+      if (w.crossValidation === 'disagreed') {
+        // Models disagree — flag regardless of confidence score
+        confClass = 'conf-disagreed';
+      } else if (conf != null && conf >= 0.93) {
         confClass = 'conf-high';
       } else if (conf != null && conf >= 0.70) {
         confClass = 'conf-medium';
@@ -735,7 +756,9 @@ export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, di
       const end = parseSttTime(w.endTime);
       const xval = w.crossValidation || 'N/A';
       const dgWord = w._deepgramWord ? `Deepgram heard: "${w._deepgramWord}"` : '';
-      span.title = `${w.word}\n${dgWord}\nCross-validation: ${xval}\n${start.toFixed(2)}s – ${end.toFixed(2)}s`;
+      const rvWord = w._alignment?.verbatim ? `Reverb heard: "${w._alignment.verbatim}"` : '';
+      const confPct = conf != null ? `Confidence: ${Math.round(conf * 100)}%` : '';
+      span.title = [w.word, dgWord, rvWord, `Cross-validation: ${xval}`, confPct, `${start.toFixed(2)}s – ${end.toFixed(2)}s`].filter(Boolean).join('\n');
 
       confWordsDiv.appendChild(span);
       confWordsDiv.appendChild(document.createTextNode(' '));

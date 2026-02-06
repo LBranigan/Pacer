@@ -249,7 +249,7 @@ details > summary::-webkit-details-marker { display: none; }
 <!-- ============================================================ -->
 <h1>ORF Pipeline Architecture</h1>
 <div class="header-meta">
-  v 2026-02-05 &nbsp;|&nbsp; Kitchen Sink Ensemble (Reverb + Deepgram)
+  v 2026-02-06 &nbsp;|&nbsp; Kitchen Sink Ensemble (Reverb + Deepgram)
 </div>
 
 <nav class="toc">
@@ -281,13 +281,15 @@ details > summary::-webkit-details-marker { display: none; }
   <div class="flow-arrow"></div>
   <div class="flow-box accent">Kitchen Sink Pipeline<br><small>Reverb + Deepgram in parallel</small></div>
   <div class="flow-arrow"></div>
-  <div class="flow-box">Word Alignment<br><small>alignment.js &mdash; diff-match-patch vs reference</small></div>
+  <div class="flow-box">Word Alignment<br><small>alignment.js &mdash; diff-match-patch + compound merging + word equivalences</small></div>
   <div class="flow-arrow"></div>
-  <div class="flow-box">Diagnostics (6 detectors)<br><small>diagnostics.js &mdash; hesitations, pauses, self-corrections, etc.</small></div>
+  <div class="flow-box">Diagnostics (6 detectors)<br><small>diagnostics.js &mdash; hesitations, pauses, self-corrections, morphological, prosody, struggle</small></div>
   <div class="flow-arrow"></div>
   <div class="flow-box">Post-Alignment Processing<br><small>Proper noun forgiveness, terminal leniency, self-correction healing</small></div>
   <div class="flow-arrow"></div>
   <div class="flow-box">VAD Gap Analysis<br><small>vad-gap-analyzer.js &mdash; acoustic labels for pauses</small></div>
+  <div class="flow-arrow"></div>
+  <div class="flow-box accent">VAD Overhang Adjustment<br><small>vad-gap-analyzer.js &mdash; correct STT under-timed gaps</small></div>
   <div class="flow-arrow"></div>
   <div class="flow-box">Metrics (WCPM + Accuracy)<br><small>metrics.js</small></div>
   <div class="flow-arrow"></div>
@@ -395,16 +397,24 @@ details > summary::-webkit-details-marker { display: none; }
   </ul>
   <p style="font-size:0.85rem; color:#666; margin-top:0.5rem;">Both original values are always preserved as <code>_reverbConfidence</code> and <code>_deepgramConfidence</code> for debugging.</p>
   <p style="font-size:0.85rem; color:#666;"><strong>UI note:</strong> Confidence percentages are <em>not</em> shown to users (both models have calibration issues &mdash; Deepgram clusters near 100%, Reverb drifts to 0%). Instead, tooltips show which word each model detected and the cross-validation status.</p>
+  <p style="font-size:0.85rem; color:#666;"><strong>Confidence View coloring:</strong> High (&ge;93%, green), Medium (&ge;70%, amber), Low (&lt;70%, red), <strong>Disagreed</strong> (yellow dashed border &mdash; models heard different words, shown regardless of confidence score).</p>
 </div>
 
 <div class="card">
   <div class="card-label">Timestamp Resolution</div>
-  <p style="font-size:0.9rem;">Deepgram Nova-3 timestamps are the <strong>primary timekeeper</strong> for all confirmed words. Reverb CTM timestamps use a hardcoded 100ms duration (<code>g_time_stamp_gap_ms = 100</code> in ctc_align.py), making all words appear as exactly 100ms regardless of actual acoustic length.</p>
+  <p style="font-size:0.9rem;">Deepgram Nova-3 timestamps are the <strong>primary timekeeper</strong> for all confirmed/disagreed words. Reverb CTM timestamps have ~40ms CTC frame resolution (<code>g_time_stamp_gap_ms = 100</code> in ctc_align.py is a boundary-placement heuristic, not a fixed duration).</p>
   <ul style="font-size:0.9rem; padding-left:1.5rem;">
-    <li><strong>Confirmed words:</strong> <code>startTime</code> / <code>endTime</code> = Deepgram values; originals preserved as <code>_reverbStartTime</code> / <code>_reverbEndTime</code></li>
+    <li><strong>Confirmed words:</strong> <code>startTime</code> / <code>endTime</code> = Deepgram values</li>
+    <li><strong>Disagreed words:</strong> <code>startTime</code> / <code>endTime</code> = Deepgram values (different word, same position)</li>
     <li><strong>Unconfirmed words:</strong> <code>startTime</code> / <code>endTime</code> = Reverb values (no Deepgram alternative)</li>
   </ul>
-  <p style="font-size:0.85rem; color:#666; margin-top:0.5rem;">This directly affects hesitation and pause detection in <code>diagnostics.js</code>, which measures inter-word gaps from <code>endTime</code> to <code>startTime</code>.</p>
+  <p style="font-size:0.9rem; margin-top:0.5rem;"><strong>All three timestamp sources are preserved on every word:</strong></p>
+  <ul style="font-size:0.9rem; padding-left:1.5rem;">
+    <li><code>_deepgramStartTime</code> / <code>_deepgramEndTime</code> &mdash; Deepgram Nova-3 (null for unconfirmed words)</li>
+    <li><code>_reverbStartTime</code> / <code>_reverbEndTime</code> &mdash; Reverb v=1.0 (verbatim pass)</li>
+    <li><code>_reverbCleanStartTime</code> / <code>_reverbCleanEndTime</code> &mdash; Reverb v=0.0 (clean pass, null for disfluencies)</li>
+  </ul>
+  <p style="font-size:0.85rem; color:#666; margin-top:0.5rem;">All three sources are visible in word tooltips and the <code>timestamp_sources</code> debug stage. This directly affects hesitation and pause detection in <code>diagnostics.js</code>, which measures inter-word gaps from <code>endTime</code> to <code>startTime</code>.</p>
 </div>
 
 
@@ -417,13 +427,19 @@ details > summary::-webkit-details-marker { display: none; }
 <div class="card">
   <div class="card-label">Pipeline</div>
   <div class="flowchart" style="margin:0.5rem 0;">
-    <div class="flow-box" style="font-size:0.85rem; min-width:auto; padding:0.4rem 1rem;">Normalize words (lowercase, strip punctuation, apply equivalences)</div>
+    <div class="flow-box" style="font-size:0.85rem; min-width:auto; padding:0.4rem 1rem;">Normalize words (lowercase, strip punctuation)</div>
     <div class="flow-arrow" style="height:16px;"></div>
     <div class="flow-box" style="font-size:0.85rem; min-width:auto; padding:0.4rem 1rem;">Filter disfluencies (<code>isDisfluency === true</code> &rarr; excluded from alignment)</div>
     <div class="flow-arrow" style="height:16px;"></div>
-    <div class="flow-box" style="font-size:0.85rem; min-width:auto; padding:0.4rem 1rem;">diff-match-patch (Levenshtein-based diff)</div>
+    <div class="flow-box" style="font-size:0.85rem; min-width:auto; padding:0.4rem 1rem;">Canonicalize via <code>word-equivalences.js</code> (e.g. "one"&harr;"1", contractions)</div>
+    <div class="flow-arrow" style="height:16px;"></div>
+    <div class="flow-box" style="font-size:0.85rem; min-width:auto; padding:0.4rem 1rem;">diff-match-patch (Levenshtein-based diff on canonical forms)</div>
+    <div class="flow-arrow" style="height:16px;"></div>
+    <div class="flow-box" style="font-size:0.85rem; min-width:auto; padding:0.4rem 1rem;">Decode diffs using original word forms (not canonical)</div>
     <div class="flow-arrow" style="height:16px;"></div>
     <div class="flow-box" style="font-size:0.85rem; min-width:auto; padding:0.4rem 1rem;">Classify each operation: correct / substitution / omission / insertion</div>
+    <div class="flow-arrow" style="height:16px;"></div>
+    <div class="flow-box accent" style="font-size:0.85rem; min-width:auto; padding:0.4rem 1rem;">Compound word merging (<code>mergeCompoundWords</code>)<br><small>e.g. ref "everyone" + STT "every"+"one" &rarr; correct (compound: true)</small></div>
   </div>
 </div>
 
@@ -517,10 +533,10 @@ details > summary::-webkit-details-marker { display: none; }
     <tr>
       <td><strong>morphological</strong></td>
       <td><span class="swatch swatch-morphological"></span></td>
-      <td>Wrong word ending &mdash; same root, wrong suffix</td>
-      <td>3+ char shared prefix + crossValidation &ne; confirmed</td>
+      <td>Wrong ending or beginning &mdash; same root, wrong affix</td>
+      <td>Substitution + 3+ char shared prefix OR suffix (no cross-validation gate)</td>
       <td>Yes</td>
-      <td>ref "running" &rarr; said "runned"</td>
+      <td>ref "running" &rarr; said "runned" (prefix "run"); ref "unhappy" &rarr; said "happy" (suffix "happy")</td>
     </tr>
     <tr>
       <td><strong>struggle</strong></td>
@@ -582,7 +598,7 @@ details > summary::-webkit-details-marker { display: none; }
 <!-- 7. DIAGNOSTICS DETAIL                                          -->
 <!-- ============================================================ -->
 <h2 id="diagnostics">6. Diagnostics Detail</h2>
-<p>Seven detectors run after alignment (<code>diagnostics.js</code>). All are orchestrated by <code>runDiagnostics()</code>.</p>
+<p>Six detectors run after alignment (<code>diagnostics.js</code>), orchestrated by <code>runDiagnostics()</code>. A seventh (Tier Breakdown) is defined but not called by the orchestrator.</p>
 
 <!-- DIAG-01 -->
 <details>
@@ -633,12 +649,13 @@ details > summary::-webkit-details-marker { display: none; }
   <summary>DIAG-04: Morphological Errors</summary>
   <div class="card">
     <p><strong>Detector:</strong> <code>detectMorphologicalErrors()</code></p>
-    <p><strong>Logic:</strong> For substitutions, check if ref and hyp share a 3+ character prefix and cross-validation shows uncertainty.</p>
+    <p><strong>Logic:</strong> For substitutions, check if ref and hyp share a 3+ character prefix <strong>or</strong> suffix. No cross-validation gate &mdash; morphological classification is about the pattern of the substitution, not ASR reliability.</p>
     <ul class="threshold-list">
       <li><span class="label">Min shared prefix</span> <span class="value">3 characters</span></li>
-      <li><span class="label">Cross-validation gate</span> <span class="value">crossValidation &ne; 'confirmed' (if both engines agree, it's a reliable substitution)</span></li>
+      <li><span class="label">Min shared suffix</span> <span class="value">3 characters</span></li>
+      <li><span class="label">Match type</span> <span class="value">Whichever is longer (prefix or suffix) wins</span></li>
     </ul>
-    <p style="font-size:0.85rem; color:#666; margin-top:0.5rem;">Morphological errors still count as substitutions but are tagged for teacher visibility.</p>
+    <p style="font-size:0.85rem; color:#666; margin-top:0.5rem;">Morphological errors still count as substitutions but are tagged for teacher visibility. Examples: suffix error "running"&rarr;"runned" (prefix "run"), prefix error "unhappy"&rarr;"happy" (suffix "happy"), tense error "jumped"&rarr;"jumping" (prefix "jump").</p>
   </div>
 </details>
 
@@ -658,11 +675,11 @@ details > summary::-webkit-details-marker { display: none; }
 
 <!-- DIAG-06 -->
 <details>
-  <summary>DIAG-06: Tier Breakdown</summary>
+  <summary>DIAG-06: Tier Breakdown (defined, not called by orchestrator)</summary>
   <div class="card">
     <p><strong>Detector:</strong> <code>computeTierBreakdown()</code></p>
     <p><strong>Logic:</strong> Categorize errors by word tier (sight / academic / proper / function) using NL API annotations.</p>
-    <p style="font-size:0.85rem; color:#666; margin-top:0.5rem;">Requires NL API annotations. Helps teachers identify which word categories the student struggles with.</p>
+    <p style="font-size:0.85rem; color:#666; margin-top:0.5rem;">Requires NL API annotations. Defined in <code>diagnostics.js</code> but <strong>not called</strong> by <code>runDiagnostics()</code>. Available for future use when NL API integration is enabled.</p>
   </div>
 </details>
 
@@ -701,6 +718,21 @@ details > summary::-webkit-details-marker { display: none; }
 </div>
 
 <p style="font-size:0.85rem; color:#666;">VAD analysis is added as <code>_vadAnalysis</code> on each long pause and hesitation entry in diagnostics. Teachers see the acoustic label in the pause/hesitation tooltip.</p>
+
+<h3>VAD Overhang Adjustment</h3>
+<p><code>adjustGapsWithVADOverhang()</code> corrects STT under-timed word endpoints using VAD speech segments.</p>
+
+<div class="card">
+  <div class="card-label">Problem &amp; Solution</div>
+  <p style="font-size:0.9rem;"><strong>Problem:</strong> STT sometimes under-reports word end timestamps (e.g. student says "soak-ed" but STT ends the word ~500ms early). This inflates the apparent gap before the next word, creating false or exaggerated hesitations.</p>
+  <p style="font-size:0.9rem; margin-top:0.5rem;"><strong>Solution:</strong> If a VAD speech segment overlaps with the previous word AND extends past its STT endpoint, use the VAD segment end as the "real" word end.</p>
+  <ul class="threshold-list" style="margin-top:0.5rem;">
+    <li><span class="label">Safety criterion</span> <span class="value">VAD segment must overlap with previous word (seg.start &lt; wordEnd)</span></li>
+    <li><span class="label">Overhang cap</span> <span class="value">min(seg.end, nextWordStart) &mdash; can't extend past next word</span></li>
+    <li><span class="label">After adjustment</span> <span class="value">Hesitations whose corrected gap falls below threshold are removed</span></li>
+  </ul>
+  <p style="font-size:0.85rem; color:#666; margin-top:0.5rem;">Adjusted hesitations get a <code>_vadOverhang</code> property with <code>overhangMs</code>, <code>originalGapMs</code>, and <code>adjustedGapMs</code>. Visible in tooltips and debug output.</p>
+</div>
 
 
 <!-- ============================================================ -->

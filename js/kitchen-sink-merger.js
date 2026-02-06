@@ -70,8 +70,17 @@ function buildMergedWordsFromAlignment(verbatimWords, taggedAlignment) {
     // Get the corresponding verbatim word
     const verbatimWord = verbatimWords[vIdx++];
 
+    // Preserve Reverb v=0.0 (clean) timestamps when available
+    // cleanData exists on match/mismatch entries from alignTranscripts()
+    const cleanTimestamps = {};
+    if (entry.cleanData) {
+      cleanTimestamps._reverbCleanStartTime = entry.cleanData.startTime;
+      cleanTimestamps._reverbCleanEndTime = entry.cleanData.endTime;
+    }
+
     merged.push({
       ...verbatimWord,
+      ...cleanTimestamps,
       // Mark as disfluency if this is an insertion (verbatim-only)
       isDisfluency: entry.type === 'insertion',
       // Classification from disfluency-tagger.js (filler, repetition, false_start, unknown)

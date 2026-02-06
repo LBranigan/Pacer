@@ -155,6 +155,8 @@ export function crossValidateWithDeepgram(reverbWords, deepgramWords) {
         _reverbConfidence: reverbWord.confidence,
         _reverbStartTime: reverbWord.startTime,
         _reverbEndTime: reverbWord.endTime,
+        _deepgramStartTime: null,
+        _deepgramEndTime: null,
         _deepgramWord: null
       });
       continue;
@@ -180,11 +182,15 @@ export function crossValidateWithDeepgram(reverbWords, deepgramWords) {
     result.push({
       ...reverbWord,
       crossValidation: status,
-      // Deepgram timestamps as primary (Reverb CTM uses hardcoded 100ms durations)
+      // Deepgram timestamps as primary timekeeper
       startTime: dgWord.startTime,
       endTime: dgWord.endTime,
+      // All three timestamp sources preserved for display
       _reverbStartTime: reverbWord.startTime,
       _reverbEndTime: reverbWord.endTime,
+      _deepgramStartTime: dgWord.startTime,
+      _deepgramEndTime: dgWord.endTime,
+      // _reverbCleanStartTime/_reverbCleanEndTime carried through via ...reverbWord
       // Deepgram confidence as primary
       confidence: dgWord.confidence,
       _reverbConfidence: reverbWord.confidence,
