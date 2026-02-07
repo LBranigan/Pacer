@@ -1236,9 +1236,9 @@ async function runAnalysis() {
   const paceConsistency = phrasing.insufficient
     ? { insufficient: true, reason: 'Phrasing insufficient' }
     : computePaceConsistency(phrasing.overallPhrasing, transcriptWords);
+  const wordOutliers = computeWordDurationOutliers(transcriptWords, alignment);
   const xvalRawWords = kitchenSinkResult.xvalRaw?.words || [];
-  const wordOutliers = computeWordDurationOutliers(transcriptWords, alignment, xvalRawWords);
-  const wordSpeedTiers = computeWordSpeedTiers(wordOutliers, alignment);
+  const wordSpeedTiers = computeWordSpeedTiers(wordOutliers, alignment, xvalRawWords, transcriptWords);
 
   diagnostics.prosody = { phrasing, pauseAtPunctuation, paceConsistency, wordOutliers };
   diagnostics.wordSpeed = wordSpeedTiers;

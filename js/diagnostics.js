@@ -956,57 +956,16 @@ export function computePaceConsistency(overallPhrasing, transcriptWords) {
 
 /**
  * Metric 4: Word Duration Outliers (Self-Normed)
- * Uses cross-validator timestamps as primary source (Deepgram or Parakeet).
- * For unconfirmed words, does temporal lookup against raw xval words to
- * recover cross-validator timing even when NW alignment couldn't match.
- * Falls back to Reverb timestamps only as last resort.
+ * Uses cross-validator timestamps exclusively (_xvalStartTime/_xvalEndTime)
+ * from either Deepgram or Parakeet (set by cross-validator NW alignment).
+ * Words without NW-matched timestamps are skipped.
  * Normalizes by syllable count. IQR-based outlier detection.
  * Only flags multisyllabic (>= 2 syl) words as outliers.
- *
- * @param {Array} transcriptWords - Merged STT words with timestamps
- * @param {Array} alignment - Alignment entries from alignWords()
- * @param {Array} [xvalRawWords] - Raw cross-validator words (pre-NW-alignment)
- *   for temporal fallback matching. Each entry: { word, startTime, endTime }
  */
-export function computeWordDurationOutliers(transcriptWords, alignment, xvalRawWords) {
+export function computeWordDurationOutliers(transcriptWords, alignment) {
   const allWords = [];
   let wordsSkippedNoTimestamps = 0;
   let hypIndex = 0;
-
-  // Build temporal index from raw xval words for fallback matching.
-  // Sorted by start time for efficient lookup.
-  const xvalIntervals = (xvalRawWords || []).map(w => ({
-    word: w.word,
-    startS: parseTime(w.startTime),
-    endS: parseTime(w.endTime)
-  })).filter(w => w.startS < w.endS).sort((a, b) => a.startS - b.startS);
-
-  /**
-   * Find the raw xval word that best covers a given time position.
-   * Returns { startS, endS, word } or null.
-   */
-  function findXvalByTime(timeSec) {
-    if (xvalIntervals.length === 0) return null;
-    // Linear scan (typically < 50 xval words, binary search not needed)
-    let best = null;
-    let bestOverlap = 0;
-    for (const iv of xvalIntervals) {
-      if (iv.endS <= timeSec - 0.5) continue;   // too early
-      if (iv.startS > timeSec + 0.5) break;     // past window
-      // Score: how close is this interval to the target time?
-      if (timeSec >= iv.startS && timeSec <= iv.endS) {
-        // Target is inside this interval — best possible match
-        return iv;
-      }
-      // Within 500ms tolerance
-      const dist = Math.min(Math.abs(iv.startS - timeSec), Math.abs(iv.endS - timeSec));
-      if (dist < 0.5 && (!best || dist < bestOverlap)) {
-        best = iv;
-        bestOverlap = dist;
-      }
-    }
-    return best;
-  }
 
   for (const entry of alignment) {
     if (entry.type === 'omission' || entry.type === 'deletion') continue;
@@ -1023,58 +982,24 @@ export function computeWordDurationOutliers(transcriptWords, alignment, xvalRawW
     const word = transcriptWords[hypIndex];
     if (!word) { hypIndex += partsCount; continue; }
 
-    // Timestamp resolution: cross-validator > xval temporal match > Reverb
-    let wordStart = word._xvalStartTime;
-    let wordEnd = word._xvalEndTime;
-    let tsSource = 'cross-validator';
-
-    // If no cross-validator timestamps (unconfirmed word), try temporal lookup
-    if (wordStart == null || wordEnd == null) {
-      const reverbStart = parseTime(word.startTime);
-      if (reverbStart > 0) {
-        const xvalMatch = findXvalByTime(reverbStart);
-        if (xvalMatch) {
-          wordStart = xvalMatch.startS + 's';
-          wordEnd = xvalMatch.endS + 's';
-          tsSource = 'xval-temporal';
-        }
-      }
-    }
-
-    // Last resort: Reverb timestamps
-    if (wordStart == null || wordEnd == null) {
-      wordStart = word.startTime;
-      wordEnd = word.endTime;
-      tsSource = 'reverb';
-    }
-
-    if (wordStart == null || wordEnd == null) {
+    // Must have cross-validator timestamps (NW-aligned)
+    if (word._xvalStartTime == null || word._xvalEndTime == null) {
       wordsSkippedNoTimestamps++;
       hypIndex += partsCount;
       continue;
     }
 
-    const startMs = parseTime(wordStart) * 1000;
+    const startMs = parseTime(word._xvalStartTime) * 1000;
     let endMs;
     // For compound words, use end time of last part
     if (entry.compound && entry.parts && entry.parts.length > 1) {
       const lastPartIdx = hypIndex + entry.parts.length - 1;
       const lastPart = transcriptWords[lastPartIdx];
-      // Same resolution cascade for last part
-      let lastEnd = lastPart?._xvalEndTime;
-      if (lastEnd == null && lastPart) {
-        const lpStart = parseTime(lastPart.startTime);
-        if (lpStart > 0) {
-          const lpMatch = findXvalByTime(lpStart);
-          if (lpMatch) lastEnd = lpMatch.endS + 's';
-        }
-      }
-      if (lastEnd == null && lastPart) lastEnd = lastPart.endTime;
-      endMs = lastEnd != null
-        ? parseTime(lastEnd) * 1000
-        : parseTime(wordEnd) * 1000;
+      endMs = lastPart && lastPart._xvalEndTime != null
+        ? parseTime(lastPart._xvalEndTime) * 1000
+        : parseTime(word._xvalEndTime) * 1000;
     } else {
-      endMs = parseTime(wordEnd) * 1000;
+      endMs = parseTime(word._xvalEndTime) * 1000;
     }
 
     const durationMs = endMs - startMs;
@@ -1094,7 +1019,7 @@ export function computeWordDurationOutliers(transcriptWords, alignment, xvalRawW
       normalizedDurationMs: Math.round(normalizedDurationMs),
       alignmentType: entry.type,
       isOutlier: false,
-      timestampSource: tsSource
+      timestampSource: 'cross-validator'
     });
 
     hypIndex += partsCount;
@@ -1168,48 +1093,104 @@ export function computeWordDurationOutliers(transcriptWords, alignment, xvalRawW
   };
 }
 
-// ── Word Speed Tiers (consumes Metric 4 output) ─────────────────────
+// ── Word Speed Tiers (xval-first timestamps for Word Speed Map) ─────
 
 /**
  * Classify every reference word into a speed tier based on duration relative
- * to the student's own median ms/syllable (from computeWordDurationOutliers).
+ * to the student's own median ms/syllable.
  *
- * Walks alignment[] to include omissions and track refIndex correctly.
+ * Timestamp source: raw cross-validator words (Parakeet/Deepgram) matched to
+ * alignment entries by ordered consumption. The xval engine produces better
+ * word-level durations than Reverb (no BPE fragmentation artifacts).
+ *
+ * Matching algorithm: both Reverb words and xval words are temporal sequences
+ * of the same audio. We walk alignment (which tracks Reverb hypIndex) and
+ * advance an xval pointer in parallel. For each spoken word, we find the xval
+ * word whose time interval contains the Reverb word's start time. Each xval
+ * word is consumed at most once, preventing many-to-one assignment.
+ *
+ * Falls back to Metric 4 data (from computeWordDurationOutliers) when raw
+ * xval words are unavailable.
+ *
  * Monosyllabic words get a distinct 'short-word' tier (timing unreliable per-syllable).
  *
  * @param {object} wordOutliers - Output from computeWordDurationOutliers()
  * @param {Array} alignment - Alignment entries from alignWords()
+ * @param {Array} [xvalRawWords] - Raw cross-validator words (pre-NW-alignment).
+ *   Each entry: { word, startTime, endTime }. When provided, used as primary
+ *   timestamp source for all words.
+ * @param {Array} [transcriptWords] - Merged STT words (for Reverb time positions)
  * @returns {object} { words[], baseline, distribution, atPacePercent } or { insufficient: true }
  */
-export function computeWordSpeedTiers(wordOutliers, alignment) {
+export function computeWordSpeedTiers(wordOutliers, alignment, xvalRawWords, transcriptWords) {
   if (!wordOutliers || wordOutliers.insufficient) {
     return { insufficient: true, reason: wordOutliers?.reason || 'Word duration data insufficient' };
   }
 
-  const medianMs = wordOutliers.baseline.medianDurationPerSyllable;
-  if (!medianMs || medianMs <= 0) {
-    return { insufficient: true, reason: 'Zero or missing median' };
-  }
-
-  // Build hypIndex → allWords lookup for O(1) matching
+  // Build hypIndex → Metric 4 allWords lookup (fallback when no xval match)
   const allWordsMap = new Map();
   for (const w of wordOutliers.allWords) {
     allWordsMap.set(w.hypIndex, w);
   }
 
+  // Build sorted xval timeline for ordered consumption
+  const xvalTimeline = (xvalRawWords || []).map(w => ({
+    word: (w.word || '').toLowerCase(),
+    startS: parseTime(w.startTime),
+    endS: parseTime(w.endTime)
+  })).filter(w => w.startS < w.endS).sort((a, b) => a.startS - b.startS);
+
+  const hasXval = xvalTimeline.length > 0 && transcriptWords;
+
+  // Pointer into xval timeline — advances forward only (ordered consumption)
+  let xvalPtr = 0;
+
+  /**
+   * Find the next xval word that covers a given Reverb time position.
+   * Advances xvalPtr past consumed/earlier words. Each xval word consumed once.
+   * @param {number} reverbStartS - Reverb word's start time in seconds
+   * @returns {{ startS, endS, word }|null}
+   */
+  function consumeXvalAt(reverbStartS) {
+    if (!hasXval || reverbStartS <= 0) return null;
+
+    // Advance past xval words that end before our target (with tolerance)
+    while (xvalPtr < xvalTimeline.length && xvalTimeline[xvalPtr].endS < reverbStartS - 0.5) {
+      xvalPtr++;
+    }
+
+    if (xvalPtr >= xvalTimeline.length) return null;
+
+    const candidate = xvalTimeline[xvalPtr];
+
+    // Check if Reverb start falls within xval interval (with 500ms tolerance)
+    if (reverbStartS >= candidate.startS - 0.5 && reverbStartS <= candidate.endS + 0.5) {
+      xvalPtr++; // consume
+      return candidate;
+    }
+
+    return null;
+  }
+
   const words = [];
+  const xvalDurations = []; // for computing own baseline from xval timestamps
   let hypIndex = 0;
   let refIndex = 0;
 
   for (const entry of alignment) {
-    // Insertions: not in reference passage — advance hypIndex only
+    // Insertions: not in reference passage — advance hypIndex and xval pointer
     if (entry.type === 'insertion') {
       const partsCount = entry.compound && entry.parts ? entry.parts.length : 1;
+      // Advance xval pointer past this insertion so it doesn't misalign
+      if (hasXval && transcriptWords[hypIndex]) {
+        const reverbS = parseTime(transcriptWords[hypIndex].startTime);
+        consumeXvalAt(reverbS);
+      }
       hypIndex += partsCount;
       continue;
     }
 
-    // Omissions: in reference but not spoken — no hypIndex advance
+    // Omissions: in reference but not spoken — no hypIndex advance, no xval consumption
     if (entry.type === 'omission' || entry.type === 'deletion') {
       words.push({
         refIndex, refWord: entry.ref,
@@ -1225,40 +1206,46 @@ export function computeWordSpeedTiers(wordOutliers, alignment) {
 
     // Correct, substitution, struggle — has a spoken word
     const partsCount = entry.compound && entry.parts ? entry.parts.length : 1;
-    const autoWord = allWordsMap.get(hypIndex);
 
-    if (autoWord && autoWord.normalizedDurationMs != null) {
-      const ratio = autoWord.normalizedDurationMs / medianMs;
-      let tier;
-
-      if (autoWord.syllables < 2) {
-        tier = 'short-word';
-      } else if (ratio < 0.75) {
-        tier = 'quick';
-      } else if (ratio < 1.25) {
-        tier = 'steady';
-      } else if (ratio < 1.75) {
-        tier = 'slow';
-      } else if (ratio < 2.50) {
-        tier = 'struggling';
-      } else {
-        tier = 'stalled';
+    // Try xval timestamp first
+    let durationMs = null;
+    let tsSource = null;
+    if (hasXval && transcriptWords[hypIndex]) {
+      const reverbS = parseTime(transcriptWords[hypIndex].startTime);
+      const xvalMatch = consumeXvalAt(reverbS);
+      if (xvalMatch) {
+        durationMs = Math.round((xvalMatch.endS - xvalMatch.startS) * 1000);
+        tsSource = 'cross-validator';
       }
+    }
 
+    // Fallback to Metric 4 data (NW-matched cross-validator timestamps)
+    const m4Word = allWordsMap.get(hypIndex);
+    if (durationMs == null && m4Word && m4Word.durationMs != null) {
+      durationMs = m4Word.durationMs;
+      tsSource = 'metric4';
+    }
+
+    if (durationMs != null && durationMs > 0) {
+      // Use ref word for syllable count (what the student was trying to read)
+      const refText = entry.ref || entry.hyp || '';
+      const syllables = countSyllables(refText);
+      const normalizedMs = Math.round(durationMs / Math.max(syllables, 1));
+
+      xvalDurations.push({ syllables, normalizedMs, durationMs });
+
+      // Tier classification deferred — need baseline first
       words.push({
         refIndex, refWord: entry.ref,
-        hypIndex, word: autoWord.word,
-        durationMs: autoWord.durationMs,
-        syllables: autoWord.syllables,
-        normalizedMs: autoWord.normalizedDurationMs,
-        ratio: Math.round(ratio * 100) / 100,
-        tier, alignmentType: entry.type,
-        isOutlier: autoWord.isOutlier || false,
-        _upperFence: wordOutliers.baseline.upperFence,
-        _medianMs: medianMs
+        hypIndex, word: entry.hyp || m4Word?.word || '',
+        durationMs, syllables, normalizedMs,
+        ratio: null, // filled after baseline computation
+        tier: null,  // filled after baseline computation
+        alignmentType: entry.type,
+        isOutlier: m4Word?.isOutlier || false,
+        _tsSource: tsSource
       });
     } else {
-      // No Deepgram timestamps for this word
       words.push({
         refIndex, refWord: entry.ref,
         hypIndex, word: entry.hyp,
@@ -1271,6 +1258,47 @@ export function computeWordSpeedTiers(wordOutliers, alignment) {
 
     hypIndex += partsCount;
     refIndex++;
+  }
+
+  // Compute baseline from xval-derived durations (or fall back to Metric 4 baseline)
+  let medianMs;
+  if (xvalDurations.length >= 4) {
+    const normed = xvalDurations.map(d => d.normalizedMs).sort((a, b) => a - b);
+    medianMs = normed.length % 2 === 0
+      ? (normed[normed.length / 2 - 1] + normed[normed.length / 2]) / 2
+      : normed[Math.floor(normed.length / 2)];
+  } else if (wordOutliers.baseline) {
+    medianMs = wordOutliers.baseline.medianDurationPerSyllable;
+  } else {
+    return { insufficient: true, reason: 'Too few words for baseline' };
+  }
+
+  if (!medianMs || medianMs <= 0) {
+    return { insufficient: true, reason: 'Zero or missing median' };
+  }
+
+  // Now classify tiers using the baseline
+  for (const w of words) {
+    if (w.tier != null) continue; // already classified (omitted, no-data)
+
+    const ratio = w.normalizedMs / medianMs;
+    w.ratio = Math.round(ratio * 100) / 100;
+    w._medianMs = Math.round(medianMs);
+    w._upperFence = wordOutliers.baseline?.upperFence || null;
+
+    if (w.syllables < 2) {
+      w.tier = 'short-word';
+    } else if (ratio < 0.75) {
+      w.tier = 'quick';
+    } else if (ratio < 1.25) {
+      w.tier = 'steady';
+    } else if (ratio < 1.75) {
+      w.tier = 'slow';
+    } else if (ratio < 2.50) {
+      w.tier = 'struggling';
+    } else {
+      w.tier = 'stalled';
+    }
   }
 
   // Count distribution per tier
@@ -1287,9 +1315,9 @@ export function computeWordSpeedTiers(wordOutliers, alignment) {
   return {
     words,
     baseline: {
-      medianMs,
+      medianMs: Math.round(medianMs),
       totalWords: words.length,
-      upperFence: wordOutliers.baseline.upperFence
+      upperFence: wordOutliers.baseline?.upperFence || null
     },
     distribution,
     atPacePercent
