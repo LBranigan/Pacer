@@ -1236,7 +1236,8 @@ async function runAnalysis() {
   const paceConsistency = phrasing.insufficient
     ? { insufficient: true, reason: 'Phrasing insufficient' }
     : computePaceConsistency(phrasing.overallPhrasing, transcriptWords);
-  const wordOutliers = computeWordDurationOutliers(transcriptWords, alignment);
+  const xvalRawWords = kitchenSinkResult.xvalRaw?.words || [];
+  const wordOutliers = computeWordDurationOutliers(transcriptWords, alignment, xvalRawWords);
   const wordSpeedTiers = computeWordSpeedTiers(wordOutliers, alignment);
 
   diagnostics.prosody = { phrasing, pauseAtPunctuation, paceConsistency, wordOutliers };
@@ -1634,8 +1635,8 @@ if (vadPresetBtns) {
 // --- Dev mode toggle (Phase 16) ---
 const devModeToggle = document.getElementById('devModeToggle');
 if (devModeToggle) {
-  // Dev mode on by default; only disable if explicitly set to 'false'
-  if (localStorage.getItem('orf_dev_mode') !== 'false') {
+  // Dev mode off by default; only enable if explicitly set to 'true'
+  if (localStorage.getItem('orf_dev_mode') === 'true') {
     document.body.classList.add('dev-mode');
   }
 

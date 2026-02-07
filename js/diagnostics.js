@@ -956,16 +956,57 @@ export function computePaceConsistency(overallPhrasing, transcriptWords) {
 
 /**
  * Metric 4: Word Duration Outliers (Self-Normed)
- * Uses cross-validator timestamps (_xvalStartTime/_xvalEndTime) from either
- * Deepgram or Parakeet. Falls back to Reverb timestamps (startTime/endTime)
- * for words the cross-validator didn't confirm.
+ * Uses cross-validator timestamps as primary source (Deepgram or Parakeet).
+ * For unconfirmed words, does temporal lookup against raw xval words to
+ * recover cross-validator timing even when NW alignment couldn't match.
+ * Falls back to Reverb timestamps only as last resort.
  * Normalizes by syllable count. IQR-based outlier detection.
  * Only flags multisyllabic (>= 2 syl) words as outliers.
+ *
+ * @param {Array} transcriptWords - Merged STT words with timestamps
+ * @param {Array} alignment - Alignment entries from alignWords()
+ * @param {Array} [xvalRawWords] - Raw cross-validator words (pre-NW-alignment)
+ *   for temporal fallback matching. Each entry: { word, startTime, endTime }
  */
-export function computeWordDurationOutliers(transcriptWords, alignment) {
+export function computeWordDurationOutliers(transcriptWords, alignment, xvalRawWords) {
   const allWords = [];
   let wordsSkippedNoTimestamps = 0;
   let hypIndex = 0;
+
+  // Build temporal index from raw xval words for fallback matching.
+  // Sorted by start time for efficient lookup.
+  const xvalIntervals = (xvalRawWords || []).map(w => ({
+    word: w.word,
+    startS: parseTime(w.startTime),
+    endS: parseTime(w.endTime)
+  })).filter(w => w.startS < w.endS).sort((a, b) => a.startS - b.startS);
+
+  /**
+   * Find the raw xval word that best covers a given time position.
+   * Returns { startS, endS, word } or null.
+   */
+  function findXvalByTime(timeSec) {
+    if (xvalIntervals.length === 0) return null;
+    // Linear scan (typically < 50 xval words, binary search not needed)
+    let best = null;
+    let bestOverlap = 0;
+    for (const iv of xvalIntervals) {
+      if (iv.endS <= timeSec - 0.5) continue;   // too early
+      if (iv.startS > timeSec + 0.5) break;     // past window
+      // Score: how close is this interval to the target time?
+      if (timeSec >= iv.startS && timeSec <= iv.endS) {
+        // Target is inside this interval — best possible match
+        return iv;
+      }
+      // Within 500ms tolerance
+      const dist = Math.min(Math.abs(iv.startS - timeSec), Math.abs(iv.endS - timeSec));
+      if (dist < 0.5 && (!best || dist < bestOverlap)) {
+        best = iv;
+        bestOverlap = dist;
+      }
+    }
+    return best;
+  }
 
   for (const entry of alignment) {
     if (entry.type === 'omission' || entry.type === 'deletion') continue;
@@ -982,10 +1023,30 @@ export function computeWordDurationOutliers(transcriptWords, alignment) {
     const word = transcriptWords[hypIndex];
     if (!word) { hypIndex += partsCount; continue; }
 
-    // Prefer cross-validator timestamps, fall back to any available timestamps
-    const wordStart = word._xvalStartTime ?? word.startTime;
-    const wordEnd = word._xvalEndTime ?? word.endTime;
-    const tsSource = word._xvalStartTime != null ? 'cross-validator' : (word.startTime != null ? 'reverb' : null);
+    // Timestamp resolution: cross-validator > xval temporal match > Reverb
+    let wordStart = word._xvalStartTime;
+    let wordEnd = word._xvalEndTime;
+    let tsSource = 'cross-validator';
+
+    // If no cross-validator timestamps (unconfirmed word), try temporal lookup
+    if (wordStart == null || wordEnd == null) {
+      const reverbStart = parseTime(word.startTime);
+      if (reverbStart > 0) {
+        const xvalMatch = findXvalByTime(reverbStart);
+        if (xvalMatch) {
+          wordStart = xvalMatch.startS + 's';
+          wordEnd = xvalMatch.endS + 's';
+          tsSource = 'xval-temporal';
+        }
+      }
+    }
+
+    // Last resort: Reverb timestamps
+    if (wordStart == null || wordEnd == null) {
+      wordStart = word.startTime;
+      wordEnd = word.endTime;
+      tsSource = 'reverb';
+    }
 
     if (wordStart == null || wordEnd == null) {
       wordsSkippedNoTimestamps++;
@@ -999,7 +1060,16 @@ export function computeWordDurationOutliers(transcriptWords, alignment) {
     if (entry.compound && entry.parts && entry.parts.length > 1) {
       const lastPartIdx = hypIndex + entry.parts.length - 1;
       const lastPart = transcriptWords[lastPartIdx];
-      const lastEnd = lastPart ? (lastPart._xvalEndTime ?? lastPart.endTime) : null;
+      // Same resolution cascade for last part
+      let lastEnd = lastPart?._xvalEndTime;
+      if (lastEnd == null && lastPart) {
+        const lpStart = parseTime(lastPart.startTime);
+        if (lpStart > 0) {
+          const lpMatch = findXvalByTime(lpStart);
+          if (lpMatch) lastEnd = lpMatch.endS + 's';
+        }
+      }
+      if (lastEnd == null && lastPart) lastEnd = lastPart.endTime;
       endMs = lastEnd != null
         ? parseTime(lastEnd) * 1000
         : parseTime(wordEnd) * 1000;
