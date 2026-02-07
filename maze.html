@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Secret Password Game</title>
+<link rel="stylesheet" href="css/maze.css">
+</head>
+<body>
+
+<!-- Welcome Screen -->
+<div id="welcome" class="screen active">
+  <h1>Secret Password Game</h1>
+  <div class="instructions">
+    <p>Read the sentence carefully.</p>
+    <p>One word is missing &mdash; replaced by 3 options.</p>
+    <p>Speak the correct word to unlock the door!</p>
+    <p>You have <strong>10 seconds</strong> per round.</p>
+    <p>Choose wisely &mdash; your first answer is final!</p>
+  </div>
+  <button class="btn-primary" id="beginBtn">Begin</button>
+</div>
+
+<!-- Round Screen -->
+<div id="round" class="screen">
+  <div class="round-header">
+    <span id="roundLabel">Round 1 of 3</span>
+    <span class="timer" id="timerDisplay">10</span>
+  </div>
+
+  <div class="sentence-display" id="sentenceDisplay"></div>
+
+  <div class="options-row" id="optionsRow"></div>
+
+  <div class="status-area" id="statusArea"></div>
+  <div class="transcript-preview" id="transcriptPreview"></div>
+
+  <div class="countdown-bar-container">
+    <div class="countdown-bar" id="countdownBar"></div>
+  </div>
+
+  <div class="feedback-message" id="feedbackMessage"></div>
+  <button class="btn-next" id="nextBtn">Next</button>
+</div>
+
+<!-- Results Screen -->
+<div id="results" class="screen">
+  <h2>Results</h2>
+  <div class="results-score" id="resultsScore"></div>
+  <ul class="results-list" id="resultsList"></ul>
+  <button class="btn-close" id="closeBtn">Close</button>
+</div>
+
+<!-- Error Screen -->
+<div id="error" class="screen">
+  <h2>Oops!</h2>
+  <p id="errorMessage">Something went wrong.</p>
+  <button class="btn-close" id="errorCloseBtn">Close</button>
+</div>
+
+<script type="module" src="js/maze-game.js"></script>
+</body>
+</html>

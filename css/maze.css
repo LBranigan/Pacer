@@ -1,0 +1,279 @@
+/* maze.css — Maze Comprehension Game styling */
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+  background: #1a1a2e;
+  color: #e0e0e0;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem;
+}
+
+/* ── Screens ── */
+
+.screen {
+  display: none;
+  width: 100%;
+  max-width: 620px;
+  text-align: center;
+}
+.screen.active { display: block; }
+
+/* ── Welcome screen ── */
+
+#welcome h1 {
+  font-size: 2rem;
+  color: #ce93d8;
+  margin-bottom: 1rem;
+}
+
+#welcome .instructions {
+  font-size: 1.05rem;
+  line-height: 1.7;
+  color: #bbb;
+  margin-bottom: 1.5rem;
+  text-align: left;
+  padding: 0 1rem;
+}
+
+#welcome .instructions p {
+  margin-bottom: 0.5rem;
+}
+
+.btn-primary {
+  background: #7b1fa2;
+  color: #fff;
+  border: none;
+  border-radius: 10px;
+  padding: 0.8rem 2.5rem;
+  font-size: 1.15rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+.btn-primary:hover { background: #9c27b0; }
+
+/* ── Round screen ── */
+
+#round .round-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1.2rem;
+  font-size: 1rem;
+  color: #aaa;
+}
+
+#round .round-header .timer {
+  font-size: 1.4rem;
+  font-weight: 700;
+  color: #fff;
+  min-width: 2.5rem;
+}
+#round .round-header .timer.warning { color: #ff9800; }
+#round .round-header .timer.critical { color: #f44336; }
+
+.sentence-display {
+  font-size: 1.25rem;
+  line-height: 1.8;
+  color: #e0e0e0;
+  background: #16213e;
+  border-radius: 12px;
+  padding: 1.2rem 1.5rem;
+  margin-bottom: 1.5rem;
+  text-align: left;
+}
+
+.sentence-display .blank {
+  display: inline-block;
+  border-bottom: 3px dashed #7b1fa2;
+  min-width: 80px;
+  padding: 0 4px;
+  color: #7b1fa2;
+  font-weight: 600;
+}
+
+.sentence-display .context-dim {
+  color: #666;
+  font-size: 1.05rem;
+}
+
+/* ── Option cards ── */
+
+.options-row {
+  display: flex;
+  justify-content: center;
+  gap: 1rem;
+  margin-bottom: 1.2rem;
+  flex-wrap: wrap;
+}
+
+.maze-option {
+  background: #16213e;
+  border: 2px solid #333;
+  border-radius: 12px;
+  padding: 0.8rem 1.5rem;
+  font-size: 1.15rem;
+  font-weight: 600;
+  color: #e0e0e0;
+  min-width: 120px;
+  text-align: center;
+  transition: border-color 0.2s, background 0.2s, transform 0.15s;
+  user-select: none;
+}
+
+.maze-option.clickable {
+  cursor: pointer;
+}
+.maze-option.clickable:hover {
+  border-color: #7b1fa2;
+  background: #1a1a3a;
+  transform: translateY(-2px);
+}
+
+.maze-option.correct {
+  border-color: #4caf50;
+  background: rgba(76, 175, 80, 0.15);
+  color: #4caf50;
+}
+.maze-option.wrong {
+  border-color: #f44336;
+  background: rgba(244, 67, 54, 0.15);
+  color: #f44336;
+}
+.maze-option.locked {
+  pointer-events: none;
+}
+
+/* ── Mic / status area ── */
+
+.status-area {
+  font-size: 0.95rem;
+  color: #999;
+  margin-bottom: 0.8rem;
+  min-height: 1.5rem;
+}
+
+.mic-indicator {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #f44336;
+  margin-right: 0.4rem;
+  animation: pulse 1.2s infinite;
+  vertical-align: middle;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}
+
+.transcript-preview {
+  font-size: 0.85rem;
+  color: #666;
+  min-height: 1.2rem;
+  margin-bottom: 0.6rem;
+}
+
+/* ── Countdown bar ── */
+
+.countdown-bar-container {
+  width: 100%;
+  height: 6px;
+  background: #333;
+  border-radius: 3px;
+  overflow: hidden;
+  margin-bottom: 1rem;
+}
+
+.countdown-bar {
+  height: 100%;
+  background: #7b1fa2;
+  border-radius: 3px;
+  transition: width 0.1s linear;
+}
+.countdown-bar.warning { background: #ff9800; }
+.countdown-bar.critical { background: #f44336; }
+
+/* ── Feedback area ── */
+
+.feedback-message {
+  font-size: 1.1rem;
+  font-weight: 600;
+  margin: 1rem 0;
+  min-height: 1.5rem;
+}
+.feedback-message.correct { color: #4caf50; }
+.feedback-message.wrong { color: #f44336; }
+.feedback-message.timeout { color: #ff9800; }
+
+.btn-next {
+  background: #7b1fa2;
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  padding: 0.6rem 2rem;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  margin-top: 0.5rem;
+  display: none;
+}
+.btn-next:hover { background: #9c27b0; }
+
+/* ── Results screen ── */
+
+#results h2 {
+  font-size: 1.8rem;
+  color: #ce93d8;
+  margin-bottom: 1rem;
+}
+
+.results-score {
+  font-size: 2.5rem;
+  font-weight: 700;
+  color: #fff;
+  margin-bottom: 1.5rem;
+}
+
+.results-list {
+  list-style: none;
+  text-align: left;
+  margin-bottom: 1.5rem;
+}
+
+.results-list li {
+  padding: 0.6rem 0;
+  border-bottom: 1px solid #333;
+  font-size: 1rem;
+}
+.results-list li .icon { margin-right: 0.5rem; }
+.results-list li .correct-word { color: #4caf50; font-weight: 600; }
+.results-list li .wrong-word { color: #f44336; font-weight: 600; }
+.results-list li .spoken { color: #999; font-size: 0.9rem; }
+
+.btn-close {
+  background: #555;
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  padding: 0.6rem 2rem;
+  font-size: 1rem;
+  cursor: pointer;
+}
+.btn-close:hover { background: #777; }
+
+/* ── Error screen ── */
+
+#error {
+  color: #f44336;
+}
+#error h2 { margin-bottom: 1rem; }
+#error p { color: #999; margin-bottom: 1rem; }

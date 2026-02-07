@@ -24,6 +24,7 @@ import { getCrossValidatorEngine, setCrossValidatorEngine, getCrossValidatorName
 import { checkTerminalLeniency } from './phonetic-utils.js';
 import { padAudioWithSilence } from './audio-padding.js';
 import { enrichDiagnosticsWithVAD, computeVADGapSummary, adjustGapsWithVADOverhang } from './vad-gap-analyzer.js';
+import { canRunMaze } from './maze-generator.js';
 
 // Code version for cache verification
 const CODE_VERSION = 'v37-2026-02-06';
@@ -89,6 +90,49 @@ function showPlaybackButton(studentId, assessmentId) {
   // Insert after analyze button
   analyzeBtn.parentNode.insertBefore(btn, analyzeBtn.nextSibling);
   btn.insertAdjacentElement('afterend', sel);
+}
+
+function showMazeButton(studentId, assessmentId, referenceText) {
+  // Remove existing maze controls
+  const existingBtn = document.getElementById('mazeGameBtn');
+  if (existingBtn) existingBtn.remove();
+  const existingSel = document.getElementById('mazeDifficulty');
+  if (existingSel) existingSel.remove();
+
+  // Only show if passage is long enough
+  if (!canRunMaze(referenceText)) return;
+
+  // Difficulty dropdown
+  const sel = document.createElement('select');
+  sel.id = 'mazeDifficulty';
+  sel.style.cssText = 'margin:0.5rem 0 0.5rem 0.5rem;padding:0.5rem 0.8rem;border-radius:8px;border:1px solid #666;background:#2a2a2a;color:#fff;font-size:0.9rem;cursor:pointer;';
+  const difficulties = [['easy', 'Easy (K-2)'], ['standard', 'Standard (3-5)'], ['challenge', 'Challenge (6-8)']];
+  for (const [val, label] of difficulties) {
+    const opt = document.createElement('option');
+    opt.value = val;
+    opt.textContent = label;
+    if (val === 'standard') opt.selected = true;
+    sel.appendChild(opt);
+  }
+
+  // Maze Game button
+  const btn = document.createElement('button');
+  btn.id = 'mazeGameBtn';
+  btn.textContent = 'Maze Game';
+  btn.style.cssText = 'margin:0.5rem 0 0.5rem 0.5rem;padding:0.6rem 1.2rem;background:#7b1fa2;color:#fff;border:none;border-radius:8px;font-size:1rem;font-weight:600;cursor:pointer;';
+  btn.addEventListener('click', () => {
+    const difficulty = sel.value;
+    const base = window.location.href.replace(/[^/]*$/, '');
+    const params = new URLSearchParams({ student: studentId, assessment: assessmentId, difficulty });
+    window.open(base + 'maze.html?' + params.toString(), 'orf_maze', 'width=700,height=500');
+  });
+
+  // Insert after the playback theme selector (or playback button, or analyze button)
+  const anchor = document.getElementById('playbackThemeSelect')
+    || document.getElementById('playbackAdventureBtn')
+    || analyzeBtn;
+  anchor.insertAdjacentElement('afterend', sel);
+  sel.insertAdjacentElement('afterend', btn);
 }
 
 function refreshStudentUI() {
@@ -1213,6 +1257,7 @@ async function runAnalysis() {
       errors: accuracy.substitutions + accuracy.omissions,
       duration: effectiveElapsedSeconds,
       passagePreview: referenceText.slice(0, 60),
+      passageText: referenceText,
       errorBreakdown,
       alignment,
       sttWords: transcriptWords,
@@ -1231,6 +1276,9 @@ async function runAnalysis() {
     if (appState.audioBlob) {
       showPlaybackButton(appState.selectedStudentId, assessmentId);
     }
+
+    // Show maze game button if passage is long enough
+    showMazeButton(appState.selectedStudentId, assessmentId, referenceText);
 
     // Finalize and auto-save debug log
     finalizeDebugLog({
@@ -1470,8 +1518,8 @@ if (vadPresetBtns) {
 // --- Dev mode toggle (Phase 16) ---
 const devModeToggle = document.getElementById('devModeToggle');
 if (devModeToggle) {
-  // Check localStorage for saved dev mode state
-  if (localStorage.getItem('orf_dev_mode') === 'true') {
+  // Dev mode on by default; only disable if explicitly set to 'false'
+  if (localStorage.getItem('orf_dev_mode') !== 'false') {
     document.body.classList.add('dev-mode');
   }
 

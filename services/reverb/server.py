@@ -221,6 +221,12 @@ class ParakeetRequest(BaseModel):
     audio_base64: str
 
 
+class MazeRequest(BaseModel):
+    """Request model for /deepgram-maze endpoint."""
+    audio_base64: str
+    keyterms: list[str]  # The 3 option words to boost
+
+
 class Word(BaseModel):
     """Word with timing and confidence."""
     word: str
@@ -445,3 +451,66 @@ async def parakeet_transcribe(req: ParakeetRequest):
             raise HTTPException(status_code=500, detail=f"Parakeet error: {e}")
         finally:
             os.unlink(temp_path)
+
+
+# =============================================================================
+# Maze Game Endpoint (Short-audio keyterm-boosted recognition)
+# =============================================================================
+
+@app.post("/deepgram-maze")
+async def deepgram_maze(req: MazeRequest):
+    """
+    Short-audio transcription optimized for maze game.
+    Uses Nova-3 keyterm prompting to boost recognition of the 3 option words.
+    Expects 1-3 second audio clips (single spoken word).
+    """
+    client = get_deepgram_client()
+    if client is None:
+        raise HTTPException(
+            status_code=503,
+            detail="Deepgram service not configured (missing DEEPGRAM_API_KEY)"
+        )
+
+    try:
+        audio_bytes = base64.b64decode(req.audio_base64)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Invalid base64: {e}")
+
+    try:
+        # keyterm (singular) is the Nova-3 API param; accepts list for multiple terms
+        response = client.listen.v1.media.transcribe_file(
+            request=audio_bytes,
+            model="nova-3",
+            language="en-US",
+            smart_format=False,
+            keyterm=req.keyterms,
+        )
+
+        transcript = response.results.channels[0].alternatives[0].transcript
+        confidence = response.results.channels[0].alternatives[0].confidence
+
+        print(f"[maze] Deepgram heard: '{transcript}' (conf={confidence:.2f}, options={req.keyterms})")
+
+        return {
+            "transcript": transcript,
+            "confidence": confidence,
+        }
+
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        # Retry without keyterm boosting as fallback
+        try:
+            print("[maze] Retrying without keyterm boosting...")
+            response = client.listen.v1.media.transcribe_file(
+                request=audio_bytes,
+                model="nova-3",
+                language="en-US",
+                smart_format=False,
+            )
+            transcript = response.results.channels[0].alternatives[0].transcript
+            confidence = response.results.channels[0].alternatives[0].confidence
+            print(f"[maze] Fallback heard: '{transcript}' (conf={confidence:.2f})")
+            return {"transcript": transcript, "confidence": confidence}
+        except Exception as e2:
+            raise HTTPException(status_code=500, detail=f"Deepgram maze error: {e2}")

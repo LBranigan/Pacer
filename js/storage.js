@@ -139,7 +139,8 @@ export function saveAssessment(studentId, results) {
     sttWords: results.sttWords ?? null,
     audioRef: results.audioRef ?? null,
     gamification: results.gamification ?? null,
-    nlAnnotations: results.nlAnnotations ?? null
+    nlAnnotations: results.nlAnnotations ?? null,
+    passageText: results.passageText ?? null
   };
   data.assessments.push(assessment);
   save(data);
