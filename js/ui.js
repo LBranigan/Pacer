@@ -1174,7 +1174,6 @@ function renderDisfluencySection(disfluencyStats) {
  */
 function renderWordSpeedSection(wordSpeedData) {
   const section = document.getElementById('wordSpeedSection');
-  const summaryInline = document.getElementById('wordSpeedSummaryInline');
   const legendEl = document.getElementById('wordSpeedLegend');
   const wordsEl = document.getElementById('wordSpeedWords');
   const summaryEl = document.getElementById('wordSpeedSummary');
@@ -1187,15 +1186,6 @@ function renderWordSpeedSection(wordSpeedData) {
   }
 
   section.style.display = '';
-
-  // ── Inline summary (visible when collapsed) ──
-  const d = wordSpeedData.distribution;
-  const parts = [];
-  parts.push(`${wordSpeedData.atPacePercent}% at pace`);
-  if (d.slow > 0) parts.push(`${d.slow} slow`);
-  if (d.struggling > 0) parts.push(`${d.struggling} struggling`);
-  if (d.stalled > 0) parts.push(`${d.stalled} stalled`);
-  if (summaryInline) summaryInline.textContent = parts.join(' | ');
 
   // ── Legend ──
   if (legendEl) {
@@ -1261,7 +1251,7 @@ function buildWordSpeedTooltip(w) {
   lines.push(`Type: ${w.alignmentType}`);
 
   if (w.tier === 'no-data') {
-    lines.push('No Deepgram timing data — word not classified');
+    lines.push('No timing data — word not classified');
     return lines.join('\n');
   }
 

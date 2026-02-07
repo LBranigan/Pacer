@@ -956,7 +956,9 @@ export function computePaceConsistency(overallPhrasing, transcriptWords) {
 
 /**
  * Metric 4: Word Duration Outliers (Self-Normed)
- * Uses Deepgram timestamps exclusively (_xvalStartTime/_xvalEndTime).
+ * Uses cross-validator timestamps (_xvalStartTime/_xvalEndTime) from either
+ * Deepgram or Parakeet. Falls back to Reverb timestamps (startTime/endTime)
+ * for words the cross-validator didn't confirm.
  * Normalizes by syllable count. IQR-based outlier detection.
  * Only flags multisyllabic (>= 2 syl) words as outliers.
  */
@@ -980,24 +982,29 @@ export function computeWordDurationOutliers(transcriptWords, alignment) {
     const word = transcriptWords[hypIndex];
     if (!word) { hypIndex += partsCount; continue; }
 
-    // Must have Deepgram timestamps
-    if (word._xvalStartTime == null || word._xvalEndTime == null) {
+    // Prefer cross-validator timestamps, fall back to any available timestamps
+    const wordStart = word._xvalStartTime ?? word.startTime;
+    const wordEnd = word._xvalEndTime ?? word.endTime;
+    const tsSource = word._xvalStartTime != null ? 'cross-validator' : (word.startTime != null ? 'reverb' : null);
+
+    if (wordStart == null || wordEnd == null) {
       wordsSkippedNoTimestamps++;
       hypIndex += partsCount;
       continue;
     }
 
-    const startMs = parseTime(word._xvalStartTime) * 1000;
+    const startMs = parseTime(wordStart) * 1000;
     let endMs;
     // For compound words, use end time of last part
     if (entry.compound && entry.parts && entry.parts.length > 1) {
       const lastPartIdx = hypIndex + entry.parts.length - 1;
       const lastPart = transcriptWords[lastPartIdx];
-      endMs = lastPart && lastPart._xvalEndTime != null
-        ? parseTime(lastPart._xvalEndTime) * 1000
-        : parseTime(word._xvalEndTime) * 1000;
+      const lastEnd = lastPart ? (lastPart._xvalEndTime ?? lastPart.endTime) : null;
+      endMs = lastEnd != null
+        ? parseTime(lastEnd) * 1000
+        : parseTime(wordEnd) * 1000;
     } else {
-      endMs = parseTime(word._xvalEndTime) * 1000;
+      endMs = parseTime(wordEnd) * 1000;
     }
 
     const durationMs = endMs - startMs;
@@ -1017,7 +1024,7 @@ export function computeWordDurationOutliers(transcriptWords, alignment) {
       normalizedDurationMs: Math.round(normalizedDurationMs),
       alignmentType: entry.type,
       isOutlier: false,
-      timestampSource: 'deepgram'
+      timestampSource: tsSource
     });
 
     hypIndex += partsCount;
