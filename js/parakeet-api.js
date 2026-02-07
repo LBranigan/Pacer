@@ -61,7 +61,7 @@ export async function sendToParakeet(blob) {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ audio_base64: base64 }),
-      signal: AbortSignal.timeout(300000) // 300s timeout (first request downloads ~600MB model)
+      signal: AbortSignal.timeout(40000) // 40s timeout
     });
 
     if (!resp.ok) {

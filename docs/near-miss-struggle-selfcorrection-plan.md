@@ -371,3 +371,55 @@ Both paths produce the same type (`struggle`) and both count as errors. The **to
 4. **Struggle visual style:** Keep the existing teal/cyan for both paths. The teal communicates "this word was a struggle" and is always an error. The *tooltip* distinguishes the evidence type — "Struggle (hesitation): 3.5s pause" vs "Struggle (decoding error): 3 attempts (...)" — so teachers understand what happened, even though both affect scoring equally.
 
 5. **Correct words with hesitation:** Under the old model, `detectStruggleWords()` flagged correct words with hesitation as "struggle." Under the new model, these words remain `correct`. Hesitation on correct words is still visible via DIAG-05 onset delay tooltips (e.g., "Onset delay: 640ms") — the diagnostic information is preserved, it's just not called "struggle."
+
+---
+
+## Fragment Absorption (Temporal Containment)
+
+**Added:** 2026-02-07
+**Function:** `absorbStruggleFragments()` in `diagnostics.js`
+**Pipeline position:** After `resolveNearMissClusters`, before `runDiagnostics`
+
+### Problem
+
+When Reverb fragments a single utterance into multiple BPE tokens (e.g., "platforms" → "pla" + "for"), the alignment creates a struggle for one fragment and an orphan insertion for the other. This insertion is not a real extra word — it's a leftover acoustic fragment of the student's failed attempt.
+
+Additionally, the struggle's sttWord (e.g., "pla") has `crossValidation: "unconfirmed"` and no cross-validator timestamps, so the alignment tooltip shows `Cross-val: N/A` even though Parakeet correctly heard "platforms" with accurate timestamps.
+
+### Solution: Temporal Containment
+
+Instead of adjacency-based detection (which fails for 3+ fragments), use the Parakeet word's timestamp window as the ground truth:
+
+1. **Step 1:** For each struggle/substitution, find its matching Parakeet word from `xvalRawWords` by temporal proximity + ref word text match (exact or `isNearMiss`).
+
+2. **Step 2:** For each insertion that is NOT "confirmed" by the cross-validator, check if its Reverb timestamp (`_reverbStartTime`) falls within the Parakeet word's `[start - 150ms, end + 150ms]` window. If yes, flag as `_partOfStruggle`.
+
+3. **Propagation:** When absorbing a fragment, propagate the fragment's xval timestamps (`_xvalStartTime`, `_xvalEndTime`, `_xvalWord`, `_xvalEngine`) to the struggle's sttWord so the tooltip displays Parakeet timing.
+
+### Why Temporal Containment (not Adjacency)
+
+| Approach | 2 fragments | 3+ fragments | Independent of alignment order |
+|----------|-------------|--------------|-------------------------------|
+| Adjacency | Works | Needs chain-walking | No |
+| Temporal containment | Works | Works | Yes |
+
+Parakeet's word window IS the temporal extent of the utterance. All fragments necessarily fall inside it. No chain-walking, no second passes, no edge cases for N fragments.
+
+### Guards Against False Positives
+
+- Insertion must NOT be "confirmed" (a real extra word both engines agree on)
+- Parakeet word must match the struggle's ref word (exact or near-miss)
+- 150ms tolerance is tight — only catches acoustic fragments, not nearby words
+
+### Example
+
+| Reverb heard | Alignment | Reverb time | Parakeet heard | Parakeet window | Action |
+|---|---|---|---|---|---|
+| "pla" | struggle (ref="platforms") | 14.31s | — (unconfirmed) | — | Paired to Parakeet "platforms" [14.08, 17.04] |
+| "for" | insertion | 15.99s | "platforms" (disagreed) | 14.08-17.04s | 15.99 inside window → absorbed, `_partOfStruggle = true` |
+| "with" | correct (ref="with") | 18.83s | "with" (confirmed) | 18.96-19.28s | Confirmed → not absorbed |
+
+After absorption:
+- "for" no longer appears in the "Inserted words" section
+- "platforms" tooltip shows `Cross-val: 14.08s-17.04s (2960ms)` instead of `N/A`
+- Insertion count decreases by 1

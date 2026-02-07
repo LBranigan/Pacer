@@ -272,6 +272,13 @@ const DIAGNOSTIC_MISCUES = {
       decoding: 'Path 2: substitution + near-miss insertions around it → multiple failed decoding attempts',
       abandoned: 'Path 3: substitution + cross-validator N/A + near-miss match → partial/garbled attempt only verbatim STT detected'
     },
+    fragmentAbsorption: {
+      description: 'When Reverb fragments a single utterance into multiple BPE tokens (e.g., "platforms" → "pla" + "for"), orphan insertions are absorbed into the parent struggle using temporal containment.',
+      detector: 'diagnostics.js → absorbStruggleFragments()',
+      mechanism: 'If an insertion\'s Reverb timestamp falls within the Parakeet word\'s time window for a nearby struggle/substitution, it is flagged _partOfStruggle and excluded from insertion count.',
+      tolerance: '150ms on Parakeet window edges',
+      guards: ['Insertion must NOT be "confirmed" by cross-validator', 'Parakeet word must match the struggle\'s ref word (exact or near-miss)', 'Propagates xval timestamps to the struggle sttWord for tooltip display']
+    },
     note: 'The struggle alignment type is always "substitution+". It only exists when the student failed to produce the word. A word can match multiple pathways simultaneously. Correct words with hesitation do not become struggle — they remain correct with onset delay information (DIAG-05).'
   }
 };

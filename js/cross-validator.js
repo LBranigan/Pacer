@@ -5,7 +5,7 @@
  * using Needleman-Wunsch sequence alignment.
  *
  * Currently supported engines: Deepgram Nova-3, Parakeet TDT 0.6B v2
- * Engine selection via localStorage key 'orf_cross_validator' (default: 'deepgram').
+ * Engine selection via localStorage key 'orf_cross_validator' (default: 'parakeet').
  *
  * Cross-validation statuses:
  *   confirmed  — both engines produced the same word (text match, fuzzy match, or near-match)
@@ -39,7 +39,7 @@ const ENGINE_KEY = 'orf_cross_validator';
  * @returns {string} Engine name (e.g., 'deepgram')
  */
 export function getCrossValidatorEngine() {
-  return localStorage.getItem(ENGINE_KEY) || 'deepgram';
+  return localStorage.getItem(ENGINE_KEY) || 'parakeet';
 }
 
 /**

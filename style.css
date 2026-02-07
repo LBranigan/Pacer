@@ -630,13 +630,6 @@ body.dev-mode .dev-mode-toggle {
   margin: 0;
 }
 
-.word-speed-summary-inline {
-  font-size: 0.8rem;
-  color: #888;
-  flex: 1;
-  margin-left: 0.75rem;
-}
-
 .word-speed-toggle {
   font-size: 0.7rem;
   color: #999;

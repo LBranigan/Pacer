@@ -92,27 +92,34 @@ class WebSpeechASR {
   }
 
   async start() {
-    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!SR) throw new Error('Web Speech API not supported');
+    this._SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!this._SR) throw new Error('Web Speech API not supported');
 
-    this.recognition = new SR();
-    this.recognition.continuous = false;     // Stop after one utterance
-    this.recognition.interimResults = false; // Only final results
-    this.recognition.maxAlternatives = 5;    // Multiple hypotheses to match against
-    this.recognition.lang = 'en-US';
+    this._initRecognition(true); // try with on-device features first
+    this.recognition.start();
+    console.log('[maze-webspeech] Listening for:', this.options);
+  }
 
-    // Chrome 139+: on-device processing for better latency + privacy
-    this._useLocalProcessing = false;
-    if ('processLocally' in this.recognition) {
-      this.recognition.processLocally = true;
-      this._useLocalProcessing = true;
+  /** Create a SpeechRecognition instance and wire up all event handlers.
+   *  @param {boolean} tryLocal — attempt Chrome 139+ on-device features */
+  _initRecognition(tryLocal) {
+    const rec = new this._SR();
+    rec.continuous = false;
+    rec.interimResults = false;
+    rec.maxAlternatives = 5;
+    rec.lang = 'en-US';
+
+    this._isLocal = false;
+
+    if (tryLocal && 'processLocally' in rec) {
+      rec.processLocally = true;
+      this._isLocal = true;
       console.log('[maze-webspeech] On-device processing enabled');
     }
 
-    // Chrome 139+: contextual biasing to boost target words
-    if (typeof SpeechRecognitionPhrase !== 'undefined') {
+    if (tryLocal && typeof SpeechRecognitionPhrase !== 'undefined') {
       try {
-        this.recognition.phrases = this.options.map(
+        rec.phrases = this.options.map(
           word => new SpeechRecognitionPhrase(word, 8.0)
         );
         console.log('[maze-webspeech] Contextual biasing for:', this.options);
@@ -121,7 +128,7 @@ class WebSpeechASR {
       }
     }
 
-    this.recognition.onresult = (event) => {
+    rec.onresult = (event) => {
       if (this.stopped || this._matched) return;
       const alternatives = event.results[0];
       const optNorm = this.options.map(o => o.toLowerCase());
@@ -161,40 +168,41 @@ class WebSpeechASR {
       console.log('[maze-webspeech] No match, will restart on end event...');
     };
 
-    this.recognition.onnomatch = () => {
+    rec.onnomatch = () => {
       console.log('[maze-webspeech] No match event');
     };
 
-    this.recognition.onerror = (event) => {
+    rec.onerror = (event) => {
       if (this.stopped) return;
       if (event.error === 'no-speech') {
         console.log('[maze-webspeech] No speech detected (will restart)');
       } else if (event.error === 'aborted') {
         // Normal when stop() is called
-      } else if (event.error === 'language-not-supported' && this._useLocalProcessing) {
-        // On-device model not available — disable and retry with server-side
-        console.warn('[maze-webspeech] On-device not available, falling back to server-side');
-        this._useLocalProcessing = false;
-        this.recognition.processLocally = false;
+      } else if (event.error === 'language-not-supported' && this._isLocal) {
+        // On-device model not available — create a fresh vanilla instance
+        console.warn('[maze-webspeech] On-device not available, creating vanilla instance');
+        this._initRecognition(false);
+        this.recognition.start();
+        console.log('[maze-webspeech] Restarted with server-side processing');
+        return; // skip onend from the old instance
       } else {
         console.warn(`[maze-webspeech] Error: ${event.error}`);
       }
     };
 
-    this.recognition.onend = () => {
+    rec.onend = () => {
       // Auto-restart: Chrome stops after each utterance or ~7s silence.
       // Keep restarting until we get a match or the round timer expires.
-      if (!this.stopped && !this._matched) {
+      if (!this.stopped && !this._matched && this.recognition === rec) {
         try {
-          this.recognition.start();
+          rec.start();
         } catch (e) {
           console.warn('[maze-webspeech] Restart failed:', e.message);
         }
       }
     };
 
-    this.recognition.start();
-    console.log('[maze-webspeech] Listening for:', this.options);
+    this.recognition = rec;
   }
 
   stop() {

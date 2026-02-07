@@ -6,7 +6,7 @@ import { alignWords } from './alignment.js';
 import { getCanonical } from './word-equivalences.js';
 import { computeWCPM, computeAccuracy, computeWCPMRange } from './metrics.js';
 import { setStatus, displayResults, displayAlignmentResults, showAudioPlayback, renderStudentSelector, renderHistory } from './ui.js';
-import { runDiagnostics, computeTierBreakdown, resolveNearMissClusters, computePhrasingQuality, computePauseAtPunctuation, computePaceConsistency, computeWordDurationOutliers, computeWordSpeedTiers } from './diagnostics.js';
+import { runDiagnostics, computeTierBreakdown, resolveNearMissClusters, absorbStruggleFragments, computePhrasingQuality, computePauseAtPunctuation, computePaceConsistency, computeWordDurationOutliers, computeWordSpeedTiers } from './diagnostics.js';
 import { extractTextFromImage } from './ocr-api.js';
 import { trimPassageToAttempted } from './passage-trimmer.js';
 import { analyzePassageText, levenshteinRatio } from './nl-api.js';
@@ -495,7 +495,8 @@ async function runAnalysis() {
       _classification: null,  // Legacy confidence classification disabled
       _kitchenSink: {
         disfluencyStats: kitchenSinkResult.disfluencyStats || null,
-        unconsumedXval: kitchenSinkResult.unconsumedXval || []
+        unconsumedXval: kitchenSinkResult.unconsumedXval || [],
+        xvalRawWords: kitchenSinkResult.xvalRaw?.words || []
       },
       _disfluency: null,      // Legacy Phase 14 disfluency detection disabled
       _safety: null            // Legacy safety checks disabled
@@ -830,6 +831,18 @@ async function runAnalysis() {
         hyp: a.hyp,
         target: a._nearMissTarget
       }))
+    });
+  }
+
+  // Absorb Reverb fragments into their parent struggle/substitution
+  // Uses temporal containment: if a fragment's Reverb timestamp falls within the
+  // Parakeet word's time window for a nearby struggle, it's part of the same utterance.
+  const xvalRawForAbsorption = data._kitchenSink?.xvalRawWords || [];
+  const absorbedFragments = absorbStruggleFragments(alignment, transcriptWords, xvalRawForAbsorption);
+  if (absorbedFragments.length > 0) {
+    addStage('fragment_absorption', {
+      count: absorbedFragments.length,
+      fragments: absorbedFragments
     });
   }
 
@@ -1237,7 +1250,7 @@ async function runAnalysis() {
     ? { insufficient: true, reason: 'Phrasing insufficient' }
     : computePaceConsistency(phrasing.overallPhrasing, transcriptWords);
   const wordOutliers = computeWordDurationOutliers(transcriptWords, alignment);
-  const xvalRawWords = kitchenSinkResult.xvalRaw?.words || [];
+  const xvalRawWords = data._kitchenSink?.xvalRawWords || [];
   const wordSpeedTiers = computeWordSpeedTiers(wordOutliers, alignment, xvalRawWords, transcriptWords);
 
   diagnostics.prosody = { phrasing, pauseAtPunctuation, paceConsistency, wordOutliers };

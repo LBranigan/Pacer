@@ -179,6 +179,155 @@ export function resolveNearMissClusters(alignment) {
   }
 }
 
+// ── Fragment Absorption (Temporal Containment) ──────────────────────
+
+/**
+ * Absorb Reverb fragments into their parent struggle/substitution.
+ *
+ * When Reverb fragments a single utterance (e.g., "platforms" → "pla" + "for"),
+ * the alignment creates a struggle for one fragment and an insertion for the other.
+ * This function absorbs those orphan insertions using temporal containment:
+ * if an insertion's Reverb timestamp falls within the Parakeet word's time window
+ * for a nearby struggle, it's part of the same utterance.
+ *
+ * Also propagates Parakeet timestamps to the struggle's sttWord so the alignment
+ * tooltip shows accurate timing data instead of "N/A".
+ *
+ * Must run AFTER resolveNearMissClusters (which handles text-similarity absorption).
+ *
+ * @param {Array} alignment - Alignment entries (mutated in place)
+ * @param {Array} transcriptWords - STT words with timestamps
+ * @param {Array} xvalRawWords - Raw cross-validator words with timestamps
+ * @returns {Array} List of absorbed fragments (for debug logging)
+ */
+export function absorbStruggleFragments(alignment, transcriptWords, xvalRawWords) {
+  if (!xvalRawWords || xvalRawWords.length === 0 || !transcriptWords) return [];
+
+  const TOLERANCE_S = 0.15; // 150ms tolerance on Parakeet window edges
+  const absorbed = [];
+  const clean = (text) => (text || '').toLowerCase().replace(/[^a-z']/g, '');
+
+  // Step 1: For each struggle/substitution, find its matching Parakeet word
+  // by temporal proximity + ref word text match
+  const strugglePairings = []; // { alignIdx, refWord, parakeet: {startS, endS, word}, hypIndex }
+
+  let hypIndex = 0;
+  for (let i = 0; i < alignment.length; i++) {
+    const entry = alignment[i];
+
+    if (entry.type === 'insertion') {
+      hypIndex += entry.compound && entry.parts ? entry.parts.length : 1;
+      continue;
+    }
+    if (entry.type === 'omission' || entry.type === 'deletion') {
+      continue;
+    }
+
+    // Spoken word (correct, substitution, struggle)
+    if (entry.type === 'struggle' || entry.type === 'substitution') {
+      const tw = transcriptWords[hypIndex];
+      if (tw && entry.ref) {
+        const reverbStartS = parseTime(tw._reverbStartTime || tw.startTime);
+        const refClean = clean(entry.ref);
+
+        // Find the Parakeet word: temporally close + matches ref
+        let bestMatch = null;
+        let bestDist = Infinity;
+        for (const xw of xvalRawWords) {
+          const xwStartS = parseTime(xw.startTime);
+          const xwEndS = parseTime(xw.endTime);
+          if (xwStartS >= xwEndS) continue;
+          const xwClean = clean(xw.word);
+
+          // Reverb start must fall within or near the xval window
+          if (reverbStartS < xwStartS - TOLERANCE_S || reverbStartS > xwEndS + TOLERANCE_S) continue;
+
+          // Word must match ref (exact or near-miss)
+          if (xwClean !== refClean && !isNearMiss(xwClean, refClean)) continue;
+
+          const dist = Math.abs(reverbStartS - xwStartS);
+          if (dist < bestDist) {
+            bestDist = dist;
+            bestMatch = { startS: xwStartS, endS: xwEndS, word: xw.word };
+          }
+        }
+
+        if (bestMatch) {
+          strugglePairings.push({
+            alignIdx: i,
+            refWord: entry.ref,
+            parakeet: bestMatch,
+            hypIndex
+          });
+        }
+      }
+    }
+
+    hypIndex += entry.compound && entry.parts ? entry.parts.length : 1;
+  }
+
+  if (strugglePairings.length === 0) return [];
+
+  // Step 2: For each insertion, check if its Reverb timestamp falls within
+  // any struggle's Parakeet word window (temporal containment)
+  hypIndex = 0;
+  for (let i = 0; i < alignment.length; i++) {
+    const entry = alignment[i];
+
+    if (entry.type === 'insertion' && !entry._partOfStruggle && !entry._isSelfCorrection) {
+      const tw = transcriptWords[hypIndex];
+
+      if (tw && tw.crossValidation !== 'confirmed') {
+        // Use Reverb timestamp — the actual acoustic position of this fragment
+        const reverbStartS = parseTime(tw._reverbStartTime || tw.startTime);
+
+        for (const pair of strugglePairings) {
+          if (reverbStartS >= pair.parakeet.startS - TOLERANCE_S &&
+              reverbStartS <= pair.parakeet.endS + TOLERANCE_S) {
+            entry._partOfStruggle = true;
+            entry._absorbedByRef = pair.refWord;
+
+            absorbed.push({
+              hyp: entry.hyp,
+              absorbedBy: pair.refWord,
+              parakeetWord: pair.parakeet.word,
+              reverbStartS: +reverbStartS.toFixed(3),
+              parakeetWindow: `${pair.parakeet.startS.toFixed(2)}s-${pair.parakeet.endS.toFixed(2)}s`
+            });
+
+            // Propagate xval timestamps to the struggle's sttWord
+            // so the alignment tooltip shows Parakeet timing instead of "N/A"
+            const struggleTw = transcriptWords[pair.hypIndex];
+            if (struggleTw && struggleTw._xvalStartTime == null) {
+              if (tw._xvalStartTime != null) {
+                struggleTw._xvalStartTime = tw._xvalStartTime;
+                struggleTw._xvalEndTime = tw._xvalEndTime;
+              } else {
+                // Fragment is unconfirmed — use the Parakeet word's timestamps directly
+                struggleTw._xvalStartTime = pair.parakeet.startS + 's';
+                struggleTw._xvalEndTime = pair.parakeet.endS + 's';
+              }
+              struggleTw._xvalWord = pair.parakeet.word;
+              if (tw._xvalEngine) struggleTw._xvalEngine = tw._xvalEngine;
+            }
+
+            break;
+          }
+        }
+      }
+    }
+
+    // Track hypIndex
+    if (entry.type === 'insertion') {
+      hypIndex += entry.compound && entry.parts ? entry.parts.length : 1;
+    } else if (entry.type !== 'omission' && entry.type !== 'deletion') {
+      hypIndex += entry.compound && entry.parts ? entry.parts.length : 1;
+    }
+  }
+
+  return absorbed;
+}
+
 // ── DIAG-01: Onset Delays (Hesitations) ─────────────────────────────
 
 /**
