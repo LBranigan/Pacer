@@ -231,6 +231,23 @@ const DIAGNOSTIC_MISCUES = {
     uiClass: 'word-morphological'
   },
 
+  wordByWord: {
+    description: 'Student reads with uniform pauses between most words, indicating word-by-word decoding rather than phrase-level reading',
+    detector: 'diagnostics.js → computePhrasingQuality() → readingPattern',
+    countsAsError: false, // Reading pattern diagnostic, not a per-word error
+    config: {
+      thresholds: {
+        wordByWord: 0.350,  // medianGap > 350ms
+        choppy: 0.250,      // medianGap > 250ms
+        phraseLevel: 0.150  // medianGap > 150ms
+      }
+    },
+    example: {
+      context: 'Student reads "The... cat... sat... on... the... mat" with ~400ms between every word',
+      result: 'medianGap = 0.412 → classification: word-by-word'
+    }
+  },
+
   struggle: {
     description: 'Substitution+ — student failed to produce the word, with additional evidence of decoding difficulty (long pause, near-miss fragments, and/or abandoned attempt). Always an error.',
     detector: 'diagnostics.js → resolveNearMissClusters() (Path 2: decoding) + detectStruggleWords() (Path 1: hesitation, Path 3: abandoned attempt)',

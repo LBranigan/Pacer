@@ -323,11 +323,24 @@ function parseSttTime(t) {
   return parseFloat(String(t).replace('s', '')) || 0;
 }
 
-export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, diagnostics, transcriptWords, tierBreakdown, disfluencySummary, safetyData) {
+export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, diagnostics, transcriptWords, tierBreakdown, disfluencySummary, safetyData, referenceText) {
   const wordsDiv = document.getElementById('resultWords');
   const plainDiv = document.getElementById('resultPlain');
   const jsonDiv = document.getElementById('resultJson');
+  const prosodyContainer = document.getElementById('prosodyContainer');
   wordsDiv.innerHTML = ''; plainDiv.textContent = ''; jsonDiv.textContent = '';
+  if (prosodyContainer) { prosodyContainer.innerHTML = ''; prosodyContainer.style.display = 'none'; }
+
+  // Build map: refIndex → trailing punctuation string (cosmetic only, not scored)
+  const punctSuffixMap = new Map();
+  if (referenceText) {
+    const rawWords = referenceText.trim().split(/\s+/);
+    for (let i = 0; i < rawWords.length; i++) {
+      const w = rawWords[i];
+      const match = w.match(/([.!?,;:\u2014\u2013\u2012\u2015]+["'\u201C\u201D\u2018\u2019)}\]]*|["'\u201C\u201D\u2018\u2019)}\]]+)$/);
+      if (match) punctSuffixMap.set(i, match[0]);
+    }
+  }
 
   // Metrics summary bar
   const metricsBar = document.createElement('div');
@@ -411,13 +424,6 @@ export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, di
   errBox.innerHTML = '<span class="metric-label">' + errParts.join(', ') + '</span>';
   metricsBar.appendChild(errBox);
 
-  if (diagnostics && diagnostics.prosodyProxy) {
-    const prosBox = document.createElement('div');
-    prosBox.className = 'metric-box';
-    prosBox.innerHTML = '<span class="metric-value">' + diagnostics.prosodyProxy.ratio + '</span><span class="metric-label">Prosody</span>';
-    metricsBar.appendChild(prosBox);
-  }
-
   // Tier breakdown row
   if (tierBreakdown) {
     const tierRow = document.createElement('div');
@@ -440,6 +446,175 @@ export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, di
   }
 
   plainDiv.appendChild(metricsBar);
+
+  // ── Collapsible Prosody Section ──
+  if (diagnostics && diagnostics.prosody && !diagnostics.prosody.phrasing.insufficient) {
+    const pros = diagnostics.prosody;
+    const section = document.createElement('div');
+    section.className = 'prosody-section';
+
+    // Header — matches Confidence View / Disfluencies pattern
+    const header = document.createElement('div');
+    header.className = 'prosody-header';
+    header.innerHTML = '<h4>Prosody</h4><span class="prosody-toggle">&#9660;</span>';
+
+    header.addEventListener('click', () => {
+      section.classList.toggle('expanded');
+    });
+    section.appendChild(header);
+
+    // Body (expanded detail)
+    const body = document.createElement('div');
+    body.className = 'prosody-body';
+
+    const phrasingPart = pros.phrasing.readingPattern.classification;
+    const isWordByWordOrChoppy = phrasingPart === 'word-by-word' || phrasingPart === 'choppy';
+
+    // Warning for word-by-word / choppy
+    if (isWordByWordOrChoppy) {
+      const warning = document.createElement('div');
+      warning.className = 'prosody-warning';
+      const gapMs = pros.phrasing.readingPattern.medianGap != null
+        ? Math.round(pros.phrasing.readingPattern.medianGap * 1000) + 'ms'
+        : '?';
+      warning.textContent = (phrasingPart === 'word-by-word' ? 'Word-by-word' : 'Choppy') +
+        ' reading pattern (median gap: ' + gapMs + ')';
+      body.appendChild(warning);
+    }
+
+    // Four metric boxes
+    const metricsRow = document.createElement('div');
+    metricsRow.className = 'prosody-metrics';
+
+    // Box 1: Phrasing
+    const phrasingBox = document.createElement('div');
+    phrasingBox.className = 'metric-box';
+    if (isWordByWordOrChoppy) {
+      const gapMs = pros.phrasing.readingPattern.medianGap != null
+        ? Math.round(pros.phrasing.readingPattern.medianGap * 1000) + 'ms'
+        : '?';
+      phrasingBox.innerHTML = '<span class="metric-value">' +
+        (phrasingPart === 'word-by-word' ? 'Word-by-word' : 'Choppy') +
+        '</span><span class="metric-label">reading (gap: ' + gapMs + ')</span>';
+    } else {
+      phrasingBox.innerHTML = '<span class="metric-value">' +
+        (pros.phrasing.fluencyPhrasing.median != null ? pros.phrasing.fluencyPhrasing.median : 'N/A') +
+        '</span><span class="metric-label">words/phrase (fluency)</span>';
+    }
+    // Phrasing tooltip
+    const phTip = [];
+    phTip.push('How fluently this student reads between sentence boundaries.');
+    if (pros.phrasing.fluencyPhrasing.median != null) {
+      phTip.push('Fluency: median ' + pros.phrasing.fluencyPhrasing.median + ' words/phrase (mean ' + pros.phrasing.fluencyPhrasing.mean + ')');
+    }
+    if (pros.phrasing.overallPhrasing.median != null) {
+      phTip.push('Overall: median ' + pros.phrasing.overallPhrasing.median + ' words/phrase (mean ' + pros.phrasing.overallPhrasing.mean + ')');
+    }
+    phTip.push(pros.phrasing.breakClassification.unexpected + ' unexpected pauses, ' + pros.phrasing.breakClassification.atPunctuation + ' at punctuation');
+    const gd = pros.phrasing.gapDistribution;
+    phTip.push('Gap analysis: Q3=' + gd.Q3 + 's, IQR=' + gd.IQR + 's, Fence=' + gd.gapFence + 's (IQR-based)');
+    const bs = pros.phrasing.breakSources;
+    phTip.push('Breaks: ' + bs.fromHesitations + ' hesitations, ' + bs.fromLongPauses + ' long pauses, ' + bs.fromMediumPauses + ' medium pauses');
+    if (bs.vadFiltered > 0) phTip.push('(' + bs.vadFiltered + ' hesitations filtered by VAD)');
+    phrasingBox.title = phTip.join('\n');
+    metricsRow.appendChild(phrasingBox);
+
+    // Box 2: Punctuation Coverage
+    const punctBox = document.createElement('div');
+    punctBox.className = 'metric-box';
+    const cov = pros.pauseAtPunctuation.coverage;
+    if (cov.ratio !== null) {
+      punctBox.innerHTML = '<span class="metric-value">' + cov.coveredCount + ' of ' + cov.encounteredPunctuationMarks +
+        '</span><span class="metric-label">Punctuation Coverage</span>';
+    } else {
+      punctBox.innerHTML = '<span class="metric-value">N/A</span><span class="metric-label">Punctuation Coverage</span>';
+    }
+    const ptTip = [];
+    if (cov.ratio !== null) {
+      ptTip.push('Of ' + cov.encounteredPunctuationMarks + ' punctuation marks encountered, the student paused at ' + cov.coveredCount + '.');
+      ptTip.push('(' + cov.totalPunctuationMarks + ' total in passage, ' + cov.encounteredPunctuationMarks + ' encountered by student, last word excluded)');
+      ptTip.push('Pause threshold: ' + (cov.punctPauseThresholdMs || '?') + 'ms (1.5x median gap, floor 100ms)');
+      if (cov.uncoveredMarks.length > 0) {
+        ptTip.push('Missed: ' + cov.uncoveredMarks.map(m => m.punctType + ' after "' + m.refWord + '"' + (m.gap != null ? ' (' + m.gap + 'ms gap)' : '')).join(', '));
+      }
+    } else {
+      ptTip.push(cov.label);
+    }
+    const prec = pros.pauseAtPunctuation.precision;
+    if (prec.ratio !== null) {
+      ptTip.push('Also: ' + Math.round(prec.ratio * 100) + '% of all pauses landed at punctuation (' + prec.atPunctuationCount + ' of ' + prec.totalPauses + ')');
+    }
+    punctBox.title = ptTip.join('\n');
+    metricsRow.appendChild(punctBox);
+
+    // Box 3: Duration Outliers
+    const outBox = document.createElement('div');
+    outBox.className = 'metric-box';
+    if (!pros.wordOutliers.insufficient) {
+      outBox.innerHTML = '<span class="metric-value">' + pros.wordOutliers.outlierCount +
+        ' word' + (pros.wordOutliers.outlierCount !== 1 ? 's' : '') +
+        '</span><span class="metric-label">Duration Outliers</span>';
+      const oTip = [];
+      oTip.push('Multisyllabic words above this student\'s statistical outlier fence');
+      oTip.push('(IQR method: Q3 + 1.5*IQR = ' + pros.wordOutliers.baseline.upperFence + 'ms/syllable).');
+      oTip.push('Student baseline: median ' + pros.wordOutliers.baseline.medianDurationPerSyllable + 'ms/syl, Q1=' + pros.wordOutliers.baseline.Q1 + ', Q3=' + pros.wordOutliers.baseline.Q3);
+      for (const o of pros.wordOutliers.outliers.slice(0, 5)) {
+        oTip.push(o.word + ' (' + o.syllables + ' syl): ' + o.normalizedDurationMs + 'ms/syl — ' + o.aboveFenceBy + 'ms above fence');
+      }
+      if (pros.wordOutliers.outlierCount > 5) oTip.push('... and ' + (pros.wordOutliers.outlierCount - 5) + ' more');
+      oTip.push('Timestamps: cross-validator (' + pros.wordOutliers.baseline.totalWordsAnalyzed + ' words analyzed, ' + pros.wordOutliers.baseline.wordsSkippedNoTimestamps + ' skipped)');
+      outBox.title = oTip.join('\n');
+    } else {
+      outBox.innerHTML = '<span class="metric-value">N/A</span><span class="metric-label">Duration Outliers</span>';
+      outBox.title = pros.wordOutliers.reason || 'Insufficient data';
+    }
+    metricsRow.appendChild(outBox);
+
+    // Box 4: Pace Consistency
+    const paceBox = document.createElement('div');
+    paceBox.className = 'metric-box';
+    if (!pros.paceConsistency.insufficient) {
+      const paceLabel = pros.paceConsistency.classification.replace(/-/g, ' ');
+      paceBox.innerHTML = '<span class="metric-value">' + paceLabel.charAt(0).toUpperCase() + paceLabel.slice(1) +
+        '</span><span class="metric-label">Pace</span>';
+      const pcTip = [];
+      pcTip.push('How consistently the student reads across the passage.');
+      pcTip.push('CV = ' + pros.paceConsistency.cv + ' (' + pros.paceConsistency.label + ')');
+      pcTip.push('Mean local rate: ' + pros.paceConsistency.meanLocalRate + ' WPM across ' + pros.paceConsistency.phraseCount + ' phrases');
+      if (pros.paceConsistency.localRates && pros.paceConsistency.localRates.length > 0) {
+        const rates = pros.paceConsistency.localRates;
+        const fastest = rates.reduce((a, b) => a.wordsPerMinute > b.wordsPerMinute ? a : b);
+        const slowest = rates.reduce((a, b) => a.wordsPerMinute < b.wordsPerMinute ? a : b);
+        pcTip.push('Fastest phrase: ' + fastest.wordsPerMinute + ' WPM (phrase ' + (fastest.phraseIndex + 1) + ', ' + fastest.wordCount + ' words)');
+        pcTip.push('Slowest phrase: ' + slowest.wordsPerMinute + ' WPM (phrase ' + (slowest.phraseIndex + 1) + ', ' + slowest.wordCount + ' words)');
+      }
+      pcTip.push('Note: Pace is measured within phrases, not word-by-word.');
+      paceBox.title = pcTip.join('\n');
+    } else {
+      paceBox.innerHTML = '<span class="metric-value">N/A</span><span class="metric-label">Pace</span>';
+      paceBox.title = pros.paceConsistency.reason || 'Insufficient data';
+    }
+    metricsRow.appendChild(paceBox);
+
+    body.appendChild(metricsRow);
+
+    // Scope transparency note
+    const scopeNote = document.createElement('div');
+    scopeNote.className = 'prosody-scope-note';
+    scopeNote.textContent = 'Measures phrasing, timing, and pace from word timestamps. Does not measure expression, intonation, or stress (requires audio pitch analysis).';
+    body.appendChild(scopeNote);
+
+    section.appendChild(body);
+    if (prosodyContainer) {
+      prosodyContainer.appendChild(section);
+      prosodyContainer.style.display = '';
+    }
+  }
+
+  // ── Word Speed Map section ──
+  if (diagnostics && diagnostics.wordSpeed && !diagnostics.wordSpeed.insufficient) {
+    renderWordSpeedSection(diagnostics.wordSpeed);
+  }
 
   // Build mapping from raw transcriptWords index → alignment render hypIndex.
   // Diagnostics (onset delays, long pauses) return indices into the full
@@ -523,6 +698,7 @@ export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, di
   // Render reference words color-coded
   const insertions = [];
   let hypIndex = 0;
+  let refIndex = 0;
   for (const item of alignment) {
     if (item.type === 'insertion') {
       insertions.push(item);
@@ -675,6 +851,12 @@ export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, di
       }
     }
 
+    // Cosmetic punctuation (not scored) — append inside span so it shares word styling
+    const punct = punctSuffixMap.get(refIndex);
+    if (punct) {
+      span.textContent += punct;
+    }
+
     // Check for disfluency badge (Phase 16) -- skip when Kitchen Sink data present
     const hasDisfluency = sttWord?.severity && sttWord.severity !== 'none' && !('isDisfluency' in (sttWord || {}));
 
@@ -691,12 +873,14 @@ export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, di
     } else {
       wordsDiv.appendChild(span);
     }
+
     wordsDiv.appendChild(document.createTextNode(' '));
 
-    // Advance hypIndex for non-omission items
+    // Advance indices
     if (item.type !== 'omission') {
       hypIndex++;
     }
+    refIndex++;
   }
 
   // Insertions section (excluding forgiven proper noun parts AND disfluent words)
@@ -977,6 +1161,204 @@ function renderDisfluencySection(disfluencyStats) {
     rateLine.style.fontSize = '0.8rem';
     rateLine.textContent = `Rate: ${disfluencyStats.rate} of words`;
     detailsEl.appendChild(rateLine);
+  }
+}
+
+// ── Word Speed Map rendering ────────────────────────────────────────
+
+/**
+ * Render the Word Speed Map collapsible section.
+ * Populates legend, passage words (colored by tier), inline summary, and summary bar.
+ *
+ * @param {object} wordSpeedData - Output from computeWordSpeedTiers()
+ */
+function renderWordSpeedSection(wordSpeedData) {
+  const section = document.getElementById('wordSpeedSection');
+  const summaryInline = document.getElementById('wordSpeedSummaryInline');
+  const legendEl = document.getElementById('wordSpeedLegend');
+  const wordsEl = document.getElementById('wordSpeedWords');
+  const summaryEl = document.getElementById('wordSpeedSummary');
+
+  if (!section || !wordsEl) return;
+
+  if (!wordSpeedData || wordSpeedData.insufficient) {
+    section.style.display = 'none';
+    return;
+  }
+
+  section.style.display = '';
+
+  // ── Inline summary (visible when collapsed) ──
+  const d = wordSpeedData.distribution;
+  const parts = [];
+  parts.push(`${wordSpeedData.atPacePercent}% at pace`);
+  if (d.slow > 0) parts.push(`${d.slow} slow`);
+  if (d.struggling > 0) parts.push(`${d.struggling} struggling`);
+  if (d.stalled > 0) parts.push(`${d.stalled} stalled`);
+  if (summaryInline) summaryInline.textContent = parts.join(' | ');
+
+  // ── Legend ──
+  if (legendEl) {
+    const tiers = [
+      { cls: 'ws-quick', label: 'Quick' },
+      { cls: 'ws-steady', label: 'Steady' },
+      { cls: 'ws-slow', label: 'Slow' },
+      { cls: 'ws-struggling', label: 'Struggling' },
+      { cls: 'ws-stalled', label: 'Stalled' },
+      { cls: 'ws-short-word', label: '1-syl word' },
+      { cls: 'ws-omitted', label: 'Omitted' },
+      { cls: 'ws-no-data', label: 'No data' }
+    ];
+    legendEl.innerHTML = '';
+    for (const t of tiers) {
+      const span = document.createElement('span');
+      span.className = t.cls;
+      span.textContent = t.label;
+      legendEl.appendChild(span);
+    }
+  }
+
+  // ── Passage words ──
+  wordsEl.innerHTML = '';
+  for (const w of wordSpeedData.words) {
+    const span = document.createElement('span');
+    span.className = `word ws-${w.tier}`;
+    span.textContent = w.refWord || '???';
+    span.title = buildWordSpeedTooltip(w);
+    wordsEl.appendChild(span);
+    wordsEl.appendChild(document.createTextNode(' '));
+  }
+
+  // ── Summary bar ──
+  if (summaryEl) {
+    renderWordSpeedSummary(summaryEl, wordSpeedData);
+  }
+}
+
+/**
+ * Build a debug-rich tooltip for a word in the Word Speed Map.
+ * Shows all available data — this is the debug surface.
+ *
+ * @param {object} w - Word entry from computeWordSpeedTiers().words[]
+ * @returns {string} Tooltip text
+ */
+function buildWordSpeedTooltip(w) {
+  const lines = [];
+
+  if (w.tier === 'omitted') {
+    lines.push(`"${w.refWord}"`);
+    lines.push('Omitted — student did not read this word');
+    return lines.join('\n');
+  }
+
+  // Ref → heard
+  if (w.word && w.word.toLowerCase() !== (w.refWord || '').toLowerCase()) {
+    lines.push(`"${w.refWord}" (ref) → "${w.word}" (heard)`);
+  } else {
+    lines.push(`"${w.refWord}"`);
+  }
+
+  lines.push(`Type: ${w.alignmentType}`);
+
+  if (w.tier === 'no-data') {
+    lines.push('No Deepgram timing data — word not classified');
+    return lines.join('\n');
+  }
+
+  // Duration line
+  if (w.durationMs != null) {
+    lines.push(`Duration: ${w.durationMs}ms | ${w.syllables} syl | ${w.normalizedMs} ms/syl`);
+  }
+
+  if (w.tier === 'short-word') {
+    lines.push('Tier: short-word — single-syllable, timing not classified');
+    if (w._medianMs) lines.push(`Student median: ${w._medianMs} ms/syl`);
+    return lines.join('\n');
+  }
+
+  // Ratio + tier with range
+  const tierRanges = {
+    quick: '< 0.75x',
+    steady: '0.75x – 1.25x',
+    slow: '1.25x – 1.75x',
+    struggling: '1.75x – 2.50x',
+    stalled: '>= 2.50x'
+  };
+  if (w.ratio != null && w._medianMs) {
+    lines.push(`Ratio: ${w.ratio}x student median (${w._medianMs} ms/syl)`);
+  }
+  lines.push(`Tier: ${w.tier} (${tierRanges[w.tier] || '?'} range)`);
+
+  // IQR outlier status
+  if (w._upperFence) {
+    lines.push(`IQR outlier: ${w.isOutlier ? 'yes' : 'no'} (fence: ${w._upperFence} ms/syl)`);
+  }
+
+  return lines.join('\n');
+}
+
+/**
+ * Render the summary bar below the word speed passage.
+ * Stacked distribution bar + text stats.
+ *
+ * @param {HTMLElement} container - The summary container element
+ * @param {object} data - Output from computeWordSpeedTiers()
+ */
+function renderWordSpeedSummary(container, data) {
+  container.innerHTML = '';
+  const d = data.distribution;
+
+  // Text summary line
+  const textLine = document.createElement('div');
+  const parts = [];
+  parts.push(`${data.atPacePercent}% at pace`);
+  if (d.slow > 0) parts.push(`${d.slow} slow`);
+  if (d.struggling > 0) parts.push(`${d.struggling} struggling`);
+  if (d.stalled > 0) parts.push(`${d.stalled} stalled`);
+  textLine.textContent = parts.join(' | ');
+  container.appendChild(textLine);
+
+  // Stacked distribution bar (only classifiable tiers)
+  const classifiable = d.quick + d.steady + d.slow + d.struggling + d.stalled;
+  if (classifiable > 0) {
+    const bar = document.createElement('div');
+    bar.className = 'ws-dist-bar';
+    const segs = [
+      { cls: 'seg-quick', count: d.quick },
+      { cls: 'seg-steady', count: d.steady },
+      { cls: 'seg-slow', count: d.slow },
+      { cls: 'seg-struggling', count: d.struggling },
+      { cls: 'seg-stalled', count: d.stalled }
+    ];
+    for (const s of segs) {
+      if (s.count <= 0) continue;
+      const seg = document.createElement('div');
+      seg.className = s.cls;
+      seg.style.width = ((s.count / classifiable) * 100) + '%';
+      bar.appendChild(seg);
+    }
+    container.appendChild(bar);
+  }
+
+  // Counts line
+  const countsLine = document.createElement('div');
+  countsLine.style.color = '#888';
+  countsLine.style.fontSize = '0.8em';
+  countsLine.style.marginTop = '4px';
+  const countParts = [`${classifiable} classifiable words`];
+  if (d['short-word'] > 0) countParts.push(`${d['short-word']} single-syl`);
+  if (d.omitted > 0) countParts.push(`${d.omitted} omitted`);
+  if (d['no-data'] > 0) countParts.push(`${d['no-data']} no data`);
+  countsLine.textContent = countParts.join(' | ');
+  container.appendChild(countsLine);
+
+  // Baseline line
+  if (data.baseline && data.baseline.medianMs) {
+    const baseLine = document.createElement('div');
+    baseLine.style.color = '#888';
+    baseLine.style.fontSize = '0.8em';
+    baseLine.textContent = `Student baseline: ${data.baseline.medianMs} ms/syllable`;
+    container.appendChild(baseLine);
   }
 }
 

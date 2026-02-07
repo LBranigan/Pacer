@@ -11,9 +11,9 @@ echo.
 set PORT=8888
 set REVERB_PORT=8765
 
-:: ── Start Reverb ASR service via WSL (conda reverb env with CUDA) ──
-echo Starting Reverb ASR service in WSL...
-start "Reverb ASR" wsl -- bash -c "set -a && source /mnt/c/Users/brani/desktop/googstt/services/reverb/.env 2>/dev/null; set +a && cd /mnt/c/Users/brani/desktop/googstt/services/reverb && /home/brani/miniconda3/envs/reverb/bin/uvicorn server:app --host 0.0.0.0 --port 8765"
+:: ── Start Reverb ASR service via Docker ──
+echo Starting Reverb ASR Docker container...
+docker compose -f services\reverb\docker-compose.yml up -d
 
 :: Wait for Reverb to become responsive
 echo Waiting for Reverb service...
@@ -29,7 +29,7 @@ if errorlevel 1 (
     ) else (
         echo.
         echo WARNING: Reverb service not responding after 60 seconds.
-        echo Check the Reverb ASR window for errors.
+        echo Run: docker compose -f services\reverb\docker-compose.yml logs
         echo The web server will still start, but transcription may not work.
         echo.
     )
@@ -43,7 +43,7 @@ start http://localhost:%PORT%/index.html
 
 echo ──────────────────────────────────────────
 echo   Web server:  http://localhost:%PORT%
-echo   Reverb ASR:  http://localhost:%REVERB_PORT%
+echo   Reverb ASR:  http://localhost:%REVERB_PORT% (Docker)
 echo ──────────────────────────────────────────
 echo.
 echo Press Ctrl+C to stop the web server, or close this window.

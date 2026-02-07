@@ -90,7 +90,6 @@ const DEFAULT_CONFIG = Object.freeze({
         errorsPerMinute: '#9d4444',
         wpm: '#4a6fa5',
         accuracy: '#7b5ea7',
-        prosody: '#b07d3d'
     },
 
     // Data point symbols
@@ -107,7 +106,6 @@ const METRIC_LABELS = {
     errorsPerMinute: 'Errors/min',
     wpm: 'Words/min',
     accuracy: 'Accuracy %',
-    prosody: 'Prosody'
 };
 
 /**
@@ -223,8 +221,6 @@ export function createChart(canvasEl, options = {}) {
                         value = a.performance?.wpm || 0; break;
                     case 'accuracy':
                         value = a.performance?.accuracy || 0; break;
-                    case 'prosody':
-                        value = (a.prosody?.score || 0) * 20; break;
                     default:
                         value = 0;
                 }

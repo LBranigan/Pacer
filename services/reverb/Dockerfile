@@ -8,6 +8,7 @@ RUN apt-get update && apt-get install -y \
     git \
     git-lfs \
     libsndfile1 \
+    sox \
     && rm -rf /var/lib/apt/lists/*
 
 # Initialize git-lfs for HuggingFace model download
@@ -25,6 +26,11 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 # Install Reverb ASR (separate layer for Docker caching)
 RUN pip install --no-cache-dir rev-reverb==0.1.0
+
+# Install NeMo ASR for Parakeet TDT (separate layer — ~1-2GB, rarely changes)
+# NeMo can pull torch/torchaudio targeting wrong CUDA; restore all three for CUDA 11.8
+RUN pip install --no-cache-dir "nemo_toolkit[asr]>=2.2" && \
+    pip install --no-cache-dir torch==2.4.0 torchvision==0.19.0 torchaudio==2.4.0 --index-url https://download.pytorch.org/whl/cu118
 
 # Copy server application (created in Plan 02)
 COPY server.py .

@@ -102,8 +102,10 @@ class WebSpeechASR {
     this.recognition.lang = 'en-US';
 
     // Chrome 139+: on-device processing for better latency + privacy
+    this._useLocalProcessing = false;
     if ('processLocally' in this.recognition) {
       this.recognition.processLocally = true;
+      this._useLocalProcessing = true;
       console.log('[maze-webspeech] On-device processing enabled');
     }
 
@@ -169,6 +171,11 @@ class WebSpeechASR {
         console.log('[maze-webspeech] No speech detected (will restart)');
       } else if (event.error === 'aborted') {
         // Normal when stop() is called
+      } else if (event.error === 'language-not-supported' && this._useLocalProcessing) {
+        // On-device model not available — disable and retry with server-side
+        console.warn('[maze-webspeech] On-device not available, falling back to server-side');
+        this._useLocalProcessing = false;
+        this.recognition.processLocally = false;
       } else {
         console.warn(`[maze-webspeech] Error: ${event.error}`);
       }

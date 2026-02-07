@@ -15,7 +15,7 @@
 </head>
 <body>
 
-<div id="version" style="text-align:right;font-size:0.75rem;color:#999;">v 2026-02-07 00:30</div>
+<div id="version" style="text-align:right;font-size:0.75rem;color:#999;">v 2026-02-07 01:15</div>
 <h1>Oral Reading Fluency Assessment</h1>
 <p class="subtitle">Reverb + Deepgram &mdash; Kitchen Sink Pipeline</p>
 
@@ -155,6 +155,23 @@
     <div class="disfluency-body">
       <div class="disfluency-summary" id="disfluencySummaryText"></div>
       <div class="disfluency-details" id="disfluencyDetails"></div>
+    </div>
+  </div>
+
+  <!-- Prosody Metrics - collapsed by default, rendered by ui.js -->
+  <div class="prosody-container" id="prosodyContainer" style="display:none;"></div>
+
+  <!-- Word Speed Map - collapsed by default -->
+  <div class="word-speed-section" id="wordSpeedSection" style="display:none;">
+    <div class="word-speed-header" onclick="document.getElementById('wordSpeedSection').classList.toggle('expanded')">
+      <h4>Word Speed Map</h4>
+      <span class="word-speed-summary-inline" id="wordSpeedSummaryInline"></span>
+      <span class="word-speed-toggle">&#9660;</span>
+    </div>
+    <div class="word-speed-body">
+      <div class="word-speed-legend" id="wordSpeedLegend"></div>
+      <div class="word-speed-words" id="wordSpeedWords"></div>
+      <div class="word-speed-summary" id="wordSpeedSummary"></div>
     </div>
   </div>
 

@@ -6,7 +6,7 @@ import { alignWords } from './alignment.js';
 import { getCanonical } from './word-equivalences.js';
 import { computeWCPM, computeAccuracy, computeWCPMRange } from './metrics.js';
 import { setStatus, displayResults, displayAlignmentResults, showAudioPlayback, renderStudentSelector, renderHistory } from './ui.js';
-import { runDiagnostics, computeTierBreakdown, resolveNearMissClusters } from './diagnostics.js';
+import { runDiagnostics, computeTierBreakdown, resolveNearMissClusters, computePhrasingQuality, computePauseAtPunctuation, computePaceConsistency, computeWordDurationOutliers, computeWordSpeedTiers } from './diagnostics.js';
 import { extractTextFromImage } from './ocr-api.js';
 import { trimPassageToAttempted } from './passage-trimmer.js';
 import { analyzePassageText, levenshteinRatio } from './nl-api.js';
@@ -50,6 +50,8 @@ const analyzeBtn = document.getElementById('analyzeBtn');
 function updateAnalyzeBtn() {
   analyzeBtn.disabled = !appState.audioBlob;
 }
+
+// ── Post-Assessment Launchers (Playback & Maze Game) ──
 
 function showPlaybackButton(studentId, assessmentId) {
   // Remove any existing playback button / theme selector
@@ -1225,6 +1227,69 @@ async function runAnalysis() {
     }))
   });
 
+  // ── Prosody metrics — computed AFTER VAD enrichment + gap adjustment ──
+  // READ-ONLY: these functions consume finalized diagnostics but never modify them
+  const phrasing = computePhrasingQuality(diagnostics, transcriptWords, referenceText, alignment);
+  const pauseAtPunctuation = phrasing.insufficient
+    ? { coverage: { ratio: null, label: 'Insufficient data' }, precision: { ratio: null, label: 'Insufficient data' }, passagePunctuationDensity: 0 }
+    : computePauseAtPunctuation(transcriptWords, referenceText, alignment, phrasing.breakClassification, phrasing._breakSet);
+  const paceConsistency = phrasing.insufficient
+    ? { insufficient: true, reason: 'Phrasing insufficient' }
+    : computePaceConsistency(phrasing.overallPhrasing, transcriptWords);
+  const wordOutliers = computeWordDurationOutliers(transcriptWords, alignment);
+  const wordSpeedTiers = computeWordSpeedTiers(wordOutliers, alignment);
+
+  diagnostics.prosody = { phrasing, pauseAtPunctuation, paceConsistency, wordOutliers };
+  diagnostics.wordSpeed = wordSpeedTiers;
+
+  addStage('prosody', {
+    insufficient: phrasing.insufficient || false,
+    phrasing: phrasing.insufficient ? null : {
+      readingPattern: phrasing.readingPattern.classification,
+      medianGap: phrasing.readingPattern.medianGap,
+      fluencyMedian: phrasing.fluencyPhrasing.median,
+      fluencyMean: phrasing.fluencyPhrasing.mean,
+      overallMedian: phrasing.overallPhrasing.median,
+      unexpectedBreaks: phrasing.breakClassification.unexpected,
+      atPunctuationBreaks: phrasing.breakClassification.atPunctuation
+    },
+    pauseAtPunctuation: {
+      covered: pauseAtPunctuation.coverage?.coveredCount ?? null,
+      encountered: pauseAtPunctuation.coverage?.encounteredPunctuationMarks ?? null,
+      total: pauseAtPunctuation.coverage?.totalPunctuationMarks ?? null,
+      ratio: pauseAtPunctuation.coverage?.ratio ?? null,
+      punctPauseThresholdMs: pauseAtPunctuation.coverage?.punctPauseThresholdMs ?? null,
+      uncoveredMarks: pauseAtPunctuation.coverage?.uncoveredMarks?.map(m => ({
+        punctType: m.punctType,
+        afterWord: m.refWord,
+        gapMs: m.gap
+      })) || [],
+      precisionRatio: pauseAtPunctuation.precision?.ratio ?? null,
+      precisionDetail: pauseAtPunctuation.precision?.ratio != null
+        ? `${pauseAtPunctuation.precision.atPunctuationCount} of ${pauseAtPunctuation.precision.totalPauses} pauses at punctuation`
+        : null
+    },
+    paceConsistency: paceConsistency.insufficient ? null : {
+      classification: paceConsistency.classification,
+      cv: paceConsistency.cv,
+      meanLocalRate: paceConsistency.meanLocalRate,
+      phraseCount: paceConsistency.phraseCount
+    },
+    wordOutliers: wordOutliers.insufficient ? null : {
+      outlierCount: wordOutliers.outlierCount,
+      baseline: {
+        medianMsPerSyl: wordOutliers.baseline.medianDurationPerSyllable,
+        upperFence: wordOutliers.baseline.upperFence
+      },
+      outliers: wordOutliers.outliers.slice(0, 5).map(o => ({
+        word: o.refWord || o.word,
+        syllables: o.syllables,
+        msPerSyl: o.normalizedDurationMs,
+        aboveFenceBy: o.aboveFenceBy
+      }))
+    }
+  });
+
   displayAlignmentResults(
     alignment,
     wcpm,
@@ -1235,7 +1300,8 @@ async function runAnalysis() {
     tierBreakdown,
     // Prefer Kitchen Sink disfluencyStats (Phase 24) over Phase 14 severity summary
     data._kitchenSink?.disfluencyStats || null,
-    data._safety || null                   // Collapse state and safety flags
+    data._safety || null,                  // Collapse state and safety flags
+    referenceText                          // Raw reference text for cosmetic punctuation
   );
 
   if (appState.selectedStudentId) {
@@ -1249,6 +1315,57 @@ async function runAnalysis() {
     if (appState.audioBlob) {
       await saveAudioBlob(assessmentId, appState.audioBlob);
     }
+    // Assemble prosody snapshot for storage
+    const prosodySnapshot = (() => {
+      const p = diagnostics.prosody;
+      if (!p || p.phrasing.insufficient) return null;
+      return {
+        phrasing: {
+          fluencyMean: p.phrasing.fluencyPhrasing.mean,
+          fluencyMedian: p.phrasing.fluencyPhrasing.median,
+          overallMean: p.phrasing.overallPhrasing.mean,
+          overallMedian: p.phrasing.overallPhrasing.median,
+          totalPhrasesOverall: p.phrasing.overallPhrasing.totalPhrases,
+          unexpectedBreaks: p.phrasing.breakClassification.unexpected,
+          atPunctuationBreaks: p.phrasing.breakClassification.atPunctuation,
+          readingPattern: p.phrasing.readingPattern.classification,
+          medianGap: p.phrasing.readingPattern.medianGap,
+          gapFence: p.phrasing.gapDistribution.gapFence
+        },
+        pauseAtPunctuation: {
+          coverageRatio: p.pauseAtPunctuation.coverage.ratio,
+          coveredCount: p.pauseAtPunctuation.coverage.coveredCount,
+          encounteredPunctuationMarks: p.pauseAtPunctuation.coverage.encounteredPunctuationMarks,
+          totalPunctuationMarks: p.pauseAtPunctuation.coverage.totalPunctuationMarks,
+          precisionRatio: p.pauseAtPunctuation.precision.ratio,
+          notAtPunctuationCount: p.pauseAtPunctuation.precision.notAtPunctuationCount,
+          passagePunctuationDensity: p.pauseAtPunctuation.passagePunctuationDensity
+        },
+        paceConsistency: p.paceConsistency.insufficient ? null : {
+          cv: p.paceConsistency.cv,
+          classification: p.paceConsistency.classification,
+          meanLocalRate: p.paceConsistency.meanLocalRate,
+          sdLocalRate: p.paceConsistency.sdLocalRate,
+          phraseCount: p.paceConsistency.phraseCount
+        },
+        wordOutliers: p.wordOutliers.insufficient ? null : {
+          medianDurationPerSyllable: p.wordOutliers.baseline.medianDurationPerSyllable,
+          upperFence: p.wordOutliers.baseline.upperFence,
+          effectiveIQR: p.wordOutliers.baseline.effectiveIQR,
+          outlierCount: p.wordOutliers.outlierCount,
+          outliers: p.wordOutliers.outliers.map(o => ({
+            word: o.refWord || o.word,
+            refIndex: o.refIndex,
+            normalizedMs: o.normalizedDurationMs,
+            aboveFenceBy: o.aboveFenceBy,
+            syllables: o.syllables
+          }))
+        },
+        passageSnippet: referenceText.substring(0, 50),
+        assessedAt: new Date().toISOString()
+      };
+    })();
+
     saveAssessment(appState.selectedStudentId, {
       _id: assessmentId,
       wcpm: wcpm ? wcpm.wcpm : null,
@@ -1263,6 +1380,7 @@ async function runAnalysis() {
       sttWords: transcriptWords,
       audioRef: appState.audioBlob ? assessmentId : null,
       nlAnnotations,
+      prosody: prosodySnapshot,
       _ensemble: data._ensemble || null,  // Preserves ensemble debug data
       _vad: data._vad || null,  // Preserves VAD ghost detection data
       _classification: data._classification || null,  // Preserves confidence classification data
@@ -1272,12 +1390,10 @@ async function runAnalysis() {
     refreshStudentUI();
     setStatus('Done (saved).');
 
-    // Show student playback button if audio exists
+    // ── Post-assessment launchers ──
     if (appState.audioBlob) {
       showPlaybackButton(appState.selectedStudentId, assessmentId);
     }
-
-    // Show maze game button if passage is long enough
     showMazeButton(appState.selectedStudentId, assessmentId, referenceText);
 
     // Finalize and auto-save debug log

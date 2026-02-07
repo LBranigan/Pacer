@@ -519,3 +519,193 @@ body.dev-mode .dev-mode-toggle {
   color: #333;
 }
 
+/* Collapsible prosody section — matches confidence/disfluency pattern */
+.prosody-section {
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.prosody-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.5rem 0.75rem;
+  background: #f5f5f5;
+  cursor: pointer;
+  user-select: none;
+}
+
+.prosody-header:hover {
+  background: #eee;
+}
+
+.prosody-header h4 {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #555;
+  margin: 0;
+}
+
+.prosody-toggle {
+  font-size: 0.8rem;
+  color: #888;
+  transition: transform 0.2s;
+}
+
+.prosody-section.expanded .prosody-toggle {
+  transform: rotate(180deg);
+}
+
+.prosody-body {
+  display: none;
+  padding: 0.75rem;
+  background: #fafafa;
+}
+
+.prosody-section.expanded .prosody-body {
+  display: block;
+}
+
+.prosody-metrics {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.prosody-metrics .metric-box {
+  flex: 1 1 120px;
+  min-width: 120px;
+}
+
+.prosody-warning {
+  color: #b45309;
+  font-weight: 500;
+  padding: 4px 8px;
+  background: #fef3c7;
+  border-radius: 3px;
+  margin-bottom: 8px;
+  font-size: 0.85em;
+}
+
+.prosody-scope-note {
+  margin-top: 10px;
+  font-size: 0.78em;
+  color: #999;
+  border-top: 1px solid #eee;
+  padding-top: 6px;
+}
+
+/* Prosody dedicated container */
+.prosody-container {
+  margin-top: 1rem;
+}
+
+/* ───────────────────────────────────────────────────────────────────────────
+   Word Speed Map section — clones Confidence View pattern
+   ─────────────────────────────────────────────────────────────────────────── */
+.word-speed-section {
+  margin-top: 1rem;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.word-speed-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.5rem 0.75rem;
+  cursor: pointer;
+  background: #f5f5f5;
+  user-select: none;
+}
+
+.word-speed-header:hover { background: #eee; }
+
+.word-speed-header h4 {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #555;
+  margin: 0;
+}
+
+.word-speed-summary-inline {
+  font-size: 0.8rem;
+  color: #888;
+  flex: 1;
+  margin-left: 0.75rem;
+}
+
+.word-speed-toggle {
+  font-size: 0.7rem;
+  color: #999;
+  transition: transform 0.2s;
+}
+
+.word-speed-section.expanded .word-speed-toggle {
+  transform: rotate(180deg);
+}
+
+.word-speed-body {
+  display: none;
+  padding: 0.75rem;
+  background: #fafafa;
+}
+
+.word-speed-section.expanded .word-speed-body {
+  display: block;
+}
+
+/* Legend */
+.word-speed-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+  font-size: 0.8rem;
+}
+
+.word-speed-legend span {
+  padding: 2px 6px;
+  border-radius: 3px;
+}
+
+/* Word line height for passage readability */
+.word-speed-words { line-height: 2; }
+
+/* Tier colors — names describe observable behavior, not cognitive states */
+.ws-quick       { background: #c8e6c9; color: #1b5e20; border-radius: 2px; padding: 1px 2px; }
+.ws-steady      { background: #e8f5e9; color: #2e7d32; border-radius: 2px; padding: 1px 2px; }
+.ws-slow        { background: #fff9c4; color: #f57f17; border-radius: 2px; padding: 1px 2px; }
+.ws-struggling  { background: #ffe0b2; color: #e65100; border-radius: 2px; padding: 1px 2px; }
+.ws-stalled     { background: #ffcdd2; color: #b71c1c; border-radius: 2px; padding: 1px 2px; }
+.ws-short-word  { background: #eceff1; color: #78909c; border-radius: 2px; padding: 1px 2px; }
+.ws-omitted     { background: #e0e0e0; color: #9e9e9e; border-radius: 2px; padding: 1px 2px;
+                  text-decoration: line-through; }
+.ws-no-data     { background: #f5f5f5; color: #bdbdbd; border-radius: 2px; padding: 1px 2px; }
+
+/* Summary bar */
+.word-speed-summary {
+  margin-top: 8px;
+  padding: 8px;
+  background: #fff;
+  border: 1px solid #eee;
+  border-radius: 4px;
+  font-size: 0.85em;
+}
+
+.ws-dist-bar {
+  height: 8px;
+  display: flex;
+  border-radius: 4px;
+  overflow: hidden;
+  margin: 4px 0;
+}
+
+.ws-dist-bar .seg-quick       { background: #4caf50; }
+.ws-dist-bar .seg-steady      { background: #8bc34a; }
+.ws-dist-bar .seg-slow        { background: #ffc107; }
+.ws-dist-bar .seg-struggling  { background: #ff9800; }
+.ws-dist-bar .seg-stalled     { background: #f44336; }
+

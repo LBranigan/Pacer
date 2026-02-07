@@ -1,6 +1,7 @@
 // diagnostics.js — Fluency diagnostic analyzers, near-miss resolution, plus orchestrator
 
 import { levenshteinRatio } from './nl-api.js';
+import { countSyllables } from './syllable-counter.js';
 
 // ── Helpers ──────────────────────────────────────────────────────────
 
@@ -18,10 +19,15 @@ export function getPunctuationPositions(referenceText) {
   const map = new Map();
   for (let i = 0; i < words.length; i++) {
     const w = words[i];
-    const last = w[w.length - 1];
+    // Strip trailing quotes/brackets before checking (dialogue punctuation fix)
+    const stripped = w.replace(/["'""\u201C\u201D\u2018\u2019)}\]]+$/, '');
+    if (stripped.length === 0) continue;
+    const last = stripped[stripped.length - 1];
     if (/[.!?]/.test(last)) {
       map.set(i, 'period');
-    } else if (/[,;:]/.test(last)) {
+    } else if (last === ':') {
+      map.set(i, 'colon');
+    } else if (/[,;]/.test(last)) {
       map.set(i, 'comma');
     }
   }
@@ -446,44 +452,770 @@ export function detectMorphologicalErrors(alignment, transcriptWords) {
   return results;
 }
 
-// ── DIAG-05: Prosody Proxy ──────────────────────────────────────────
+// ── Statistical Helpers ──────────────────────────────────────────────
+
+/** Median of a numeric array. Returns null for empty/null input. Copies before sorting. */
+function median(arr) {
+  if (!arr || arr.length === 0) return null;
+  const sorted = [...arr].sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  return sorted.length % 2 !== 0 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
+}
+
+/** Percentile (0-100) of a numeric array using linear interpolation. Returns null for empty input. */
+function percentile(arr, p) {
+  if (!arr || arr.length === 0) return null;
+  const sorted = [...arr].sort((a, b) => a - b);
+  if (sorted.length === 1) return sorted[0];
+  const idx = (p / 100) * (sorted.length - 1);
+  const lower = Math.floor(idx);
+  const upper = Math.ceil(idx);
+  if (lower === upper) return sorted[lower];
+  return sorted[lower] + (sorted[upper] - sorted[lower]) * (idx - lower);
+}
+
+// ── DIAG-05: Prosody Metrics ────────────────────────────────────────
 
 /**
- * Compute ratio of average pause at punctuation vs mid-sentence.
- * Returns { ratio, avgPauseAtPunct, avgPauseMid, punctuationPauses, midSentencePauses }.
+ * Metric 1: Phrasing Quality
+ * Computes phrase breaks from three sources (hesitations, long pauses, IQR-based medium pauses),
+ * classifies breaks as at-punctuation or unexpected, and reports words-per-phrase metrics.
+ * Also classifies reading pattern (word-by-word, choppy, phrase-level, connected).
+ *
+ * READ-ONLY: consumes diagnostics.onsetDelays and .longPauses but never modifies them.
  */
-export function computeProsodyProxy(transcriptWords, referenceText, alignment) {
-  const punctMap = getPunctuationPositions(referenceText);
-  const hypToRef = buildHypToRefMap(alignment);
+export function computePhrasingQuality(diagnostics, transcriptWords, referenceText, alignment) {
+  if (!transcriptWords || transcriptWords.length < 2) {
+    return { insufficient: true, reason: 'Too few words' };
+  }
 
-  const punctPauses = [];
-  const midPauses = [];
+  // ── Pre-step: Build excludeFromCount set ──
+  const excludeFromCount = new Set();
+  let hypIdx = 0;
+  for (const entry of alignment) {
+    if (entry.type === 'omission' || entry.type === 'deletion') continue;
+    if (entry.type === 'insertion') {
+      if (transcriptWords[hypIdx] && transcriptWords[hypIdx].isDisfluency) excludeFromCount.add(hypIdx);
+      if (entry._isSelfCorrection) excludeFromCount.add(hypIdx);
+      if (entry._partOfStruggle) excludeFromCount.add(hypIdx);
+    }
+    if (transcriptWords[hypIdx] && transcriptWords[hypIdx].crossValidation === 'unconfirmed') {
+      excludeFromCount.add(hypIdx);
+    }
+    const partsCount = entry.compound && entry.parts ? entry.parts.length : 1;
+    hypIdx += partsCount;
+  }
 
-  for (let i = 0; i < transcriptWords.length - 1; i++) {
-    const end = parseTime(transcriptWords[i].endTime);
-    const nextStart = parseTime(transcriptWords[i + 1].startTime);
-    const gap = nextStart - end;
-    if (gap < 0) continue; // overlapping timestamps, skip
-
-    const refIdx = hypToRef.get(i);
-    if (refIdx !== undefined && punctMap.has(refIdx)) {
-      punctPauses.push(gap);
+  // ── Pre-step: Build compoundPositions set ──
+  const compoundPositions = new Set();
+  hypIdx = 0;
+  for (const entry of alignment) {
+    if (entry.type === 'omission' || entry.type === 'deletion') continue;
+    if (entry.compound && entry.parts) {
+      for (let p = 0; p < entry.parts.length - 1; p++) {
+        compoundPositions.add(hypIdx + p);
+      }
+      hypIdx += entry.parts.length;
     } else {
-      midPauses.push(gap);
+      hypIdx++;
     }
   }
 
-  const avg = arr => arr.length === 0 ? 0 : arr.reduce((a, b) => a + b, 0) / arr.length;
-  const avgPauseAtPunct = avg(punctPauses);
-  const avgPauseMid = avg(midPauses);
-  const ratio = avgPauseMid === 0 ? 0 : Math.round((avgPauseAtPunct / avgPauseMid) * 100) / 100;
+  // ── Source A: Hesitations (existing onsetDelays) — READ-ONLY ──
+  const breakSet = new Set();
+  const sourceABGapPositions = new Set();
+  let vadFiltered = 0;
+  let sourceACount = 0;
+
+  for (const delay of (diagnostics.onsetDelays || [])) {
+    if (delay._vadAnalysis && delay._vadAnalysis.speechPercent >= 80) {
+      vadFiltered++;
+      continue;
+    }
+    const breakAfter = delay.wordIndex - 1;
+    if (breakAfter >= 0) {
+      breakSet.add(breakAfter);
+      sourceABGapPositions.add(breakAfter);
+      sourceACount++;
+    }
+  }
+
+  // ── Source B: Long pauses (existing longPauses) — READ-ONLY ──
+  let sourceBCount = 0;
+  for (const pause of (diagnostics.longPauses || [])) {
+    breakSet.add(pause.afterWordIndex);
+    sourceABGapPositions.add(pause.afterWordIndex);
+    sourceBCount++;
+  }
+
+  // ── Source C: Medium pauses (IQR-based) ──
+  // First collect baseline gaps (excluding Sources A/B and compounds)
+  const allGaps = [];
+  const gapPositions = []; // parallel array: position for each gap
+  for (let i = 0; i < transcriptWords.length - 1; i++) {
+    if (transcriptWords[i].crossValidation === 'unconfirmed') continue;
+    // Find next confirmed word
+    let nextI = i + 1;
+    while (nextI < transcriptWords.length && transcriptWords[nextI].crossValidation === 'unconfirmed') nextI++;
+    if (nextI >= transcriptWords.length) continue;
+
+    const gap = parseTime(transcriptWords[nextI].startTime) - parseTime(transcriptWords[i].endTime);
+    if (gap < 0) continue;
+    if (sourceABGapPositions.has(i)) continue;
+    if (compoundPositions.has(i)) continue;
+    allGaps.push(gap);
+    gapPositions.push(i);
+  }
+
+  const medianGap = median(allGaps);
+  const Q1_gap = percentile(allGaps, 25);
+  const Q3_gap = percentile(allGaps, 75);
+  const IQR_gap = (Q1_gap !== null && Q3_gap !== null) ? Q3_gap - Q1_gap : 0;
+  const effectiveIQR_gap = Math.max(IQR_gap, 0.050);
+  const rawFence = Q3_gap !== null ? Q3_gap + 1.5 * effectiveIQR_gap : 0.200;
+  const gapFence = Math.max(rawFence, 0.200);
+  const isFenceFloored = rawFence < 0.200;
+  const isIQRFloored = IQR_gap < 0.050;
+
+  // Scan ALL inter-word positions for Source C
+  let sourceCCount = 0;
+  let compoundSkipped = 0;
+  for (let i = 0; i < transcriptWords.length - 1; i++) {
+    if (transcriptWords[i].crossValidation === 'unconfirmed') continue;
+    let nextI = i + 1;
+    while (nextI < transcriptWords.length && transcriptWords[nextI].crossValidation === 'unconfirmed') nextI++;
+    if (nextI >= transcriptWords.length) continue;
+
+    const gap = parseTime(transcriptWords[nextI].startTime) - parseTime(transcriptWords[i].endTime);
+    if (gap < 0) continue;
+    if (gap < gapFence) continue;
+    if (compoundPositions.has(i)) { compoundSkipped++; continue; }
+    if (!breakSet.has(i)) {
+      breakSet.add(i);
+      sourceCCount++;
+    }
+  }
+
+  // ── Reading pattern classification ──
+  let classification;
+  if (medianGap === null) classification = 'connected';
+  else if (medianGap > 0.350) classification = 'word-by-word';
+  else if (medianGap > 0.250) classification = 'choppy';
+  else if (medianGap > 0.150) classification = 'phrase-level';
+  else classification = 'connected';
+
+  // ── Break classification ──
+  const punctMap = getPunctuationPositions(referenceText);
+  const hypToRef = buildHypToRefMap(alignment);
+  const breaks = [];
+  let atPunctuationCount = 0;
+  let unexpectedCount = 0;
+  const unexpectedBreaks = new Set();
+
+  for (const pos of breakSet) {
+    const refIdx = hypToRef.get(pos);
+    const atPunct = refIdx !== undefined && punctMap.has(refIdx);
+    const punctType = atPunct ? punctMap.get(refIdx) : null;
+
+    // Determine break source
+    let source = 'mediumPause';
+    for (const delay of (diagnostics.onsetDelays || [])) {
+      if (delay.wordIndex - 1 === pos) { source = 'hesitation'; break; }
+    }
+    for (const pause of (diagnostics.longPauses || [])) {
+      if (pause.afterWordIndex === pos) { source = 'longPause'; break; }
+    }
+
+    // Compute gap for this break
+    let gapMs = null;
+    if (pos < transcriptWords.length - 1) {
+      let nextI = pos + 1;
+      while (nextI < transcriptWords.length && transcriptWords[nextI].crossValidation === 'unconfirmed') nextI++;
+      if (nextI < transcriptWords.length) {
+        gapMs = Math.round((parseTime(transcriptWords[nextI].startTime) - parseTime(transcriptWords[pos].endTime)) * 1000);
+      }
+    }
+
+    if (atPunct) {
+      atPunctuationCount++;
+    } else {
+      unexpectedCount++;
+      unexpectedBreaks.add(pos);
+    }
+    breaks.push({ position: pos, type: atPunct ? 'at-punctuation' : 'unexpected', punctType, source, gapMs });
+  }
+
+  // ── Build phrase lists ──
+  function buildPhrases(breakPositions) {
+    const sortedBreaks = [...breakPositions].sort((a, b) => a - b);
+    const phrases = [];
+    let start = 0;
+
+    for (const bp of sortedBreaks) {
+      if (bp >= start) {
+        const phrase = buildSinglePhrase(start, bp);
+        if (phrase) phrases.push(phrase);
+        start = bp + 1;
+      }
+    }
+    // Final phrase
+    if (start < transcriptWords.length) {
+      const phrase = buildSinglePhrase(start, transcriptWords.length - 1);
+      if (phrase) phrases.push(phrase);
+    }
+    return phrases;
+  }
+
+  function buildSinglePhrase(startIdx, endIdx) {
+    let wordCount = 0;
+    const words = [];
+    for (let i = startIdx; i <= endIdx && i < transcriptWords.length; i++) {
+      if (!excludeFromCount.has(i)) {
+        wordCount++;
+        words.push(transcriptWords[i].word);
+      }
+    }
+    // Compute gap after this phrase (if not the final phrase)
+    let gapAfterMs = null;
+    if (endIdx < transcriptWords.length - 1) {
+      let nextI = endIdx + 1;
+      while (nextI < transcriptWords.length && transcriptWords[nextI].crossValidation === 'unconfirmed') nextI++;
+      if (nextI < transcriptWords.length) {
+        gapAfterMs = Math.round((parseTime(transcriptWords[nextI].startTime) - parseTime(transcriptWords[endIdx].endTime)) * 1000);
+      }
+    }
+
+    // Find break info for this position
+    const breakInfo = breaks.find(b => b.position === endIdx);
+
+    return {
+      startHypIndex: startIdx,
+      endHypIndex: endIdx,
+      wordCount,
+      words,
+      gapAfterMs,
+      breakSource: breakInfo ? breakInfo.source : null,
+      breakType: breakInfo ? breakInfo.type : null
+    };
+  }
+
+  const fluencyPhrases = buildPhrases(unexpectedBreaks);
+  const overallPhrases = buildPhrases(breakSet);
+
+  const fluencyLengths = fluencyPhrases.map(p => p.wordCount).filter(c => c > 0);
+  const overallLengths = overallPhrases.map(p => p.wordCount).filter(c => c > 0);
+
+  const mean = arr => arr.length === 0 ? null : arr.reduce((a, b) => a + b, 0) / arr.length;
+
+  // ── Exclusion stats ──
+  let disfluencyCount = 0, selfCorrCount = 0, strugglePartCount = 0, unconfirmedCount = 0;
+  hypIdx = 0;
+  for (const entry of alignment) {
+    if (entry.type === 'omission' || entry.type === 'deletion') continue;
+    if (excludeFromCount.has(hypIdx)) {
+      if (entry.type === 'insertion' && transcriptWords[hypIdx] && transcriptWords[hypIdx].isDisfluency) disfluencyCount++;
+      else if (entry._isSelfCorrection) selfCorrCount++;
+      else if (entry._partOfStruggle) strugglePartCount++;
+      else if (transcriptWords[hypIdx] && transcriptWords[hypIdx].crossValidation === 'unconfirmed') unconfirmedCount++;
+    }
+    const partsCount = entry.compound && entry.parts ? entry.parts.length : 1;
+    hypIdx += partsCount;
+  }
 
   return {
-    ratio,
-    avgPauseAtPunct: Math.round(avgPauseAtPunct * 1000) / 1000,
-    avgPauseMid: Math.round(avgPauseMid * 1000) / 1000,
-    punctuationPauses: punctPauses.length,
-    midSentencePauses: midPauses.length
+    fluencyPhrasing: {
+      mean: mean(fluencyLengths) !== null ? Math.round(mean(fluencyLengths) * 10) / 10 : null,
+      median: median(fluencyLengths),
+      totalPhrases: fluencyPhrases.length,
+      phraseLengths: fluencyLengths
+    },
+    overallPhrasing: {
+      mean: mean(overallLengths) !== null ? Math.round(mean(overallLengths) * 10) / 10 : null,
+      median: median(overallLengths),
+      totalPhrases: overallPhrases.length,
+      phraseLengths: overallLengths,
+      phrases: overallPhrases
+    },
+    readingPattern: {
+      medianGap: medianGap !== null ? Math.round(medianGap * 1000) / 1000 : null,
+      classification
+    },
+    breakClassification: {
+      total: breakSet.size,
+      atPunctuation: atPunctuationCount,
+      unexpected: unexpectedCount,
+      breaks
+    },
+    gapDistribution: {
+      Q1: Q1_gap !== null ? Math.round(Q1_gap * 1000) / 1000 : null,
+      Q3: Q3_gap !== null ? Math.round(Q3_gap * 1000) / 1000 : null,
+      IQR: Math.round(IQR_gap * 1000) / 1000,
+      effectiveIQR: Math.round(effectiveIQR_gap * 1000) / 1000,
+      gapFence: Math.round(gapFence * 1000) / 1000,
+      isFenceFloored,
+      isIQRFloored,
+      totalGapsAnalyzed: allGaps.length
+    },
+    breakSources: {
+      fromHesitations: sourceACount,
+      fromLongPauses: sourceBCount,
+      fromMediumPauses: sourceCCount,
+      vadFiltered,
+      compoundSkipped,
+      totalBreaks: breakSet.size
+    },
+    excludedFromCount: {
+      disfluencies: disfluencyCount,
+      selfCorrections: selfCorrCount,
+      struggleParts: strugglePartCount,
+      unconfirmed: unconfirmedCount,
+      totalExcluded: excludeFromCount.size
+    },
+    _breakSet: breakSet
+  };
+}
+
+/**
+ * Metric 2: Punctuation Awareness
+ * Pure consumer of Metric 1's break classification. Computes coverage (punctuation marks
+ * with a pause) and precision (pauses at punctuation / total pauses).
+ */
+export function computePauseAtPunctuation(transcriptWords, referenceText, alignment, breakClassification, breakSet) {
+  const punctMap = getPunctuationPositions(referenceText);
+  const hypToRef = buildHypToRefMap(alignment);
+
+  // Build reverse map: refIndex -> hypIndex
+  const refToHyp = new Map();
+  for (const [hIdx, rIdx] of hypToRef) {
+    refToHyp.set(rIdx, hIdx);
+  }
+
+  // Coverage: of encountered punctuation marks, how many had a pause?
+  let encounteredPunctuationCount = 0;
+  let coveredCount = 0;
+  const uncoveredMarks = [];
+  let totalPunctuationMarks = punctMap.size;
+
+  // Build ref words for uncovered mark details
+  const refWords = referenceText.trim().split(/\s+/);
+
+  // Build hyp-index → gap-after-word map for punctuation-aware gap check.
+  // A fluent reader pauses briefly at commas (~100-200ms) — shorter than a
+  // phrasing break but still noticeably longer than inter-word gaps (~50ms).
+  // Use median gap * 1.5 (floor 100ms) as the punctuation pause threshold.
+  const gapAfterHyp = new Map();
+  const baselineGaps = [];
+  for (let i = 0; i < transcriptWords.length - 1; i++) {
+    const gap = parseTime(transcriptWords[i + 1].startTime) - parseTime(transcriptWords[i].endTime);
+    if (gap >= 0) {
+      gapAfterHyp.set(i, gap);
+      baselineGaps.push(gap);
+    }
+  }
+  const medianBaselineGap = median(baselineGaps) || 0.050;
+  const punctPauseThreshold = Math.max(medianBaselineGap * 1.5, 0.100);
+
+  // Find the last ref index the student actually read (for last-word exclusion)
+  let lastEncounteredRefIdx = -1;
+  for (const [refIdx] of punctMap) {
+    if (refToHyp.has(refIdx) && refIdx > lastEncounteredRefIdx) {
+      lastEncounteredRefIdx = refIdx;
+    }
+  }
+
+  for (const [refIdx, punctType] of punctMap) {
+    const hypIdx = refToHyp.get(refIdx);
+    if (hypIdx === undefined) continue; // student didn't read this word
+    // Skip the last word the student read — no opportunity to pause after it
+    if (refIdx === lastEncounteredRefIdx) continue;
+    encounteredPunctuationCount++;
+    // Primary: detected as a phrasing break (Sources A/B/C)
+    // Fallback (commas/semicolons/colons only): gap exceeds the lower punctuation
+    // pause threshold. Periods, ? and ! are sentence boundaries — require a full break.
+    const gapAtPosition = gapAfterHyp.get(hypIdx);
+    const allowLowerThreshold = punctType === 'comma';
+    if (breakSet.has(hypIdx) || (allowLowerThreshold && gapAtPosition !== undefined && gapAtPosition >= punctPauseThreshold)) {
+      coveredCount++;
+    } else {
+      uncoveredMarks.push({ refIndex: refIdx, refWord: refWords[refIdx] || '', punctType, gap: gapAtPosition != null ? Math.round(gapAtPosition * 1000) : null });
+    }
+  }
+
+  const coverageRatio = encounteredPunctuationCount > 0
+    ? Math.round((coveredCount / encounteredPunctuationCount) * 100) / 100
+    : null;
+
+  // Coverage label
+  let coverageLabel;
+  if (coverageRatio === null) coverageLabel = 'No punctuation encountered';
+  else if (coverageRatio < 0.30) coverageLabel = 'Rarely pauses at punctuation';
+  else if (coverageRatio < 0.60) coverageLabel = 'Pauses at some punctuation';
+  else if (coverageRatio < 0.80) coverageLabel = 'Pauses at most punctuation';
+  else coverageLabel = 'Consistently pauses at punctuation';
+
+  // Precision
+  const totalPauses = breakClassification.total;
+  const precisionRatio = totalPauses > 0
+    ? Math.round((breakClassification.atPunctuation / totalPauses) * 100) / 100
+    : null;
+
+  let precisionLabel;
+  if (precisionRatio === null) precisionLabel = 'No pauses detected';
+  else if (precisionRatio < 0.30) precisionLabel = 'Pauses rarely align with sentences';
+  else if (precisionRatio < 0.60) precisionLabel = 'Some pauses at punctuation, many mid-sentence';
+  else if (precisionRatio < 0.80) precisionLabel = 'Most pauses at punctuation';
+  else precisionLabel = 'Pauses well-aligned with text structure';
+
+  // Punctuation density
+  const totalWords = refWords.length;
+  const passagePunctuationDensity = totalWords > 0
+    ? Math.round((totalPunctuationMarks / totalWords) * 1000) / 1000
+    : 0;
+
+  return {
+    coverage: {
+      ratio: coverageRatio,
+      label: coverageLabel,
+      coveredCount,
+      encounteredPunctuationMarks: encounteredPunctuationCount,
+      totalPunctuationMarks,
+      uncoveredMarks,
+      punctPauseThresholdMs: Math.round(punctPauseThreshold * 1000)
+    },
+    precision: {
+      ratio: precisionRatio,
+      label: precisionLabel,
+      atPunctuationCount: breakClassification.atPunctuation,
+      notAtPunctuationCount: breakClassification.unexpected,
+      totalPauses
+    },
+    passagePunctuationDensity
+  };
+}
+
+/**
+ * Metric 3: Pace Consistency
+ * Coefficient of variation of local reading rates across phrases.
+ * Depends on Metric 1's overallPhrasing.phrases[].
+ */
+export function computePaceConsistency(overallPhrasing, transcriptWords) {
+  if (!overallPhrasing || !overallPhrasing.phrases || overallPhrasing.phrases.length < 3) {
+    return { insufficient: true, reason: 'Too few phrases' };
+  }
+
+  const localRates = [];
+  for (let pi = 0; pi < overallPhrasing.phrases.length; pi++) {
+    const phrase = overallPhrasing.phrases[pi];
+    if (phrase.wordCount <= 0) continue;
+
+    const startTime = parseTime(transcriptWords[phrase.startHypIndex].startTime);
+    const endTime = parseTime(transcriptWords[phrase.endHypIndex].endTime);
+    const durationSec = endTime - startTime;
+    if (durationSec <= 0) continue;
+
+    const wordsPerMinute = (phrase.wordCount / durationSec) * 60;
+    localRates.push({ phraseIndex: pi, wordsPerMinute: Math.round(wordsPerMinute), wordCount: phrase.wordCount, durationSec: Math.round(durationSec * 100) / 100 });
+  }
+
+  if (localRates.length < 3) {
+    return { insufficient: true, reason: 'Too few measurable phrases' };
+  }
+
+  const rates = localRates.map(r => r.wordsPerMinute);
+  const meanRate = rates.reduce((a, b) => a + b, 0) / rates.length;
+  if (meanRate === 0) {
+    return { insufficient: true, reason: 'Zero mean rate' };
+  }
+
+  const variance = rates.reduce((sum, r) => sum + (r - meanRate) ** 2, 0) / rates.length;
+  const sdRate = Math.sqrt(variance);
+  const cv = sdRate / meanRate;
+
+  let cvClassification;
+  if (cv < 0.15) cvClassification = 'consistent';
+  else if (cv < 0.30) cvClassification = 'mostly-steady';
+  else if (cv < 0.50) cvClassification = 'variable';
+  else cvClassification = 'highly-variable';
+
+  let label;
+  if (cv < 0.15) label = 'Consistent pace throughout';
+  else if (cv < 0.30) label = 'Mostly steady pace';
+  else if (cv < 0.50) label = 'Variable pace — speeds up and slows down';
+  else label = 'Highly variable pace — significant speed changes';
+
+  return {
+    cv: Math.round(cv * 100) / 100,
+    classification: cvClassification,
+    label,
+    meanLocalRate: Math.round(meanRate),
+    sdLocalRate: Math.round(sdRate),
+    phraseCount: localRates.length,
+    localRates
+  };
+}
+
+/**
+ * Metric 4: Word Duration Outliers (Self-Normed)
+ * Uses Deepgram timestamps exclusively (_xvalStartTime/_xvalEndTime).
+ * Normalizes by syllable count. IQR-based outlier detection.
+ * Only flags multisyllabic (>= 2 syl) words as outliers.
+ */
+export function computeWordDurationOutliers(transcriptWords, alignment) {
+  const allWords = [];
+  let wordsSkippedNoTimestamps = 0;
+  let hypIndex = 0;
+
+  for (const entry of alignment) {
+    if (entry.type === 'omission' || entry.type === 'deletion') continue;
+
+    const partsCount = entry.compound && entry.parts ? entry.parts.length : 1;
+
+    // Skip disfluency insertions, self-corrections, struggle parts
+    if (entry.type === 'insertion') {
+      if (transcriptWords[hypIndex] && transcriptWords[hypIndex].isDisfluency) { hypIndex += partsCount; continue; }
+      if (entry._isSelfCorrection) { hypIndex += partsCount; continue; }
+      if (entry._partOfStruggle) { hypIndex += partsCount; continue; }
+    }
+
+    const word = transcriptWords[hypIndex];
+    if (!word) { hypIndex += partsCount; continue; }
+
+    // Must have Deepgram timestamps
+    if (word._xvalStartTime == null || word._xvalEndTime == null) {
+      wordsSkippedNoTimestamps++;
+      hypIndex += partsCount;
+      continue;
+    }
+
+    const startMs = parseTime(word._xvalStartTime) * 1000;
+    let endMs;
+    // For compound words, use end time of last part
+    if (entry.compound && entry.parts && entry.parts.length > 1) {
+      const lastPartIdx = hypIndex + entry.parts.length - 1;
+      const lastPart = transcriptWords[lastPartIdx];
+      endMs = lastPart && lastPart._xvalEndTime != null
+        ? parseTime(lastPart._xvalEndTime) * 1000
+        : parseTime(word._xvalEndTime) * 1000;
+    } else {
+      endMs = parseTime(word._xvalEndTime) * 1000;
+    }
+
+    const durationMs = endMs - startMs;
+    if (durationMs <= 0) { hypIndex += partsCount; continue; }
+
+    const wordText = entry.compound ? (entry.hyp || entry.ref || word.word) : word.word;
+    const syllables = countSyllables(wordText);
+    const normalizedDurationMs = durationMs / Math.max(syllables, 1);
+
+    allWords.push({
+      hypIndex,
+      word: wordText,
+      refWord: entry.ref || entry.reference || wordText,
+      refIndex: null, // filled below
+      durationMs: Math.round(durationMs),
+      syllables,
+      normalizedDurationMs: Math.round(normalizedDurationMs),
+      alignmentType: entry.type,
+      isOutlier: false,
+      timestampSource: 'deepgram'
+    });
+
+    hypIndex += partsCount;
+  }
+
+  // Fill refIndex from hypToRef
+  const hypToRef = buildHypToRefMap(alignment);
+  for (const w of allWords) {
+    const ri = hypToRef.get(w.hypIndex);
+    w.refIndex = ri !== undefined ? ri : null;
+  }
+
+  if (allWords.length < 4) {
+    return { insufficient: true, reason: 'Too few words with cross-validator timestamps', allWords };
+  }
+
+  // Compute baseline
+  const durations = allWords.map(w => w.normalizedDurationMs);
+  const Q1 = percentile(durations, 25);
+  const Q3 = percentile(durations, 75);
+  const IQR = Q3 - Q1;
+  const effectiveIQR = Math.max(IQR, 50);
+  const upperFence = Q3 + 1.5 * effectiveIQR;
+  const isFenceFloored = IQR < 50;
+
+  const medianDur = median(durations);
+  const meanDur = durations.reduce((a, b) => a + b, 0) / durations.length;
+  const variance = durations.reduce((sum, d) => sum + (d - meanDur) ** 2, 0) / durations.length;
+  const sdDur = Math.sqrt(variance);
+
+  // Flag outliers (multisyllabic only)
+  const outliers = [];
+  for (const w of allWords) {
+    if (w.normalizedDurationMs > upperFence && w.syllables >= 2) {
+      w.isOutlier = true;
+      outliers.push({
+        hypIndex: w.hypIndex,
+        word: w.word,
+        refWord: w.refWord,
+        refIndex: w.refIndex,
+        durationMs: w.durationMs,
+        syllables: w.syllables,
+        normalizedDurationMs: w.normalizedDurationMs,
+        aboveFenceBy: Math.round(w.normalizedDurationMs - upperFence),
+        ratio: medianDur > 0 ? Math.round((w.normalizedDurationMs / medianDur) * 100) / 100 : null,
+        alignmentType: w.alignmentType
+      });
+    }
+  }
+
+  // Sort outliers worst first
+  outliers.sort((a, b) => b.normalizedDurationMs - a.normalizedDurationMs);
+
+  return {
+    baseline: {
+      medianDurationPerSyllable: Math.round(medianDur),
+      meanDurationPerSyllable: Math.round(meanDur),
+      sdDurationPerSyllable: Math.round(sdDur),
+      Q1: Math.round(Q1),
+      Q3: Math.round(Q3),
+      IQR: Math.round(IQR),
+      effectiveIQR: Math.round(effectiveIQR),
+      upperFence: Math.round(upperFence),
+      isFenceFloored,
+      totalWordsAnalyzed: allWords.length,
+      wordsSkippedNoTimestamps
+    },
+    outliers,
+    outlierCount: outliers.length,
+    allWords
+  };
+}
+
+// ── Word Speed Tiers (consumes Metric 4 output) ─────────────────────
+
+/**
+ * Classify every reference word into a speed tier based on duration relative
+ * to the student's own median ms/syllable (from computeWordDurationOutliers).
+ *
+ * Walks alignment[] to include omissions and track refIndex correctly.
+ * Monosyllabic words get a distinct 'short-word' tier (timing unreliable per-syllable).
+ *
+ * @param {object} wordOutliers - Output from computeWordDurationOutliers()
+ * @param {Array} alignment - Alignment entries from alignWords()
+ * @returns {object} { words[], baseline, distribution, atPacePercent } or { insufficient: true }
+ */
+export function computeWordSpeedTiers(wordOutliers, alignment) {
+  if (!wordOutliers || wordOutliers.insufficient) {
+    return { insufficient: true, reason: wordOutliers?.reason || 'Word duration data insufficient' };
+  }
+
+  const medianMs = wordOutliers.baseline.medianDurationPerSyllable;
+  if (!medianMs || medianMs <= 0) {
+    return { insufficient: true, reason: 'Zero or missing median' };
+  }
+
+  // Build hypIndex → allWords lookup for O(1) matching
+  const allWordsMap = new Map();
+  for (const w of wordOutliers.allWords) {
+    allWordsMap.set(w.hypIndex, w);
+  }
+
+  const words = [];
+  let hypIndex = 0;
+  let refIndex = 0;
+
+  for (const entry of alignment) {
+    // Insertions: not in reference passage — advance hypIndex only
+    if (entry.type === 'insertion') {
+      const partsCount = entry.compound && entry.parts ? entry.parts.length : 1;
+      hypIndex += partsCount;
+      continue;
+    }
+
+    // Omissions: in reference but not spoken — no hypIndex advance
+    if (entry.type === 'omission' || entry.type === 'deletion') {
+      words.push({
+        refIndex, refWord: entry.ref,
+        hypIndex: null, word: null,
+        durationMs: null, syllables: null,
+        normalizedMs: null, ratio: null,
+        tier: 'omitted', alignmentType: 'omission',
+        isOutlier: false
+      });
+      refIndex++;
+      continue;
+    }
+
+    // Correct, substitution, struggle — has a spoken word
+    const partsCount = entry.compound && entry.parts ? entry.parts.length : 1;
+    const autoWord = allWordsMap.get(hypIndex);
+
+    if (autoWord && autoWord.normalizedDurationMs != null) {
+      const ratio = autoWord.normalizedDurationMs / medianMs;
+      let tier;
+
+      if (autoWord.syllables < 2) {
+        tier = 'short-word';
+      } else if (ratio < 0.75) {
+        tier = 'quick';
+      } else if (ratio < 1.25) {
+        tier = 'steady';
+      } else if (ratio < 1.75) {
+        tier = 'slow';
+      } else if (ratio < 2.50) {
+        tier = 'struggling';
+      } else {
+        tier = 'stalled';
+      }
+
+      words.push({
+        refIndex, refWord: entry.ref,
+        hypIndex, word: autoWord.word,
+        durationMs: autoWord.durationMs,
+        syllables: autoWord.syllables,
+        normalizedMs: autoWord.normalizedDurationMs,
+        ratio: Math.round(ratio * 100) / 100,
+        tier, alignmentType: entry.type,
+        isOutlier: autoWord.isOutlier || false,
+        _upperFence: wordOutliers.baseline.upperFence,
+        _medianMs: medianMs
+      });
+    } else {
+      // No Deepgram timestamps for this word
+      words.push({
+        refIndex, refWord: entry.ref,
+        hypIndex, word: entry.hyp,
+        durationMs: null, syllables: null,
+        normalizedMs: null, ratio: null,
+        tier: 'no-data', alignmentType: entry.type,
+        isOutlier: false
+      });
+    }
+
+    hypIndex += partsCount;
+    refIndex++;
+  }
+
+  // Count distribution per tier
+  const distribution = { quick: 0, steady: 0, slow: 0, struggling: 0, stalled: 0, 'short-word': 0, omitted: 0, 'no-data': 0 };
+  for (const w of words) {
+    if (distribution[w.tier] !== undefined) distribution[w.tier]++;
+  }
+
+  // atPacePercent: only words we could meaningfully classify
+  const classifiable = distribution.quick + distribution.steady + distribution.slow + distribution.struggling + distribution.stalled;
+  const atPace = distribution.quick + distribution.steady;
+  const atPacePercent = classifiable > 0 ? Math.round((atPace / classifiable) * 1000) / 10 : 0;
+
+  return {
+    words,
+    baseline: {
+      medianMs,
+      totalWords: words.length,
+      upperFence: wordOutliers.baseline.upperFence
+    },
+    distribution,
+    atPacePercent
   };
 }
 
@@ -638,7 +1370,6 @@ export function runDiagnostics(transcriptWords, alignment, referenceText) {
     longPauses: detectLongPauses(transcriptWords),
     selfCorrections: detectSelfCorrections(transcriptWords, alignment),
     morphologicalErrors: detectMorphologicalErrors(alignment, transcriptWords),
-    prosodyProxy: computeProsodyProxy(transcriptWords, referenceText, alignment),
     struggleWords: detectStruggleWords(transcriptWords, referenceText, alignment)
   };
 }
