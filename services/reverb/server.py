@@ -15,10 +15,13 @@ Requirements:
   - nemo_toolkit[asr] (optional, for /parakeet endpoint)
 """
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.middleware.base import BaseHTTPMiddleware
 from pydantic import BaseModel
+from slowapi import Limiter
+from slowapi.errors import RateLimitExceeded
 import asyncio
 import base64
 import tempfile
@@ -37,25 +40,60 @@ app = FastAPI(
     version="1.0.0"
 )
 
-# CORS Configuration (critical for browser access)
-# Allow all origins — this is a local dev service running in Docker,
-# accessed from file:// (origin "null"), localhost, or 127.0.0.1
+# CORS Configuration — allow GitHub Pages + local dev origins.
+# ORF_CORS_ORIGINS env var can override (comma-separated list).
+_default_origins = [
+    "https://lbranigan.github.io",
+    "http://localhost:8080",
+    "http://localhost:3000",
+    "http://127.0.0.1:8080",
+    "http://127.0.0.1:3000",
+    "null",  # file:// origin
+]
+_cors_origins = os.environ.get("ORF_CORS_ORIGINS")
+ALLOWED_ORIGINS = _cors_origins.split(",") if _cors_origins else _default_origins
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=ALLOWED_ORIGINS,
     allow_methods=["GET", "POST", "OPTIONS"],
     allow_headers=["Content-Type", "Authorization"],
 )
+
+# --- Request size limit middleware (25MB max) ---
+MAX_BODY_SIZE = 25 * 1024 * 1024  # 25MB — covers base64-encoded audio (~15MB WAV)
+
+class LimitBodySize(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        content_length = request.headers.get("content-length")
+        if content_length and int(content_length) > MAX_BODY_SIZE:
+            return JSONResponse(status_code=413, content={"error": "payload too large (25MB limit)"})
+        return await call_next(request)
+
+app.add_middleware(LimitBodySize)
+
+# --- Rate limiting (slowapi) ---
+limiter = Limiter(key_func=lambda: "global")
+app.state.limiter = limiter
+
+@app.exception_handler(RateLimitExceeded)
+async def rate_limit_handler(request: Request, exc: RateLimitExceeded):
+    return JSONResponse(status_code=429, content={"error": "rate limit exceeded — try again shortly"})
 
 # Optional auth token — set ORF_AUTH_TOKEN env var to require Bearer token.
 # /health is always public (needed for connection testing).
 AUTH_TOKEN = os.environ.get("ORF_AUTH_TOKEN")
 
 @app.middleware("http")
-async def check_auth(request, call_next):
+async def check_auth(request: Request, call_next):
     if AUTH_TOKEN and request.url.path != "/health":
-        token = request.headers.get("Authorization", "").replace("Bearer ", "")
+        auth_header = request.headers.get("Authorization", "")
+        if not auth_header.startswith("Bearer "):
+            print(f"[AUTH] Rejected (bad format): {request.method} {request.url.path} from {request.client.host}")
+            return JSONResponse(status_code=401, content={"error": "invalid auth format — use Bearer token"})
+        token = auth_header[7:]
         if token != AUTH_TOKEN:
+            print(f"[AUTH] Rejected (bad token): {request.method} {request.url.path} from {request.client.host}")
             return JSONResponse(status_code=401, content={"error": "unauthorized"})
     return await call_next(request)
 
@@ -253,7 +291,8 @@ class Word(BaseModel):
 # =============================================================================
 
 @app.post("/ensemble")
-async def ensemble(req: EnsembleRequest):
+@limiter.limit("10/minute")
+async def ensemble(req: EnsembleRequest, request: Request):
     """
     Dual-pass transcription with verbatimicity control.
 
@@ -323,7 +362,8 @@ async def ensemble(req: EnsembleRequest):
 # =============================================================================
 
 @app.post("/deepgram")
-async def deepgram_transcribe(req: DeepgramRequest):
+@limiter.limit("10/minute")
+async def deepgram_transcribe(req: DeepgramRequest, request: Request):
     """
     Transcribe audio using Deepgram Nova-3 via backend proxy.
 
@@ -377,7 +417,8 @@ async def deepgram_transcribe(req: DeepgramRequest):
 # =============================================================================
 
 @app.post("/parakeet")
-async def parakeet_transcribe(req: ParakeetRequest):
+@limiter.limit("10/minute")
+async def parakeet_transcribe(req: ParakeetRequest, request: Request):
     """
     Transcribe audio using Parakeet TDT 0.6B v2 (local GPU).
 
@@ -471,7 +512,8 @@ async def parakeet_transcribe(req: ParakeetRequest):
 # =============================================================================
 
 @app.post("/deepgram-maze")
-async def deepgram_maze(req: MazeRequest):
+@limiter.limit("20/minute")
+async def deepgram_maze(req: MazeRequest, request: Request):
     """
     Short-audio transcription optimized for maze game.
     Uses Nova-3 keyterm prompting to boost recognition of the 3 option words.

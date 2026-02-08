@@ -1,15 +1,33 @@
-const CACHE_NAME = 'orf-v38';
+const CACHE_NAME = 'orf-v39';
 
 const SHELL = [
+  // --- HTML pages ---
   './',
   './index.html',
   './dashboard.html',
+  './report.html',
+  './playback.html',
+  './maze.html',
+  './orf_assessment.html',
+
+  // --- CSS ---
   './style.css',
+  './css/student-playback.css',
+  './css/maze.css',
+
+  // --- Manifest + icons ---
+  './manifest.json',
+  './icons/icon-192.png',
+  './icons/icon-512.png',
+
+  // --- Data ---
+  './data/cmudict-phoneme-counts.json',
+
+  // --- Core pipeline JS ---
   './js/app.js',
   './js/ui.js',
   './js/recorder.js',
   './js/file-handler.js',
-  // './js/stt-api.js',  // Google STT — no longer used
   './js/ocr-api.js',
   './js/passage-trimmer.js',
   './js/word-equivalences.js',
@@ -22,16 +40,47 @@ const SHELL = [
   './js/audio-playback.js',
   './js/benchmarks.js',
   './js/dashboard.js',
-  './report.html',
-  './manifest.json',
-  './playback.html',
-  './css/student-playback.css',
-  './js/student-playback.js',
   './js/gamification.js',
   './js/effect-engine.js',
   './js/nl-api.js',
   './js/debug-logger.js',
-  './js/backend-config.js'
+  './js/backend-config.js',
+
+  // --- Pipeline modules (imported by app.js/diagnostics.js) ---
+  './js/text-normalize.js',
+  './js/vad-processor.js',
+  './js/ghost-detector.js',
+  './js/confidence-classifier.js',
+  './js/disfluency-detector.js',
+  './js/safety-checker.js',
+  './js/kitchen-sink-merger.js',
+  './js/cross-validator.js',
+  './js/phonetic-utils.js',
+  './js/audio-padding.js',
+  './js/vad-gap-analyzer.js',
+  './js/maze-generator.js',
+  './js/phoneme-counter.js',
+
+  // --- Config modules ---
+  './js/safety-config.js',
+  './js/disfluency-config.js',
+  './js/confidence-config.js',
+
+  // --- API + support modules ---
+  './js/syllable-counter.js',
+  './js/deepgram-api.js',
+  './js/parakeet-api.js',
+  './js/sequence-aligner.js',
+  './js/disfluency-tagger.js',
+  './js/reverb-api.js',
+  './js/ensemble-merger.js',
+  './js/miscue-registry.js',
+  './js/maze-game.js',
+
+  // --- Other ---
+  './js/student-playback.js',
+  './js/sprite-animator.js',
+  './js/stt-api.js',
 ];
 
 self.addEventListener('install', (event) => {
@@ -50,6 +99,7 @@ self.addEventListener('activate', (event) => {
 });
 
 self.addEventListener('fetch', (event) => {
+  // Skip Google APIs (NL API, etc.) — always go to network
   if (event.request.url.includes('googleapis.com')) {
     return;
   }
@@ -62,7 +112,18 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
+  // Cache-first with runtime caching for cache misses
   event.respondWith(
-    caches.match(event.request).then(cached => cached || fetch(event.request))
+    caches.match(event.request).then(cached => {
+      if (cached) return cached;
+      return fetch(event.request).then(response => {
+        // Only cache same-origin, successful, GET requests
+        if (response.ok && event.request.method === 'GET' && event.request.url.startsWith(self.location.origin)) {
+          const clone = response.clone();
+          caches.open(CACHE_NAME).then(cache => cache.put(event.request, clone));
+        }
+        return response;
+      });
+    })
   );
 });

@@ -38,4 +38,4 @@ COPY server.py .
 EXPOSE 8765
 
 # Run uvicorn ASGI server
-CMD ["uvicorn", "server:app", "--host", "0.0.0.0", "--port", "8765"]
+CMD ["uvicorn", "server:app", "--host", "0.0.0.0", "--port", "8765", "--timeout-keep-alive", "120"]

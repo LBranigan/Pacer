@@ -9,8 +9,18 @@
  * changes rarely and all consuming modules bind it at import time.
  */
 
-export const BACKEND_URL = localStorage.getItem('orf_backend_url')
-  || 'http://localhost:8765';
+function getDefaultBackendUrl() {
+  const saved = localStorage.getItem('orf_backend_url');
+  if (saved) return saved;
+  // If running locally, use localhost
+  if (['localhost', '127.0.0.1'].includes(location.hostname)) {
+    return 'http://localhost:8765';
+  }
+  // If deployed remotely, no default — force user to configure
+  return '';
+}
+
+export const BACKEND_URL = getDefaultBackendUrl();
 
 export const BACKEND_TOKEN = localStorage.getItem('orf_backend_token') || '';
 

@@ -1821,9 +1821,21 @@ if (backendUrlInput) {
   // Test connection button
   if (backendTestBtn) {
     backendTestBtn.addEventListener('click', async () => {
-      const url = backendUrlInput.value.trim() || 'http://localhost:8765';
-      backendStatusText.textContent = 'Testing...';
+      const url = backendUrlInput.value.trim()
+        || (['localhost','127.0.0.1'].includes(location.hostname) ? 'http://localhost:8765' : '');
       backendStatusText.className = '';
+      if (!url) {
+        backendStatusText.textContent = 'Not configured — enter your backend URL above';
+        backendStatusText.className = 'err';
+        return;
+      }
+      // Mixed-content warning: HTTPS page cannot call HTTP backend
+      if (location.protocol === 'https:' && url.startsWith('http://') && !url.includes('localhost')) {
+        backendStatusText.textContent = 'Warning: HTTPS page cannot call HTTP backend. Use an HTTPS URL.';
+        backendStatusText.className = 'err';
+        return;
+      }
+      backendStatusText.textContent = 'Testing...';
       try {
         const resp = await fetch(`${url}/health`, {
           method: 'GET',
@@ -1848,7 +1860,13 @@ if (backendUrlInput) {
 
   // Auto-test on page load (silent)
   (async () => {
-    const url = backendUrlInput.value.trim() || 'http://localhost:8765';
+    const url = backendUrlInput.value.trim()
+      || (['localhost','127.0.0.1'].includes(location.hostname) ? 'http://localhost:8765' : '');
+    if (!url) {
+      backendStatusText.textContent = 'Not configured — enter your backend URL above';
+      backendStatusText.className = 'err';
+      return;
+    }
     try {
       const resp = await fetch(`${url}/health`, {
         method: 'GET',
