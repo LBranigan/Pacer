@@ -569,9 +569,44 @@ async function runAnalysis() {
     }
   }
 
+  // Split hyphenated STT words into separate words before alignment.
+  // ASRs sometimes join consecutive words with hyphens (e.g., "wiggle-waggle")
+  // which causes false substitutions/omissions. Same logic as normalizeText()
+  // applies to reference text. Timestamps divided proportionally by char count.
+  const parseT = (t) => parseFloat(String(t).replace('s', '')) || 0;
+  {
+    const expanded = [];
+    for (const w of transcriptWords) {
+      const stripped = w.word.replace(/^[^\w'-]+|[^\w'-]+$/g, '');
+      if (stripped.includes('-') && stripped.length > 1) {
+        const parts = stripped.split('-').filter(p => p.length > 0);
+        if (parts.length > 1) {
+          const start = parseT(w.startTime);
+          const end = parseT(w.endTime);
+          const dur = end - start;
+          const totalChars = parts.reduce((s, p) => s + p.length, 0);
+          let cursor = start;
+          for (const part of parts) {
+            const partDur = dur * (part.length / totalChars);
+            expanded.push({
+              ...w,
+              word: part,
+              startTime: `${cursor.toFixed(3)}s`,
+              endTime: `${(cursor + partDur).toFixed(3)}s`,
+            });
+            cursor += partDur;
+          }
+          continue;
+        }
+      }
+      expanded.push(w);
+    }
+    transcriptWords.length = 0;
+    transcriptWords.push(...expanded);
+  }
+
   // Log STT words with full details for maximum transparency
   // NOTE: After Phase 13, transcriptWords excludes ghost words (filtered before alignment)
-  const parseT = (t) => parseFloat(String(t).replace('s', '')) || 0;
 
   // Build complete timeline with words and ALL gaps
   const wordTimeline = [];
