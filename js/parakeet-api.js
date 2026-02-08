@@ -1,5 +1,5 @@
 /**
- * Parakeet TDT 0.6B v2 API Client
+ * Parakeet TDT 0.6B v3 API Client
  *
  * Calls backend at localhost:8765/parakeet for local GPU-based transcription.
  * Pure transport layer — cross-validation logic is in cross-validator.js.

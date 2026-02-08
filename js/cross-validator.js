@@ -4,7 +4,7 @@
  * Engine-agnostic cross-validation of Reverb transcript against a second ASR engine
  * using Needleman-Wunsch sequence alignment.
  *
- * Currently supported engines: Deepgram Nova-3, Parakeet TDT 0.6B v2
+ * Currently supported engines: Deepgram Nova-3, Parakeet TDT 0.6B v3
  * Engine selection via localStorage key 'orf_cross_validator' (default: 'parakeet').
  *
  * Cross-validation statuses:

@@ -4,7 +4,7 @@ Reverb ASR HTTP API Server
 Endpoints:
   POST /ensemble - Dual-pass transcription (v=1.0 verbatim + v=0.0 clean)
   POST /deepgram - Deepgram Nova-3 transcription proxy (cross-validation)
-  POST /parakeet - Parakeet TDT 0.6B v2 local transcription (cross-validation)
+  POST /parakeet - Parakeet TDT 0.6B v3 local transcription (cross-validation)
   GET  /health   - Health check with GPU status and model info
 
 Requirements:
@@ -151,12 +151,12 @@ def check_parakeet_available():
 
 
 def get_parakeet_model():
-    """Get or load the Parakeet TDT 0.6B v2 model singleton. ~600MB VRAM."""
+    """Get or load the Parakeet TDT 0.6B v3 model singleton. ~600MB VRAM."""
     global _parakeet_model
     if _parakeet_model is None:
         import nemo.collections.asr as nemo_asr
-        print("[parakeet] Loading model nvidia/parakeet-tdt-0.6b-v2...")
-        _parakeet_model = nemo_asr.models.ASRModel.from_pretrained("nvidia/parakeet-tdt-0.6b-v2")
+        print("[parakeet] Loading model nvidia/parakeet-tdt-0.6b-v3...")
+        _parakeet_model = nemo_asr.models.ASRModel.from_pretrained("nvidia/parakeet-tdt-0.6b-v3")
         print("[parakeet] Model loaded successfully")
     return _parakeet_model
 
@@ -420,7 +420,7 @@ async def deepgram_transcribe(req: DeepgramRequest, request: Request):
 @limiter.limit("10/minute")
 async def parakeet_transcribe(req: ParakeetRequest, request: Request):
     """
-    Transcribe audio using Parakeet TDT 0.6B v2 (local GPU).
+    Transcribe audio using Parakeet TDT 0.6B v3 (local GPU).
 
     Returns normalized word-level timestamps matching project format.
     Model lazy-loads on first request (~600MB VRAM).
@@ -507,7 +507,7 @@ async def parakeet_transcribe(req: ParakeetRequest, request: Request):
             return {
                 "words": words,
                 "transcript": transcript,
-                "model": "parakeet-tdt-0.6b-v2"
+                "model": "parakeet-tdt-0.6b-v3"
             }
 
         except Exception as e:
