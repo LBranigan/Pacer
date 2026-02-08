@@ -332,11 +332,25 @@ export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, di
   if (prosodyContainer) { prosodyContainer.innerHTML = ''; prosodyContainer.style.display = 'none'; }
 
   // Build map: refIndex → trailing punctuation string (cosmetic only, not scored)
+  // Must mirror normalizeText's trailing-hyphen merge so indices align with alignment entries.
+  // Without merging, OCR artifacts like "spread- sheet" create an index offset that shifts
+  // all subsequent punctuation to the wrong word (e.g., period after "process" lands on "shanna").
   const punctSuffixMap = new Map();
   if (referenceText) {
-    const rawWords = referenceText.trim().split(/\s+/);
-    for (let i = 0; i < rawWords.length; i++) {
-      const w = rawWords[i];
+    const rawTokens = referenceText.trim().split(/\s+/);
+    const mergedForPunct = [];
+    for (let i = 0; i < rawTokens.length; i++) {
+      const stripped = rawTokens[i].replace(/^[^\w'-]+|[^\w'-]+$/g, '');
+      if (stripped.length === 0) continue; // skip empty tokens (bullet points etc.)
+      if (stripped.endsWith('-') && i + 1 < rawTokens.length) {
+        mergedForPunct.push(rawTokens[i + 1]); // second part may carry trailing punct
+        i++;
+      } else {
+        mergedForPunct.push(rawTokens[i]);
+      }
+    }
+    for (let i = 0; i < mergedForPunct.length; i++) {
+      const w = mergedForPunct[i];
       const match = w.match(/([.!?,;:\u2014\u2013\u2012\u2015]+["'\u201C\u201D\u2018\u2019)}\]]*|["'\u201C\u201D\u2018\u2019)}\]]+)$/);
       if (match) punctSuffixMap.set(i, match[0]);
     }
@@ -555,11 +569,11 @@ export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, di
         ' word' + (pros.wordOutliers.outlierCount !== 1 ? 's' : '') +
         '</span><span class="metric-label">Duration Outliers</span>';
       const oTip = [];
-      oTip.push('Multisyllabic words above this student\'s statistical outlier fence');
-      oTip.push('(IQR method: Q3 + 1.5*IQR = ' + pros.wordOutliers.baseline.upperFence + 'ms/syllable).');
-      oTip.push('Student baseline: median ' + pros.wordOutliers.baseline.medianDurationPerSyllable + 'ms/syl, Q1=' + pros.wordOutliers.baseline.Q1 + ', Q3=' + pros.wordOutliers.baseline.Q3);
+      oTip.push('Words above this student\'s statistical outlier fence');
+      oTip.push('(IQR method: Q3 + 1.5*IQR = ' + pros.wordOutliers.baseline.upperFence + 'ms/phoneme).');
+      oTip.push('Student baseline: median ' + pros.wordOutliers.baseline.medianDurationPerPhoneme + 'ms/ph, Q1=' + pros.wordOutliers.baseline.Q1 + ', Q3=' + pros.wordOutliers.baseline.Q3);
       for (const o of pros.wordOutliers.outliers.slice(0, 5)) {
-        oTip.push(o.word + ' (' + o.syllables + ' syl): ' + o.normalizedDurationMs + 'ms/syl — ' + o.aboveFenceBy + 'ms above fence');
+        oTip.push(o.word + ' (' + (o.phonemes || o.syllables) + ' ph): ' + o.normalizedDurationMs + 'ms/ph — ' + o.aboveFenceBy + 'ms above fence');
       }
       if (pros.wordOutliers.outlierCount > 5) oTip.push('... and ' + (pros.wordOutliers.outlierCount - 5) + ' more');
       oTip.push('Timestamps: cross-validator (' + pros.wordOutliers.baseline.totalWordsAnalyzed + ' words analyzed, ' + pros.wordOutliers.baseline.wordsSkippedNoTimestamps + ' skipped)');
@@ -598,6 +612,11 @@ export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, di
 
     body.appendChild(metricsRow);
 
+    // ── Word Speed Map (inline within prosody) ──
+    if (diagnostics.wordSpeed && !diagnostics.wordSpeed.insufficient) {
+      renderWordSpeedInto(body, diagnostics.wordSpeed);
+    }
+
     // Scope transparency note
     const scopeNote = document.createElement('div');
     scopeNote.className = 'prosody-scope-note';
@@ -609,11 +628,6 @@ export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, di
       prosodyContainer.appendChild(section);
       prosodyContainer.style.display = '';
     }
-  }
-
-  // ── Word Speed Map section ──
-  if (diagnostics && diagnostics.wordSpeed && !diagnostics.wordSpeed.insufficient) {
-    renderWordSpeedSection(diagnostics.wordSpeed);
   }
 
   // Build mapping from raw transcriptWords index → alignment render hypIndex.
@@ -708,7 +722,7 @@ export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, di
     // Forgiven words (proper nouns) render as correct — they don't count as errors
     const displayType = item.forgiven ? 'correct' : item.type;
     span.className = 'word word-' + displayType;
-    span.textContent = item.ref || '';
+    span.textContent = item._displayRef || item.ref || '';
 
     // Look up STT word metadata for tooltip
     const hypKey = item.hyp;
@@ -1167,49 +1181,48 @@ function renderDisfluencySection(disfluencyStats) {
 // ── Word Speed Map rendering ────────────────────────────────────────
 
 /**
- * Render the Word Speed Map collapsible section.
- * Populates legend, passage words (colored by tier), inline summary, and summary bar.
+ * Render Word Speed Map inline within a parent element (prosody body).
+ * Creates legend, passage words (colored by tier), and summary bar.
  *
+ * @param {HTMLElement} parent - Element to append word speed content into
  * @param {object} wordSpeedData - Output from computeWordSpeedTiers()
  */
-function renderWordSpeedSection(wordSpeedData) {
-  const section = document.getElementById('wordSpeedSection');
-  const legendEl = document.getElementById('wordSpeedLegend');
-  const wordsEl = document.getElementById('wordSpeedWords');
-  const summaryEl = document.getElementById('wordSpeedSummary');
+function renderWordSpeedInto(parent, wordSpeedData) {
+  if (!wordSpeedData || wordSpeedData.insufficient) return;
 
-  if (!section || !wordsEl) return;
+  const wrapper = document.createElement('div');
+  wrapper.className = 'word-speed-inline';
 
-  if (!wordSpeedData || wordSpeedData.insufficient) {
-    section.style.display = 'none';
-    return;
-  }
-
-  section.style.display = '';
+  // Label
+  const label = document.createElement('h5');
+  label.className = 'word-speed-label';
+  label.textContent = 'Word Speed Map';
+  wrapper.appendChild(label);
 
   // ── Legend ──
-  if (legendEl) {
-    const tiers = [
-      { cls: 'ws-quick', label: 'Quick' },
-      { cls: 'ws-steady', label: 'Steady' },
-      { cls: 'ws-slow', label: 'Slow' },
-      { cls: 'ws-struggling', label: 'Struggling' },
-      { cls: 'ws-stalled', label: 'Stalled' },
-      { cls: 'ws-short-word', label: '1-syl word' },
-      { cls: 'ws-omitted', label: 'Omitted' },
-      { cls: 'ws-no-data', label: 'No data' }
-    ];
-    legendEl.innerHTML = '';
-    for (const t of tiers) {
-      const span = document.createElement('span');
-      span.className = t.cls;
-      span.textContent = t.label;
-      legendEl.appendChild(span);
-    }
+  const legendEl = document.createElement('div');
+  legendEl.className = 'word-speed-legend';
+  const tiers = [
+    { cls: 'ws-quick', label: 'Quick' },
+    { cls: 'ws-steady', label: 'Steady' },
+    { cls: 'ws-slow', label: 'Slow' },
+    { cls: 'ws-struggling', label: 'Struggling' },
+    { cls: 'ws-stalled', label: 'Stalled' },
+    { cls: 'ws-short-word', label: '1-syl word' },
+    { cls: 'ws-omitted', label: 'Omitted' },
+    { cls: 'ws-no-data', label: 'No data' }
+  ];
+  for (const t of tiers) {
+    const span = document.createElement('span');
+    span.className = t.cls;
+    span.textContent = t.label;
+    legendEl.appendChild(span);
   }
+  wrapper.appendChild(legendEl);
 
   // ── Passage words ──
-  wordsEl.innerHTML = '';
+  const wordsEl = document.createElement('div');
+  wordsEl.className = 'word-speed-words';
   for (const w of wordSpeedData.words) {
     const span = document.createElement('span');
     span.className = `word ws-${w.tier}`;
@@ -1218,11 +1231,15 @@ function renderWordSpeedSection(wordSpeedData) {
     wordsEl.appendChild(span);
     wordsEl.appendChild(document.createTextNode(' '));
   }
+  wrapper.appendChild(wordsEl);
 
   // ── Summary bar ──
-  if (summaryEl) {
-    renderWordSpeedSummary(summaryEl, wordSpeedData);
-  }
+  const summaryEl = document.createElement('div');
+  summaryEl.className = 'word-speed-summary';
+  renderWordSpeedSummary(summaryEl, wordSpeedData);
+  wrapper.appendChild(summaryEl);
+
+  parent.appendChild(wrapper);
 }
 
 /**
@@ -1255,14 +1272,19 @@ function buildWordSpeedTooltip(w) {
     return lines.join('\n');
   }
 
-  // Duration line
+  // Duration line with phoneme + syllable counts
   if (w.durationMs != null) {
-    lines.push(`Duration: ${w.durationMs}ms | ${w.syllables} syl | ${w.normalizedMs} ms/syl`);
+    const phonemeStr = w.phonemes != null ? `${w.phonemes} ph` : '';
+    const sylStr = w.syllables != null ? `${w.syllables} syl` : '';
+    const countsStr = [phonemeStr, sylStr].filter(Boolean).join(', ');
+    const sourceTag = w.phonemeSource === 'fallback' ? ' (est.)' : '';
+    lines.push(`Duration: ${w.durationMs}ms | ${countsStr}${sourceTag} | ${w.normalizedMs} ms/ph`);
   }
 
   if (w.tier === 'short-word') {
-    lines.push('Tier: short-word — single-syllable, timing not classified');
-    if (w._medianMs) lines.push(`Student median: ${w._medianMs} ms/syl`);
+    lines.push('Tier: short-word — few phonemes, timing not classified');
+    if (w._medianMs) lines.push(`Student median: ${w._medianMs} ms/ph`);
+    if (w.sentenceFinal) lines.push('(sentence-final — duration may be inflated)');
     return lines.join('\n');
   }
 
@@ -1275,13 +1297,18 @@ function buildWordSpeedTooltip(w) {
     stalled: '>= 2.50x'
   };
   if (w.ratio != null && w._medianMs) {
-    lines.push(`Ratio: ${w.ratio}x student median (${w._medianMs} ms/syl)`);
+    lines.push(`Ratio: ${w.ratio}x student median (${w._medianMs} ms/ph)`);
   }
   lines.push(`Tier: ${w.tier} (${tierRanges[w.tier] || '?'} range)`);
 
   // IQR outlier status
   if (w._upperFence) {
-    lines.push(`IQR outlier: ${w.isOutlier ? 'yes' : 'no'} (fence: ${w._upperFence} ms/syl)`);
+    lines.push(`IQR outlier: ${w.isOutlier ? 'yes' : 'no'} (fence: ${w._upperFence} ms/ph)`);
+  }
+
+  // Sentence-final flag
+  if (w.sentenceFinal) {
+    lines.push('(sentence-final — duration may be inflated)');
   }
 
   return lines.join('\n');
@@ -1347,7 +1374,7 @@ function renderWordSpeedSummary(container, data) {
     const baseLine = document.createElement('div');
     baseLine.style.color = '#888';
     baseLine.style.fontSize = '0.8em';
-    baseLine.textContent = `Student baseline: ${data.baseline.medianMs} ms/syllable`;
+    baseLine.textContent = `Student baseline: ${data.baseline.medianMs} ms/phoneme`;
     container.appendChild(baseLine);
   }
 }

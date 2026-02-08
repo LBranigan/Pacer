@@ -25,10 +25,14 @@ import { checkTerminalLeniency } from './phonetic-utils.js';
 import { padAudioWithSilence } from './audio-padding.js';
 import { enrichDiagnosticsWithVAD, computeVADGapSummary, adjustGapsWithVADOverhang } from './vad-gap-analyzer.js';
 import { canRunMaze } from './maze-generator.js';
+import { loadPhonemeData, getPhonemeCountWithFallback } from './phoneme-counter.js';
 
 // Code version for cache verification
-const CODE_VERSION = 'v37-2026-02-06';
+const CODE_VERSION = 'v39-2026-02-07';
 console.log('[ORF] Code version:', CODE_VERSION);
+
+// Pre-load CMUdict phoneme data (used by word speed normalization)
+loadPhonemeData();
 
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('./sw.js')
@@ -283,12 +287,39 @@ async function runAnalysis() {
       });
     }
 
+    // Raw Reverb word lists (before alignment/cross-validation)
+    if (kitchenSinkResult.reverb) {
+      const rev = kitchenSinkResult.reverb;
+      const mapReverb = (w, i) => ({
+        idx: i, word: w.word,
+        start: w.startTime, end: w.endTime,
+        confidence: w.confidence
+      });
+      addStage('reverb_raw', {
+        description: 'Raw Reverb word lists before alignment/cross-validation (v1.0=verbatim, v0.0=clean)',
+        verbatim: {
+          wordCount: rev.verbatim?.words?.length || 0,
+          transcript: rev.verbatim?.transcript || '',
+          words: (rev.verbatim?.words || []).map(mapReverb)
+        },
+        clean: {
+          wordCount: rev.clean?.words?.length || 0,
+          transcript: rev.clean?.transcript || '',
+          words: (rev.clean?.words || []).map(mapReverb)
+        }
+      });
+    }
+
     // Per-word timestamp comparison: all three sources
     const _parseTs = t => parseFloat(String(t).replace('s', '')) || 0;
     addStage('timestamp_sources', {
       description: 'All timestamp sources per word (cross-validator=primary, Reverb v1.0=verbatim, Reverb v0.0=clean)',
       words: mergedWords.map(w => {
         const entry = { word: w.word, crossValidation: w.crossValidation };
+        // Phoneme count (for duration normalization)
+        const ph = getPhonemeCountWithFallback(w.word);
+        entry.phonemes = ph.count;
+        entry.phonemeSource = ph.source;
         // Primary (cross-validator for confirmed/disagreed, Reverb for unconfirmed)
         entry.primary = { start: w.startTime, end: w.endTime };
         // Cross-validator
@@ -956,46 +987,102 @@ async function runAnalysis() {
 
   // Map NL annotations onto alignment entries
   if (nlAnnotations) {
-    let refWordIndex = 0;
-    const refWordsForNL = referenceText.trim().split(/\s+/);
+    // Build position-annotated reference word array aligned with normalizeText output.
+    // normalizeText merges trailing-hyphen tokens (OCR line-break artifacts like "spread-" + "sheet"
+    // → "spreadsheet") and filters empty tokens. This mirrors that logic but preserves original
+    // casing and character positions for offset-based NL annotation matching.
+    const refPositions = (() => {
+      const rawTokens = [];
+      const regex = /\S+/g;
+      let m;
+      while ((m = regex.exec(referenceText)) !== null) {
+        const stripped = m[0].replace(/^[^\w'-]+|[^\w'-]+$/g, '');
+        if (stripped.length > 0) {
+          rawTokens.push({ original: m[0], stripped, start: m.index, end: m.index + m[0].length });
+        }
+      }
+      const merged = [];
+      for (let t = 0; t < rawTokens.length; t++) {
+        if (rawTokens[t].stripped.endsWith('-') && t + 1 < rawTokens.length) {
+          merged.push({
+            word: rawTokens[t].stripped.slice(0, -1) + rawTokens[t + 1].stripped,
+            start: rawTokens[t].start,
+            end: rawTokens[t + 1].end
+          });
+          t++;
+        } else {
+          merged.push({ word: rawTokens[t].original, start: rawTokens[t].start, end: rawTokens[t].end });
+        }
+      }
+      return merged;
+    })();
 
+    // Build set of words that appear lowercase (non-sentence-start) in the reference text.
+    // Uses raw split (not merged) so "sheet" from "spread- sheet" is captured, preventing
+    // false proper-noun forgiveness for "Sheet" in "Google Sheet".
+    const rawRefWords = referenceText.trim().split(/\s+/);
+    const refLowercaseSet = new Set(
+      rawRefWords
+        .filter((w, i) => {
+          if (!w || w.length === 0) return false;
+          if (i === 0) return false;
+          if (i > 0 && /[.!?]$/.test(rawRefWords[i - 1])) return false;
+          return w.charAt(0) === w.charAt(0).toLowerCase();
+        })
+        .map(w => w.toLowerCase().replace(/[^a-z'-]/g, ''))
+    );
+
+    // Match NL annotations to alignment entries by character offset rather than sequential index.
+    // The NL API tokenizes differently from split(/\s+/) — it splits contractions ("it's" → "it" + "'s")
+    // and normalizeText merges hyphens ("spread-" + "sheet" → "spreadsheet"). Both cause sequential
+    // index drift. Offset-based matching is robust to all tokenization differences.
+    let ri = 0;
     for (const entry of alignment) {
       if (entry.type === 'insertion') continue;
-      if (refWordIndex < nlAnnotations.length) {
-        entry.nl = { ...nlAnnotations[refWordIndex] }; // Clone to avoid mutating original
+      if (ri < refPositions.length) {
+        const range = refPositions[ri];
+        const matching = nlAnnotations.filter(a => a.offset >= range.start && a.offset < range.end);
+        if (matching.length > 0) {
+          entry.nl = { ...(matching.find(a => a.isProperNoun) || matching[0]) };
+        }
 
-        // Reference capitalization override: if reference is lowercase, it's NOT a proper noun
-        // This fixes STT/NL incorrectly marking "brown" as proper noun "Brown"
-        const refWord = refWordsForNL[refWordIndex] || '';
-        const isAtSentenceStart = refWordIndex === 0 ||
-          (refWordIndex > 0 && /[.!?]$/.test(refWordsForNL[refWordIndex - 1]));
+        // Cosmetic: preserve original casing for UI display (e.g., "Shanna Mallon")
+        // Logic uses lowercase entry.ref; display uses _displayRef
+        const refWord = range.word.replace(/^[^\w'-]+|[^\w'-]+$/g, '');
+        entry._displayRef = refWord;
+        const isAtSentenceStart = ri === 0 ||
+          (ri > 0 && /[.!?]$/.test(refPositions[ri - 1].word));
 
-        if (!isAtSentenceStart && refWord.length > 0) {
+        if (entry.nl && !isAtSentenceStart && refWord.length > 0) {
           const refIsLowercase = refWord.charAt(0) === refWord.charAt(0).toLowerCase();
           if (refIsLowercase && entry.nl.isProperNoun) {
-            // Override: reference says it's lowercase, so NOT a proper noun
             entry.nl.isProperNoun = false;
-            entry.nl.tierOverridden = entry.nl.tier; // Save original for debugging
-            entry.nl.tier = 'academic'; // Default to academic tier instead of proper
+            entry.nl.tierOverridden = entry.nl.tier;
+            entry.nl.tier = 'academic';
           }
         }
       }
-      refWordIndex++;
+      ri++;
     }
 
-    // Build capitalization map from original reference text as fallback for proper noun detection
-    // (NL API may miss proper nouns without sufficient context)
-    const refWordsOriginal = referenceText.trim().split(/\s+/);
-    const isCapitalized = (word, index) => {
-      if (!word || word.length === 0) return false;
-      const firstChar = word.charAt(0);
-      if (firstChar !== firstChar.toUpperCase()) return false;
-      // Check if it's at sentence start (after . ! ? or first word)
-      if (index === 0) return false;
-      const prevWord = refWordsOriginal[index - 1];
-      if (prevWord && /[.!?]$/.test(prevWord)) return false;
-      return true;
-    };
+    // Dictionary-based common word detection: checks Free Dictionary API
+    // to distinguish exotic names (Mallon, Shanna) from common words (Straight, North).
+    // Common words get 200 → skip forgiveness; exotic names get 404 → allow forgiveness.
+    // Results cached in sessionStorage to avoid re-fetching across runs.
+    async function isCommonDictionaryWord(word) {
+      const key = `dict_${word.toLowerCase()}`;
+      const cached = sessionStorage.getItem(key);
+      if (cached !== null) return cached === 'true';
+      try {
+        const resp = await fetch(`https://api.dictionaryapi.dev/api/v2/entries/en/${encodeURIComponent(word.toLowerCase())}`);
+        const isCommon = resp.status === 200;
+        sessionStorage.setItem(key, String(isCommon));
+        return isCommon;
+      } catch {
+        // Network error — assume NOT common (fail open: allow forgiveness)
+        return false;
+      }
+    }
 
     // Mark proper noun errors as forgiven if phonetically close
     // (student decoded correctly but doesn't know accepted pronunciation - vocabulary gap, not decoding failure)
@@ -1007,33 +1094,43 @@ async function runAnalysis() {
       if (entry.type === 'insertion') continue;
 
       if (entry.type === 'substitution') {
-        // Check if proper noun via NL API OR via capitalization heuristic
-        // BUT: Reference text is ground truth - if it's lowercase there, it's NOT a proper noun
-        // (STT often capitalizes common words like "brown" → "Brown" thinking it's a surname)
-        const refWordOriginal = refWordsOriginal[refIdx] || '';
+        const refWordOriginal = refIdx < refPositions.length
+          ? refPositions[refIdx].word.replace(/^[^\w'-]+|[^\w'-]+$/g, '')
+          : '';
         const refIsLowercase = refWordOriginal.length > 0 &&
           refWordOriginal.charAt(0) === refWordOriginal.charAt(0).toLowerCase();
 
-        // NL API detection, but overridden if reference is lowercase
         let isProperViaNL = entry.nl && entry.nl.isProperNoun;
         if (isProperViaNL && refIsLowercase) {
-          // Reference has lowercase - author intended it as common word, not proper noun
+          isProperViaNL = false;
+        }
+        // Override if this word appears lowercase elsewhere in the reference text
+        // (e.g., "Sheet" in "Google Sheet" when "sheet" also appears in "spreadsheet")
+        if (isProperViaNL && refLowercaseSet.has(entry.ref.toLowerCase())) {
           isProperViaNL = false;
         }
 
-        const isProperViaCaps = isCapitalized(refWordsOriginal[refIdx], refIdx);
+        // Dictionary guard: common English words (north, straight) should NOT be forgiven
+        // even if NL API tags them as proper nouns (e.g., "Straight North" company name)
+        let isDictionaryCommon = false;
+        if (isProperViaNL) {
+          isDictionaryCommon = await isCommonDictionaryWord(entry.ref);
+          if (isDictionaryCommon) {
+            isProperViaNL = false;
+          }
+        }
 
         const logEntry = {
           refWord: entry.ref,
           hypWord: entry.hyp,
           refIdx,
           isProperViaNL,
-          isProperViaCaps,
+          isDictionaryCommon,
           refIsLowercase,
           nlData: entry.nl
         };
 
-        if (isProperViaNL || isProperViaCaps) {
+        if (isProperViaNL) {
           // Try combining with following insertions to find best phonetic match
           // (handles "her" + "my" + "own" = "hermyown" for "Hermione")
           let bestRatio = levenshteinRatio(entry.ref, entry.hyp);
@@ -1065,7 +1162,7 @@ async function runAnalysis() {
           if (bestRatio >= 0.4) {
             entry.forgiven = true;
             entry.phoneticRatio = Math.round(bestRatio * 100);
-            entry.properNounSource = isProperViaNL ? 'NL API' : 'capitalization';
+            entry.properNounSource = 'NL API';
             logEntry.forgiven = true;
             if (bestInsertionsUsed > 0) {
               entry.combinedPronunciation = bestCombined;
@@ -1086,7 +1183,8 @@ async function runAnalysis() {
 
     addStage('proper_noun_forgiveness', {
       totalSubstitutions: forgivenessLog.length,
-      properNounsFound: forgivenessLog.filter(l => l.isProperViaNL || l.isProperViaCaps).length,
+      properNounsFound: forgivenessLog.filter(l => l.isProperViaNL).length,
+      dictionaryBlocked: forgivenessLog.filter(l => l.isDictionaryCommon).length,
       forgiven: forgivenessLog.filter(l => l.forgiven).length,
       details: forgivenessLog
     });
@@ -1249,9 +1347,10 @@ async function runAnalysis() {
   const paceConsistency = phrasing.insufficient
     ? { insufficient: true, reason: 'Phrasing insufficient' }
     : computePaceConsistency(phrasing.overallPhrasing, transcriptWords);
+  await loadPhonemeData(); // Ensure CMUdict phoneme counts are loaded before normalization
   const wordOutliers = computeWordDurationOutliers(transcriptWords, alignment);
   const xvalRawWords = data._kitchenSink?.xvalRawWords || [];
-  const wordSpeedTiers = computeWordSpeedTiers(wordOutliers, alignment, xvalRawWords, transcriptWords);
+  const wordSpeedTiers = computeWordSpeedTiers(wordOutliers, alignment, xvalRawWords, transcriptWords, referenceText);
 
   diagnostics.prosody = { phrasing, pauseAtPunctuation, paceConsistency, wordOutliers };
   diagnostics.wordSpeed = wordSpeedTiers;

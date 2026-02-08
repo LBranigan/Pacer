@@ -1,8 +1,14 @@
 // syllable-counter.js — Dependency-free English syllable counter
 //
 // Heuristic algorithm for estimating syllable counts in English words.
-// Designed for ORF (Oral Reading Fluency) assessment: normalizing spoken
-// word durations by syllable count rather than character count.
+// Originally the primary normalizer for spoken word duration in ORF assessment;
+// now serves as the fallback estimator for words not found in CMUdict.
+//
+// The primary normalizer is now phoneme count (from CMUdict via phoneme-counter.js).
+// Phoneme count captures consonant density that syllable count misses — e.g.,
+// "spreadsheet" (2 syl, 8 phonemes) vs "baby" (2 syl, 4 phonemes). For words
+// not in CMUdict, we estimate: phonemes ≈ syllables × PHONEMES_PER_SYLLABLE_RATIO.
+// See docs/phoneme-normalization-plan.md for full rationale.
 //
 // Algorithm lineage: Based on the approach from Lingua::EN::Syllable (Perl),
 // adapted through Text-Statistics (PHP) and the words/syllable (JS) ecosystem,
@@ -12,19 +18,6 @@
 // Accuracy: ~95% on grade 1-8 reading vocabulary. Perfect accuracy is
 // impossible without a full pronunciation dictionary (CMU Dict = 134K words)
 // because English orthography is not phonetically regular.
-//
-// Research note — syllable count vs. character count for duration normalization:
-//   Syllable count is the better normalizer for spoken word duration because
-//   speech is produced in syllable-sized articulatory gestures, not character-
-//   sized ones. "Strength" (8 chars, 1 syllable) takes roughly the same time
-//   to say as "cat" (3 chars, 1 syllable), but 3x less than "elephant"
-//   (8 chars, 3 syllables). Character count conflates orthographic complexity
-//   with phonological complexity; syllable count tracks the actual motor plan.
-//   Baker & Bradlow (2009, J. Phonetics) found that number of phonemes (which
-//   correlates strongly with syllable count) is among the strongest predictors
-//   of word duration in connected speech, alongside word frequency and mention
-//   status. European reading fluency assessments (e.g., Dutch, Finnish) already
-//   use syllables-per-second as their primary fluency metric.
 
 // ── Exception dictionary ────────────────────────────────────────────────
 // Words whose syllable counts are notoriously wrong under heuristic rules.

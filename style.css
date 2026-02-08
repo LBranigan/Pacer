@@ -602,52 +602,19 @@ body.dev-mode .dev-mode-toggle {
 }
 
 /* ───────────────────────────────────────────────────────────────────────────
-   Word Speed Map section — clones Confidence View pattern
+   Word Speed Map — inline within prosody section
    ─────────────────────────────────────────────────────────────────────────── */
-.word-speed-section {
-  margin-top: 1rem;
-  border: 1px solid #ddd;
-  border-radius: 6px;
-  overflow: hidden;
+.word-speed-inline {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid #eee;
 }
 
-.word-speed-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0.5rem 0.75rem;
-  cursor: pointer;
-  background: #f5f5f5;
-  user-select: none;
-}
-
-.word-speed-header:hover { background: #eee; }
-
-.word-speed-header h4 {
-  font-size: 0.9rem;
+.word-speed-label {
+  font-size: 0.85rem;
   font-weight: 600;
   color: #555;
-  margin: 0;
-}
-
-.word-speed-toggle {
-  font-size: 0.7rem;
-  color: #999;
-  transition: transform 0.2s;
-}
-
-.word-speed-section.expanded .word-speed-toggle {
-  transform: rotate(180deg);
-}
-
-.word-speed-body {
-  display: none;
-  padding: 0.75rem;
-  background: #fafafa;
-}
-
-.word-speed-section.expanded .word-speed-body {
-  display: block;
+  margin: 0 0 6px 0;
 }
 
 /* Legend */

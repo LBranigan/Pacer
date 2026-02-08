@@ -347,19 +347,29 @@ const CONFIDENCE_MISCUES = {
 
 const FORGIVENESS_RULES = {
   properNounForgiveness: {
-    description: 'Phonetically close attempt at a proper noun (name)',
-    detector: 'metrics.js → computeAccuracy() / NL API proper noun detection',
+    description: 'Phonetically close attempt at a proper noun (name), with dictionary guard to exclude common English words',
+    detector: 'app.js → forgiveness loop (NL API proper noun detection + Free Dictionary API guard)',
     countsAsError: false, // Forgiven - student decoded correctly, just unfamiliar
     config: {
-      min_similarity: 0.40               // 40% Levenshtein similarity required
+      min_similarity: 0.40,              // 40% Levenshtein similarity required
+      dictionary_api: 'https://api.dictionaryapi.dev/api/v2/entries/en/{word}',
+      dictionary_cache: 'sessionStorage (key: dict_{word})',
+      // 200 = common word → skip forgiveness (student should know this word)
+      // 404 = exotic name → allow forgiveness
     },
     example: {
-      reference: 'Hermione',
-      spoken: 'Her-my-oh-nee',
-      result: 'Proper noun + phonetically close = forgiven'
+      reference: 'Mallon',
+      spoken: 'Malone',
+      result: 'Proper noun + dictionary 404 (exotic name) + phonetically close = forgiven'
     },
+    guards: [
+      'NL API must identify word as proper noun (isProperViaNL)',
+      'Reference text lowercase override: if word appears lowercase elsewhere, NOT proper',
+      'Dictionary guard: if Free Dictionary API returns 200, word is common English → NOT forgiven',
+      'Capitalization is cosmetic only — no isProperViaCaps fallback'
+    ],
     uiClass: 'word-forgiven',
-    note: 'Student used phonics correctly but doesn\'t know the name'
+    note: 'Student used phonics correctly but doesn\'t know the name. Common words like "north", "straight" are blocked by dictionary lookup even if NL API tags them as proper nouns.'
   },
 
   terminalLeniency: {

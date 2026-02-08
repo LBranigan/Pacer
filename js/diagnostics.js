@@ -2,6 +2,7 @@
 
 import { levenshteinRatio } from './nl-api.js';
 import { countSyllables } from './syllable-counter.js';
+import { getPhonemeCountWithFallback, PHONEMES_PER_SYLLABLE_RATIO } from './phoneme-counter.js';
 
 // ── Helpers ──────────────────────────────────────────────────────────
 
@@ -15,7 +16,21 @@ export function parseTime(t) {
  * Returns Map<refWordIndex, 'period'|'comma'>.
  */
 export function getPunctuationPositions(referenceText) {
-  const words = referenceText.trim().split(/\s+/);
+  // Mirror normalizeText's trailing-hyphen merge so indices align with alignment entries.
+  // Without this, OCR line-break artifacts like "spread- sheet" create an index offset
+  // that shifts all subsequent punctuation positions by 1.
+  const rawTokens = referenceText.trim().split(/\s+/);
+  const words = [];
+  for (let i = 0; i < rawTokens.length; i++) {
+    const clean = rawTokens[i].replace(/^[^\w'-]+|[^\w'-]+$/g, '');
+    if (clean.length === 0) continue;
+    if (clean.endsWith('-') && i + 1 < rawTokens.length) {
+      words.push(rawTokens[i + 1]); // second part may carry trailing punct
+      i++;
+    } else {
+      words.push(rawTokens[i]);
+    }
+  }
   const map = new Map();
   for (let i = 0; i < words.length; i++) {
     const w = words[i];
@@ -945,8 +960,19 @@ export function computePauseAtPunctuation(transcriptWords, referenceText, alignm
   const uncoveredMarks = [];
   let totalPunctuationMarks = punctMap.size;
 
-  // Build ref words for uncovered mark details
-  const refWords = referenceText.trim().split(/\s+/);
+  // Build ref words for uncovered mark details (merged to match alignment indices)
+  const rawRefTokens = referenceText.trim().split(/\s+/);
+  const refWords = [];
+  for (let i = 0; i < rawRefTokens.length; i++) {
+    const clean = rawRefTokens[i].replace(/^[^\w'-]+|[^\w'-]+$/g, '');
+    if (clean.length === 0) continue;
+    if (clean.endsWith('-') && i + 1 < rawRefTokens.length) {
+      refWords.push(clean.slice(0, -1) + rawRefTokens[i + 1].replace(/^[^\w'-]+|[^\w'-]+$/g, ''));
+      i++;
+    } else {
+      refWords.push(rawRefTokens[i]);
+    }
+  }
 
   // Build hyp-index → gap-after-word map for punctuation-aware gap check.
   // A fluent reader pauses briefly at commas (~100-200ms) — shorter than a
@@ -1155,8 +1181,10 @@ export function computeWordDurationOutliers(transcriptWords, alignment) {
     if (durationMs <= 0) { hypIndex += partsCount; continue; }
 
     const wordText = entry.compound ? (entry.hyp || entry.ref || word.word) : word.word;
+    const phonemeInfo = getPhonemeCountWithFallback(wordText);
+    const phonemes = phonemeInfo.count;
     const syllables = countSyllables(wordText);
-    const normalizedDurationMs = durationMs / Math.max(syllables, 1);
+    const normalizedDurationMs = durationMs / Math.max(phonemes, 1);
 
     allWords.push({
       hypIndex,
@@ -1164,6 +1192,8 @@ export function computeWordDurationOutliers(transcriptWords, alignment) {
       refWord: entry.ref || entry.reference || wordText,
       refIndex: null, // filled below
       durationMs: Math.round(durationMs),
+      phonemes,
+      phonemeSource: phonemeInfo.source,
       syllables,
       normalizedDurationMs: Math.round(normalizedDurationMs),
       alignmentType: entry.type,
@@ -1199,10 +1229,10 @@ export function computeWordDurationOutliers(transcriptWords, alignment) {
   const variance = durations.reduce((sum, d) => sum + (d - meanDur) ** 2, 0) / durations.length;
   const sdDur = Math.sqrt(variance);
 
-  // Flag outliers (multisyllabic only)
+  // Flag outliers (only words with enough phonemes for meaningful normalization)
   const outliers = [];
   for (const w of allWords) {
-    if (w.normalizedDurationMs > upperFence && w.syllables >= 2) {
+    if (w.normalizedDurationMs > upperFence && w.phonemes > 3) {
       w.isOutlier = true;
       outliers.push({
         hypIndex: w.hypIndex,
@@ -1210,6 +1240,8 @@ export function computeWordDurationOutliers(transcriptWords, alignment) {
         refWord: w.refWord,
         refIndex: w.refIndex,
         durationMs: w.durationMs,
+        phonemes: w.phonemes,
+        phonemeSource: w.phonemeSource,
         syllables: w.syllables,
         normalizedDurationMs: w.normalizedDurationMs,
         aboveFenceBy: Math.round(w.normalizedDurationMs - upperFence),
@@ -1224,6 +1256,11 @@ export function computeWordDurationOutliers(transcriptWords, alignment) {
 
   return {
     baseline: {
+      normalizationUnit: 'phoneme',
+      medianDurationPerPhoneme: Math.round(medianDur),
+      meanDurationPerPhoneme: Math.round(meanDur),
+      sdDurationPerPhoneme: Math.round(sdDur),
+      // Legacy aliases for backward compatibility
       medianDurationPerSyllable: Math.round(medianDur),
       meanDurationPerSyllable: Math.round(meanDur),
       sdDurationPerSyllable: Math.round(sdDur),
@@ -1246,7 +1283,7 @@ export function computeWordDurationOutliers(transcriptWords, alignment) {
 
 /**
  * Classify every reference word into a speed tier based on duration relative
- * to the student's own median ms/syllable.
+ * to the student's own median ms/phoneme.
  *
  * Timestamp source: raw cross-validator words (Parakeet/Deepgram) matched to
  * alignment entries by ordered consumption. The xval engine produces better
@@ -1261,7 +1298,7 @@ export function computeWordDurationOutliers(transcriptWords, alignment) {
  * Falls back to Metric 4 data (from computeWordDurationOutliers) when raw
  * xval words are unavailable.
  *
- * Monosyllabic words get a distinct 'short-word' tier (timing unreliable per-syllable).
+ * Words with <= 3 phonemes get a distinct 'short-word' tier (timing unreliable at this granularity).
  *
  * @param {object} wordOutliers - Output from computeWordDurationOutliers()
  * @param {Array} alignment - Alignment entries from alignWords()
@@ -1269,11 +1306,19 @@ export function computeWordDurationOutliers(transcriptWords, alignment) {
  *   Each entry: { word, startTime, endTime }. When provided, used as primary
  *   timestamp source for all words.
  * @param {Array} [transcriptWords] - Merged STT words (for Reverb time positions)
+ * @param {string} [referenceText] - Reference passage text (for sentence-final detection)
  * @returns {object} { words[], baseline, distribution, atPacePercent } or { insufficient: true }
  */
-export function computeWordSpeedTiers(wordOutliers, alignment, xvalRawWords, transcriptWords) {
+export function computeWordSpeedTiers(wordOutliers, alignment, xvalRawWords, transcriptWords, referenceText) {
   if (!wordOutliers || wordOutliers.insufficient) {
     return { insufficient: true, reason: wordOutliers?.reason || 'Word duration data insufficient' };
+  }
+
+  // Build sentence-final position set from reference text punctuation
+  const punctMap = referenceText ? getPunctuationPositions(referenceText) : new Map();
+  const sentenceFinalSet = new Set();
+  for (const [idx, type] of punctMap) {
+    if (type === 'period') sentenceFinalSet.add(idx); // 'period' = . ! ?
   }
 
   // Build hypIndex → Metric 4 allWords lookup (fallback when no xval match)
@@ -1347,7 +1392,8 @@ export function computeWordSpeedTiers(wordOutliers, alignment, xvalRawWords, tra
         durationMs: null, syllables: null,
         normalizedMs: null, ratio: null,
         tier: 'omitted', alignmentType: 'omission',
-        isOutlier: false
+        isOutlier: false,
+        sentenceFinal: sentenceFinalSet.has(refIndex)
       });
       refIndex++;
       continue;
@@ -1376,22 +1422,25 @@ export function computeWordSpeedTiers(wordOutliers, alignment, xvalRawWords, tra
     }
 
     if (durationMs != null && durationMs > 0) {
-      // Use ref word for syllable count (what the student was trying to read)
+      // Use ref word for phoneme/syllable count (what the student was trying to read)
       const refText = entry.ref || entry.hyp || '';
+      const phonemeInfo = getPhonemeCountWithFallback(refText);
+      const phonemes = phonemeInfo.count;
       const syllables = countSyllables(refText);
-      const normalizedMs = Math.round(durationMs / Math.max(syllables, 1));
+      const normalizedMs = Math.round(durationMs / Math.max(phonemes, 1));
 
-      xvalDurations.push({ syllables, normalizedMs, durationMs });
+      xvalDurations.push({ phonemes, syllables, normalizedMs, durationMs });
 
       // Tier classification deferred — need baseline first
       words.push({
         refIndex, refWord: entry.ref,
         hypIndex, word: entry.hyp || m4Word?.word || '',
-        durationMs, syllables, normalizedMs,
+        durationMs, phonemes, phonemeSource: phonemeInfo.source, syllables, normalizedMs,
         ratio: null, // filled after baseline computation
         tier: null,  // filled after baseline computation
         alignmentType: entry.type,
         isOutlier: m4Word?.isOutlier || false,
+        sentenceFinal: sentenceFinalSet.has(refIndex),
         _tsSource: tsSource
       });
     } else {
@@ -1401,7 +1450,8 @@ export function computeWordSpeedTiers(wordOutliers, alignment, xvalRawWords, tra
         durationMs: null, syllables: null,
         normalizedMs: null, ratio: null,
         tier: 'no-data', alignmentType: entry.type,
-        isOutlier: false
+        isOutlier: false,
+        sentenceFinal: sentenceFinalSet.has(refIndex)
       });
     }
 
@@ -1417,7 +1467,7 @@ export function computeWordSpeedTiers(wordOutliers, alignment, xvalRawWords, tra
       ? (normed[normed.length / 2 - 1] + normed[normed.length / 2]) / 2
       : normed[Math.floor(normed.length / 2)];
   } else if (wordOutliers.baseline) {
-    medianMs = wordOutliers.baseline.medianDurationPerSyllable;
+    medianMs = wordOutliers.baseline.medianDurationPerPhoneme;
   } else {
     return { insufficient: true, reason: 'Too few words for baseline' };
   }
@@ -1435,7 +1485,7 @@ export function computeWordSpeedTiers(wordOutliers, alignment, xvalRawWords, tra
     w._medianMs = Math.round(medianMs);
     w._upperFence = wordOutliers.baseline?.upperFence || null;
 
-    if (w.syllables < 2) {
+    if (w.phonemes <= 3) {
       w.tier = 'short-word';
     } else if (ratio < 0.75) {
       w.tier = 'quick';
@@ -1464,6 +1514,7 @@ export function computeWordSpeedTiers(wordOutliers, alignment, xvalRawWords, tra
   return {
     words,
     baseline: {
+      normalizationUnit: 'phoneme',
       medianMs: Math.round(medianMs),
       totalWords: words.length,
       upperFence: wordOutliers.baseline?.upperFence || null
