@@ -445,6 +445,17 @@ async def parakeet_transcribe(req: ParakeetRequest, request: Request):
             f.write(audio_bytes)
             temp_path = f.name
 
+        # Parakeet requires mono audio — convert with ffmpeg if needed
+        import subprocess
+        mono_path = temp_path.replace(".wav", "_mono.wav")
+        subprocess.run(
+            ["ffmpeg", "-y", "-i", temp_path, "-ac", "1", "-ar", "16000", mono_path],
+            capture_output=True
+        )
+        if os.path.exists(mono_path):
+            os.unlink(temp_path)
+            temp_path = mono_path
+
         try:
             model = get_parakeet_model()
 
