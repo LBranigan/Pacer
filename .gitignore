@@ -1,0 +1,21 @@
+# API keys and credentials (CRITICAL — never commit)
+keys/
+services/reverb/.env
+.env
+.env.local
+
+# Audio test files (large, user-specific)
+audio files/
+
+# Python build artifacts
+*.pyc
+__pycache__/
+services/reverb/__pycache__/
+
+# OS artifacts
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
