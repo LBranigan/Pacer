@@ -588,11 +588,21 @@ async function runAnalysis() {
           let cursor = start;
           for (const part of parts) {
             const partDur = dur * (part.length / totalChars);
+            const partStart = `${cursor.toFixed(3)}s`;
+            const partEnd = `${(cursor + partDur).toFixed(3)}s`;
             expanded.push({
               ...w,
               word: part,
-              startTime: `${cursor.toFixed(3)}s`,
-              endTime: `${(cursor + partDur).toFixed(3)}s`,
+              startTime: partStart,
+              endTime: partEnd,
+              // Override all secondary timestamp sources so tooltip/playback
+              // use the split range, not the original combined word's range
+              _xvalStartTime: partStart,
+              _xvalEndTime: partEnd,
+              _reverbStartTime: partStart,
+              _reverbEndTime: partEnd,
+              _reverbCleanStartTime: partStart,
+              _reverbCleanEndTime: partEnd,
             });
             cursor += partDur;
           }
