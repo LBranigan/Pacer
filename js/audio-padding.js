@@ -7,6 +7,11 @@
  *
  * Solution: Append silence to give the ASR model context to resolve
  * the final phonemes properly.
+ *
+ * Audio quality: All browser processing (AGC, noiseSuppression, echoCancellation)
+ * is OFF in recorder.js. Recording at 48kHz/128kbps Opus. Both Reverb and Parakeet
+ * handle their own internal normalization during feature extraction, so we pass
+ * the raw signal through untouched.
  */
 
 const PADDING_DURATION_MS = 500; // 500ms of silence
