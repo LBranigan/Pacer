@@ -1378,6 +1378,7 @@ async function runAnalysis() {
 
   diagnostics.prosody = { phrasing, pauseAtPunctuation, paceConsistency, wordOutliers };
   diagnostics.wordSpeed = wordSpeedTiers;
+  console.log('[WordSpeed Debug]', { phInsufficent: phrasing.insufficient, woInsufficient: wordOutliers.insufficient, woCount: wordOutliers.allWords?.length, wsInsufficient: wordSpeedTiers.insufficient, wsReason: wordSpeedTiers.reason });
 
   addStage('prosody', {
     insufficient: phrasing.insufficient || false,
