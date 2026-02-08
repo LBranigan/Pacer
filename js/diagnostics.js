@@ -16,19 +16,32 @@ export function parseTime(t) {
  * Returns Map<refWordIndex, 'period'|'comma'>.
  */
 export function getPunctuationPositions(referenceText) {
-  // Mirror normalizeText's trailing-hyphen merge so indices align with alignment entries.
-  // Without this, OCR line-break artifacts like "spread- sheet" create an index offset
-  // that shifts all subsequent punctuation positions by 1.
+  // Mirror normalizeText's trailing-hyphen merge AND internal-hyphen split so indices
+  // align with alignment entries. Without this, OCR artifacts and hyphenated words
+  // create index offsets that shift all subsequent punctuation positions.
   const rawTokens = referenceText.trim().split(/\s+/);
-  const words = [];
+  const merged = [];
   for (let i = 0; i < rawTokens.length; i++) {
     const clean = rawTokens[i].replace(/^[^\w'-]+|[^\w'-]+$/g, '');
     if (clean.length === 0) continue;
     if (clean.endsWith('-') && i + 1 < rawTokens.length) {
-      words.push(rawTokens[i + 1]); // second part may carry trailing punct
+      merged.push(rawTokens[i + 1]); // second part may carry trailing punct
       i++;
     } else {
-      words.push(rawTokens[i]);
+      merged.push(rawTokens[i]);
+    }
+  }
+  // Split internal-hyphen tokens: "smooth-on-skin." → ["smooth", "on", "smooth-on-skin."]
+  // Last part keeps original token so trailing punctuation is preserved for the regex.
+  const words = [];
+  for (const token of merged) {
+    const stripped = token.replace(/^[^\w'-]+|[^\w'-]+$/g, '');
+    if (stripped.includes('-')) {
+      const parts = stripped.split('-').filter(p => p.length > 0);
+      for (let j = 0; j < parts.length - 1; j++) words.push(parts[j]);
+      words.push(token); // last part: original token preserves trailing punct
+    } else {
+      words.push(token);
     }
   }
   const map = new Map();
