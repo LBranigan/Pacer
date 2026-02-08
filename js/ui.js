@@ -337,8 +337,10 @@ export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, di
   let wordAudioUrl = null;
   if (audioBlob) {
     wordAudioEl = new Audio();
+    wordAudioEl.preload = 'auto';
     wordAudioUrl = URL.createObjectURL(audioBlob);
     wordAudioEl.src = wordAudioUrl;
+    wordAudioEl.load(); // Required for iOS Safari to buffer audio for seeking
     window._wordAudioEl = wordAudioEl;
   }
 
@@ -807,7 +809,7 @@ export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, di
           }
         };
         wordAudioEl.addEventListener('timeupdate', onTime);
-        wordAudioEl.play();
+        wordAudioEl.play().catch(() => {}); // Silently handle autoplay restrictions
       });
     }
 
@@ -1077,7 +1079,7 @@ export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, di
             }
           };
           wordAudioEl.addEventListener('timeupdate', onTime);
-          wordAudioEl.play();
+          wordAudioEl.play().catch(() => {});
         });
       }
 
@@ -1307,7 +1309,7 @@ function renderWordSpeedInto(parent, wordSpeedData, wordAudioEl, transcriptWords
             }
           };
           wordAudioEl.addEventListener('timeupdate', onTime);
-          wordAudioEl.play();
+          wordAudioEl.play().catch(() => {});
         });
       }
     }
