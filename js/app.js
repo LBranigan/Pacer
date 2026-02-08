@@ -1014,7 +1014,31 @@ async function runAnalysis() {
           merged.push({ word: rawTokens[t].original, start: rawTokens[t].start, end: rawTokens[t].end });
         }
       }
-      return merged;
+      // Split internal-hyphen tokens to mirror normalizeText's hyphen split.
+      // e.g., "smooth-on-skin" → [{word:"smooth",...}, {word:"on",...}, {word:"skin",...}]
+      // Without this, refPositions has fewer entries than alignment and _displayRef/NL drift.
+      const positions = [];
+      for (const pos of merged) {
+        const stripped = pos.word.replace(/^[^\w'-]+|[^\w'-]+$/g, '');
+        if (stripped.includes('-')) {
+          const parts = stripped.split('-').filter(p => p.length > 0);
+          const leadingLen = pos.word.match(/^[^\w'-]*/)[0].length;
+          const trailingPunct = pos.word.match(/[^\w'-]*$/)[0];
+          let cursor = pos.start + leadingLen;
+          for (let j = 0; j < parts.length; j++) {
+            if (j === parts.length - 1) {
+              // Last part keeps trailing punctuation for sentence-end detection
+              positions.push({ word: parts[j] + trailingPunct, start: cursor, end: pos.end });
+            } else {
+              positions.push({ word: parts[j], start: cursor, end: cursor + parts[j].length });
+            }
+            cursor += parts[j].length + 1; // +1 for the hyphen
+          }
+        } else {
+          positions.push(pos);
+        }
+      }
+      return positions;
     })();
 
     // Build set of words that appear lowercase (non-sentence-start) in the reference text.
@@ -1033,9 +1057,9 @@ async function runAnalysis() {
     );
 
     // Match NL annotations to alignment entries by character offset rather than sequential index.
-    // The NL API tokenizes differently from split(/\s+/) — it splits contractions ("it's" → "it" + "'s")
-    // and normalizeText merges hyphens ("spread-" + "sheet" → "spreadsheet"). Both cause sequential
-    // index drift. Offset-based matching is robust to all tokenization differences.
+    // The NL API tokenizes differently from split(/\s+/) — it splits contractions ("it's" → "it" + "'s"),
+    // normalizeText merges trailing hyphens ("spread-" + "sheet" → "spreadsheet"), and splits internal
+    // hyphens ("smooth-on-skin" → ["smooth","on","skin"]). Offset-based matching handles all these.
     let ri = 0;
     for (const entry of alignment) {
       if (entry.type === 'insertion') continue;
