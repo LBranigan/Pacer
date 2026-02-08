@@ -348,23 +348,39 @@ body.dev-mode .dev-mode-toggle {
   display: block;
 }
 
-.confidence-legend {
-  display: flex;
-  gap: 1rem;
-  margin-bottom: 0.5rem;
-  font-size: 0.8rem;
-}
-
-.confidence-legend span {
-  padding: 2px 8px;
-  border-radius: 3px;
-}
-
 .confidence-words {
   line-height: 2;
 }
 
-/* Confidence-based word colors */
+/* STT source rows */
+.stt-source-row {
+  margin-bottom: 0.75rem;
+}
+
+.stt-source-row:last-child {
+  margin-bottom: 0;
+}
+
+.stt-source-label {
+  font-size: 0.8rem;
+  font-weight: 600;
+  margin-bottom: 0.25rem;
+  padding: 2px 8px;
+  border-radius: 3px;
+  display: inline-block;
+}
+
+.stt-source-words {
+  line-height: 2;
+}
+
+.stt-no-data {
+  color: #999;
+  font-style: italic;
+  font-size: 0.85rem;
+}
+
+/* Per-engine word colors */
 .conf-word {
   display: inline-block;
   margin: 2px;
@@ -373,31 +389,34 @@ body.dev-mode .dev-mode-toggle {
   font-size: 0.9rem;
 }
 
-.conf-high {
-  background: #c8e6c9;
+.stt-reverb-v1.stt-source-label {
+  background: #e3f2fd;
+  color: #1565c0;
+}
+
+.conf-word.stt-reverb-v1 {
+  background: #e3f2fd;
+  color: #1565c0;
+}
+
+.stt-reverb-v0.stt-source-label {
+  background: #e8f5e9;
   color: #2e7d32;
 }
 
-.conf-medium {
-  background: #fff3e0;
-  color: #e65100;
+.conf-word.stt-reverb-v0 {
+  background: #e8f5e9;
+  color: #2e7d32;
 }
 
-.conf-low {
-  background: #ffcdd2;
-  color: #c62828;
+.stt-parakeet.stt-source-label {
+  background: #f3e5f5;
+  color: #7b1fa2;
 }
 
-.conf-disagreed {
-  background: #fff9c4;
-  color: #f57f17;
-  border: 1px dashed #fbc02d;
-}
-
-.conf-ghost {
-  background: #e0e0e0;
-  color: #757575;
-  text-decoration: line-through;
+.conf-word.stt-parakeet {
+  background: #f3e5f5;
+  color: #7b1fa2;
 }
 
 /* Struggle word indicator (DIAG-07)

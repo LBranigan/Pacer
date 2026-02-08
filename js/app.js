@@ -527,7 +527,9 @@ async function runAnalysis() {
       _kitchenSink: {
         disfluencyStats: kitchenSinkResult.disfluencyStats || null,
         unconsumedXval: kitchenSinkResult.unconsumedXval || [],
-        xvalRawWords: kitchenSinkResult.xvalRaw?.words || []
+        xvalRawWords: kitchenSinkResult.xvalRaw?.words || [],
+        reverbVerbatimWords: kitchenSinkResult.reverb?.verbatim?.words || [],
+        reverbCleanWords: kitchenSinkResult.reverb?.clean?.words || []
       },
       _disfluency: null,      // Legacy Phase 14 disfluency detection disabled
       _safety: null            // Legacy safety checks disabled
@@ -1440,7 +1442,12 @@ async function runAnalysis() {
     data._kitchenSink?.disfluencyStats || null,
     data._safety || null,                  // Collapse state and safety flags
     referenceText,                         // Raw reference text for cosmetic punctuation
-    appState.audioBlob || null             // Audio blob for click-to-play word audio
+    appState.audioBlob || null,            // Audio blob for click-to-play word audio
+    {                                       // Raw STT word lists for transcript view
+      reverbVerbatim: data._kitchenSink?.reverbVerbatimWords || [],
+      reverbClean: data._kitchenSink?.reverbCleanWords || [],
+      xvalRaw: data._kitchenSink?.xvalRawWords || []
+    }
   );
 
   if (appState.selectedStudentId) {

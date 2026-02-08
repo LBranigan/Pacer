@@ -15,7 +15,7 @@
 </head>
 <body>
 
-<div id="version" style="text-align:right;font-size:0.75rem;color:#999;">v 2026-02-08 23:45</div>
+<div id="version" style="text-align:right;font-size:0.75rem;color:#999;">v 2026-02-09 00:15</div>
 <h1>Oral Reading Fluency Assessment</h1>
 <p class="subtitle">Reverb + Deepgram &mdash; Kitchen Sink Pipeline</p>
 
@@ -151,19 +151,13 @@
   </div>
   <div class="result-box" id="resultWords">Awaiting audio...</div>
 
-  <!-- Confidence Visualization (collapsed by default) -->
+  <!-- STT Transcript View (collapsed by default) -->
   <div class="confidence-section" id="confidenceSection">
     <div class="confidence-header" onclick="document.getElementById('confidenceSection').classList.toggle('expanded')">
-      <h4>Confidence View</h4>
+      <h4>STT Transcripts</h4>
       <span class="confidence-toggle">▼</span>
     </div>
     <div class="confidence-body">
-      <div class="confidence-legend">
-        <span class="conf-high">High (≥93%)</span>
-        <span class="conf-medium">Medium (≥70%)</span>
-        <span class="conf-low">Low (&lt;70%)</span>
-        <span class="conf-disagreed" title="Models heard different words at this position — e.g. Reverb heard 'jued' but cross-validator heard 'jumped'. Yellow regardless of confidence score.">Disagreed</span>
-      </div>
       <div class="confidence-words" id="confidenceWords">Awaiting audio...</div>
     </div>
   </div>

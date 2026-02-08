@@ -323,7 +323,7 @@ function parseSttTime(t) {
   return parseFloat(String(t).replace('s', '')) || 0;
 }
 
-export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, diagnostics, transcriptWords, tierBreakdown, disfluencySummary, safetyData, referenceText, audioBlob) {
+export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, diagnostics, transcriptWords, tierBreakdown, disfluencySummary, safetyData, referenceText, audioBlob, rawSttSources) {
   const wordsDiv = document.getElementById('resultWords');
   const plainDiv = document.getElementById('resultPlain');
   const jsonDiv = document.getElementById('resultJson');
@@ -1027,64 +1027,71 @@ export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, di
   }
 
   // ─────────────────────────────────────────────────────────────────────────
-  // Confidence Visualization Section
+  // STT Transcript View — shows what each engine detected
   // ─────────────────────────────────────────────────────────────────────────
   const confWordsDiv = document.getElementById('confidenceWords');
-  if (confWordsDiv && transcriptWords && transcriptWords.length > 0) {
+  if (confWordsDiv) {
     confWordsDiv.innerHTML = '';
 
-    for (const w of transcriptWords) {
-      const span = document.createElement('span');
+    const sources = [
+      { label: 'Reverb v1 (verbatim)', words: rawSttSources?.reverbVerbatim || [], cssClass: 'stt-reverb-v1' },
+      { label: 'Reverb v0 (clean)', words: rawSttSources?.reverbClean || [], cssClass: 'stt-reverb-v0' },
+      { label: 'Parakeet', words: rawSttSources?.xvalRaw || [], cssClass: 'stt-parakeet' }
+    ];
 
-      // Determine confidence class
-      // Priority: disagreed overrides confidence score (models heard different words)
-      // Otherwise: confidence score thresholds apply
-      let confClass = 'conf-low';
-      const conf = w.confidence;
+    for (const src of sources) {
+      const row = document.createElement('div');
+      row.className = 'stt-source-row';
 
-      if (w.crossValidation === 'disagreed') {
-        // Models disagree — flag regardless of confidence score
-        confClass = 'conf-disagreed';
-      } else if (conf != null && conf >= 0.93) {
-        confClass = 'conf-high';
-      } else if (conf != null && conf >= 0.70) {
-        confClass = 'conf-medium';
+      const labelEl = document.createElement('div');
+      labelEl.className = 'stt-source-label ' + src.cssClass;
+      labelEl.textContent = src.label + ` (${src.words.length})`;
+      row.appendChild(labelEl);
+
+      const wordsRow = document.createElement('div');
+      wordsRow.className = 'stt-source-words';
+
+      if (src.words.length === 0) {
+        const emptySpan = document.createElement('span');
+        emptySpan.className = 'stt-no-data';
+        emptySpan.textContent = 'No data (service unavailable)';
+        wordsRow.appendChild(emptySpan);
       } else {
-        confClass = 'conf-low';
-      }
+        for (const w of src.words) {
+          const span = document.createElement('span');
+          span.className = 'conf-word ' + src.cssClass;
+          span.textContent = w.word;
 
-      span.className = 'conf-word ' + confClass;
-      span.textContent = w.word;
+          const start = parseSttTime(w.startTime);
+          const end = parseSttTime(w.endTime);
+          const dur = ((end - start) * 1000).toFixed(0);
+          const confPct = w.confidence != null ? `${Math.round(w.confidence * 100)}%` : 'N/A';
+          span.title = `"${w.word}"\nConfidence: ${confPct}\nDuration: ${dur}ms\n${start.toFixed(2)}s – ${end.toFixed(2)}s`;
 
-      // Build tooltip with model words and cross-validation status
-      const start = parseSttTime(w.startTime);
-      const end = parseSttTime(w.endTime);
-      const xval = w.crossValidation || 'N/A';
-      const xvLabel = w._xvalEngine ? w._xvalEngine.charAt(0).toUpperCase() + w._xvalEngine.slice(1) : 'Cross-val';
-      const xvWordText = w._xvalWord ? `${xvLabel} heard: "${w._xvalWord}"` : '';
-      const rvWord = w._alignment?.verbatim ? `Reverb heard: "${w._alignment.verbatim}"` : '';
-      const confPct = conf != null ? `Confidence: ${Math.round(conf * 100)}%` : '';
-      span.title = [w.word, xvWordText, rvWord, `Cross-validation: ${xval}`, confPct, `${start.toFixed(2)}s – ${end.toFixed(2)}s`].filter(Boolean).join('\n');
-
-      // Click-to-play word audio
-      if (wordAudioEl && start > 0) {
-        span.classList.add('word-clickable');
-        span.addEventListener('click', () => {
-          wordAudioEl.pause();
-          wordAudioEl.currentTime = start;
-          const onTime = () => {
-            if (wordAudioEl.currentTime >= end) {
+          // Click-to-play word audio
+          if (wordAudioEl && start > 0) {
+            span.classList.add('word-clickable');
+            span.addEventListener('click', () => {
               wordAudioEl.pause();
-              wordAudioEl.removeEventListener('timeupdate', onTime);
-            }
-          };
-          wordAudioEl.addEventListener('timeupdate', onTime);
-          wordAudioEl.play().catch(() => {});
-        });
+              wordAudioEl.currentTime = start;
+              const onTime = () => {
+                if (wordAudioEl.currentTime >= end) {
+                  wordAudioEl.pause();
+                  wordAudioEl.removeEventListener('timeupdate', onTime);
+                }
+              };
+              wordAudioEl.addEventListener('timeupdate', onTime);
+              wordAudioEl.play().catch(() => {});
+            });
+          }
+
+          wordsRow.appendChild(span);
+          wordsRow.appendChild(document.createTextNode(' '));
+        }
       }
 
-      confWordsDiv.appendChild(span);
-      confWordsDiv.appendChild(document.createTextNode(' '));
+      row.appendChild(wordsRow);
+      confWordsDiv.appendChild(row);
     }
   }
 
