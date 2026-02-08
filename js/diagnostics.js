@@ -973,17 +973,29 @@ export function computePauseAtPunctuation(transcriptWords, referenceText, alignm
   const uncoveredMarks = [];
   let totalPunctuationMarks = punctMap.size;
 
-  // Build ref words for uncovered mark details (merged to match alignment indices)
+  // Build ref words for uncovered mark details (merged + split to match alignment indices)
   const rawRefTokens = referenceText.trim().split(/\s+/);
-  const refWords = [];
+  const mergedRef = [];
   for (let i = 0; i < rawRefTokens.length; i++) {
     const clean = rawRefTokens[i].replace(/^[^\w'-]+|[^\w'-]+$/g, '');
     if (clean.length === 0) continue;
     if (clean.endsWith('-') && i + 1 < rawRefTokens.length) {
-      refWords.push(clean.slice(0, -1) + rawRefTokens[i + 1].replace(/^[^\w'-]+|[^\w'-]+$/g, ''));
+      mergedRef.push(clean.slice(0, -1) + rawRefTokens[i + 1].replace(/^[^\w'-]+|[^\w'-]+$/g, ''));
       i++;
     } else {
-      refWords.push(rawRefTokens[i]);
+      mergedRef.push(rawRefTokens[i]);
+    }
+  }
+  // Split internal hyphens to mirror normalizeText (5th location)
+  const refWords = [];
+  for (const token of mergedRef) {
+    const stripped = token.replace(/^[^\w'-]+|[^\w'-]+$/g, '');
+    if (stripped.includes('-')) {
+      const parts = stripped.split('-').filter(p => p.length > 0);
+      for (let j = 0; j < parts.length - 1; j++) refWords.push(parts[j]);
+      refWords.push(token); // last part keeps original for display
+    } else {
+      refWords.push(token);
     }
   }
 
@@ -1144,15 +1156,17 @@ export function computePaceConsistency(overallPhrasing, transcriptWords) {
 
 /**
  * Metric 4: Word Duration Outliers (Self-Normed)
- * Uses cross-validator timestamps exclusively (_xvalStartTime/_xvalEndTime)
- * from either Deepgram or Parakeet (set by cross-validator NW alignment).
- * Words without NW-matched timestamps are skipped.
- * Normalizes by syllable count. IQR-based outlier detection.
- * Only flags multisyllabic (>= 2 syl) words as outliers.
+ * Prefers cross-validator timestamps (_xvalStartTime/_xvalEndTime) from
+ * Deepgram or Parakeet. Falls back to primary timestamps (startTime/endTime)
+ * when the cross-validator is unavailable (e.g., server 500 error).
+ * Normalizes by phoneme count. IQR-based outlier detection.
+ * Only flags words with > 3 phonemes as outliers.
  */
 export function computeWordDurationOutliers(transcriptWords, alignment) {
   const allWords = [];
   let wordsSkippedNoTimestamps = 0;
+  let xvalCount = 0;
+  let primaryCount = 0;
   let hypIndex = 0;
 
   for (const entry of alignment) {
@@ -1170,24 +1184,40 @@ export function computeWordDurationOutliers(transcriptWords, alignment) {
     const word = transcriptWords[hypIndex];
     if (!word) { hypIndex += partsCount; continue; }
 
-    // Must have cross-validator timestamps (NW-aligned)
-    if (word._xvalStartTime == null || word._xvalEndTime == null) {
+    // Prefer cross-validator timestamps; fall back to primary (Reverb) timestamps
+    let startMs, endMs, tsSource;
+    if (word._xvalStartTime != null && word._xvalEndTime != null) {
+      startMs = parseTime(word._xvalStartTime) * 1000;
+      // For compound words, use end time of last part
+      if (entry.compound && entry.parts && entry.parts.length > 1) {
+        const lastPartIdx = hypIndex + entry.parts.length - 1;
+        const lastPart = transcriptWords[lastPartIdx];
+        endMs = lastPart && lastPart._xvalEndTime != null
+          ? parseTime(lastPart._xvalEndTime) * 1000
+          : parseTime(word._xvalEndTime) * 1000;
+      } else {
+        endMs = parseTime(word._xvalEndTime) * 1000;
+      }
+      tsSource = 'cross-validator';
+      xvalCount++;
+    } else if (word.startTime != null && word.endTime != null) {
+      // Fallback: primary timestamps (Reverb or whichever engine provided them)
+      startMs = parseTime(word.startTime) * 1000;
+      if (entry.compound && entry.parts && entry.parts.length > 1) {
+        const lastPartIdx = hypIndex + entry.parts.length - 1;
+        const lastPart = transcriptWords[lastPartIdx];
+        endMs = lastPart && lastPart.endTime != null
+          ? parseTime(lastPart.endTime) * 1000
+          : parseTime(word.endTime) * 1000;
+      } else {
+        endMs = parseTime(word.endTime) * 1000;
+      }
+      tsSource = 'primary';
+      primaryCount++;
+    } else {
       wordsSkippedNoTimestamps++;
       hypIndex += partsCount;
       continue;
-    }
-
-    const startMs = parseTime(word._xvalStartTime) * 1000;
-    let endMs;
-    // For compound words, use end time of last part
-    if (entry.compound && entry.parts && entry.parts.length > 1) {
-      const lastPartIdx = hypIndex + entry.parts.length - 1;
-      const lastPart = transcriptWords[lastPartIdx];
-      endMs = lastPart && lastPart._xvalEndTime != null
-        ? parseTime(lastPart._xvalEndTime) * 1000
-        : parseTime(word._xvalEndTime) * 1000;
-    } else {
-      endMs = parseTime(word._xvalEndTime) * 1000;
     }
 
     const durationMs = endMs - startMs;
@@ -1211,7 +1241,7 @@ export function computeWordDurationOutliers(transcriptWords, alignment) {
       normalizedDurationMs: Math.round(normalizedDurationMs),
       alignmentType: entry.type,
       isOutlier: false,
-      timestampSource: 'cross-validator'
+      timestampSource: tsSource
     });
 
     hypIndex += partsCount;
@@ -1225,7 +1255,7 @@ export function computeWordDurationOutliers(transcriptWords, alignment) {
   }
 
   if (allWords.length < 4) {
-    return { insufficient: true, reason: 'Too few words with cross-validator timestamps', allWords };
+    return { insufficient: true, reason: `Too few words with timestamps (xval: ${xvalCount}, primary: ${primaryCount}, skipped: ${wordsSkippedNoTimestamps})`, allWords };
   }
 
   // Compute baseline
@@ -1284,7 +1314,9 @@ export function computeWordDurationOutliers(transcriptWords, alignment) {
       upperFence: Math.round(upperFence),
       isFenceFloored,
       totalWordsAnalyzed: allWords.length,
-      wordsSkippedNoTimestamps
+      wordsSkippedNoTimestamps,
+      xvalTimestamps: xvalCount,
+      primaryTimestamps: primaryCount
     },
     outliers,
     outlierCount: outliers.length,

@@ -1365,6 +1365,9 @@ function buildWordSpeedTooltip(w) {
     const countsStr = [phonemeStr, sylStr].filter(Boolean).join(', ');
     const sourceTag = w.phonemeSource === 'fallback' ? ' (est.)' : '';
     lines.push(`Duration: ${w.durationMs}ms | ${countsStr}${sourceTag} | ${w.normalizedMs} ms/ph`);
+    if (w._tsSource === 'primary' || w._tsSource === 'metric4') {
+      lines.push('Timestamps: Reverb (cross-validator unavailable)');
+    }
   }
 
   if (w.tier === 'short-word') {
