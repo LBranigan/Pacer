@@ -86,7 +86,7 @@ AUTH_TOKEN = os.environ.get("ORF_AUTH_TOKEN")
 
 @app.middleware("http")
 async def check_auth(request: Request, call_next):
-    if AUTH_TOKEN and request.url.path != "/health":
+    if AUTH_TOKEN and request.url.path != "/health" and request.method != "OPTIONS":
         auth_header = request.headers.get("Authorization", "")
         if not auth_header.startswith("Bearer "):
             print(f"[AUTH] Rejected (bad format): {request.method} {request.url.path} from {request.client.host}")
