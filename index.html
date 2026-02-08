@@ -15,13 +15,35 @@
 </head>
 <body>
 
-<div id="version" style="text-align:right;font-size:0.75rem;color:#999;">v 2026-02-07 22:30</div>
+<div id="version" style="text-align:right;font-size:0.75rem;color:#999;">v 2026-02-08 00:15</div>
 <h1>Oral Reading Fluency Assessment</h1>
 <p class="subtitle">Reverb + Deepgram &mdash; Kitchen Sink Pipeline</p>
 
 <div class="section">
   <label for="apiKey">Google Cloud API Key</label>
   <input type="text" id="apiKey" placeholder="Enter your GCP API key (Speech-to-Text API must be enabled)">
+</div>
+
+<div class="section" id="backendSettingsSection">
+  <label>Backend Connection</label>
+  <div class="backend-settings">
+    <div class="backend-field">
+      <label for="backendUrl">Backend URL</label>
+      <input type="text" id="backendUrl" placeholder="http://localhost:8765">
+    </div>
+    <div class="backend-field">
+      <label for="backendToken">Auth Token (optional)</label>
+      <input type="password" id="backendToken" placeholder="Leave blank for local use">
+    </div>
+    <div class="backend-status">
+      <button id="backendTestBtn" type="button">Test Connection</button>
+      <span id="backendStatusText"></span>
+    </div>
+    <div id="backendReloadNotice" style="display:none; color:#e65100; font-size:0.85rem; margin-top:0.25rem;">
+      Reload required for changes to take effect.
+      <button id="backendReloadBtn" type="button" style="margin-left:0.5rem; font-size:0.8rem; padding:0.2rem 0.6rem;">Reload Now</button>
+    </div>
+  </div>
 </div>
 
 <div class="section" id="vadSettingsSection">

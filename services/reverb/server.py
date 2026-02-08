@@ -16,6 +16,7 @@ Requirements:
 """
 
 from fastapi import FastAPI, HTTPException
+from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import asyncio
@@ -43,8 +44,20 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
     allow_methods=["GET", "POST", "OPTIONS"],
-    allow_headers=["Content-Type"],
+    allow_headers=["Content-Type", "Authorization"],
 )
+
+# Optional auth token — set ORF_AUTH_TOKEN env var to require Bearer token.
+# /health is always public (needed for connection testing).
+AUTH_TOKEN = os.environ.get("ORF_AUTH_TOKEN")
+
+@app.middleware("http")
+async def check_auth(request, call_next):
+    if AUTH_TOKEN and request.url.path != "/health":
+        token = request.headers.get("Authorization", "").replace("Bearer ", "")
+        if token != AUTH_TOKEN:
+            return JSONResponse(status_code=401, content={"error": "unauthorized"})
+    return await call_next(request)
 
 # =============================================================================
 # GPU and Model Management

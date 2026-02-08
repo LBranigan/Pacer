@@ -8,10 +8,9 @@
 
 import { getAssessment } from './storage.js';
 import { generateMazeItems, verifyMazeResponse, canRunMaze } from './maze-generator.js';
+import { BACKEND_URL, backendHeaders } from './backend-config.js';
 
 // ── Constants ──
-
-const BACKEND_BASE_URL = 'http://localhost:8765';
 const ROUND_DURATION_MS = 20000;
 
 // ── DOM refs ──
@@ -316,9 +315,9 @@ class DeepgramASR {
 
     try {
       const base64 = await blobToBase64(blob);
-      const resp = await fetch(`${BACKEND_BASE_URL}/deepgram-maze`, {
+      const resp = await fetch(`${BACKEND_URL}/deepgram-maze`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: backendHeaders('application/json'),
         body: JSON.stringify({ audio_base64: base64, keyterms: this.options }),
         signal: AbortSignal.timeout(8000)
       });
@@ -383,7 +382,7 @@ async function detectASRMode() {
 
   // Fallback: Deepgram via backend
   try {
-    const resp = await fetch(`${BACKEND_BASE_URL}/health`, { signal: AbortSignal.timeout(3000) });
+    const resp = await fetch(`${BACKEND_URL}/health`, { signal: AbortSignal.timeout(3000) });
     const data = await resp.json();
     if (data.deepgram_configured) {
       console.log('[maze] ASR mode: Deepgram (backend)');

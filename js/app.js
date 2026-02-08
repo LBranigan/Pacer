@@ -1744,6 +1744,107 @@ if (vadPresetBtns) {
 // Note: Per CONTEXT.md "Persistence: Reset each session - threshold resets to default on page reload"
 // No persistence needed - the default behavior handles this naturally
 
+// --- Backend connection settings ---
+const backendUrlInput = document.getElementById('backendUrl');
+const backendTokenInput = document.getElementById('backendToken');
+const backendTestBtn = document.getElementById('backendTestBtn');
+const backendStatusText = document.getElementById('backendStatusText');
+const backendReloadNotice = document.getElementById('backendReloadNotice');
+
+if (backendUrlInput) {
+  // Pre-fill from localStorage
+  const savedUrl = localStorage.getItem('orf_backend_url') || '';
+  const savedToken = localStorage.getItem('orf_backend_token') || '';
+  if (savedUrl) backendUrlInput.value = savedUrl;
+  if (savedToken) backendTokenInput.value = savedToken;
+
+  // Track whether values have changed since page load
+  const initialUrl = savedUrl;
+  const initialToken = savedToken;
+
+  function onBackendSettingsChange() {
+    const newUrl = backendUrlInput.value.trim();
+    const newToken = backendTokenInput.value.trim();
+
+    // Persist to localStorage
+    if (newUrl) {
+      localStorage.setItem('orf_backend_url', newUrl);
+    } else {
+      localStorage.removeItem('orf_backend_url');
+    }
+    if (newToken) {
+      localStorage.setItem('orf_backend_token', newToken);
+    } else {
+      localStorage.removeItem('orf_backend_token');
+    }
+
+    // Show reload notice if changed after initial load
+    const changed = newUrl !== initialUrl || newToken !== initialToken;
+    backendReloadNotice.style.display = changed ? 'block' : 'none';
+  }
+
+  backendUrlInput.addEventListener('change', onBackendSettingsChange);
+  backendTokenInput.addEventListener('change', onBackendSettingsChange);
+
+  // Reload button
+  const backendReloadBtn = document.getElementById('backendReloadBtn');
+  if (backendReloadBtn) {
+    backendReloadBtn.addEventListener('click', () => location.reload());
+  }
+
+  // Test connection button
+  if (backendTestBtn) {
+    backendTestBtn.addEventListener('click', async () => {
+      const url = backendUrlInput.value.trim() || 'http://localhost:8765';
+      backendStatusText.textContent = 'Testing...';
+      backendStatusText.className = '';
+      try {
+        const resp = await fetch(`${url}/health`, {
+          method: 'GET',
+          signal: AbortSignal.timeout(5000)
+        });
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        const data = await resp.json();
+        const services = [];
+        if (data.status === 'ok' || data.status === 'ready') services.push('Reverb');
+        if (data.parakeet_configured) services.push('Parakeet');
+        if (data.deepgram_configured) services.push('Deepgram');
+        backendStatusText.textContent = services.length
+          ? `Connected: ${services.join(', ')}`
+          : 'Connected (no services detected)';
+        backendStatusText.className = 'ok';
+      } catch (e) {
+        backendStatusText.textContent = `Failed: ${e.message}`;
+        backendStatusText.className = 'err';
+      }
+    });
+  }
+
+  // Auto-test on page load (silent)
+  (async () => {
+    const url = backendUrlInput.value.trim() || 'http://localhost:8765';
+    try {
+      const resp = await fetch(`${url}/health`, {
+        method: 'GET',
+        signal: AbortSignal.timeout(3000)
+      });
+      if (resp.ok) {
+        const data = await resp.json();
+        const services = [];
+        if (data.status === 'ok' || data.status === 'ready') services.push('Reverb');
+        if (data.parakeet_configured) services.push('Parakeet');
+        if (data.deepgram_configured) services.push('Deepgram');
+        backendStatusText.textContent = services.length
+          ? `Connected: ${services.join(', ')}`
+          : 'Connected';
+        backendStatusText.className = 'ok';
+      }
+    } catch {
+      // Silent failure on auto-test — user can click Test Connection
+    }
+  })();
+}
+
 // --- Dev mode toggle (Phase 16) ---
 const devModeToggle = document.getElementById('devModeToggle');
 if (devModeToggle) {

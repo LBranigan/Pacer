@@ -1,4 +1,4 @@
-const CACHE_NAME = 'orf-v37';
+const CACHE_NAME = 'orf-v38';
 
 const SHELL = [
   './',
@@ -30,7 +30,8 @@ const SHELL = [
   './js/gamification.js',
   './js/effect-engine.js',
   './js/nl-api.js',
-  './js/debug-logger.js'
+  './js/debug-logger.js',
+  './js/backend-config.js'
 ];
 
 self.addEventListener('install', (event) => {

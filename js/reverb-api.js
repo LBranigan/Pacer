@@ -10,8 +10,7 @@
  * Pipeline: reverb-api.js -> sequence-aligner.js -> disfluency-tagger.js
  */
 
-// Configurable base URL - allows override via window global
-const REVERB_URL = window.REVERB_API_URL || 'http://localhost:8765';
+import { BACKEND_URL, backendHeaders } from './backend-config.js';
 
 /**
  * Convert blob to base64 string.
@@ -62,7 +61,7 @@ function normalizeWord(w) {
  */
 export async function isReverbAvailable() {
   try {
-    const resp = await fetch(`${REVERB_URL}/health`, {
+    const resp = await fetch(`${BACKEND_URL}/health`, {
       method: 'GET',
       signal: AbortSignal.timeout(3000)
     });
@@ -102,9 +101,9 @@ export async function sendToReverbEnsemble(blob) {
   try {
     const base64 = await blobToBase64(blob);
 
-    const resp = await fetch(`${REVERB_URL}/ensemble`, {
+    const resp = await fetch(`${BACKEND_URL}/ensemble`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: backendHeaders('application/json'),
       body: JSON.stringify({ audio_base64: base64 }),
       // 120-second timeout: first request triggers model loading (~30-60s)
       // Subsequent requests are fast (~5-15s depending on audio length)

@@ -8,7 +8,7 @@
  * - INTG-02: deepgram-api.js client calls Deepgram Nova-3 API
  */
 
-const BACKEND_BASE_URL = 'http://localhost:8765';
+import { BACKEND_URL, backendHeaders } from './backend-config.js';
 
 /**
  * Convert blob to base64 string.
@@ -31,7 +31,7 @@ function blobToBase64(blob) {
  */
 export async function isDeepgramAvailable() {
   try {
-    const resp = await fetch(`${BACKEND_BASE_URL}/health`, {
+    const resp = await fetch(`${BACKEND_URL}/health`, {
       method: 'GET',
       signal: AbortSignal.timeout(3000)
     });
@@ -56,9 +56,9 @@ export async function sendToDeepgram(blob) {
   try {
     const base64 = await blobToBase64(blob);
 
-    const resp = await fetch(`${BACKEND_BASE_URL}/deepgram`, {
+    const resp = await fetch(`${BACKEND_URL}/deepgram`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: backendHeaders('application/json'),
       body: JSON.stringify({ audio_base64: base64 }),
       signal: AbortSignal.timeout(30000) // 30s timeout for transcription
     });
