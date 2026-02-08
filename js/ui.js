@@ -639,7 +639,7 @@ export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, di
 
     // ── Word Speed Map (inline within prosody) ──
     if (diagnostics.wordSpeed && !diagnostics.wordSpeed.insufficient) {
-      renderWordSpeedInto(body, diagnostics.wordSpeed);
+      renderWordSpeedInto(body, diagnostics.wordSpeed, wordAudioEl, transcriptWords);
     }
 
     // Scope transparency note
@@ -1064,6 +1064,23 @@ export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, di
       const confPct = conf != null ? `Confidence: ${Math.round(conf * 100)}%` : '';
       span.title = [w.word, xvWordText, rvWord, `Cross-validation: ${xval}`, confPct, `${start.toFixed(2)}s – ${end.toFixed(2)}s`].filter(Boolean).join('\n');
 
+      // Click-to-play word audio
+      if (wordAudioEl && start > 0) {
+        span.classList.add('word-clickable');
+        span.addEventListener('click', () => {
+          wordAudioEl.pause();
+          wordAudioEl.currentTime = start;
+          const onTime = () => {
+            if (wordAudioEl.currentTime >= end) {
+              wordAudioEl.pause();
+              wordAudioEl.removeEventListener('timeupdate', onTime);
+            }
+          };
+          wordAudioEl.addEventListener('timeupdate', onTime);
+          wordAudioEl.play();
+        });
+      }
+
       confWordsDiv.appendChild(span);
       confWordsDiv.appendChild(document.createTextNode(' '));
     }
@@ -1231,7 +1248,7 @@ function renderDisfluencySection(disfluencyStats) {
  * @param {HTMLElement} parent - Element to append word speed content into
  * @param {object} wordSpeedData - Output from computeWordSpeedTiers()
  */
-function renderWordSpeedInto(parent, wordSpeedData) {
+function renderWordSpeedInto(parent, wordSpeedData, wordAudioEl, transcriptWords) {
   if (!wordSpeedData || wordSpeedData.insufficient) return;
 
   const wrapper = document.createElement('div');
@@ -1272,6 +1289,29 @@ function renderWordSpeedInto(parent, wordSpeedData) {
     span.className = `word ws-${w.tier}`;
     span.textContent = w.refWord || '???';
     span.title = buildWordSpeedTooltip(w);
+
+    // Click-to-play word audio (look up timestamps via hypIndex → transcriptWords)
+    if (wordAudioEl && w.hypIndex != null && transcriptWords && transcriptWords[w.hypIndex]) {
+      const tw = transcriptWords[w.hypIndex];
+      const start = parseSttTime(tw.startTime);
+      const end = parseSttTime(tw.endTime);
+      if (start > 0) {
+        span.classList.add('word-clickable');
+        span.addEventListener('click', () => {
+          wordAudioEl.pause();
+          wordAudioEl.currentTime = start;
+          const onTime = () => {
+            if (wordAudioEl.currentTime >= end) {
+              wordAudioEl.pause();
+              wordAudioEl.removeEventListener('timeupdate', onTime);
+            }
+          };
+          wordAudioEl.addEventListener('timeupdate', onTime);
+          wordAudioEl.play();
+        });
+      }
+    }
+
     wordsEl.appendChild(span);
     wordsEl.appendChild(document.createTextNode(' '));
   }
