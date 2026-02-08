@@ -323,13 +323,24 @@ function parseSttTime(t) {
   return parseFloat(String(t).replace('s', '')) || 0;
 }
 
-export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, diagnostics, transcriptWords, tierBreakdown, disfluencySummary, safetyData, referenceText) {
+export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, diagnostics, transcriptWords, tierBreakdown, disfluencySummary, safetyData, referenceText, audioBlob) {
   const wordsDiv = document.getElementById('resultWords');
   const plainDiv = document.getElementById('resultPlain');
   const jsonDiv = document.getElementById('resultJson');
   const prosodyContainer = document.getElementById('prosodyContainer');
   wordsDiv.innerHTML = ''; plainDiv.textContent = ''; jsonDiv.textContent = '';
   if (prosodyContainer) { prosodyContainer.innerHTML = ''; prosodyContainer.style.display = 'none'; }
+
+  // Click-to-play word audio setup
+  if (window._wordAudioEl) { window._wordAudioEl.pause(); URL.revokeObjectURL(window._wordAudioEl.src); }
+  let wordAudioEl = null;
+  let wordAudioUrl = null;
+  if (audioBlob) {
+    wordAudioEl = new Audio();
+    wordAudioUrl = URL.createObjectURL(audioBlob);
+    wordAudioEl.src = wordAudioUrl;
+    window._wordAudioEl = wordAudioEl;
+  }
 
   // Build map: refIndex → trailing punctuation string (cosmetic only, not scored)
   // Must mirror normalizeText's trailing-hyphen merge so indices align with alignment entries.
@@ -349,8 +360,22 @@ export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, di
         mergedForPunct.push(rawTokens[i]);
       }
     }
-    for (let i = 0; i < mergedForPunct.length; i++) {
-      const w = mergedForPunct[i];
+    // Split internal-hyphen tokens to mirror normalizeText's hyphen split.
+    // e.g., "soft-on-skin." → ["soft", "on", "soft-on-skin."] so only the last
+    // part (original token) feeds the punct regex and gets the trailing period.
+    const splitForPunct = [];
+    for (const token of mergedForPunct) {
+      const stripped = token.replace(/^[^\w'-]+|[^\w'-]+$/g, '');
+      if (stripped.includes('-')) {
+        const parts = stripped.split('-').filter(p => p.length > 0);
+        for (let j = 0; j < parts.length - 1; j++) splitForPunct.push(parts[j]);
+        splitForPunct.push(token); // last part: use original token so punct regex works
+      } else {
+        splitForPunct.push(token);
+      }
+    }
+    for (let i = 0; i < splitForPunct.length; i++) {
+      const w = splitForPunct[i];
       const match = w.match(/([.!?,;:\u2014\u2013\u2012\u2015]+["'\u201C\u201D\u2018\u2019)}\]]*|["'\u201C\u201D\u2018\u2019)}\]]+)$/);
       if (match) punctSuffixMap.set(i, match[0]);
     }
@@ -766,6 +791,25 @@ export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, di
 
     // Build tooltip with enhanced debug info
     span.title = buildEnhancedTooltip(item, sttWord);
+
+    // Click-to-play word audio (Deepgram/Parakeet timestamps)
+    if (wordAudioEl && sttWord) {
+      span.classList.add('word-clickable');
+      const start = parseSttTime(sttWord.startTime);
+      const end = parseSttTime(sttWord.endTime);
+      span.addEventListener('click', () => {
+        wordAudioEl.pause();
+        wordAudioEl.currentTime = start;
+        const onTime = () => {
+          if (wordAudioEl.currentTime >= end) {
+            wordAudioEl.pause();
+            wordAudioEl.removeEventListener('timeupdate', onTime);
+          }
+        };
+        wordAudioEl.addEventListener('timeupdate', onTime);
+        wordAudioEl.play();
+      });
+    }
 
     // Additional context for specific types
     if (item.type === 'substitution' || item.type === 'struggle') {

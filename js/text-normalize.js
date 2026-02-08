@@ -9,8 +9,9 @@ const DISFLUENCIES = new Set([
 
 /**
  * Normalize text into an array of lowercase words.
- * Strips leading/trailing punctuation from each word but preserves
- * apostrophes and hyphens within words.
+ * Strips leading/trailing punctuation from each word and preserves
+ * apostrophes within words. Hyphens at line breaks are rejoined;
+ * all other hyphens split the word into separate tokens.
  * @param {string} text
  * @returns {string[]}
  */
@@ -25,7 +26,6 @@ export function normalizeText(text) {
 
   // Merge trailing-hyphen tokens with next token (line-break artifacts from OCR).
   // e.g., ["spread-", "sheet"] → ["spreadsheet"]
-  // Real hyphenated words like "mother-in-law" have internal hyphens, never trailing.
   const merged = [];
   for (let i = 0; i < tokens.length; i++) {
     if (tokens[i].endsWith('-') && i + 1 < tokens.length) {
@@ -35,7 +35,21 @@ export function normalizeText(text) {
       merged.push(tokens[i]);
     }
   }
-  return merged;
+
+  // Split internal-hyphen words into separate words so they match STT output.
+  // e.g., "soft-on-skin" → ["soft", "on", "skin"]
+  // Line-break hyphens were already rejoined above, so remaining hyphens are
+  // real compound-word hyphens that STT engines output as separate words.
+  const result = [];
+  for (const token of merged) {
+    if (token.includes('-')) {
+      const parts = token.split('-').filter(p => p.length > 0);
+      result.push(...parts);
+    } else {
+      result.push(token);
+    }
+  }
+  return result;
 }
 
 /**

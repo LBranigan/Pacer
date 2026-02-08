@@ -1414,7 +1414,8 @@ async function runAnalysis() {
     // Prefer Kitchen Sink disfluencyStats (Phase 24) over Phase 14 severity summary
     data._kitchenSink?.disfluencyStats || null,
     data._safety || null,                  // Collapse state and safety flags
-    referenceText                          // Raw reference text for cosmetic punctuation
+    referenceText,                         // Raw reference text for cosmetic punctuation
+    appState.audioBlob || null             // Audio blob for click-to-play word audio
   );
 
   if (appState.selectedStudentId) {
