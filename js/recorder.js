@@ -9,17 +9,37 @@ function toggleRecord() {
   recording ? stopRecording() : startRecording();
 }
 
+// Negotiate best supported mimeType for MediaRecorder
+function pickMimeType() {
+  const candidates = [
+    'audio/webm;codecs=opus',
+    'audio/webm',
+    'audio/mp4',
+    'audio/ogg;codecs=opus'
+  ];
+  for (const mt of candidates) {
+    if (MediaRecorder.isTypeSupported(mt)) return mt;
+  }
+  return ''; // let browser pick default
+}
+
 async function startRecording() {
   try {
+    // Use 'ideal' for sampleRate so mobile devices that only support 44.1kHz
+    // still succeed. Boolean constraints are fine as-is (ignored if unsupported).
     const stream = await navigator.mediaDevices.getUserMedia({
-      audio: { channelCount: 1, sampleRate: 48000, echoCancellation: false, noiseSuppression: false, autoGainControl: false }
+      audio: { channelCount: 1, sampleRate: { ideal: 48000 }, echoCancellation: false, noiseSuppression: false, autoGainControl: false }
     });
     audioChunks = [];
-    mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm;codecs=opus', bitsPerSecond: 128000 });
+    const mimeType = pickMimeType();
+    const options = { bitsPerSecond: 128000 };
+    if (mimeType) options.mimeType = mimeType;
+    mediaRecorder = new MediaRecorder(stream, options);
+    const blobType = mimeType || 'audio/webm';
     mediaRecorder.ondataavailable = e => { if (e.data.size > 0) audioChunks.push(e.data); };
     mediaRecorder.onstop = () => {
       stream.getTracks().forEach(t => t.stop());
-      const blob = new Blob(audioChunks, { type: 'audio/webm' });
+      const blob = new Blob(audioChunks, { type: blobType });
       if (onComplete) onComplete(blob, 'WEBM_OPUS', seconds);
     };
     mediaRecorder.start();
