@@ -33,7 +33,8 @@ function mergeCompoundWords(alignment) {
   while (i < alignment.length) {
     const current = alignment[i];
 
-    // Look for substitution followed by one or more insertions
+    // Pattern A: substitution followed by one or more insertions
+    // e.g., sub(ref="hotdog", hyp="hot") + ins(hyp="dog") → correct("hotdog")
     if (current.type === 'substitution' && current.ref && current.hyp) {
       const refCanon = getCanonical(current.ref);
       let combined = current.hyp;
@@ -63,6 +64,61 @@ function mergeCompoundWords(alignment) {
       if (i < alignment.length && alignment[i] === current) {
         result.push(current);
         i++;
+      }
+
+    // Pattern B: one or more insertions followed by substitution (reversed order)
+    // NW traceback can produce this when tie-breaking favors diagonal at the later position.
+    // e.g., ins(hyp="hot") + sub(ref="hotdog", hyp="dog") → correct("hotdog")
+    } else if (current.type === 'insertion' && current.hyp) {
+      // Collect consecutive insertions
+      let insertionCount = 0;
+      while (i + insertionCount < alignment.length && alignment[i + insertionCount].type === 'insertion') {
+        insertionCount++;
+      }
+
+      // Check if a substitution follows the insertion run
+      const subIdx = i + insertionCount;
+      if (subIdx < alignment.length && alignment[subIdx].type === 'substitution' && alignment[subIdx].ref) {
+        const refCanon = getCanonical(alignment[subIdx].ref);
+        let combined = '';
+        let matched = false;
+
+        // Try combining insertions (from first) + substitution hyp
+        for (let k = 0; k < insertionCount; k++) {
+          combined += alignment[i + k].hyp;
+          const withSub = combined + alignment[subIdx].hyp;
+          if (getCanonical(withSub) === refCanon) {
+            // Found reversed compound word match
+            const parts = [];
+            for (let p = 0; p <= k; p++) parts.push(alignment[i + p].hyp);
+            parts.push(alignment[subIdx].hyp);
+            result.push({
+              ref: alignment[subIdx].ref,
+              hyp: withSub,
+              type: 'correct',
+              compound: true,
+              parts
+            });
+            i = subIdx + 1;
+            matched = true;
+            break;
+          }
+        }
+
+        if (!matched) {
+          // No compound match — push all insertions normally
+          for (let k = 0; k < insertionCount; k++) {
+            result.push(alignment[i + k]);
+          }
+          i += insertionCount;
+          // Don't push the substitution here; it will be handled in the next iteration
+        }
+      } else {
+        // No substitution follows — push insertions normally
+        for (let k = 0; k < insertionCount; k++) {
+          result.push(alignment[i + k]);
+        }
+        i += insertionCount;
       }
     } else {
       result.push(current);
