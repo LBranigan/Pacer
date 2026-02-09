@@ -197,7 +197,7 @@ function buildEnhancedTooltip(item, sttWord) {
     lines.push(`  Reverb v1.0: ${fmtTs(rvStart, rvEnd)}`);
     lines.push(`  Reverb v0.0: ${fmtTs(rcStart, rcEnd)}`);
 
-    // What each model heard (word text, not confidence %)
+    // What each model heard (word text)
     const reverbWord = sttWord._alignment?.verbatim || sttWord.word;
     const xvalWord = sttWord._xvalWord;
     if (xvalWord) {
@@ -243,11 +243,6 @@ function buildEnhancedTooltip(item, sttWord) {
   if (item.nl) {
     const nlTip = buildNLTooltip(item.nl);
     if (nlTip) lines.push(nlTip);
-  }
-
-  // Healed word
-  if (item.healed) {
-    lines.push(`Healed: STT said "${item.originalHyp}"`);
   }
 
   // Flags as text list (per CONTEXT.md: "no icons in tooltip")
@@ -323,7 +318,7 @@ function parseSttTime(t) {
   return parseFloat(String(t).replace('s', '')) || 0;
 }
 
-export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, diagnostics, transcriptWords, tierBreakdown, disfluencySummary, safetyData, referenceText, audioBlob, rawSttSources) {
+export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, diagnostics, transcriptWords, tierBreakdown, disfluencySummary, referenceText, audioBlob, rawSttSources) {
   const wordsDiv = document.getElementById('resultWords');
   const plainDiv = document.getElementById('resultPlain');
   const jsonDiv = document.getElementById('resultJson');
@@ -391,14 +386,7 @@ export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, di
   const wcpmBox = document.createElement('div');
   wcpmBox.className = 'metric-box';
 
-  // Check for collapse state
-  if (safetyData?.collapse?.collapsed) {
-    // Show collapse banner instead of WCPM
-    const banner = document.createElement('div');
-    banner.className = 'collapse-banner';
-    banner.textContent = 'Results may be unreliable due to poor audio quality';
-    metricsBar.appendChild(banner);
-  } else if (wcpm) {
+  if (wcpm) {
     // Normal WCPM range display
     const container = document.createElement('div');
     container.className = 'wcpm-container';
@@ -768,12 +756,6 @@ export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, di
       sttInfo += '\n' + buildNLTooltip(item.nl);
     }
 
-    // Healed word indicator
-    if (item.healed) {
-      span.classList.add('word-healed');
-      sttInfo += '\n(Healed: STT said "' + item.originalHyp + '")';
-    }
-
     // Rate anomaly visual indicator (Phase 16)
     if (sttWord?._flags?.includes('rate_anomaly')) {
       span.classList.add('word-rate-anomaly');
@@ -1029,7 +1011,7 @@ export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, di
   // ─────────────────────────────────────────────────────────────────────────
   // STT Transcript View — shows what each engine detected
   // ─────────────────────────────────────────────────────────────────────────
-  const confWordsDiv = document.getElementById('confidenceWords');
+  const confWordsDiv = document.getElementById('sttTranscriptWords');
   if (confWordsDiv) {
     confWordsDiv.innerHTML = '';
 
@@ -1065,8 +1047,7 @@ export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, di
           const start = parseSttTime(w.startTime);
           const end = parseSttTime(w.endTime);
           const dur = ((end - start) * 1000).toFixed(0);
-          const confPct = w.confidence != null ? `${Math.round(w.confidence * 100)}%` : 'N/A';
-          span.title = `"${w.word}"\nConfidence: ${confPct}\nDuration: ${dur}ms\n${start.toFixed(2)}s – ${end.toFixed(2)}s`;
+          span.title = `"${w.word}"\nDuration: ${dur}ms\n${start.toFixed(2)}s – ${end.toFixed(2)}s`;
 
           // Click-to-play word audio
           if (wordAudioEl && start > 0) {
@@ -1104,8 +1085,7 @@ export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, di
     return {
       word: w.word,
       startTime: start,
-      endTime: end,
-      confidence: w.confidence != null ? Math.round(w.confidence * 1000) / 1000 : null
+      endTime: end
     };
   });
 
@@ -1131,7 +1111,6 @@ export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, di
       const sw = sttWords[enrichIdx];
       entry.startTime = sw.startTime;
       entry.endTime = sw.endTime;
-      entry.confidence = sw.confidence;
       enrichIdx++;
     }
     return entry;

@@ -284,63 +284,6 @@ const DIAGNOSTIC_MISCUES = {
 };
 
 // ============================================================================
-// CONFIDENCE-BASED MISCUES (detected in ghost-detector.js, confidence-classifier.js)
-// These identify potential STT hallucinations or uncertain transcriptions
-// ============================================================================
-
-const CONFIDENCE_MISCUES = {
-  ghost: {
-    description: 'Word detected by STT but VAD found no speech at that time',
-    detector: 'ghost-detector.js → flagGhostWords()',
-    countsAsError: false, // Filtered out before alignment
-    config: {
-      min_vad_overlap_ms: 50,            // Requires 50ms speech overlap
-      short_word_overlap_ms: 30,         // Short words need only 30ms
-      edge_leniency_ms: 300              // Lenient at audio start/end
-    },
-    example: {
-      context: 'STT reports "the" at 5.0s-5.2s, but VAD shows silence',
-      result: 'Word flagged as ghost, confidence set to 0.0'
-    },
-    uiClass: null, // Ghosts are filtered, not displayed
-    note: 'Only flags latest_only words that ARE in reference text'
-  },
-
-  possibleInsertion: {
-    description: 'Word only in latest_long model and NOT in reference text',
-    detector: 'confidence-classifier.js → classifyWordConfidence()',
-    countsAsError: false, // Flagged for review, not auto-penalized
-    config: {
-      assigned_confidence: 0.50          // Below MEDIUM threshold
-    },
-    example: {
-      context: 'latest_long says "um" but default model and reference have nothing',
-      result: 'Flagged as possible_insertion with 0.50 confidence'
-    },
-    uiClass: null,
-    flag: 'possible_insertion'
-  },
-
-  referenceVeto: {
-    description: 'When STT models disagree on word, prefer the one matching reference text',
-    detector: 'ensemble-merger.js → createMergedWord()',
-    countsAsError: false, // Arbitration rule, not an error
-    config: {
-      // Applied when: latestWord.word !== defaultWord.word
-      // Logic: If default matches reference AND latest doesn't → use default
-      //        If neither matches → use latest_long (legitimate substitution)
-    },
-    example: {
-      context: 'latest_long heard "Hefty", default heard "happy", reference says "happy"',
-      result: 'Reference Veto applied: "happy" used instead of "Hefty"'
-    },
-    uiClass: null,
-    debugField: '_debug.referenceVetoApplied',
-    note: 'Handles cases where latest_long\'s better vocabulary makes wrong guesses. Does NOT veto when student makes legitimate substitution (neither matches reference).'
-  }
-};
-
-// ============================================================================
 // FORGIVENESS RULES (detected in metrics.js / alignment post-processing)
 // These identify errors that should NOT count against the student
 // ============================================================================
@@ -370,20 +313,6 @@ const FORGIVENESS_RULES = {
     ],
     uiClass: 'word-forgiven',
     note: 'Student used phonics correctly but doesn\'t know the name. Common words like "north", "straight" are blocked by dictionary lookup even if NL API tags them as proper nouns.'
-  },
-
-  terminalLeniency: {
-    description: 'Errors in last 1-2 words when recording was cut off',
-    detector: 'app.js → terminal leniency check',
-    countsAsError: false, // Recording ended, not student\'s fault
-    config: {
-      max_words_from_end: 2
-    },
-    example: {
-      context: 'Student reading "sandwich" when recording stopped',
-      result: 'Final word error forgiven due to cutoff'
-    },
-    uiClass: null
   }
 };
 
@@ -426,9 +355,6 @@ export const MISCUE_REGISTRY = {
 
   // Diagnostics (fluency indicators)
   ...DIAGNOSTIC_MISCUES,
-
-  // Confidence-based (STT quality)
-  ...CONFIDENCE_MISCUES,
 
   // Forgiveness rules
   ...FORGIVENESS_RULES
@@ -497,10 +423,7 @@ export function getDetectorLocation(type) {
  * - repetition: Self-correction attempt
  * - hesitation: Brief pause (< 3s)
  * - selfCorrection: Repeated word/phrase or near-miss attempt before correct word
- * - ghost: STT hallucination (filtered)
- * - possibleInsertion: Uncertain extra word
  * - properNounForgiveness: Close attempt at name
- * - terminalLeniency: Recording cut off
  * - reverb_filler: Filler word (um, uh) via Reverb model diff
  * - reverb_repetition: Word repetition via Reverb model diff
  * - reverb_false_start: False start via Reverb model diff

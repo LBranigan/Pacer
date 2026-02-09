@@ -15,13 +15,9 @@ import { saveAudioBlob } from './audio-store.js';
 import { initDashboard } from './dashboard.js';
 import { initDebugLog, addStage, addWarning, addError, finalizeDebugLog, saveDebugLog } from './debug-logger.js';
 import { vadProcessor } from './vad-processor.js';
-import { flagGhostWords } from './ghost-detector.js';
-import { classifyAllWords, filterGhosts, computeClassificationStats } from './confidence-classifier.js';
 import { detectDisfluencies } from './disfluency-detector.js';
-import { applySafetyChecks } from './safety-checker.js';
 import { runKitchenSinkPipeline, isKitchenSinkEnabled, computeKitchenSinkStats } from './kitchen-sink-merger.js';
 import { getCrossValidatorEngine, setCrossValidatorEngine, getCrossValidatorName } from './cross-validator.js';
-import { checkTerminalLeniency } from './phonetic-utils.js';
 import { padAudioWithSilence } from './audio-padding.js';
 import { enrichDiagnosticsWithVAD, computeVADGapSummary, adjustGapsWithVADOverhang } from './vad-gap-analyzer.js';
 import { canRunMaze } from './maze-generator.js';
@@ -268,8 +264,7 @@ async function runAnalysis() {
           idx: i,
           word: w.word,
           start: w.startTime,
-          end: w.endTime,
-          confidence: w.confidence
+          end: w.endTime
         }))
       });
     }
@@ -281,8 +276,7 @@ async function runAnalysis() {
         words: kitchenSinkResult.unconsumedXval.map(w => ({
           word: w.word,
           start: w.startTime,
-          end: w.endTime,
-          confidence: w.confidence
+          end: w.endTime
         }))
       });
     }
@@ -292,8 +286,7 @@ async function runAnalysis() {
       const rev = kitchenSinkResult.reverb;
       const mapReverb = (w, i) => ({
         idx: i, word: w.word,
-        start: w.startTime, end: w.endTime,
-        confidence: w.confidence
+        start: w.startTime, end: w.endTime
       });
       addStage('reverb_raw', {
         description: 'Raw Reverb word lists before alignment/cross-validation (v1.0=verbatim, v0.0=clean)',
@@ -358,133 +351,6 @@ async function runAnalysis() {
     //   Kitchen Sink uses Deepgram cross-validation instead (crossValidation
     //   property on each word: "confirmed"/"unconfirmed"/"unavailable").
     //
-    // - Confidence Classification (Phase 13): Classified words as high/medium/
-    //   low/ghost based on Google ensemble agreement. Kitchen Sink words already
-    //   have per-word confidence from Reverb/Deepgram.
-    //
-    // - Phase 14 Disfluency Detection: Detected disfluencies via timing gaps
-    //   between words (severity-based: minor/moderate/significant). Kitchen Sink
-    //   uses Reverb verbatim-vs-clean diff for model-level disfluency detection
-    //   (type-based: filler/repetition/false_start) — far more accurate.
-    //
-    // - Safety Checks (Phase 15): Caught confidence collapse and rate anomalies
-    //   in the Google ensemble. Not applicable to Kitchen Sink pipeline.
-    //
-    // These stages also had a bug: they referenced `referenceText` before it
-    // was declared (line 363), causing a ReferenceError crash.
-    //
-    // The Kitchen Sink pipeline (kitchen-sink-merger.js) handles all of this:
-    //   - Hallucination filtering via Deepgram cross-validation
-    //   - Disfluency detection via Reverb verbatim/clean alignment
-    //   - Word-level confidence from source ASR models
-    // =========================================================================
-
-    // // VAD processing for ghost detection (Phase 12)
-    // let vadResult = { segments: [], durationMs: 0, error: 'VAD not initialized' };
-    // let ghostResult = { ghostCount: 0, hasGhostSequence: false, vadError: null, ghostIndices: [] };
-    //
-    // if (vadProcessor.isLoaded) {
-    //   setStatus('Running ghost detection...');
-    //   vadResult = await vadProcessor.processAudio(appState.audioBlob);
-    //
-    //   addStage('vad_processing', {
-    //     segmentCount: vadResult.segments.length,
-    //     durationMs: vadResult.durationMs,
-    //     error: vadResult.error
-    //   });
-    //
-    //   // Run ghost detection on merged words (referenceText already fetched above)
-    //   ghostResult = flagGhostWords(mergedWords, vadResult, referenceText, vadResult.durationMs);
-    //
-    //   addStage('ghost_detection', {
-    //     ghostCount: ghostResult.ghostCount,
-    //     hasGhostSequence: ghostResult.hasGhostSequence,
-    //     vadError: ghostResult.vadError,
-    //     ghostIndices: ghostResult.ghostIndices
-    //   });
-    //
-    //   if (ghostResult.ghostCount > 0) {
-    //     console.log(`[ORF] Ghost detection: ${ghostResult.ghostCount} potential hallucinations flagged`);
-    //   }
-    // } else {
-    //   addWarning('VAD not loaded', { error: vadProcessor.loadError });
-    //   console.warn('[ORF] VAD not loaded, skipping ghost detection:', vadProcessor.loadError);
-    // }
-
-    // // Confidence classification (Phase 13)
-    // // Pipeline: Classify -> Filter ghosts -> Align
-    // setStatus('Classifying word confidence...');
-    // // referenceText already fetched above (before ensemble merge)
-    // const classifiedWords = classifyAllWords(mergedWords, referenceText);
-    // const classificationStats = computeClassificationStats(classifiedWords);
-    //
-    // addStage('confidence_classification', {
-    //   total: classificationStats.total,
-    //   high: classificationStats.high,
-    //   medium: classificationStats.medium,
-    //   low: classificationStats.low,
-    //   ghost: classificationStats.ghost,
-    //   possibleInsertions: classificationStats.possibleInsertions
-    // });
-    //
-    // // Filter ghost words BEFORE alignment (confidence === 0.0)
-    // const wordsForAlignment = filterGhosts(classifiedWords);
-    //
-    // if (classificationStats.ghost > 0) {
-    //   console.log(`[ORF] Filtered ${classificationStats.ghost} ghost words before alignment`);
-    // }
-    // if (classificationStats.possibleInsertions > 0) {
-    //   console.log(`[ORF] ${classificationStats.possibleInsertions} possible insertions flagged (not filtered)`);
-    // }
-
-    // // Disfluency detection (Phase 14) - Hierarchy of Truth architecture
-    // // Pipeline: Classify -> Filter ghosts -> Detect disfluencies -> Safety checks -> Align
-    // setStatus('Detecting disfluencies...');
-    // const disfluencyResult = detectDisfluencies(wordsForAlignment, referenceText);
-    // const wordsWithDisfluency = disfluencyResult.words;
-    //
-    // addStage('disfluency_detection', {
-    //   wordsProcessed: wordsForAlignment.length,
-    //   wordsAfter: wordsWithDisfluency.length,
-    //   fragmentsRemoved: disfluencyResult.fragmentsRemoved,
-    //   summary: disfluencyResult.summary
-    // });
-    //
-    // if (disfluencyResult.fragmentsRemoved > 0) {
-    //   console.log(`[ORF] Disfluency: ${disfluencyResult.fragmentsRemoved} fragments merged`);
-    // }
-    // if (disfluencyResult.summary.totalWordsWithDisfluency > 0) {
-    //   console.log(`[ORF] Disfluency: ${disfluencyResult.summary.totalWordsWithDisfluency} words with stutter events`);
-    // }
-
-    // // Safety checks (Phase 15)
-    // // Pipeline: Classify -> Filter ghosts -> Detect disfluencies -> Safety checks -> Align
-    // setStatus('Running safety checks...');
-    // // Get audio duration: prefer VAD result, fallback to last word's endTime
-    // const parseTime = (t) => parseFloat(String(t).replace('s', '')) || 0;
-    // const audioDurationMs = vadResult.durationMs > 0
-    //   ? vadResult.durationMs
-    //   : parseTime(wordsWithDisfluency[wordsWithDisfluency.length - 1]?.endTime) * 1000 || 0;
-    // const safetyResult = applySafetyChecks(wordsWithDisfluency, referenceText, audioDurationMs);
-    // const wordsWithSafety = safetyResult.words;
-    //
-    // // Debug: verify _debug is preserved through pipeline
-    // console.log('[Pipeline Debug] First 3 words after safety checks:', wordsWithSafety.slice(0, 3).map(w => ({
-    //   word: w.word,
-    //   has_debug: !!w._debug,
-    //   _debug: w._debug
-    // })));
-    //
-    // addStage('safety_checks', {
-    //   rateAnomalies: safetyResult._safety.rateAnomalies,
-    //   uncorroboratedSequences: safetyResult._safety.uncorroboratedSequences,
-    //   collapse: safetyResult._safety.collapse
-    // });
-    //
-    // if (safetyResult._safety.collapse.collapsed) {
-    //   console.warn('[ORF] Confidence collapse detected:', safetyResult._safety.collapse.percent.toFixed(1) + '% flagged');
-    // }
-
     // =========================================================================
     // Kitchen Sink direct pass-through
     // =========================================================================
@@ -522,17 +388,13 @@ async function runAnalysis() {
       _ensemble: {
         stats: ensembleStats
       },
-      _vad: null,             // Legacy ghost detection disabled
-      _classification: null,  // Legacy confidence classification disabled
       _kitchenSink: {
         disfluencyStats: kitchenSinkResult.disfluencyStats || null,
         unconsumedXval: kitchenSinkResult.unconsumedXval || [],
         xvalRawWords: kitchenSinkResult.xvalRaw?.words || [],
         reverbVerbatimWords: kitchenSinkResult.reverb?.verbatim?.words || [],
         reverbCleanWords: kitchenSinkResult.reverb?.clean?.words || []
-      },
-      _disfluency: null,      // Legacy Phase 14 disfluency detection disabled
-      _safety: null            // Legacy safety checks disabled
+      }
     };
   }
 
@@ -641,9 +503,6 @@ async function runAnalysis() {
       word: w.word,
       range: startSec.toFixed(3) + 's - ' + endSec.toFixed(3) + 's',
       duration: (endSec - startSec).toFixed(3) + 's',
-      confidence: w.confidence,
-      _reverbConfidence: w._reverbConfidence,
-      _xvalConfidence: w._xvalConfidence,
       crossValidation: w.crossValidation,
       source: w.source,
       isDisfluency: w.isDisfluency || false,
@@ -675,9 +534,6 @@ async function runAnalysis() {
       word: w.word,
       start: w.startTime,
       end: w.endTime,
-      confidence: w.confidence,
-      _reverbConfidence: w._reverbConfidence,
-      _xvalConfidence: w._xvalConfidence,
       crossValidation: w.crossValidation,
       source: w.source,
       isDisfluency: w.isDisfluency || false,
@@ -835,16 +691,13 @@ async function runAnalysis() {
         word: xvWord.word,
         startTime: xvWord.startTime,
         endTime: xvWord.endTime,
-        confidence: xvWord.confidence,
         crossValidation: 'recovered',
         _xvalStartTime: xvWord.startTime,
         _xvalEndTime: xvWord.endTime,
-        _xvalConfidence: xvWord.confidence,
         _xvalWord: xvWord.word,
         _xvalEngine: getCrossValidatorEngine(),
         _reverbStartTime: null,
         _reverbEndTime: null,
-        _reverbConfidence: null,
         _recovered: true,
         isDisfluency: false,
         disfluencyType: null
@@ -875,7 +728,6 @@ async function runAnalysis() {
         word: xvWord.word,
         start: xvWord.startTime,
         end: xvWord.endTime,
-        confidence: xvWord.confidence,
         insertedAt: insertIdx
       });
     }
@@ -1261,102 +1113,6 @@ async function runAnalysis() {
     });
   }
 
-  // Terminal Leniency: Apply phonetic matching to final word if it's a low-confidence substitution
-  // This handles the "hen"/"hand"/"and" problem where ASR struggles with trailing words.
-  // A human teacher would give credit for phonetically close attempts at the end of a passage.
-  const terminalLeniencyLog = { applied: false, details: null };
-
-  if (alignment.length > 0) {
-    // Find the last non-insertion entry (the actual last reference word)
-    let lastRefIdx = alignment.length - 1;
-    while (lastRefIdx >= 0 && alignment[lastRefIdx].type === 'insertion') {
-      lastRefIdx--;
-    }
-
-    if (lastRefIdx >= 0) {
-      const lastEntry = alignment[lastRefIdx];
-
-      // Only apply to substitutions that weren't already forgiven
-      if (lastEntry.type === 'substitution' && !lastEntry.forgiven) {
-        // Find the confidence for this word from transcript
-        // The last STT word should correspond to this alignment entry
-        const lastSttWord = transcriptWords[transcriptWords.length - 1];
-        const confidence = lastSttWord?.confidence || 0;
-
-        // Check the primary merged word first
-        let leniencyResult = checkTerminalLeniency(
-          lastEntry.ref,
-          lastEntry.hyp,
-          confidence
-        );
-
-        // If primary doesn't match, check alternative model transcription
-        // (e.g., if merged word is "and" but default model heard "hand")
-        let alternativeWord = null;
-        if (!leniencyResult.isMatch && lastSttWord?._debug) {
-          // Extract the other model's word
-          const debug = lastSttWord._debug;
-          if (debug.default && debug.latestLong) {
-            // Find which one differs from the merged word
-            const defaultWord = typeof debug.default === 'string'
-              ? debug.default.split(' ')[0]
-              : debug.default?.word;
-            const latestWord = typeof debug.latestLong === 'string'
-              ? debug.latestLong.split(' ')[0]
-              : debug.latestLong?.word;
-
-            const mergedLower = lastEntry.hyp.toLowerCase();
-            if (defaultWord && defaultWord.toLowerCase() !== mergedLower) {
-              alternativeWord = defaultWord;
-            } else if (latestWord && latestWord.toLowerCase() !== mergedLower) {
-              alternativeWord = latestWord;
-            }
-          }
-
-          if (alternativeWord) {
-            const altResult = checkTerminalLeniency(lastEntry.ref, alternativeWord, confidence);
-            if (altResult.isMatch) {
-              leniencyResult = altResult;
-              leniencyResult.viaAlternative = alternativeWord;
-            }
-          }
-        }
-
-        terminalLeniencyLog.details = {
-          refWord: lastEntry.ref,
-          hypWord: lastEntry.hyp,
-          alternativeWord: alternativeWord,
-          confidence: Math.round(confidence * 100) / 100,
-          refPhonetic: leniencyResult.refCode,
-          hypPhonetic: leniencyResult.asrCode,
-          reason: leniencyResult.reason,
-          viaAlternative: leniencyResult.viaAlternative || null,
-          granted: leniencyResult.isMatch
-        };
-
-        if (leniencyResult.isMatch && leniencyResult.reason !== 'exact') {
-          // Grant terminal leniency - mark as correct via "healed"
-          lastEntry.originalHyp = lastEntry.hyp; // Save original for tooltip
-          lastEntry.type = 'correct';
-          lastEntry.healed = true;
-          lastEntry.healReason = 'terminal_leniency';
-          lastEntry.originalType = 'substitution';
-          lastEntry.phoneticMatch = {
-            ref: leniencyResult.refCode,
-            hyp: leniencyResult.asrCode,
-            reason: leniencyResult.reason,
-            viaAlternative: leniencyResult.viaAlternative || null
-          };
-          terminalLeniencyLog.applied = true;
-          const matchedWord = leniencyResult.viaAlternative || lastEntry.originalHyp;
-          console.log(`[ORF] Terminal leniency: "${matchedWord}" accepted as "${lastEntry.ref}" (phonetic: ${leniencyResult.refCode} ~ ${leniencyResult.asrCode})${leniencyResult.viaAlternative ? ' [via alternative model]' : ''}`);
-        }
-      }
-    }
-  }
-
-  addStage('terminal_leniency', terminalLeniencyLog);
-
   // Calculate effective reading time: first word start = t=0
   // This gives the student a full 60 seconds from when they start speaking
   let effectiveElapsedSeconds = appState.elapsedSeconds;
@@ -1485,7 +1241,6 @@ async function runAnalysis() {
     tierBreakdown,
     // Prefer Kitchen Sink disfluencyStats (Phase 24) over Phase 14 severity summary
     data._kitchenSink?.disfluencyStats || null,
-    data._safety || null,                  // Collapse state and safety flags
     referenceText,                         // Raw reference text for cosmetic punctuation
     appState.audioBlob || null,            // Audio blob for click-to-play word audio
     {                                       // Raw STT word lists for transcript view
@@ -1572,11 +1327,7 @@ async function runAnalysis() {
       audioRef: appState.audioBlob ? assessmentId : null,
       nlAnnotations,
       prosody: prosodySnapshot,
-      _ensemble: data._ensemble || null,  // Preserves ensemble debug data
-      _vad: data._vad || null,  // Preserves VAD ghost detection data
-      _classification: data._classification || null,  // Preserves confidence classification data
-      _disfluency: data._disfluency || null,  // Preserves disfluency detection data
-      _safety: data._safety || null  // Preserves safety check data
+      _ensemble: data._ensemble || null
     });
     refreshStudentUI();
     setStatus('Done (saved).');

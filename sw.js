@@ -49,22 +49,16 @@ const SHELL = [
   // --- Pipeline modules (imported by app.js/diagnostics.js) ---
   './js/text-normalize.js',
   './js/vad-processor.js',
-  './js/ghost-detector.js',
-  './js/confidence-classifier.js',
   './js/disfluency-detector.js',
-  './js/safety-checker.js',
   './js/kitchen-sink-merger.js',
   './js/cross-validator.js',
-  './js/phonetic-utils.js',
   './js/audio-padding.js',
   './js/vad-gap-analyzer.js',
   './js/maze-generator.js',
   './js/phoneme-counter.js',
 
   // --- Config modules ---
-  './js/safety-config.js',
   './js/disfluency-config.js',
-  './js/confidence-config.js',
 
   // --- API + support modules ---
   './js/syllable-counter.js',
@@ -73,7 +67,6 @@ const SHELL = [
   './js/sequence-aligner.js',
   './js/disfluency-tagger.js',
   './js/reverb-api.js',
-  './js/ensemble-merger.js',
   './js/miscue-registry.js',
   './js/maze-game.js',
 

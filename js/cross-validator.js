@@ -118,7 +118,7 @@ const XVAL_OPTIONS = {
  *   deletion → unconsumed    (cross-validator-only, logged but not added to word list)
  *
  * For confirmed and disagreed words, cross-validator timestamps replace Reverb's
- * (Reverb CTM hardcodes 100ms durations). Both confidence values are preserved.
+ * (Reverb CTM hardcodes 100ms durations).
  *
  * @param {Array} reverbWords - Merged words from Reverb ensemble (after NW + disfluency tagging)
  * @param {Array|null} xvalWords - Words from cross-validator (e.g. Deepgram Nova-3), or null if unavailable
@@ -157,7 +157,6 @@ export function crossValidateTranscripts(reverbWords, xvalWords) {
       result.push({
         ...reverbWord,
         crossValidation: 'unconfirmed',
-        _reverbConfidence: reverbWord.confidence,
         _reverbStartTime: reverbWord.startTime,
         _reverbEndTime: reverbWord.endTime,
         _xvalStartTime: null,
@@ -246,10 +245,6 @@ export function crossValidateTranscripts(reverbWords, xvalWords) {
       _xvalStartTime: xvWord.startTime,
       _xvalEndTime: xvWord.endTime,
       // _reverbCleanStartTime/_reverbCleanEndTime carried through via ...reverbWord
-      // Cross-validator confidence as primary
-      confidence: xvWord.confidence,
-      _reverbConfidence: reverbWord.confidence,
-      _xvalConfidence: xvWord.confidence,
       ...(fuzzyMatch ? { _fuzzyMatch: fuzzyMatch } : {}),
       ...(nearMatch ? { _nearMatch: nearMatch } : {}),
       _xvalWord: xvWord.word,
@@ -281,7 +276,7 @@ export function crossValidateTranscripts(reverbWords, xvalWords) {
 
   if (unconsumedXv.length > 0) {
     console.log('[cross-validation] Unconsumed cross-validator words (heard by xval but not Reverb):');
-    console.table(unconsumedXv.map(w => ({ word: w.word, start: w.startTime, end: w.endTime, conf: w.confidence })));
+    console.table(unconsumedXv.map(w => ({ word: w.word, start: w.startTime, end: w.endTime })));
   }
 
   return { words: result, unconsumedXval: unconsumedXv };

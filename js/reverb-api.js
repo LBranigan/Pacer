@@ -30,8 +30,8 @@ function blobToBase64(blob) {
 /**
  * Normalize Reverb word format to project conventions.
  *
- * Reverb returns: { word, start_time (float), end_time (float), confidence }
- * Project uses: { word, startTime ("X.XXs"), endTime ("X.XXs"), confidence }
+ * Reverb returns: { word, start_time (float), end_time (float) }
+ * Project uses: { word, startTime ("X.XXs"), endTime ("X.XXs") }
  *
  * We keep BOTH formats:
  * - startTime/endTime as strings for existing code compatibility
@@ -48,8 +48,7 @@ function normalizeWord(w) {
     endTime: `${w.end_time}s`,
     // Numeric format for alignment calculations
     start_time: w.start_time,
-    end_time: w.end_time,
-    confidence: w.confidence
+    end_time: w.end_time
   };
 }
 

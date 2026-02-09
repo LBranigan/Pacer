@@ -56,7 +56,7 @@ function migrate(data) {
         for (const w of a.sttWords) {
           if ('_deepgramStartTime' in w) { w._xvalStartTime = w._deepgramStartTime; delete w._deepgramStartTime; }
           if ('_deepgramEndTime' in w)   { w._xvalEndTime = w._deepgramEndTime;     delete w._deepgramEndTime; }
-          if ('_deepgramConfidence' in w) { w._xvalConfidence = w._deepgramConfidence; delete w._deepgramConfidence; }
+          if ('_deepgramConfidence' in w) { delete w._deepgramConfidence; }
           if ('_deepgramWord' in w)       { w._xvalWord = w._deepgramWord;           delete w._deepgramWord; }
           // Add engine tag to migrated words
           if (w._xvalStartTime != null) w._xvalEngine = 'deepgram';

@@ -6,7 +6,6 @@
  *
  * Parakeet TDT (Token-and-Duration Transducer) provides:
  * - Native word-level timestamps from duration prediction head
- * - Confidence: 1.0 for all words (TDT standard output doesn't expose per-word confidence)
  * - Runs locally on GPU — no API key needed, no network latency
  */
 

@@ -118,7 +118,6 @@ button { padding: 0.6rem 1.4rem; border: none; border-radius: 4px; font-size: 1r
 .word-tier-academic { font-weight: 500; }
 .word-tier-sight { }
 .word-tier-function { }
-.word-healed { text-decoration: underline dashed #4caf50; text-underline-offset: 3px; background: #e8f5e9; }
 .word-forgiven { position: relative; border: 2px dashed #4caf50; }
 .word-forgiven::after { content: '✓'; position: absolute; top: -8px; right: -6px; font-size: 0.7rem; color: #4caf50; font-weight: bold; background: #fff; border-radius: 50%; padding: 0 2px; }
 .tier-breakdown { display: flex; gap: 1rem; flex-wrap: wrap; width: 100%; margin-top: 0.5rem; }
@@ -221,18 +220,6 @@ button { padding: 0.6rem 1.4rem; border: none; border-radius: 4px; font-size: 1r
 .fluency-summary .moderate { color: #ff9800; }
 .fluency-summary .minor { color: #ffc107; }
 
-/* Collapse warning banner (Phase 16) */
-.collapse-banner {
-  background: #fff3e0;
-  border: 1px solid #ff9800;
-  border-radius: 6px;
-  padding: 0.75rem 1rem;
-  margin-bottom: 0.75rem;
-  color: #e65100;
-  font-weight: 600;
-  text-align: center;
-}
-
 /* Dev mode toggle (Phase 16) */
 .dev-mode-only {
   display: none !important;
@@ -299,15 +286,15 @@ body.dev-mode .dev-mode-toggle {
   to { transform: rotate(360deg); }
 }
 
-/* Confidence visualization section (collapsible) */
-.confidence-section {
+/* STT Transcript section (collapsible) */
+.stt-transcript-section {
   margin-top: 1rem;
   border: 1px solid #ddd;
   border-radius: 6px;
   overflow: hidden;
 }
 
-.confidence-header {
+.stt-transcript-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -317,38 +304,38 @@ body.dev-mode .dev-mode-toggle {
   user-select: none;
 }
 
-.confidence-header:hover {
+.stt-transcript-header:hover {
   background: #eee;
 }
 
-.confidence-header h4 {
+.stt-transcript-header h4 {
   font-size: 0.9rem;
   font-weight: 600;
   color: #555;
   margin: 0;
 }
 
-.confidence-toggle {
+.stt-transcript-toggle {
   font-size: 0.8rem;
   color: #888;
   transition: transform 0.2s;
 }
 
-.confidence-section.expanded .confidence-toggle {
+.stt-transcript-section.expanded .stt-transcript-toggle {
   transform: rotate(180deg);
 }
 
-.confidence-body {
+.stt-transcript-body {
   display: none;
   padding: 0.75rem;
   background: #fafafa;
 }
 
-.confidence-section.expanded .confidence-body {
+.stt-transcript-section.expanded .stt-transcript-body {
   display: block;
 }
 
-.confidence-words {
+.stt-transcript-words {
   line-height: 2;
 }
 
@@ -422,7 +409,7 @@ body.dev-mode .dev-mode-toggle {
 /* Struggle word indicator (DIAG-07)
  * Highlights words where student showed decoding difficulty:
  * 1. Pause/hesitation before word
- * 2. Low STT confidence
+ * 2. ASR struggled with word
  * 3. Word length > 3 chars (not a sight word)
  * Distinct style: teal/cyan with dotted border - stands out from other indicators
  */
@@ -473,7 +460,7 @@ body.dev-mode .dev-mode-toggle {
 
 /* ───────────────────────────────────────────────────────────────────────────
    Disfluency diagnostics section (Phase 24) - collapsible
-   Clones Confidence View pattern from .confidence-section
+   Clones STT Transcript View pattern from .stt-transcript-section
    ─────────────────────────────────────────────────────────────────────────── */
 .disfluency-section {
   margin-top: 1rem;
@@ -550,7 +537,7 @@ body.dev-mode .dev-mode-toggle {
   color: #333;
 }
 
-/* Collapsible prosody section — matches confidence/disfluency pattern */
+/* Collapsible prosody section — matches stt-transcript/disfluency pattern */
 .prosody-section {
   border: 1px solid #ddd;
   border-radius: 6px;
