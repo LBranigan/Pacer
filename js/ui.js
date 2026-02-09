@@ -1,3 +1,5 @@
+import { recomputeWordSpeedWithPauses } from './diagnostics.js';
+
 export function setStatus(msg) {
   document.getElementById('status').textContent = msg;
 }
@@ -700,7 +702,7 @@ export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, di
 
     // ── Word Speed Map (inline within prosody) ──
     if (diagnostics.wordSpeed && !diagnostics.wordSpeed.insufficient) {
-      renderWordSpeedInto(body, diagnostics.wordSpeed, wordAudioEl, transcriptWords);
+      renderWordSpeedInto(body, diagnostics.wordSpeed, wordAudioEl, transcriptWords, referenceText);
     }
 
     // Scope transparency note
@@ -1393,17 +1395,30 @@ function renderDisfluencySection(disfluencyStats) {
  * @param {HTMLElement} parent - Element to append word speed content into
  * @param {object} wordSpeedData - Output from computeWordSpeedTiers()
  */
-function renderWordSpeedInto(parent, wordSpeedData, wordAudioEl, transcriptWords) {
+function renderWordSpeedInto(parent, wordSpeedData, wordAudioEl, transcriptWords, referenceText) {
   if (!wordSpeedData || wordSpeedData.insufficient) return;
 
   const wrapper = document.createElement('div');
   wrapper.className = 'word-speed-inline';
 
-  // Label
+  // Header row: label + toggle
+  const headerRow = document.createElement('div');
+  headerRow.className = 'word-speed-header';
+
   const label = document.createElement('h5');
   label.className = 'word-speed-label';
   label.textContent = 'Word Speed Map';
-  wrapper.appendChild(label);
+  headerRow.appendChild(label);
+
+  const toggleLabel = document.createElement('label');
+  toggleLabel.className = 'ws-pause-toggle';
+  const toggleCb = document.createElement('input');
+  toggleCb.type = 'checkbox';
+  toggleLabel.appendChild(toggleCb);
+  toggleLabel.appendChild(document.createTextNode(' Include preceding pauses'));
+  headerRow.appendChild(toggleLabel);
+
+  wrapper.appendChild(headerRow);
 
   // ── Legend ──
   const legendEl = document.createElement('div');
@@ -1426,52 +1441,71 @@ function renderWordSpeedInto(parent, wordSpeedData, wordAudioEl, transcriptWords
   }
   wrapper.appendChild(legendEl);
 
-  // ── Passage words ──
+  // ── Passage words (re-rendered on toggle) ──
   const wordsEl = document.createElement('div');
   wordsEl.className = 'word-speed-words';
-  for (const w of wordSpeedData.words) {
-    const span = document.createElement('span');
-    span.className = `word ws-${w.tier}`;
-    span.textContent = w.refWord || '???';
-    span.dataset.tooltip = buildWordSpeedTooltip(w);
+  wrapper.appendChild(wordsEl);
 
-    // Click-to-play word audio (look up timestamps via hypIndex → transcriptWords)
-    if (wordAudioEl && w.hypIndex != null && transcriptWords && transcriptWords[w.hypIndex]) {
-      const tw = transcriptWords[w.hypIndex];
-      const start = parseSttTime(tw.startTime);
-      const end = parseSttTime(tw.endTime);
-      if (start > 0) {
-        span.classList.add('word-clickable');
-        const playFn = () => {
-          wordAudioEl.pause();
-          wordAudioEl.currentTime = start;
-          const onTime = () => {
-            if (wordAudioEl.currentTime >= end) {
-              wordAudioEl.pause();
-              wordAudioEl.removeEventListener('timeupdate', onTime);
-            }
+  // ── Summary bar (re-rendered on toggle) ──
+  const summaryEl = document.createElement('div');
+  summaryEl.className = 'word-speed-summary';
+  wrapper.appendChild(summaryEl);
+
+  /** Populate words grid + summary from a wordSpeedData object */
+  function renderContent(data) {
+    wordsEl.innerHTML = '';
+    hideWordTooltip();
+    for (const w of data.words) {
+      const span = document.createElement('span');
+      span.className = `word ws-${w.tier}`;
+      span.textContent = w.refWord || '???';
+      span.dataset.tooltip = buildWordSpeedTooltip(w);
+
+      // Click-to-play word audio
+      if (wordAudioEl && w.hypIndex != null && transcriptWords && transcriptWords[w.hypIndex]) {
+        const tw = transcriptWords[w.hypIndex];
+        const start = parseSttTime(tw.startTime);
+        const end = parseSttTime(tw.endTime);
+        if (start > 0) {
+          span.classList.add('word-clickable');
+          const playFn = () => {
+            wordAudioEl.pause();
+            wordAudioEl.currentTime = start;
+            const onTime = () => {
+              if (wordAudioEl.currentTime >= end) {
+                wordAudioEl.pause();
+                wordAudioEl.removeEventListener('timeupdate', onTime);
+              }
+            };
+            wordAudioEl.addEventListener('timeupdate', onTime);
+            wordAudioEl.play().catch(() => {});
           };
-          wordAudioEl.addEventListener('timeupdate', onTime);
-          wordAudioEl.play().catch(() => {});
-        };
-        span.addEventListener('click', (e) => { e.stopPropagation(); showWordTooltip(span, playFn); });
+          span.addEventListener('click', (e) => { e.stopPropagation(); showWordTooltip(span, playFn); });
+        } else {
+          span.addEventListener('click', (e) => { e.stopPropagation(); showWordTooltip(span, null); });
+        }
       } else {
         span.addEventListener('click', (e) => { e.stopPropagation(); showWordTooltip(span, null); });
       }
-    } else {
-      span.addEventListener('click', (e) => { e.stopPropagation(); showWordTooltip(span, null); });
+
+      wordsEl.appendChild(span);
+      wordsEl.appendChild(document.createTextNode(' '));
     }
-
-    wordsEl.appendChild(span);
-    wordsEl.appendChild(document.createTextNode(' '));
+    renderWordSpeedSummary(summaryEl, data);
   }
-  wrapper.appendChild(wordsEl);
 
-  // ── Summary bar ──
-  const summaryEl = document.createElement('div');
-  summaryEl.className = 'word-speed-summary';
-  renderWordSpeedSummary(summaryEl, wordSpeedData);
-  wrapper.appendChild(summaryEl);
+  // Initial render with original data
+  renderContent(wordSpeedData);
+
+  // Toggle handler: recompute with pauses or revert to original
+  toggleCb.addEventListener('change', () => {
+    if (toggleCb.checked) {
+      const adjusted = recomputeWordSpeedWithPauses(wordSpeedData, transcriptWords, referenceText);
+      renderContent(adjusted);
+    } else {
+      renderContent(wordSpeedData);
+    }
+  });
 
   parent.appendChild(wrapper);
 }
@@ -1512,7 +1546,11 @@ function buildWordSpeedTooltip(w) {
     const sylStr = w.syllables != null ? `${w.syllables} syl` : '';
     const countsStr = [phonemeStr, sylStr].filter(Boolean).join(', ');
     const sourceTag = w.phonemeSource === 'fallback' ? ' (est.)' : '';
-    lines.push(`Duration: ${w.durationMs}ms | ${countsStr}${sourceTag} | ${w.normalizedMs} ms/ph`);
+    if (w._gapBeforeMs != null && w._gapBeforeMs > 0) {
+      lines.push(`Duration: ${w.durationMs}ms (word) + ${w._gapBeforeMs}ms (pause) = ${w._effectiveDurationMs}ms | ${countsStr}${sourceTag} | ${w.normalizedMs} ms/ph`);
+    } else {
+      lines.push(`Duration: ${w.durationMs}ms | ${countsStr}${sourceTag} | ${w.normalizedMs} ms/ph`);
+    }
     if (w._tsSource === 'primary' || w._tsSource === 'metric4') {
       lines.push('Timestamps: Reverb (cross-validator unavailable)');
     }

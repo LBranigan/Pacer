@@ -629,11 +629,33 @@ body.dev-mode .dev-mode-toggle {
   border-top: 1px solid #eee;
 }
 
+.word-speed-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 6px;
+}
+
 .word-speed-label {
   font-size: 0.85rem;
   font-weight: 600;
   color: #555;
-  margin: 0 0 6px 0;
+  margin: 0;
+}
+
+.ws-pause-toggle {
+  font-size: 0.78rem;
+  color: #777;
+  cursor: pointer;
+  user-select: none;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.ws-pause-toggle input[type="checkbox"] {
+  margin: 0;
+  cursor: pointer;
 }
 
 /* Legend */

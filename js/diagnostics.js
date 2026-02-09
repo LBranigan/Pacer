@@ -1600,6 +1600,127 @@ export function computeWordSpeedTiers(wordOutliers, alignment, xvalRawWords, tra
   };
 }
 
+/**
+ * Recompute word speed tiers with preceding-pause durations folded in.
+ * For each word, the silence gap before it (prev.endTime → this.startTime)
+ * is added to the word's raw duration. Gaps after sentence-ending punctuation
+ * (. ! ?) are excluded — those are natural prosodic pauses.
+ *
+ * Returns a new wordSpeedData object (does not mutate the original).
+ *
+ * @param {object} wordSpeedData - Output from computeWordSpeedTiers()
+ * @param {Array} transcriptWords - STT transcript words array with startTime/endTime
+ * @param {string} referenceText - Original reference text (for punctuation detection)
+ * @returns {object} New { words, baseline, distribution, atPacePercent } with pause-adjusted durations
+ */
+export function recomputeWordSpeedWithPauses(wordSpeedData, transcriptWords, referenceText) {
+  if (!wordSpeedData || wordSpeedData.insufficient) return wordSpeedData;
+
+  const punctMap = referenceText ? getPunctuationPositions(referenceText) : new Map();
+  const sentenceFinalSet = new Set();
+  for (const [idx, type] of punctMap) {
+    if (type === 'period') sentenceFinalSet.add(idx);
+  }
+
+  // Deep-clone words so we don't mutate original
+  const words = wordSpeedData.words.map(w => ({ ...w }));
+  const normDurations = [];
+
+  for (const w of words) {
+    // Reset pause fields
+    w._gapBeforeMs = null;
+    w._effectiveDurationMs = null;
+
+    if (w.durationMs == null || w.hypIndex == null) continue;
+    if (w.hypIndex <= 0) {
+      // First word — no preceding gap
+      normDurations.push(w.normalizedMs);
+      continue;
+    }
+
+    const tw = transcriptWords[w.hypIndex];
+    const prevTw = transcriptWords[w.hypIndex - 1];
+    if (!tw || !prevTw) {
+      normDurations.push(w.normalizedMs);
+      continue;
+    }
+
+    const thisStart = parseTime(tw.startTime);
+    const prevEnd = parseTime(prevTw.endTime);
+    const gapMs = Math.max(0, Math.round((thisStart - prevEnd) * 1000));
+
+    // Skip gap if previous ref word is sentence-final (natural prosodic pause)
+    const prevRefIndex = w.refIndex - 1;
+    if (prevRefIndex >= 0 && sentenceFinalSet.has(prevRefIndex)) {
+      normDurations.push(w.normalizedMs);
+      continue;
+    }
+
+    w._gapBeforeMs = gapMs;
+    const effectiveMs = w.durationMs + gapMs;
+    w._effectiveDurationMs = effectiveMs;
+    const phonemes = w.phonemes || 1;
+    w.normalizedMs = Math.round(effectiveMs / Math.max(phonemes, 1));
+    normDurations.push(w.normalizedMs);
+  }
+
+  // Recompute median from adjusted normalized durations
+  if (normDurations.length < 4) return wordSpeedData; // not enough data
+  const sorted = normDurations.slice().sort((a, b) => a - b);
+  const medianMs = sorted.length % 2 === 0
+    ? (sorted[sorted.length / 2 - 1] + sorted[sorted.length / 2]) / 2
+    : sorted[Math.floor(sorted.length / 2)];
+
+  if (!medianMs || medianMs <= 0) return wordSpeedData;
+
+  // Re-classify tiers
+  const distribution = { quick: 0, steady: 0, slow: 0, struggling: 0, stalled: 0, 'short-word': 0, omitted: 0, 'no-data': 0 };
+  for (const w of words) {
+    if (w.tier === 'omitted' || w.tier === 'no-data') {
+      distribution[w.tier]++;
+      continue;
+    }
+    if (w.normalizedMs == null) {
+      w.tier = 'no-data';
+      distribution['no-data']++;
+      continue;
+    }
+
+    const ratio = w.normalizedMs / medianMs;
+    w.ratio = Math.round(ratio * 100) / 100;
+    w._medianMs = Math.round(medianMs);
+
+    if (w.phonemes <= 3) {
+      w.tier = 'short-word';
+    } else if (ratio < 0.75) {
+      w.tier = 'quick';
+    } else if (ratio < 1.25) {
+      w.tier = 'steady';
+    } else if (ratio < 1.75) {
+      w.tier = 'slow';
+    } else if (ratio < 2.50) {
+      w.tier = 'struggling';
+    } else {
+      w.tier = 'stalled';
+    }
+    distribution[w.tier]++;
+  }
+
+  const classifiable = distribution.quick + distribution.steady + distribution.slow + distribution.struggling + distribution.stalled;
+  const atPace = distribution.quick + distribution.steady;
+  const atPacePercent = classifiable > 0 ? Math.round((atPace / classifiable) * 1000) / 10 : 0;
+
+  return {
+    words,
+    baseline: {
+      ...wordSpeedData.baseline,
+      medianMs: Math.round(medianMs)
+    },
+    distribution,
+    atPacePercent
+  };
+}
+
 // ── DIAG-06: Tier Breakdown ──────────────────────────────────────────
 
 /**

@@ -1,6 +1,6 @@
 {
-  "name": "Oral Reading Fluency Assessment",
-  "short_name": "ORF Assess",
+  "name": "Pacer — Fluency and Comprehension Training",
+  "short_name": "Pacer",
   "start_url": "./index.html",
   "display": "standalone",
   "background_color": "#f5f5f5",
