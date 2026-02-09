@@ -93,3 +93,13 @@ NW is O(m×n) where m, n are word counts. Each cell computes `levenshteinRatio` 
 ## Risk
 
 Low. The alignment output format is identical. Post-alignment corrections (compound merge, contraction merge, omission recovery, near-miss clusters, fragment absorption) all operate on the same `{ref, hyp, type}` entries. The only behavioral change is better assignment of which hypothesis word fills each reference slot.
+
+## Related: [unknown] Token Display
+
+The `<unknown>` token from Reverb's CTC decoder (wenet) indicates speech was detected but couldn't be matched to a known word. Previously displayed as literal "unknown" in the UI, which was confusing. Now:
+
+- **Detection**: `isSpecialASTToken(word)` in `ui.js` checks for `<...>` angle-bracket pattern
+- **Display**: Shown as `[unknown]` in purple italic (`.word-unknown-token` CSS class)
+- **Tooltip**: "speech detected but no word recognized" + cross-validator's hearing (e.g., Parakeet heard "mishaan") + adjacent reference word context
+- **STT transcript view**: Also shows `[unknown]` instead of raw `<unknown>` token
+- **Click-to-play**: All insertion words (including `[unknown]`) now support audio playback via click

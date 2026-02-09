@@ -170,6 +170,7 @@ code { font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace; font-siz
 .swatch-substitution { background: #ffe0b2; }
 .swatch-omission { background: #ffcdd2; }
 .swatch-insertion { background: #bbdefb; }
+.swatch-unknown-token { background: #e1bee7; font-style: italic; }
 .swatch-hesitation { background: #fff; border-left: 3px solid #ff9800; }
 .swatch-pause { background: #eee; border: 1px dotted #999; }
 .swatch-self-correction { background: #e1bee7; }
@@ -450,6 +451,7 @@ details > summary::-webkit-details-marker { display: none; }
   <tr><td>substitution</td><td><span class="swatch swatch-substitution"></span> Orange</td><td>Student said a different word</td></tr>
   <tr><td>omission</td><td><span class="swatch swatch-omission"></span> Red + strikethrough</td><td>Student skipped a word</td></tr>
   <tr><td>insertion</td><td><span class="swatch swatch-insertion"></span> Blue</td><td>Student added a word not in reference</td></tr>
+  <tr><td>[unknown]</td><td><span class="swatch swatch-unknown-token"></span> Purple italic</td><td>Reverb CTC decoder detected speech but couldn't match a known word</td></tr>
 </table>
 
 
@@ -503,6 +505,14 @@ details > summary::-webkit-details-marker { display: none; }
       <td>NW gap (hyp word with no ref match)</td>
       <td>No</td>
       <td>ref "the dog" &rarr; said "the big dog"</td>
+    </tr>
+    <tr>
+      <td><strong>[unknown] token</strong></td>
+      <td><span class="swatch swatch-unknown-token"></span></td>
+      <td>Special ASR token &mdash; Reverb CTC decoder detected speech but couldn't identify a word. Displayed as <em>[unknown]</em> in purple italic. Tooltip shows cross-validator's hearing and adjacent reference word.</td>
+      <td><code>isSpecialASTToken(sttWord.word)</code> &mdash; any word matching <code>&lt;...&gt;</code> pattern (e.g. <code>&lt;unknown&gt;</code>, <code>&lt;unk&gt;</code>)</td>
+      <td>Depends on alignment type</td>
+      <td>Reverb: "&lt;unknown&gt;", Parakeet heard "mishaan" &rarr; shown as <em>[unknown]</em></td>
     </tr>
 
     <!-- Diagnostics -->
