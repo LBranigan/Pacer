@@ -101,7 +101,7 @@ After the pass — upgrade substitutions with evidence:
     → Set _originalType = 'substitution'
 ```
 
-**Why three priorities?** Students can stutter/fragment both *before* and *after* the word they fail on. diff-match-patch can produce either ordering depending on its edit path. The "look both ways" approach handles all topologies:
+**Why three priorities?** Students can stutter/fragment both *before* and *after* the word they fail on. the NW aligner can produce either ordering depending on its traceback path. The "look both ways" approach handles all topologies:
 
 - **Post-struggle** (common): `sub(station→sta), ins(tieion), ins(staion)` — insertions come after the substitution. Caught by Priority 3.
 - **Pre-struggle** (uncommon): `ins(sta), sub(station→tion)` — insertion comes before the substitution. Caught by Priority 2.

@@ -281,7 +281,7 @@ details > summary::-webkit-details-marker { display: none; }
   <div class="flow-arrow"></div>
   <div class="flow-box accent">Kitchen Sink Pipeline<br><small>Reverb + Deepgram in parallel</small></div>
   <div class="flow-arrow"></div>
-  <div class="flow-box">Word Alignment<br><small>alignment.js &mdash; diff-match-patch + compound merging + word equivalences</small></div>
+  <div class="flow-box">Word Alignment<br><small>alignment.js &mdash; Needleman-Wunsch (graded similarity) + compound merging + word equivalences</small></div>
   <div class="flow-arrow"></div>
   <div class="flow-box">Diagnostics (6 detectors)<br><small>diagnostics.js &mdash; hesitations, pauses, self-corrections, morphological, prosody, struggle</small></div>
   <div class="flow-arrow"></div>
@@ -422,7 +422,7 @@ details > summary::-webkit-details-marker { display: none; }
 <!-- 5. WORD ALIGNMENT                                              -->
 <!-- ============================================================ -->
 <h2 id="alignment">4. Word Alignment (Reference vs STT)</h2>
-<p><code>alignment.js</code> compares the reference passage against the student's transcribed speech using diff-match-patch.</p>
+<p><code>alignment.js</code> compares the reference passage against the student's transcribed speech using Needleman-Wunsch with graded Levenshtein substitution costs.</p>
 
 <div class="card">
   <div class="card-label">Pipeline</div>
@@ -433,9 +433,9 @@ details > summary::-webkit-details-marker { display: none; }
     <div class="flow-arrow" style="height:16px;"></div>
     <div class="flow-box" style="font-size:0.85rem; min-width:auto; padding:0.4rem 1rem;">Canonicalize via <code>word-equivalences.js</code> (e.g. "one"&harr;"1", contractions)</div>
     <div class="flow-arrow" style="height:16px;"></div>
-    <div class="flow-box" style="font-size:0.85rem; min-width:auto; padding:0.4rem 1rem;">diff-match-patch (Levenshtein-based diff on canonical forms)</div>
+    <div class="flow-box" style="font-size:0.85rem; min-width:auto; padding:0.4rem 1rem;">Needleman-Wunsch DP (graded: match +2, gap &minus;1, mismatch &minus;1.5&times;(1&minus;similarity))</div>
     <div class="flow-arrow" style="height:16px;"></div>
-    <div class="flow-box" style="font-size:0.85rem; min-width:auto; padding:0.4rem 1rem;">Decode diffs using original word forms (not canonical)</div>
+    <div class="flow-box" style="font-size:0.85rem; min-width:auto; padding:0.4rem 1rem;">Traceback using original word forms (not canonical)</div>
     <div class="flow-arrow" style="height:16px;"></div>
     <div class="flow-box" style="font-size:0.85rem; min-width:auto; padding:0.4rem 1rem;">Classify each operation: correct / substitution / omission / insertion</div>
     <div class="flow-arrow" style="height:16px;"></div>
@@ -476,7 +476,7 @@ details > summary::-webkit-details-marker { display: none; }
       <td><strong>correct</strong></td>
       <td><span class="swatch swatch-correct"></span></td>
       <td>Word matches reference</td>
-      <td>diff-match-patch equality</td>
+      <td>NW exact canonical match</td>
       <td>&mdash;</td>
       <td>ref "dog" &rarr; said "dog"</td>
     </tr>
@@ -484,7 +484,7 @@ details > summary::-webkit-details-marker { display: none; }
       <td><strong>substitution</strong></td>
       <td><span class="swatch swatch-substitution"></span></td>
       <td>Student said a different word</td>
-      <td>diff-match-patch replacement</td>
+      <td>NW diagonal (canonical mismatch)</td>
       <td>Yes</td>
       <td>ref "house" &rarr; said "horse"</td>
     </tr>
@@ -492,7 +492,7 @@ details > summary::-webkit-details-marker { display: none; }
       <td><strong>omission</strong></td>
       <td><span class="swatch swatch-omission"></span></td>
       <td>Student skipped a word</td>
-      <td>diff-match-patch deletion from reference</td>
+      <td>NW gap (ref word with no hyp match)</td>
       <td>Yes</td>
       <td>ref "the big dog" &rarr; said "the dog"</td>
     </tr>
@@ -500,7 +500,7 @@ details > summary::-webkit-details-marker { display: none; }
       <td><strong>insertion</strong></td>
       <td><span class="swatch swatch-insertion"></span></td>
       <td>Student added a word not in reference</td>
-      <td>diff-match-patch insertion</td>
+      <td>NW gap (hyp word with no ref match)</td>
       <td>No</td>
       <td>ref "the dog" &rarr; said "the big dog"</td>
     </tr>

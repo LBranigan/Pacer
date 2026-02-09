@@ -522,7 +522,7 @@ network connection, 25+ modules + 1.6MB data file are fetched fresh every sessio
 instead of being served from cache. On cellular networks this is significant.
 
 **External CDN dependencies** (not cacheable by SW, rely on browser cache):
-- `diff_match_patch.js` (cdnjs)
+- ~~`diff_match_patch.js` (cdnjs)~~ — removed, replaced by NW in alignment.js
 - `ort.wasm.min.js` (jsdelivr) — required by VAD
 - `vad-web/bundle.min.js` (jsdelivr)
 - Google Fonts CSS (student-playback.css)
