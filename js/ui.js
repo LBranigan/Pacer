@@ -1052,6 +1052,23 @@ export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, di
         if (meta._xvalWord) {
           const xvalLabel = meta._xvalEngine ? meta._xvalEngine.charAt(0).toUpperCase() + meta._xvalEngine.slice(1) : 'Cross-validator';
           tipLines.push(`${xvalLabel} heard: "${meta._xvalWord}"`);
+        } else if (rawSttSources?.xvalRaw?.length > 0) {
+          // Fallback: find closest xval word by timestamp overlap
+          let bestOverlap = 0, bestWord = null;
+          for (const xw of rawSttSources.xvalRaw) {
+            const xwStart = parseFloat((xw.startTime || xw.start || '').toString().replace('s', '')) || 0;
+            const xwEnd = parseFloat((xw.endTime || xw.end || '').toString().replace('s', '')) || 0;
+            const overlapStart = Math.max(start, xwStart);
+            const overlapEnd = Math.min(end, xwEnd);
+            const overlap = overlapEnd - overlapStart;
+            if (overlap > bestOverlap) {
+              bestOverlap = overlap;
+              bestWord = xw.word;
+            }
+          }
+          if (bestWord) {
+            tipLines.push(`Cross-validator heard nearby: "${bestWord}"`);
+          }
         }
         if (ins._prevRef) {
           tipLines.push(`Attempted after: "${ins._prevRef}"`);
