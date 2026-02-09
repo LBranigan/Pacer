@@ -17,7 +17,7 @@
  */
 
 // ============================================================================
-// ALIGNMENT-BASED MISCUES (detected via diff-match-patch in alignment.js)
+// ALIGNMENT-BASED MISCUES (detected via Needleman-Wunsch in alignment.js)
 // These compare the reference text against what the student said
 // ============================================================================
 

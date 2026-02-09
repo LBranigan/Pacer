@@ -1,10 +1,24 @@
 /**
- * Word-level alignment engine using diff-match-patch.
- * Diffs STT transcript against reference text to classify each word.
+ * Word-level alignment engine using Needleman-Wunsch with graded substitution costs.
+ * Aligns STT transcript against reference text to classify each word.
+ *
+ * Uses Levenshtein similarity to score substitutions — similar words get lower
+ * penalty than dissimilar ones. This ensures that when two hypothesis words
+ * compete for the same reference slot, the more similar one wins.
+ *
+ * Replaces the previous diff-match-patch binary (match/no-match) approach,
+ * which could assign the wrong hypothesis word to a reference slot when
+ * insertions appeared adjacent to substitutions.
+ *
+ * Scoring (based on texterrors: https://github.com/RuABraun/texterrors):
+ *   Match (exact canonical):  +2.0
+ *   Gap (insertion/omission): -1.0
+ *   Mismatch (graded):        -1.5 × (1 - levenshteinRatio)
  */
 
 import { normalizeText, filterDisfluencies } from './text-normalize.js';
 import { getCanonical } from './word-equivalences.js';
+import { levenshteinRatio } from './nl-api.js';
 
 /**
  * Post-process alignment to detect compound words split by ASR.
@@ -156,13 +170,44 @@ function mergeContractions(alignment) {
   return result;
 }
 
-/* diff-match-patch constants */
-const DIFF_DELETE = -1;
-const DIFF_INSERT = 1;
-const DIFF_EQUAL = 0;
+// --- Needleman-Wunsch scoring parameters ---
+// Based on texterrors (https://github.com/RuABraun/texterrors)
+const MATCH_BONUS = 2;      // Exact canonical match reward
+const GAP_PENALTY = -1;     // Insertion or omission penalty
+const MAX_MISMATCH = -1.5;  // Worst-case mismatch (1.5× multiplier prevents over-favoring subs)
+
+/**
+ * Compute alignment score for pairing refWord with hypWord.
+ *
+ * Exact canonical matches get full MATCH_BONUS (+2).
+ * Non-matches get a graded penalty: -1.5 × (1 - levenshteinRatio).
+ *   - Near-miss ("bark"→"barked", ratio ~0.67): -0.50  (cheap sub)
+ *   - Distant ("the"→"mission", ratio ~0):      -1.50  (expensive sub)
+ *
+ * Substitution is always preferred over ins+del (-1.5 < -2.0),
+ * so no false gap pairs are created. But when two hypothesis words
+ * compete for the same reference slot, the more similar one wins.
+ */
+function scorePair(refWord, hypWord) {
+  const refCanon = getCanonical(refWord).replace(/'/g, '');
+  const hypCanon = getCanonical(hypWord).replace(/'/g, '');
+
+  // Exact canonical match (includes equivalences like "one"/"1")
+  if (refCanon === hypCanon) return MATCH_BONUS;
+
+  // Graded mismatch based on character-level similarity
+  const ratio = levenshteinRatio(refCanon, hypCanon);
+  return MAX_MISMATCH * (1 - ratio);
+}
 
 /**
  * Align reference text against transcript words from STT.
+ *
+ * Uses Needleman-Wunsch global alignment with graded substitution costs.
+ * When two hypothesis words compete for a reference slot, the one with
+ * higher character-level similarity wins — preventing the diff algorithm
+ * from assigning unrelated words (like "the") as substitutions for
+ * content words (like "mission") when the actual attempt is nearby.
  *
  * @param {string} referenceText - The passage the student should read.
  * @param {Array<{word: string}>} transcriptWords - STT word objects (each has .word).
@@ -177,85 +222,76 @@ export function alignWords(referenceText, transcriptWords) {
 
   if (refWords.length === 0 && hypWords.length === 0) return [];
 
-  // Encode words as single Unicode characters for diff-match-patch
-  const wordMap = new Map();
-  let nextChar = 0x100; // start above ASCII
+  const m = refWords.length;
+  const n = hypWords.length;
 
-  function encode(words) {
-    let encoded = '';
-    for (const w of words) {
-      const canon = getCanonical(w);
-      const compareKey = canon.replace(/'/g, '');  // Apostrophe-blind comparison
-      if (!wordMap.has(compareKey)) {
-        wordMap.set(compareKey, String.fromCharCode(nextChar++));
-      }
-      encoded += wordMap.get(compareKey);
-    }
-    return encoded;
+  // Edge cases: one side empty
+  if (m === 0) {
+    return hypWords.map(w => ({ ref: null, hyp: w, type: 'insertion' }));
+  }
+  if (n === 0) {
+    return refWords.map(w => ({ ref: w, hyp: null, type: 'omission' }));
   }
 
-  const refEncoded = encode(refWords);
-  const hypEncoded = encode(hypWords);
+  // --- Needleman-Wunsch dynamic programming ---
 
-  // eslint-disable-next-line no-undef
-  const dmp = new diff_match_patch();
-  const diffs = dmp.diff_main(refEncoded, hypEncoded);
+  // Scoring matrix F[i][j] = best score aligning ref[0..i-1] with hyp[0..j-1]
+  const F = Array(m + 1).fill(null).map(() => Array(n + 1).fill(0));
+  // Pointer matrix for traceback
+  const P = Array(m + 1).fill(null).map(() => Array(n + 1).fill(null));
 
-  // Decode diffs into classified word list using original word forms (not canonical).
-  // Track indices into refWords/hypWords so output preserves what was actually said.
-  const result = [];
-  let refIdx = 0;
-  let hypIdx = 0;
-  let i = 0;
+  // First column: all omissions (ref words with no hypothesis match)
+  for (let i = 1; i <= m; i++) {
+    F[i][0] = F[i - 1][0] + GAP_PENALTY;
+    P[i][0] = 'up';
+  }
 
-  while (i < diffs.length) {
-    const [op, text] = diffs[i];
-    const count = [...text].length;
+  // First row: all insertions (hypothesis words with no reference match)
+  for (let j = 1; j <= n; j++) {
+    F[0][j] = F[0][j - 1] + GAP_PENALTY;
+    P[0][j] = 'left';
+  }
 
-    if (op === DIFF_EQUAL) {
-      for (let j = 0; j < count; j++) {
-        result.push({ ref: refWords[refIdx], hyp: hypWords[hypIdx], type: 'correct' });
-        refIdx++;
-        hypIdx++;
-      }
-      i++;
-    } else if (op === DIFF_DELETE) {
-      // Check if next diff is INSERT (substitution merge)
-      if (i + 1 < diffs.length && diffs[i + 1][0] === DIFF_INSERT) {
-        const insCount = [...diffs[i + 1][1]].length;
-        const pairCount = Math.min(count, insCount);
-        // Pair 1:1 as substitutions
-        for (let j = 0; j < pairCount; j++) {
-          result.push({ ref: refWords[refIdx], hyp: hypWords[hypIdx], type: 'substitution' });
-          refIdx++;
-          hypIdx++;
-        }
-        // Excess deletes become omissions
-        for (let j = pairCount; j < count; j++) {
-          result.push({ ref: refWords[refIdx], hyp: null, type: 'omission' });
-          refIdx++;
-        }
-        // Excess inserts become insertions
-        for (let j = pairCount; j < insCount; j++) {
-          result.push({ ref: null, hyp: hypWords[hypIdx], type: 'insertion' });
-          hypIdx++;
-        }
-        i += 2;
+  // Fill matrix with graded substitution costs
+  for (let i = 1; i <= m; i++) {
+    for (let j = 1; j <= n; j++) {
+      const scoreDiag = F[i - 1][j - 1] + scorePair(refWords[i - 1], hypWords[j - 1]);
+      const scoreUp   = F[i - 1][j]     + GAP_PENALTY;  // Omission
+      const scoreLeft = F[i][j - 1]      + GAP_PENALTY;  // Insertion
+
+      const maxScore = Math.max(scoreDiag, scoreUp, scoreLeft);
+      F[i][j] = maxScore;
+
+      // Prefer diagonal for ties (minimizes gaps)
+      if (maxScore === scoreDiag) {
+        P[i][j] = 'diag';
+      } else if (maxScore === scoreUp) {
+        P[i][j] = 'up';
       } else {
-        // Pure omissions
-        for (let j = 0; j < count; j++) {
-          result.push({ ref: refWords[refIdx], hyp: null, type: 'omission' });
-          refIdx++;
-        }
-        i++;
+        P[i][j] = 'left';
       }
-    } else if (op === DIFF_INSERT) {
-      // Pure insertions (no preceding DELETE)
-      for (let j = 0; j < count; j++) {
-        result.push({ ref: null, hyp: hypWords[hypIdx], type: 'insertion' });
-        hypIdx++;
-      }
-      i++;
+    }
+  }
+
+  // Traceback from bottom-right to top-left
+  const result = [];
+  let i = m;
+  let j = n;
+
+  while (i > 0 || j > 0) {
+    if (i > 0 && j > 0 && P[i][j] === 'diag') {
+      const refCanon = getCanonical(refWords[i - 1]).replace(/'/g, '');
+      const hypCanon = getCanonical(hypWords[j - 1]).replace(/'/g, '');
+      const type = (refCanon === hypCanon) ? 'correct' : 'substitution';
+      result.unshift({ ref: refWords[i - 1], hyp: hypWords[j - 1], type });
+      i--;
+      j--;
+    } else if (i > 0 && (j === 0 || P[i][j] === 'up')) {
+      result.unshift({ ref: refWords[i - 1], hyp: null, type: 'omission' });
+      i--;
+    } else {
+      result.unshift({ ref: null, hyp: hypWords[j - 1], type: 'insertion' });
+      j--;
     }
   }
 
