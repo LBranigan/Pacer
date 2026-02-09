@@ -204,17 +204,17 @@ function isSpecialASTToken(word) {
 function buildEnhancedTooltip(item, sttWord) {
   const lines = [];
 
-  // Show [unknown] for special ASR tokens instead of literal text
+  // Show ? for special ASR tokens instead of literal text
   const isUnknown = sttWord && isSpecialASTToken(sttWord.word);
-  const saidText = isUnknown ? '[unknown]' : item.hyp;
+  const saidText = isUnknown ? '?' : item.hyp;
 
   // Existing type info
   if (item.type === 'substitution') {
     lines.push(`Expected: ${item.ref}, Said: ${saidText}`);
-    if (isUnknown) lines.push('Reverb detected speech but couldn\'t identify a word');
+    if (isUnknown) lines.push('Speech detected but not recognized as a word');
   } else if (item.type === 'struggle') {
     lines.push(`Expected: ${item.ref}, Said: ${saidText}`);
-    if (isUnknown) lines.push('Reverb detected speech but couldn\'t identify a word');
+    if (isUnknown) lines.push('Speech detected but not recognized as a word');
     lines.push('');
     lines.push('Struggle pathways:');
 
@@ -1043,12 +1043,11 @@ export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, di
 
       // Special ASR token (e.g., <unknown> from Reverb CTC decoder)
       if (meta && isSpecialASTToken(meta.word)) {
-        span.textContent = '[unknown]';
-        span.classList.add('word-unknown-token');
+        span.textContent = '?';
         const start = parseFloat(meta.startTime?.replace('s', '')) || 0;
         const end = parseFloat(meta.endTime?.replace('s', '')) || 0;
         const tipLines = [
-          '[unknown] — speech detected but no word recognized',
+          '? — speech detected but not recognized as a word',
           `${start.toFixed(2)}s – ${end.toFixed(2)}s`
         ];
         if (meta._xvalWord) {
@@ -1194,16 +1193,14 @@ export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, di
           const span = document.createElement('span');
           span.className = 'conf-word ' + src.cssClass;
           const isUnkToken = isSpecialASTToken(w.word);
-          span.textContent = isUnkToken ? '[unknown]' : w.word;
-          if (isUnkToken) span.classList.add('word-unknown-token');
+          span.textContent = isUnkToken ? '?' : w.word;
 
           const start = parseSttTime(w.startTime);
           const end = parseSttTime(w.endTime);
           const dur = ((end - start) * 1000).toFixed(0);
-          const displayWord = isUnkToken ? '[unknown]' : w.word;
           span.dataset.tooltip = isUnkToken
-            ? `[unknown] — speech detected, no word recognized\nDuration: ${dur}ms\n${start.toFixed(2)}s – ${end.toFixed(2)}s`
-            : `"${displayWord}"\nDuration: ${dur}ms\n${start.toFixed(2)}s – ${end.toFixed(2)}s`;
+            ? `? — speech detected but not recognized as a word\nDuration: ${dur}ms\n${start.toFixed(2)}s – ${end.toFixed(2)}s`
+            : `"${w.word}"\nDuration: ${dur}ms\n${start.toFixed(2)}s – ${end.toFixed(2)}s`;
 
           // Click-to-play word audio
           if (wordAudioEl && start > 0) {
