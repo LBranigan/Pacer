@@ -1581,11 +1581,29 @@ const backendStatusText = document.getElementById('backendStatusText');
 const backendReloadNotice = document.getElementById('backendReloadNotice');
 
 if (backendUrlInput) {
-  // Pre-fill from localStorage
+  // Check URL parameters first (used by external login redirects)
+  const urlParams = new URLSearchParams(window.location.search);
+  const paramUrl = urlParams.get('backendUrl');
+  const paramToken = urlParams.get('backendToken');
+  if (paramUrl) {
+    localStorage.setItem('orf_backend_url', paramUrl);
+    backendUrlInput.value = paramUrl;
+  }
+  if (paramToken) {
+    localStorage.setItem('orf_backend_token', paramToken);
+    backendTokenInput.value = paramToken;
+  }
+  // Strip credentials from URL bar without reloading
+  if (paramUrl || paramToken) {
+    const cleanUrl = window.location.origin + window.location.pathname;
+    window.history.replaceState({}, '', cleanUrl);
+  }
+
+  // Pre-fill from localStorage (if not already set by URL params)
   const savedUrl = localStorage.getItem('orf_backend_url') || '';
   const savedToken = localStorage.getItem('orf_backend_token') || '';
-  if (savedUrl) backendUrlInput.value = savedUrl;
-  if (savedToken) backendTokenInput.value = savedToken;
+  if (!backendUrlInput.value && savedUrl) backendUrlInput.value = savedUrl;
+  if (!backendTokenInput.value && savedToken) backendTokenInput.value = savedToken;
 
   // Track whether values have changed since page load
   const initialUrl = savedUrl;
