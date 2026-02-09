@@ -14,12 +14,11 @@
  *   unavailable — cross-validator service was offline
  *
  * Near-match resolution (edit distance ≤ 1):
- *   When engines disagree by a single character (e.g., Reverb "you" vs Deepgram "your"),
- *   this is phonetic parsing noise — not a student error. In connected speech, trailing
- *   sounds like 'r', 's', or 't' are often reduced and parsed differently by each engine.
- *   For these near-matches, we use the cross-validator's word text (1 char away from Reverb's,
- *   negligible difference) since the cross-validator generally has slightly higher word-level accuracy.
- *   This is NOT reference-biased — we don't look at the reference text at all.
+ *   Long words (≥ 5 chars): A single-character difference is phonetic parsing noise or BPE
+ *   spelling variation (e.g., "jumped"/"jumpt"). Confirmed; cross-validator word used.
+ *   Short words (2-4 chars): A single character IS the phonemic difference — "cat"/"bat" is
+ *   a real consonant substitution, "went"/"want" a real vowel error. Marked as disagreed
+ *   so downstream scoring counts these as potential errors. Reverb's word kept.
  *
  * Requirements covered:
  * - XVAL-01: Cross-validator called for cross-validation
@@ -191,15 +190,24 @@ export function crossValidateTranscripts(reverbWords, xvalWords) {
         const maxLen = Math.max(normA.length, normB.length);
         const editDist = maxLen > 0 ? Math.round((1 - similarity) * maxLen) : 0;
 
-        if (editDist <= 1 && maxLen >= 2) {
-          // Tier 2 — Near-match (edit distance ≤ 1, e.g., "you"/"your", "cat"/"cats").
-          // A single-character difference between two ASR engines is phonetic parsing
-          // noise, not a meaningful disagreement. In connected speech, trailing sounds
-          // like 'r', 's', 't' are often reduced and each engine parses the boundary
-          // differently. We confirm the match and use the cross-validator's word text
-          // since it's only 1 char different and generally has higher word-level accuracy.
-          // This is NOT reference-biased — we don't look at the reference at all.
+        if (editDist <= 1 && maxLen >= 5) {
+          // Tier 2a — Long near-match (edit distance ≤ 1, length ≥ 5).
+          // e.g., "jumped"/"jumpt", "house"/"houses". A single-character difference
+          // on a longer word is phonetic parsing noise or BPE spelling variation,
+          // not a meaningful disagreement. Confirm and use cross-validator's word.
           status = 'confirmed';
+          nearMatch = {
+            reverbWord: reverbWord.word,
+            xvalWord: xvWord.word,
+            editDistance: editDist,
+            similarity: Math.round(similarity * 1000) / 1000
+          };
+        } else if (editDist <= 1 && maxLen >= 2) {
+          // Tier 2b — Short near-match (edit distance ≤ 1, length 2-4).
+          // e.g., "cat"/"bat", "went"/"want". For short words, a single character
+          // IS the phonemic difference — a real consonant or vowel substitution.
+          // Mark as disagreed so downstream scoring counts these as potential errors.
+          status = 'disagreed';
           nearMatch = {
             reverbWord: reverbWord.word,
             xvalWord: xvWord.word,
@@ -228,9 +236,10 @@ export function crossValidateTranscripts(reverbWords, xvalWords) {
       xvalDurMs: Math.round((_parseTs(xvWord.endTime) - _parseTs(xvWord.startTime)) * 1000),
     });
 
-    // For near-matches, use cross-validator's word text (normalized to match Reverb format).
-    // For all other cases, keep Reverb's word text via ...reverbWord spread.
-    const wordOverride = nearMatch ? { word: _normalizeWord(xvWord.word) } : {};
+    // For confirmed near-matches (Tier 2a, long words), use cross-validator's word text.
+    // For disagreed near-matches (Tier 2b, short words), keep Reverb's word — the
+    // single-character difference may be a real phonemic error.
+    const wordOverride = (nearMatch && status === 'confirmed') ? { word: _normalizeWord(xvWord.word) } : {};
 
     result.push({
       ...reverbWord,

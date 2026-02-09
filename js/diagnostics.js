@@ -235,6 +235,37 @@ export function absorbStruggleFragments(alignment, transcriptWords, xvalRawWords
   const absorbed = [];
   const clean = (text) => (text || '').toLowerCase().replace(/[^a-z']/g, '');
 
+  // ── Timestamp offset logging ──
+  // Measure actual Reverb-Parakeet offset from confirmed words to evaluate
+  // whether the fixed 150ms tolerance is adequate. Data-gathering only.
+  const offsets = [];
+  for (const w of transcriptWords) {
+    if (w.crossValidation !== 'confirmed') continue;
+    const reverbStart = parseTime(w._reverbStartTime);
+    const xvalStart = parseTime(w._xvalStartTime);
+    if (reverbStart > 0 && xvalStart > 0) {
+      offsets.push(Math.abs(reverbStart - xvalStart));
+    }
+  }
+  if (offsets.length >= 4) {
+    offsets.sort((a, b) => a - b);
+    const Q1 = offsets[Math.floor(offsets.length * 0.25)];
+    const Q3 = offsets[Math.floor(offsets.length * 0.75)];
+    const IQR = Q3 - Q1;
+    const tukeyFence = Q3 + 1.5 * Math.max(IQR, 0.030);
+    const median = offsets[Math.floor(offsets.length / 2)];
+    const max = offsets[offsets.length - 1];
+    const pct95 = offsets[Math.floor(offsets.length * 0.95)];
+    const wouldExceed150ms = offsets.filter(o => o > 0.15).length;
+    console.log(`[fragment-absorption] Reverb-Parakeet offset distribution (${offsets.length} confirmed words):`,
+      { medianMs: +(median * 1000).toFixed(0), Q1ms: +(Q1 * 1000).toFixed(0), Q3ms: +(Q3 * 1000).toFixed(0),
+        IQRms: +(IQR * 1000).toFixed(0), tukeyFenceMs: +(tukeyFence * 1000).toFixed(0),
+        p95ms: +(pct95 * 1000).toFixed(0), maxMs: +(max * 1000).toFixed(0),
+        wouldExceed150ms, currentTolerance: '150ms' });
+  } else {
+    console.log(`[fragment-absorption] Insufficient confirmed words for offset analysis (${offsets.length})`);
+  }
+
   // Step 1: For each struggle/substitution, find its matching Parakeet word
   // by temporal proximity + ref word text match
   const strugglePairings = []; // { alignIdx, refWord, parakeet: {startS, endS, word}, hypIndex }
