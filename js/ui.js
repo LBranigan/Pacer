@@ -89,19 +89,6 @@ function highlightSpanRange(wordsDiv, prevSpan, nextSpan, highlightClass) {
   return { firstSpan: allSpans[startIdx], lastSpan: allSpans[endIdx] };
 }
 
-function scrollToHighlightIfNeeded(firstSpan, lastSpan) {
-  const first = firstSpan || lastSpan;
-  const last = lastSpan || firstSpan;
-  const firstRect = first.getBoundingClientRect();
-  const lastRect = last.getBoundingClientRect();
-  const firstVisible = firstRect.top >= 0 && firstRect.bottom <= window.innerHeight;
-  const lastVisible = lastRect.top >= 0 && lastRect.bottom <= window.innerHeight;
-  if (!firstVisible || !lastVisible) {
-    const target = !firstVisible ? first : last;
-    target.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-  }
-}
-
 function applyHighlightOverlay(span, highlightClass) {
   const start = parseFloat(span.dataset.startTime) || 0;
   const end = parseFloat(span.dataset.endTime) || 0;
@@ -110,8 +97,7 @@ function applyHighlightOverlay(span, highlightClass) {
     if (!wordsDiv) return;
     const { prevSpan, nextSpan } = findBracketingSpans(wordsDiv, start, end);
     if (prevSpan || nextSpan) {
-      const { firstSpan, lastSpan } = highlightSpanRange(wordsDiv, prevSpan, nextSpan, highlightClass);
-      scrollToHighlightIfNeeded(firstSpan, lastSpan);
+      highlightSpanRange(wordsDiv, prevSpan, nextSpan, highlightClass);
     }
   }
 }
@@ -1879,34 +1865,46 @@ function renderDisfluencySection(disfluencyStats, transcriptWords, alignment, au
     const row = document.createElement('div');
     row.className = 'disfluency-word-row';
 
-    // Play button — scrolls to word in STT Transcript and triggers click-to-play
+    // ── Top line: play + word + badge + note ──
+    const topLine = document.createElement('div');
+    topLine.className = 'disfluency-word-top';
+
+    // Play button — plays audio clip: 2s before to 2s after disfluency
     const playBtn = document.createElement('button');
     playBtn.className = 'disfluency-play-btn';
     playBtn.textContent = '\u25B6';
-    playBtn.title = 'Listen in STT Transcript';
-    const tIdx = d.transcriptIndex;
-    playBtn.addEventListener('click', () => {
-      const sttSection = document.getElementById('sttTranscriptSection');
-      if (sttSection && !sttSection.classList.contains('expanded')) {
-        sttSection.classList.add('expanded');
-      }
-      // Select only the transcript word spans (exclude unconsumed xval words)
-      const wordSpans = document.querySelectorAll(
-        '#sttTranscriptWords .stt-disagreement-row .disagree-word:not(.disagree-unconsumed)'
-      );
-      const targetSpan = wordSpans[tIdx];
-      if (targetSpan) {
-        targetSpan.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        setTimeout(() => targetSpan.click(), 350);
-      }
-    });
-    row.appendChild(playBtn);
+    playBtn.title = 'Play audio with context';
+    if (audioEl && d.startTime > 0) {
+      const clipStart = Math.max(0, d.startTime - 2);
+      const clipEnd = d.endTime + 2;
+      playBtn.addEventListener('click', () => {
+        audioEl.pause();
+        if (audioEl._disfluencyOnTime) {
+          audioEl.removeEventListener('timeupdate', audioEl._disfluencyOnTime);
+        }
+        audioEl.currentTime = clipStart;
+        const onTime = () => {
+          if (audioEl.currentTime >= clipEnd) {
+            audioEl.pause();
+            audioEl.removeEventListener('timeupdate', onTime);
+            audioEl._disfluencyOnTime = null;
+          }
+        };
+        audioEl._disfluencyOnTime = onTime;
+        audioEl.addEventListener('timeupdate', onTime);
+        audioEl.play().catch(() => {});
+      });
+    } else {
+      playBtn.disabled = true;
+      playBtn.style.opacity = '0.3';
+    }
+    topLine.appendChild(playBtn);
 
-    // Word itself
+    // Word
     const wordSpan = document.createElement('span');
     wordSpan.className = 'disfluency-word-text';
     wordSpan.textContent = `"${d.word}"`;
-    row.appendChild(wordSpan);
+    topLine.appendChild(wordSpan);
 
     // Classification badge
     const badge = document.createElement('span');
@@ -1919,37 +1917,13 @@ function renderDisfluencySection(disfluencyStats, transcriptWords, alignment, au
       badge.textContent = label;
       badge.classList.add(`disfluency-badge-${d.type}`);
     }
-    row.appendChild(badge);
+    topLine.appendChild(badge);
 
-    // Context snippet: ...prev WORD next...
-    const ctx = document.createElement('span');
-    ctx.className = 'disfluency-word-context';
-    const prevText = d.prevWord ? d.prevWord + ' ' : '';
-    const nextText = d.nextWord ? ' ' + d.nextWord : '';
-    ctx.innerHTML = '';
-    if (prevText) {
-      const prevEl = document.createElement('span');
-      prevEl.className = 'disfluency-ctx-dim';
-      prevEl.textContent = prevText;
-      ctx.appendChild(prevEl);
-    }
-    const highlightEl = document.createElement('span');
-    highlightEl.className = 'disfluency-ctx-highlight';
-    highlightEl.textContent = d.word;
-    ctx.appendChild(highlightEl);
-    if (nextText) {
-      const nextEl = document.createElement('span');
-      nextEl.className = 'disfluency-ctx-dim';
-      nextEl.textContent = nextText;
-      ctx.appendChild(nextEl);
-    }
-    row.appendChild(ctx);
-
-    // Enrichment note from ref alignment
+    // Enrichment note
     const note = document.createElement('span');
     note.className = 'disfluency-word-note';
     if (d.selfCorrection) {
-      note.textContent = '';  // badge already says it
+      note.textContent = '';
     } else if (d.refTarget) {
       note.textContent = `target: "${d.refTarget}"`;
     } else if (d.nearSubstitution) {
@@ -1960,9 +1934,51 @@ function renderDisfluencySection(disfluencyStats, transcriptWords, alignment, au
       note.textContent = 'models disagree';
     }
     if (note.textContent) {
-      row.appendChild(note);
+      topLine.appendChild(note);
+    }
+    row.appendChild(topLine);
+
+    // ── Context line: ...grey words  RED WORD  grey words... ──
+    const ctx = document.createElement('div');
+    ctx.className = 'disfluency-word-context';
+
+    // Leading ellipsis if not at start of transcript
+    if (d.prevWords.length > 0 && d.transcriptIndex > d.prevWords.length) {
+      const dots = document.createElement('span');
+      dots.className = 'disfluency-ctx-dim';
+      dots.textContent = '... ';
+      ctx.appendChild(dots);
     }
 
+    for (const pw of d.prevWords) {
+      const el = document.createElement('span');
+      el.className = 'disfluency-ctx-dim';
+      el.textContent = pw + ' ';
+      ctx.appendChild(el);
+    }
+
+    const hl = document.createElement('span');
+    hl.className = 'disfluency-ctx-highlight';
+    hl.textContent = d.word;
+    ctx.appendChild(hl);
+
+    for (const nw of d.nextWords) {
+      const el = document.createElement('span');
+      el.className = 'disfluency-ctx-dim';
+      el.textContent = ' ' + nw;
+      ctx.appendChild(el);
+    }
+
+    // Trailing ellipsis if not at end of transcript
+    if (d.nextWords.length > 0 &&
+        d.transcriptIndex + d.nextWords.length < transcriptWords.length - 1) {
+      const dots = document.createElement('span');
+      dots.className = 'disfluency-ctx-dim';
+      dots.textContent = ' ...';
+      ctx.appendChild(dots);
+    }
+
+    row.appendChild(ctx);
     detailsEl.appendChild(row);
   }
 
