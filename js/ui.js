@@ -844,6 +844,8 @@ export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, di
       const queue = sttLookup.get(hypKey);
       if (queue && queue.length > 0) {
         sttWord = queue.shift();
+      } else {
+        console.warn(`[sttLookup MISS] ref="${item.ref}" hyp="${hypKey}" type=${item.type} — key ${queue ? 'exhausted (queue empty)' : 'not found in map'}`);
       }
     }
 
