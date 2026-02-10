@@ -212,6 +212,14 @@ function buildEnhancedTooltip(item, sttWord) {
   if (item.type === 'substitution') {
     lines.push(`Expected: ${item.ref}, Said: ${saidText}`);
     if (isUnknown) lines.push('Speech detected but not recognized as a word');
+    if (isUnknown && sttWord?._xvalWord) {
+      const xvalLabel = sttWord._xvalEngine
+        ? sttWord._xvalEngine.charAt(0).toUpperCase() + sttWord._xvalEngine.slice(1)
+        : 'Cross-val';
+      lines.push(`${xvalLabel} heard: "${sttWord._xvalWord}"`);
+      lines.push('Reverb could not decode this word (CTC failure)');
+      lines.push(`Only ${xvalLabel} provides evidence — single source, verify`);
+    }
   } else if (item.type === 'struggle') {
     lines.push(`Expected: ${item.ref}, Said: ${saidText}`);
     if (isUnknown) lines.push('Speech detected but not recognized as a word');
@@ -993,8 +1001,9 @@ export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, di
       span.textContent += punct;
     }
 
-    // Recovery warning badge (!) — Parakeet-only omission recovery (weakest evidence)
-    if (item._recovered || sttWord?._recovered) {
+    // Recovery warning badge (!) — weak-evidence words (Parakeet-only recovery or Reverb CTC failure)
+    const isReverbGarbage = sttWord && isSpecialASTToken(sttWord.word) && sttWord._xvalWord;
+    if (item._recovered || sttWord?._recovered || isReverbGarbage) {
       span.classList.add('word-recovered-badge');
     }
 

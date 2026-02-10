@@ -219,6 +219,7 @@ const DIAGNOSTIC_MISCUES = {
     countsAsError: true, // Counted as substitution
     config: {
       min_shared_affix: 3,               // Must share 3+ char prefix OR suffix
+      min_diff_chars: 2,                 // Must differ by 2+ chars (skips "formats"/"format")
       // No cross-validation gate: morphological is about the error pattern,
       // not ASR reliability. A confirmed "runned" for "running" is still morphological.
       // Uses positional lookup (transcriptWords[hypIndex]) for metadata.
@@ -280,6 +281,20 @@ const DIAGNOSTIC_MISCUES = {
       guards: ['Insertion must NOT be "confirmed" by cross-validator', 'Parakeet word must match the struggle\'s ref word (exact or near-miss)', 'Propagates xval timestamps to the struggle sttWord for tooltip display']
     },
     note: 'The struggle alignment type is always "substitution+". It only exists when the student failed to produce the word. A word can match multiple pathways simultaneously. Correct words with hesitation do not become struggle — they remain correct with onset delay information (DIAG-05).'
+  },
+
+  reverbCtcFailure: {
+    description: 'Reverb produced a CTC special token (<unknown>, <unk>, <blank>) — speech was detected but could not be decoded into a word. Cross-validator heard a real word. Substitution is preserved; (!) badge flags single-source evidence.',
+    detector: 'js/ui.js:997 (badge condition), js/ui.js:214 (tooltip)',
+    countsAsError: true, // substitution scoring unchanged
+    config: {},          // no thresholds — purely display
+    example: {
+      reference: 'publication',
+      spoken: 'Reverb → <unknown>, Parakeet → "publication"',
+      result: 'Substitution with (!) badge. Teacher sees orange word with warning: only Parakeet provides evidence.'
+    },
+    uiClass: 'word-recovered-badge',
+    note: 'Reverb CTC failure means the acoustic signal was too garbled for CTC decoding. The cross-validator (Parakeet/Deepgram) may have heard a word, but it is single-source evidence. The (!) badge warns the teacher to verify by listening.'
   }
 };
 
@@ -471,6 +486,7 @@ export function getDetectorLocation(type) {
  * - struggle: Substitution+ with decoding difficulty evidence (hesitation / near-miss fragments / abandoned attempt)
  * - longPause: Stuck for 3+ seconds
  * - morphological: Wrong word ending
+ * - reverbCtcFailure: Reverb CTC failure (<unknown>) — substitution with (!) weak-evidence badge
  *
  * NOT ERRORS (diagnostic only):
  * - insertion: Extra word (per ORF standards)
