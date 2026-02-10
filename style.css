@@ -538,86 +538,67 @@ body.dev-mode .dev-mode-toggle {
   color: #333;
 }
 
-/* Word-level disfluency rows */
+/* Word-level disfluency rows — single-line: play | badge | context | note */
 .disfluency-word-row {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
-  padding: 0.35rem 0;
-  border-bottom: 1px solid #eee;
-  flex-wrap: wrap;
+  gap: 0.4rem;
+  padding: 0.35rem 0.5rem;
+  border-bottom: 1px solid #f0f0f0;
 }
 .disfluency-word-row:last-child {
   border-bottom: none;
 }
+.disfluency-word-row.playing {
+  background: #f5f5f5;
+}
 
 .disfluency-play-btn {
   background: none;
-  border: 1px solid #ccc;
-  border-radius: 50%;
-  width: 24px;
-  height: 24px;
+  border: none;
   font-size: 0.6rem;
-  color: #666;
+  color: #bbb;
   cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
   flex-shrink: 0;
-  padding: 0;
+  padding: 2px;
   line-height: 1;
 }
 .disfluency-play-btn:hover {
-  background: #e3f2fd;
-  border-color: #90caf9;
   color: #1976d2;
 }
 
-.disfluency-word-text {
-  font-weight: 600;
-  color: #333;
-  white-space: nowrap;
-}
-
-.disfluency-word-badge {
-  font-size: 0.7rem;
-  padding: 1px 6px;
-  border-radius: 3px;
-  white-space: nowrap;
-  font-weight: 500;
-}
-.disfluency-badge-filler { background: #e8f5e9; color: #2e7d32; }
-.disfluency-badge-repetition { background: #fff3e0; color: #e65100; }
-.disfluency-badge-false_start { background: #fce4ec; color: #c62828; }
-.disfluency-badge-unknown { background: #f3e5f5; color: #6a1b9a; }
-.disfluency-badge-selfcorrection { background: #e3f2fd; color: #1565c0; }
-
 .disfluency-word-context {
-  font-size: 0.8rem;
-  color: #888;
-  font-style: italic;
+  font-size: 0.85rem;
+  color: #999;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  min-width: 0;
+  flex: 1;
 }
-.disfluency-ctx-dim { color: #aaa; }
 .disfluency-ctx-highlight {
-  color: #d32f2f;
+  color: #c62828;
   font-weight: 600;
-  font-style: normal;
 }
 
-.disfluency-word-note {
-  font-size: 0.75rem;
-  color: #999;
-  margin-left: auto;
+.disfluency-word-meta {
+  font-size: 0.72rem;
+  color: #aaa;
   white-space: nowrap;
+  flex-shrink: 0;
 }
+.disfluency-meta-type { font-weight: 500; }
+.disfluency-meta-filler { color: #2e7d32; }
+.disfluency-meta-repetition { color: #e65100; }
+.disfluency-meta-false_start { color: #c62828; }
+.disfluency-meta-unknown { color: #6a1b9a; }
+.disfluency-meta-selfcorrection { color: #1565c0; }
 
 .disfluency-rate-line {
-  margin-top: 0.5rem;
-  color: #888;
-  font-size: 0.8rem;
+  margin-top: 0.4rem;
+  padding: 0 0.5rem;
+  color: #aaa;
+  font-size: 0.75rem;
 }
 
 /* Collapsible prosody section — matches stt-transcript/disfluency pattern */
