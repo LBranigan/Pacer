@@ -683,9 +683,12 @@ async function runAnalysis() {
   }
 
   // Build lookup: normalized hyp word -> queue of STT metadata
+  // Key by raw normalized word (NOT canonical) — alignment output uses raw
+  // normalizeText() forms, not getCanonical(). Using canonical here caused
+  // misses: "volume"→"vol", "and"→"&", etc.
   const sttLookup = new Map();
   for (const w of transcriptWords) {
-    const norm = getCanonical(w.word.toLowerCase().replace(/^[^\w'-]+|[^\w'-]+$/g, ''));
+    const norm = w.word.toLowerCase().replace(/^[^\w'-]+|[^\w'-]+$/g, '').replace(/\./g, '');
     if (!sttLookup.has(norm)) sttLookup.set(norm, []);
     sttLookup.get(norm).push(w);
   }
@@ -720,13 +723,13 @@ async function runAnalysis() {
 
   // Create synthetic sttLookup entries for compound words
   // Compound merger creates items like { hyp: "everyone", parts: ["every", "one"] }
-  // but sttLookup only has entries for canonical("every") and canonical("one")="1".
+  // but sttLookup only has entries for "every" and "one" (not "everyone").
   // Without this fix, tooltip for compound words shows no STT metadata.
   for (const item of alignment) {
     if (item.compound && item.parts) {
       const partWords = [];
       for (const part of item.parts) {
-        const partKey = getCanonical(part.toLowerCase().replace(/^[^\w'-]+|[^\w'-]+$/g, ''));
+        const partKey = part.toLowerCase().replace(/^[^\w'-]+|[^\w'-]+$/g, '').replace(/\./g, '');
         const queue = sttLookup.get(partKey);
         if (queue && queue.length > 0) {
           partWords.push(queue.shift());
@@ -809,7 +812,7 @@ async function runAnalysis() {
       entry._recovered = true;
 
       // Add to sttLookup so tooltip works
-      const lookupKey = getCanonical(xvWord.word.toLowerCase().replace(/^[^\w'-]+|[^\w'-]+$/g, ''));
+      const lookupKey = xvWord.word.toLowerCase().replace(/^[^\w'-]+|[^\w'-]+$/g, '').replace(/\./g, '');
       if (!sttLookup.has(lookupKey)) sttLookup.set(lookupKey, []);
       sttLookup.get(lookupKey).push(recoveredWord);
 
