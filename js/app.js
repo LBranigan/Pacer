@@ -1820,14 +1820,14 @@ if (backendUrlInput) {
   if (!backendUrlInput.value && savedUrl) backendUrlInput.value = savedUrl;
   if (!backendTokenInput.value && savedToken) backendTokenInput.value = savedToken;
 
-  // Auto-fetch backend config from GitHub Pages if no settings exist yet
-  if (!backendUrlInput.value) {
+  // Auto-fetch backend config from GitHub Pages — always check for tunnel URL updates
+  if (!['localhost', '127.0.0.1'].includes(location.hostname)) {
     fetch('backend-config.json?t=' + Date.now()).then(r => r.json()).then(cfg => {
-      if (cfg.backendUrl && !backendUrlInput.value) {
+      if (cfg.backendUrl) {
         backendUrlInput.value = cfg.backendUrl;
         localStorage.setItem('orf_backend_url', cfg.backendUrl);
       }
-      if (cfg.backendToken && !backendTokenInput.value) {
+      if (cfg.backendToken) {
         backendTokenInput.value = cfg.backendToken;
         localStorage.setItem('orf_backend_token', cfg.backendToken);
       }

@@ -29,16 +29,16 @@ export let BACKEND_TOKEN = getDefaultBackendToken();
  * Fetch backend config from backend-config.json if no settings exist.
  * Returns a promise that resolves when config is ready.
  */
-export const backendReady = (BACKEND_URL)
+export const backendReady = (['localhost', '127.0.0.1'].includes(location.hostname))
   ? Promise.resolve()
   : fetch('backend-config.json?t=' + Date.now())
       .then(r => r.json())
       .then(cfg => {
-        if (cfg.backendUrl && !BACKEND_URL) {
+        if (cfg.backendUrl) {
           BACKEND_URL = cfg.backendUrl;
           localStorage.setItem('orf_backend_url', cfg.backendUrl);
         }
-        if (cfg.backendToken && !BACKEND_TOKEN) {
+        if (cfg.backendToken) {
           BACKEND_TOKEN = cfg.backendToken;
           localStorage.setItem('orf_backend_token', cfg.backendToken);
         }
