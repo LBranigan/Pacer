@@ -682,13 +682,34 @@ async function runAnalysis() {
     });
   }
 
+  // Flag CTC artifact <unknown> tokens: short (≤200ms) and overlapping a confirmed word.
+  // Data is preserved in transcriptWords for research; flag used by UI to hide from teachers.
+  for (let i = 0; i < transcriptWords.length; i++) {
+    const w = transcriptWords[i];
+    if (!(typeof w.word === 'string' && w.word.startsWith('<') && w.word.endsWith('>'))) continue;
+    const wStart = parseT(w.startTime);
+    const wEnd = parseT(w.endTime);
+    if (wEnd - wStart > 0.12) continue; // single BPE token = 100ms; allow slight float margin
+    for (let j = 0; j < transcriptWords.length; j++) {
+      if (j === i) continue;
+      const o = transcriptWords[j];
+      if (o.crossValidation !== 'confirmed') continue;
+      const oStart = parseT(o.startTime);
+      const oEnd = parseT(o.endTime);
+      if (wStart < oEnd + 0.2 && oStart < wEnd + 0.2) {
+        w._ctcArtifact = true;
+        break;
+      }
+    }
+  }
+
   // Build lookup: normalized hyp word -> queue of STT metadata
   // Key by raw normalized word (NOT canonical) — alignment output uses raw
   // normalizeText() forms, not getCanonical(). Using canonical here caused
   // misses: "volume"→"vol", "and"→"&", etc.
   const sttLookup = new Map();
   for (const w of transcriptWords) {
-    const norm = w.word.toLowerCase().replace(/^[^\w'-]+|[^\w'-]+$/g, '').replace(/\./g, '');
+    const norm = w.word.toLowerCase().replace(/^[^\w'-]+|[^\w'-]+$/g, '').replace(/\./g, '').replace(/-+$/, '');
     if (!sttLookup.has(norm)) sttLookup.set(norm, []);
     sttLookup.get(norm).push(w);
   }
@@ -1129,6 +1150,13 @@ async function runAnalysis() {
             entry.nl.tierOverridden = entry.nl.tier;
             entry.nl.tier = 'academic';
           }
+        }
+        // Also override if the word appears lowercase elsewhere in reference text
+        // (e.g., "Visuals" at sentence start when "visuals" also appears lowercase)
+        if (entry.nl && entry.nl.isProperNoun && refLowercaseSet.has(entry.ref.toLowerCase())) {
+          entry.nl.isProperNoun = false;
+          entry.nl.tierOverridden = entry.nl.tier;
+          entry.nl.tier = 'academic';
         }
       }
       ri++;

@@ -1116,11 +1116,14 @@ export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, di
     if (ins.partOfForgiven) return false;
     if (ins._isSelfCorrection) return false;
     if (ins._partOfStruggle) return false;
-    // Check if the corresponding STT word is a disfluency
+    // Check if the corresponding STT word is a disfluency or CTC artifact
     if (ins.hyp && sttLookup) {
       const queue = sttLookup.get(ins.hyp);
       // Peek at first item without consuming it
-      if (queue && queue.length > 0 && queue[0]?.isDisfluency) return false;
+      if (queue && queue.length > 0) {
+        if (queue[0]?.isDisfluency) return false;
+        if (queue[0]?._ctcArtifact) return false;
+      }
     }
     return true;
   });

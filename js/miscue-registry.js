@@ -294,7 +294,7 @@ const DIAGNOSTIC_MISCUES = {
       result: 'Substitution with (!) badge. Teacher sees orange word with warning: only Parakeet provides evidence.'
     },
     uiClass: 'word-recovered-badge',
-    note: 'Reverb CTC failure means the acoustic signal was too garbled for CTC decoding. The cross-validator (Parakeet/Deepgram) may have heard a word, but it is single-source evidence. The (!) badge warns the teacher to verify by listening.'
+    note: 'Reverb CTC failure means the acoustic signal was too garbled for CTC decoding. The cross-validator (Parakeet/Deepgram) may have heard a word, but it is single-source evidence. The (!) badge warns the teacher to verify by listening. Single-BPE-token (≤120ms) <unknown> tokens that overlap a confirmed word are flagged as _ctcArtifact and hidden from the teacher-facing "Inserted words" section (but preserved in data and STT Transcript). See ctcArtifactFilter below.'
   }
 };
 
@@ -304,6 +304,27 @@ const DIAGNOSTIC_MISCUES = {
 // ============================================================================
 
 const PRE_ALIGNMENT_FIXES = {
+  ctcArtifactFilter: {
+    description: 'Flags single-BPE-token <unknown> tokens as CTC artifacts when they temporally overlap a confirmed word. These are onset/offset decoding failures — Reverb CTC could not classify the first frame of a word the student actually said. Flagged tokens (_ctcArtifact: true) are hidden from the teacher-facing "Inserted words" section but preserved in transcriptWords, debug JSON, and STT Transcript view.',
+    detector: 'app.js → CTC artifact flag block (before sttLookup build); ui.js → regularInsertions filter',
+    countsAsError: false, // hidden from teacher view, does not affect scoring
+    config: {
+      maxDurationMs: 120,       // single BPE token = 100ms (wenet g_time_stamp_gap_ms); 120ms for float margin
+      overlapToleranceMs: 200   // ±200ms tolerance for timestamp overlap with confirmed word
+    },
+    example: {
+      reference: 'Visuals',
+      spoken: 'Reverb → <unknown> (1.75s–1.85s, 100ms) then "visuals" (2.07s), Parakeet → "Visuals" (1.76s–2.64s)',
+      result: '<unknown> flagged _ctcArtifact: true. Hidden from "Inserted words" section. Still visible in STT Transcript and debug JSON.'
+    },
+    guards: [
+      'Must be a special ASR token (word starts with < and ends with >)',
+      'Duration must be ≤120ms (single BPE token)',
+      'Must temporally overlap (±200ms) with at least one confirmed transcriptWord'
+    ],
+    note: 'A single-BPE-token <unknown> overlapping a confirmed word is almost certainly the CTC decoder failing to decode the onset of that word. However, it could theoretically be an imperceptible micro-stutter. Data is preserved (not deleted) so future analysis can revisit this decision.'
+  },
+
   preAlignmentFragmentMerge: {
     description: 'Merges adjacent Reverb BPE fragments into a single token before NW alignment when they share the same cross-validator time window. Prevents orphan insertions and false substitutions caused by BPE fragmentation.',
     detector: 'app.js → pre-alignment fragment merge block (after hyphen split, before sttLookup)',
