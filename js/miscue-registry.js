@@ -325,7 +325,7 @@ const ABBREVIATION_RULES = {
     countsAsError: false,
     config: {
       mechanism: 'Parakeet ITN reassembles spoken letters back to written form (e.g., "eye ee" → "i.e.")',
-      guard: 'Substitution hyp must be a fragment of the ref word or ≤2 chars'
+      guard: 'Ref must be ≤5 chars (abbreviation-shaped) AND hyp must be ≤2 chars (single letter fragment)'
     },
     example: {
       reference: 'i.e.',

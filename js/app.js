@@ -767,17 +767,17 @@ async function runAnalysis() {
     for (const entry of alignment) {
       if (entry.type !== 'substitution' || !entry.ref) continue;
       const refNorm = entry.ref.toLowerCase();
+      const hypNorm = (entry.hyp || '').toLowerCase();
+      // Only apply to abbreviation-shaped words: ref is short (≤5 chars like
+      // "ie", "eg", "am", "usa") AND hyp is a single letter/fragment (≤2 chars).
+      // This prevents false matches like "formats"/"format" where ref.includes(hyp)
+      // is true but it's a morphological error, not an abbreviation.
+      if (refNorm.length > 5 || hypNorm.length > 2) continue;
       // Check if the cross-validator confirmed this exact word form
       if (xvalConfirmedSet.has(refNorm)) {
-        // Additional guard: the substitution's hyp should be a fragment/letter
-        // of the abbreviation (e.g., hyp="e" for ref="ie") — not a completely
-        // unrelated word that happens to share a cross-validator match
-        const hypNorm = (entry.hyp || '').toLowerCase();
-        if (refNorm.includes(hypNorm) || hypNorm.length <= 2) {
-          entry.type = 'correct';
-          entry._xvalAbbrConfirmed = true;
-          abbrConfirmed.push({ ref: entry.ref, hyp: entry.hyp });
-        }
+        entry.type = 'correct';
+        entry._xvalAbbrConfirmed = true;
+        abbrConfirmed.push({ ref: entry.ref, hyp: entry.hyp });
       }
     }
 
