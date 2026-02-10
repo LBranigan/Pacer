@@ -1,18 +1,22 @@
 // debug-logger.js — Debug logging for ORF assessment
 // Saves debug info to downloadable JSON files
 
-const DEBUG_VERSION = 'v33-2026-02-03';
+function getVersionFromUI() {
+  const el = typeof document !== 'undefined' && document.getElementById('version');
+  return el ? el.textContent.trim() : 'unknown';
+}
 let debugLog = null;
 
 /**
  * Initialize a new debug log for an assessment
  */
 export function initDebugLog() {
+  const version = getVersionFromUI();
   debugLog = {
-    version: DEBUG_VERSION,
+    version,
     timestamp: new Date().toISOString(),
     codeVersionCheck: {
-      expectedVersion: DEBUG_VERSION,
+      expectedVersion: version,
       metricsHasForgiven: typeof window !== 'undefined'
     },
     stages: [],

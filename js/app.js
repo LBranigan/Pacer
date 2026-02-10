@@ -481,6 +481,91 @@ async function runAnalysis() {
     transcriptWords.push(...expanded);
   }
 
+  // ── Pre-alignment fragment merge ─────────────────────────────────
+  // Reverb BPE sometimes splits a single spoken word into fragments
+  // (e.g., "ideation" → "i" + "d"). Detect adjacent unconfirmed/disagreed
+  // Reverb words whose timestamps fall within the same cross-validator
+  // word's time window, and merge them into a single token before NW
+  // alignment sees them. This prevents orphan insertions and false
+  // substitutions caused by BPE fragmentation.
+  {
+    const TOLERANCE_S = 0.3; // 300ms tolerance for Reverb timestamp jitter
+    const merged = [];
+    let i = 0;
+    while (i < transcriptWords.length) {
+      const w = transcriptWords[i];
+
+      // Only try to merge fragments that lack xval confirmation
+      if (w.crossValidation === 'unconfirmed' || w.crossValidation === 'disagreed') {
+        // Look ahead for adjacent fragments sharing the same xval time window
+        // Find an anchor: the first word in the run that has _xvalWord
+        let anchor = null;
+        let anchorIdx = -1;
+        const group = [i];
+
+        // Scan forward for fragments that share the same xval window
+        for (let j = i + 1; j < transcriptWords.length; j++) {
+          const next = transcriptWords[j];
+          const nextXv = next.crossValidation;
+          if (nextXv !== 'unconfirmed' && nextXv !== 'disagreed') break;
+
+          // Check temporal proximity: Reverb timestamps should be close
+          const prevEnd = parseT(transcriptWords[j - 1]._reverbEndTime || transcriptWords[j - 1].endTime);
+          const nextStart = parseT(next._reverbStartTime || next.startTime);
+          if (nextStart - prevEnd > 2.0) break; // too far apart
+
+          group.push(j);
+        }
+
+        // Find the anchor word (one with _xvalWord) in the group
+        for (const idx of group) {
+          if (transcriptWords[idx]._xvalWord) {
+            anchor = transcriptWords[idx];
+            anchorIdx = idx;
+            break;
+          }
+        }
+
+        // Only merge if we have 2+ fragments and an anchor with xval data
+        if (group.length >= 2 && anchor) {
+          // Verify all fragments fall within the anchor's xval time window
+          const xvStart = parseT(anchor._xvalStartTime) - TOLERANCE_S;
+          const xvEnd = parseT(anchor._xvalEndTime) + TOLERANCE_S;
+          const inWindow = group.every(idx => {
+            const rStart = parseT(transcriptWords[idx]._reverbStartTime || transcriptWords[idx].startTime);
+            return rStart >= xvStart && rStart <= xvEnd;
+          });
+
+          if (inWindow) {
+            // Merge: concatenate word text, use anchor's xval timestamps
+            const parts = group.map(idx => transcriptWords[idx].word);
+            const mergedWord = parts.join('');
+            const first = transcriptWords[group[0]];
+
+            merged.push({
+              ...anchor,
+              word: mergedWord,
+              startTime: anchor._xvalStartTime || first.startTime,
+              endTime: anchor._xvalEndTime || anchor.endTime,
+              _reverbStartTime: first._reverbStartTime || first.startTime,
+              _reverbEndTime: transcriptWords[group[group.length - 1]]._reverbEndTime || transcriptWords[group[group.length - 1]].endTime,
+              _mergedFragments: parts,
+              _mergedFrom: 'pre-alignment-fragment-merge'
+            });
+            console.log(`[Fragment Merge] Merged ${parts.length} Reverb fragments: "${parts.join('" + "')}" → "${mergedWord}" (xval: "${anchor._xvalWord}")`);
+            i = group[group.length - 1] + 1;
+            continue;
+          }
+        }
+      }
+
+      merged.push(w);
+      i++;
+    }
+    transcriptWords.length = 0;
+    transcriptWords.push(...merged);
+  }
+
   // Log STT words with full details for maximum transparency
   // NOTE: After Phase 13, transcriptWords excludes ghost words (filtered before alignment)
 
