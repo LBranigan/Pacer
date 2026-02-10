@@ -181,9 +181,22 @@ export function crossValidateTranscripts(reverbWords, xvalWords) {
 
       if (similarity >= 0.8) {
         // Tier 1 — High similarity (e.g., "shelly"/"shelley"): spelling variant.
-        // Keep Reverb's word text, mark confirmed.
+        // Mark confirmed. For single-char differences on long words (e.g.,
+        // "format"/"formats"), prefer cross-validator's word text — the extra
+        // character is likely a real inflection the student spoke.
         status = 'confirmed';
-        fuzzyMatch = { reverbWord: reverbWord.word, xvalWord: xvWord.word, similarity: Math.round(similarity * 1000) / 1000 };
+        const maxLen = Math.max(normA.length, normB.length);
+        const editDist = maxLen > 0 ? Math.round((1 - similarity) * maxLen) : 0;
+        if (editDist <= 1 && maxLen >= 5) {
+          nearMatch = {
+            reverbWord: reverbWord.word,
+            xvalWord: xvWord.word,
+            editDistance: editDist,
+            similarity: Math.round(similarity * 1000) / 1000
+          };
+        } else {
+          fuzzyMatch = { reverbWord: reverbWord.word, xvalWord: xvWord.word, similarity: Math.round(similarity * 1000) / 1000 };
+        }
       } else {
         // Check edit distance for near-match detection.
         // Derive from similarity: dist = (1 - ratio) * maxLen
@@ -236,9 +249,10 @@ export function crossValidateTranscripts(reverbWords, xvalWords) {
       xvalDurMs: Math.round((_parseTs(xvWord.endTime) - _parseTs(xvWord.startTime)) * 1000),
     });
 
-    // For confirmed near-matches (Tier 2a, long words), use cross-validator's word text.
-    // For disagreed near-matches (Tier 2b, short words), keep Reverb's word — the
-    // single-character difference may be a real phonemic error.
+    // For confirmed near-matches (Tier 1 inflections + Tier 2a long words), use
+    // cross-validator's word text. For disagreed near-matches (Tier 2b, short
+    // words), keep Reverb's word — the single-character difference may be a real
+    // phonemic error.
     const wordOverride = (nearMatch && status === 'confirmed') ? { word: _normalizeWord(xvWord.word) } : {};
 
     result.push({
