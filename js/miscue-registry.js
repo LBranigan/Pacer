@@ -274,7 +274,7 @@ const DIAGNOSTIC_MISCUES = {
       abandoned: 'Path 3: substitution + cross-validator N/A + near-miss match → partial/garbled attempt only verbatim STT detected'
     },
     fragmentAbsorption: {
-      description: 'When Reverb fragments a single utterance into multiple BPE tokens (e.g., "platforms" → "pla" + "for"), orphan insertions are absorbed into the parent struggle using temporal containment.',
+      description: 'When Reverb fragments a single utterance into multiple BPE tokens (e.g., "platforms" → "pla" + "for"), orphan insertions are absorbed into the parent struggle using temporal containment. NOTE: Pre-alignment fragment merge (app.js) now handles many of these cases upstream — fragments sharing the same xval time window are merged before NW alignment, preventing orphan insertions from being created in the first place. This post-alignment absorption remains as a safety net for cases that escape the pre-merge.',
       detector: 'diagnostics.js → absorbStruggleFragments()',
       mechanism: 'If an insertion\'s Reverb timestamp falls within the Parakeet word\'s time window for a nearby struggle/substitution, it is flagged _partOfStruggle and excluded from insertion count.',
       tolerance: '150ms on Parakeet window edges',
@@ -295,6 +295,53 @@ const DIAGNOSTIC_MISCUES = {
     },
     uiClass: 'word-recovered-badge',
     note: 'Reverb CTC failure means the acoustic signal was too garbled for CTC decoding. The cross-validator (Parakeet/Deepgram) may have heard a word, but it is single-source evidence. The (!) badge warns the teacher to verify by listening.'
+  }
+};
+
+// ============================================================================
+// PRE-ALIGNMENT FIXES (app.js, cross-validator.js)
+// These correct ASR artifacts before words reach NW alignment
+// ============================================================================
+
+const PRE_ALIGNMENT_FIXES = {
+  preAlignmentFragmentMerge: {
+    description: 'Merges adjacent Reverb BPE fragments into a single token before NW alignment when they share the same cross-validator time window. Prevents orphan insertions and false substitutions caused by BPE fragmentation.',
+    detector: 'app.js → pre-alignment fragment merge block (after hyphen split, before sttLookup)',
+    countsAsError: false, // Corrective — reduces false errors
+    config: {
+      TOLERANCE_S: 0.3,                 // 300ms tolerance for Reverb timestamp jitter
+      maxGapBetweenFragments: 2.0,      // Fragments must be within 2s of each other
+      requireXvalAnchor: true           // At least one fragment must have _xvalWord
+    },
+    example: {
+      reference: 'ideation',
+      spoken: 'Reverb → "i" + "d", Parakeet → "idiasion"',
+      result: 'Fragments merged to "id" before alignment. NW sees ref="ideation" vs hyp="id" — near-miss, likely upgraded to struggle instead of meaningless sub(hyp="d").'
+    },
+    guards: [
+      'All fragments must be unconfirmed or disagreed (not confirmed)',
+      'At least one fragment must have _xvalWord (anchor)',
+      'All fragment Reverb timestamps must fall within anchor xval time window (±300ms)',
+      'Fragments must be temporally adjacent (< 2s gap between Reverb timestamps)'
+    ],
+    note: 'Reverb BPE tokenization sometimes splits a single spoken word into multiple fragments (e.g., "ideation" → "i" + "d"). Without merging, each fragment enters alignment separately, producing an orphan insertion and a meaningless substitution. The merge concatenates fragments and uses the cross-validator timestamps.'
+  },
+
+  tier1NearMatchOverride: {
+    description: 'When Tier 1 fuzzy match (similarity >= 0.8) has edit distance <= 1 on a long word, use the cross-validator word text instead of Reverb. Prevents false substitutions from minor Reverb transcription differences (e.g., dropped plural "s").',
+    detector: 'cross-validator.js → crossValidateTranscripts() Tier 1 block',
+    countsAsError: false, // Corrective — reduces false errors
+    config: {
+      similarityThreshold: 0.8,         // Must already be Tier 1 (high similarity)
+      maxEditDistance: 1,                // Single character difference
+      minWordLength: 5                  // Long words only (short words: 1 char IS the difference)
+    },
+    example: {
+      reference: 'formats',
+      spoken: 'Reverb → "format", Parakeet → "formats"',
+      result: 'Similarity 0.857 (Tier 1), editDist=1, maxLen=7. Cross-validator word "formats" overrides Reverb "format". Alignment sees correct match.'
+    },
+    note: 'Previously, Tier 1 always kept Reverb word text. For single-char differences on long words (like dropped plural "s"), the cross-validator is more likely correct. Now promotes to nearMatch so wordOverride applies, same as Tier 2a.'
   }
 };
 
@@ -423,6 +470,9 @@ export const MISCUE_REGISTRY = {
   // Diagnostics (fluency indicators)
   ...DIAGNOSTIC_MISCUES,
 
+  // Pre-alignment fixes
+  ...PRE_ALIGNMENT_FIXES,
+
   // Abbreviation handling
   ...ABBREVIATION_RULES,
 
@@ -501,4 +551,10 @@ export function getDetectorLocation(type) {
  * - abbreviationCompoundMerge: i.e./e.g./U.S. read letter-by-letter → compound merged
  * - abbreviationExpansionMerge: i.e. read as "that is" → expansion merged
  * - xvalAbbreviationConfirmation: Cross-validator confirms abbreviation reading
+ * - preAlignmentFragmentMerge: Reverb BPE fragments merged before alignment ("i"+"d" → "id")
+ * - tier1NearMatchOverride: Tier 1 fuzzy match uses xval word for 1-char diffs ("format"→"formats")
+ *
+ * INFRASTRUCTURE FIXES:
+ * - sttLookup keys use raw normalized words (not getCanonical) to match alignment hyp values
+ * - Debug logger reads version from #version div (not hardcoded constant)
  */
