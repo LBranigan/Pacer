@@ -300,6 +300,11 @@ function buildEnhancedTooltip(item, sttWord) {
       lines.push(`Disfluency: ${typeLabels[sttWord.disfluencyType] || 'Yes'} (not an error)`);
     }
 
+    // Recovery warning (Parakeet-only omission recovery)
+    if (sttWord._recovered) {
+      lines.push('Recovered from Parakeet only — Reverb heard nothing. Evidence is weak.');
+    }
+
     // Reverb internal diff (v=1.0 verbatim vs v=0.0 clean)
     if (sttWord._alignment) {
       const a = sttWord._alignment;
@@ -979,6 +984,11 @@ export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, di
       span.textContent += punct;
     }
 
+    // Recovery warning badge (!) — Parakeet-only omission recovery (weakest evidence)
+    if (item._recovered || sttWord?._recovered) {
+      span.classList.add('word-recovered-badge');
+    }
+
     // Check for disfluency badge (Phase 16) -- skip when Kitchen Sink data present
     const hasDisfluency = sttWord?.severity && sttWord.severity !== 'none' && !('isDisfluency' in (sttWord || {}));
 
@@ -1164,6 +1174,203 @@ export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, di
   const confWordsDiv = document.getElementById('sttTranscriptWords');
   if (confWordsDiv) {
     confWordsDiv.innerHTML = '';
+
+    // ── Model Disagreements row — rendered first (topmost) ──
+    if (transcriptWords && transcriptWords.length > 0) {
+      const disagreeRow = document.createElement('div');
+      disagreeRow.className = 'stt-source-row stt-disagreement-row';
+
+      const disagreeLabel = document.createElement('div');
+      disagreeLabel.className = 'stt-source-label';
+      disagreeLabel.style.cssText = 'background:#fff3e0;color:#e65100;';
+      const disagreedCount = transcriptWords.filter(w =>
+        w.crossValidation !== 'confirmed' || w._recovered || w.isDisfluency
+      ).length;
+      disagreeLabel.textContent = `Model Disagreements (${disagreedCount})`;
+      disagreeRow.appendChild(disagreeLabel);
+
+      // Legend
+      const legend = document.createElement('div');
+      legend.className = 'disagree-legend';
+      const legendItems = [
+        { cls: 'disagree-disagreed', text: 'Disagreed' },
+        { cls: 'disagree-unconfirmed', text: 'Reverb only' },
+        { cls: 'disagree-recovered', text: 'Parakeet only' },
+        { cls: 'disagree-disfluency', text: 'Disfluency' },
+        { cls: 'disagree-unconsumed', text: 'Unconsumed xval' }
+      ];
+      for (const li of legendItems) {
+        const s = document.createElement('span');
+        s.className = li.cls;
+        s.textContent = li.text;
+        legend.appendChild(s);
+      }
+      disagreeRow.appendChild(legend);
+
+      const disagreeWords = document.createElement('div');
+      disagreeWords.className = 'stt-source-words';
+
+      for (const w of transcriptWords) {
+        const span = document.createElement('span');
+        span.className = 'disagree-word';
+
+        const isUnk = isSpecialASTToken(w.word);
+        span.textContent = isUnk ? '?' : w.word;
+
+        // Classify the word
+        let category;
+        if (w._recovered) {
+          category = 'recovered';
+          span.classList.add('disagree-recovered');
+        } else if (w.isDisfluency) {
+          category = 'disfluency';
+          span.classList.add('disagree-disfluency');
+        } else if (w.crossValidation === 'confirmed') {
+          category = 'agreed';
+          span.classList.add('disagree-agreed');
+        } else if (w.crossValidation === 'disagreed') {
+          category = 'disagreed';
+          span.classList.add('disagree-disagreed');
+        } else if (w.crossValidation === 'unconfirmed') {
+          category = 'unconfirmed';
+          span.classList.add('disagree-unconfirmed');
+        } else {
+          category = 'agreed';
+          span.classList.add('disagree-agreed');
+        }
+
+        // Build tooltip for non-agreed words
+        if (category !== 'agreed') {
+          const tipLines = [];
+          tipLines.push(`"${w.word}"`);
+
+          // What each model heard
+          const reverbWord = w._alignment?.verbatim || w.word;
+          const reverbClean = w._alignment?.clean;
+          const xvalWord = w._xvalWord;
+          const xvalLabel = w._xvalEngine ? w._xvalEngine.charAt(0).toUpperCase() + w._xvalEngine.slice(1) : 'Parakeet';
+
+          if (category === 'recovered') {
+            tipLines.push('Recovered from Parakeet only');
+            tipLines.push('Reverb heard: [nothing]');
+            tipLines.push(`${xvalLabel} heard: "${xvalWord || w.word}"`);
+            tipLines.push('Evidence is weak — single biased source');
+          } else if (category === 'disfluency') {
+            const typeLabels = { filler: 'Filler (um, uh)', repetition: 'Repetition', false_start: 'False start', unknown: 'Disfluency' };
+            tipLines.push(`Verbatim-only disfluency: ${typeLabels[w.disfluencyType] || 'Disfluency'}`);
+            tipLines.push(`Reverb v1 heard: "${reverbWord}"`);
+            if (reverbClean) tipLines.push(`Reverb v0 heard: "${reverbClean}"`);
+            else tipLines.push('Reverb v0: [removed in clean pass]');
+          } else if (category === 'disagreed') {
+            tipLines.push('Models heard different words');
+            tipLines.push(`Reverb heard: "${reverbWord}"`);
+            tipLines.push(`${xvalLabel} heard: "${xvalWord != null ? xvalWord : '[N/A]'}"`);
+          } else if (category === 'unconfirmed') {
+            tipLines.push(`Reverb only — ${xvalLabel} heard nothing`);
+            tipLines.push(`Reverb heard: "${reverbWord}"`);
+          }
+
+          // Timestamps
+          const start = parseSttTime(w.startTime);
+          const end = parseSttTime(w.endTime);
+          const durMs = Math.round((end - start) * 1000);
+          tipLines.push(`Time: ${start.toFixed(2)}s – ${end.toFixed(2)}s (${durMs}ms)`);
+
+          // Cross-validation status
+          tipLines.push(`Cross-validation: ${w.crossValidation || 'N/A'}`);
+
+          span.dataset.tooltip = tipLines.join('\n');
+
+          // Click-to-play audio
+          if (wordAudioEl && start > 0) {
+            span.classList.add('word-clickable');
+            const playFn = () => {
+              wordAudioEl.pause();
+              wordAudioEl.currentTime = start;
+              const onTime = () => {
+                if (wordAudioEl.currentTime >= end) {
+                  wordAudioEl.pause();
+                  wordAudioEl.removeEventListener('timeupdate', onTime);
+                }
+              };
+              wordAudioEl.addEventListener('timeupdate', onTime);
+              wordAudioEl.play().catch(() => {});
+            };
+            span.addEventListener('click', (e) => { e.stopPropagation(); showWordTooltip(span, playFn); });
+          } else {
+            span.addEventListener('click', (e) => { e.stopPropagation(); showWordTooltip(span, null); });
+          }
+        }
+
+        disagreeWords.appendChild(span);
+        disagreeWords.appendChild(document.createTextNode(' '));
+      }
+
+      // Unconsumed xval words — Parakeet heard these but they weren't matched to any Reverb word
+      const xvalRaw = rawSttSources?.xvalRaw || [];
+      if (xvalRaw.length > 0 && transcriptWords.length > 0) {
+        // Build set of consumed xval words (those matched into transcriptWords)
+        const consumedXval = new Set();
+        for (const tw of transcriptWords) {
+          if (tw._xvalWord && tw._xvalStartTime != null) {
+            consumedXval.add(`${tw._xvalWord}|${parseSttTime(tw._xvalStartTime).toFixed(3)}`);
+          }
+        }
+        const unconsumed = xvalRaw.filter(xw => {
+          const key = `${xw.word}|${parseSttTime(xw.startTime).toFixed(3)}`;
+          return !consumedXval.has(key);
+        });
+
+        if (unconsumed.length > 0) {
+          // Add separator
+          const sep = document.createElement('span');
+          sep.style.cssText = 'color:#999;font-size:0.75rem;margin:0 4px;';
+          sep.textContent = '|';
+          disagreeWords.appendChild(sep);
+
+          for (const xw of unconsumed) {
+            const span = document.createElement('span');
+            span.className = 'disagree-word disagree-unconsumed word-clickable';
+            span.textContent = xw.word;
+
+            const start = parseSttTime(xw.startTime);
+            const end = parseSttTime(xw.endTime);
+            const durMs = Math.round((end - start) * 1000);
+            const xvalLabel = xw._xvalEngine ? xw._xvalEngine.charAt(0).toUpperCase() + xw._xvalEngine.slice(1) : 'Parakeet';
+            span.dataset.tooltip = [
+              `"${xw.word}"`,
+              `${xvalLabel} heard this, Reverb did not`,
+              'Not matched to any omission',
+              `Time: ${start.toFixed(2)}s – ${end.toFixed(2)}s (${durMs}ms)`
+            ].join('\n');
+
+            if (wordAudioEl && start > 0) {
+              const playFn = () => {
+                wordAudioEl.pause();
+                wordAudioEl.currentTime = start;
+                const onTime = () => {
+                  if (wordAudioEl.currentTime >= end) {
+                    wordAudioEl.pause();
+                    wordAudioEl.removeEventListener('timeupdate', onTime);
+                  }
+                };
+                wordAudioEl.addEventListener('timeupdate', onTime);
+                wordAudioEl.play().catch(() => {});
+              };
+              span.addEventListener('click', (e) => { e.stopPropagation(); showWordTooltip(span, playFn); });
+            } else {
+              span.addEventListener('click', (e) => { e.stopPropagation(); showWordTooltip(span, null); });
+            }
+
+            disagreeWords.appendChild(span);
+            disagreeWords.appendChild(document.createTextNode(' '));
+          }
+        }
+      }
+
+      disagreeRow.appendChild(disagreeWords);
+      confWordsDiv.appendChild(disagreeRow);
+    }
 
     const sources = [
       { label: 'Reverb v1 (verbatim)', words: rawSttSources?.reverbVerbatim || [], cssClass: 'stt-reverb-v1' },
