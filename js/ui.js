@@ -1204,7 +1204,7 @@ export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, di
       disagreeLabel.className = 'stt-source-label';
       disagreeLabel.style.cssText = 'background:#fff3e0;color:#e65100;';
       const disagreedCount = transcriptWords.filter(w =>
-        w.crossValidation !== 'confirmed' || w._recovered || w.isDisfluency
+        (w.crossValidation !== 'confirmed' || w._recovered || w.isDisfluency) && !w._healed
       ).length;
       disagreeLabel.textContent = `Model Disagreements (${disagreedCount})`;
       disagreeRow.appendChild(disagreeLabel);
@@ -1239,7 +1239,12 @@ export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, di
 
         // Classify the word
         let category;
-        if (w._recovered) {
+        if (w._healed) {
+          // Alignment resolved this as correct despite cross-validation disagreement
+          // (e.g., compound merge for abbreviations, Tier 1 near-match override)
+          category = 'agreed';
+          span.classList.add('disagree-agreed');
+        } else if (w._recovered) {
           category = 'recovered';
           span.classList.add('disagree-recovered');
         } else if (w.isDisfluency) {

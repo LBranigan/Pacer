@@ -1366,6 +1366,48 @@ async function runAnalysis() {
     }
   });
 
+  // Mark transcriptWords as "healed" when alignment resolved them as correct
+  // despite having disagreed/unconfirmed cross-validation (e.g., compound merge
+  // for "i"+"e"→"ie", Tier 1 near-match override for "format"→"formats").
+  // The STT disagreement display uses this to suppress resolved disagreements.
+  {
+    let hypIdx = 0;
+    for (const entry of alignment) {
+      if (entry.type === 'omission') continue; // no hyp word consumed
+      if (entry.type === 'correct' || entry.forgiven) {
+        // Walk transcriptWords to find the matching entry by word text
+        // The sttLookup queue approach consumed entries in order, so we
+        // advance hypIdx through transcriptWords matching hyp values
+        while (hypIdx < transcriptWords.length) {
+          const tw = transcriptWords[hypIdx];
+          const twNorm = tw.word.toLowerCase().replace(/^[^\w'-]+|[^\w'-]+$/g, '').replace(/\./g, '');
+          const hypNorm = entry.hyp ? entry.hyp.toLowerCase().replace(/^[^\w'-]+|[^\w'-]+$/g, '').replace(/\./g, '') : '';
+          hypIdx++;
+          if (twNorm === hypNorm || (entry.compound && entry.parts)) {
+            // Found the match — mark healed if cross-validation wasn't confirmed
+            if (tw.crossValidation && tw.crossValidation !== 'confirmed') {
+              tw._healed = true;
+            }
+            // For compound words, also heal subsequent parts
+            if (entry.compound && entry.parts && entry.parts.length > 1) {
+              for (let p = 1; p < entry.parts.length && hypIdx < transcriptWords.length; p++) {
+                const partTw = transcriptWords[hypIdx];
+                if (partTw.crossValidation && partTw.crossValidation !== 'confirmed') {
+                  partTw._healed = true;
+                }
+                hypIdx++;
+              }
+            }
+            break;
+          }
+        }
+      } else {
+        // substitution, insertion, struggle — still advance hypIdx
+        hypIdx++;
+      }
+    }
+  }
+
   displayAlignmentResults(
     alignment,
     wcpm,
