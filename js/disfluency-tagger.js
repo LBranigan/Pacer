@@ -63,16 +63,17 @@ export function classifyDisfluency(entry, alignment, index) {
   }
 
   // Check next verbatim word (if this is the first occurrence before a repeat)
-  // Only mark as repetition if the next word is also an insertion of the same word
-  if (nextEntry && nextEntry.type === 'insertion' && normalizeWord(nextEntry.verbatim) === word) {
+  if (nextEntry && nextEntry.verbatim && normalizeWord(nextEntry.verbatim) === word) {
     return 'repetition';
   }
 
   // 3. DISF-05: False starts (partial word followed by complete word)
   // Short word (1-3 chars) followed by longer word starting with same prefix
-  if (word.length >= 1 && word.length <= 3 && nextEntry && nextEntry.verbatim) {
+  // Strip trailing hyphens before length check (Reverb outputs "pro-" for partial words)
+  const bareWord = word.endsWith('-') ? word.slice(0, -1) : word;
+  if (bareWord.length >= 1 && bareWord.length <= 3 && nextEntry && nextEntry.verbatim) {
     const nextWord = normalizeWord(nextEntry.verbatim);
-    if (nextWord.startsWith(word) && nextWord.length > word.length) {
+    if (nextWord.startsWith(bareWord) && nextWord.length > bareWord.length) {
       return 'false_start';
     }
   }

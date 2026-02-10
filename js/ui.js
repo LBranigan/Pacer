@@ -1522,7 +1522,7 @@ export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, di
   // Disfluency diagnostics section (Phase 24)
   // disfluencySummary carries Kitchen Sink disfluencyStats when available
   if (disfluencySummary && disfluencySummary.total !== undefined) {
-    renderDisfluencySection(disfluencySummary);
+    renderDisfluencySection(disfluencySummary, transcriptWords, enrichedAlignment);
   }
 
   jsonDiv.textContent = JSON.stringify({
@@ -1537,12 +1537,14 @@ export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, di
 
 /**
  * Render the disfluency diagnostics section (Phase 24).
- * Populates the collapsible section with count, rate, and type breakdown.
+ * Shows each disfluent word with context, classification, and play button.
  *
- * @param {object|null} disfluencyStats - Stats from Kitchen Sink pipeline:
+ * @param {object|null} disfluencyStats - Aggregate stats from Kitchen Sink:
  *   { total, contentWords, rate, byType: { filler, repetition, false_start, unknown } }
+ * @param {Array|null} transcriptWords - Full transcript word list with isDisfluency flags
+ * @param {Array|null} alignment - Ref-vs-STT alignment entries for context enrichment
  */
-function renderDisfluencySection(disfluencyStats) {
+function renderDisfluencySection(disfluencyStats, transcriptWords, alignment) {
   const section = document.getElementById('disfluencySection');
   const summaryEl = document.getElementById('disfluencySummaryText');
   const detailsEl = document.getElementById('disfluencyDetails');
@@ -1565,66 +1567,207 @@ function renderDisfluencySection(disfluencyStats) {
     return;
   }
 
-  // Determine dominant type for collapsed summary
-  const byType = disfluencyStats.byType || {};
-  let dominant = '';
-  let maxCount = 0;
-  for (const [type, count] of Object.entries(byType)) {
-    if (count > maxCount) {
-      maxCount = count;
-      dominant = type;
+  // ── Build word-level disfluency list from transcriptWords ──
+  const disfluencies = [];
+  if (transcriptWords && transcriptWords.length > 0) {
+    for (let i = 0; i < transcriptWords.length; i++) {
+      const w = transcriptWords[i];
+      if (!w.isDisfluency) continue;
+
+      // Gather context: previous and next non-disfluent words
+      let prevWord = null;
+      for (let j = i - 1; j >= 0; j--) {
+        prevWord = transcriptWords[j].word;
+        break;  // always take immediate neighbor for readable context
+      }
+      let nextWord = null;
+      for (let j = i + 1; j < transcriptWords.length; j++) {
+        nextWord = transcriptWords[j].word;
+        break;
+      }
+
+      disfluencies.push({
+        word: w.word,
+        type: w.disfluencyType || 'unknown',
+        crossValidation: w.crossValidation,
+        transcriptIndex: i,
+        prevWord,
+        nextWord
+      });
     }
   }
 
-  const dominantLabels = {
-    filler: 'fillers',
-    repetition: 'repetitions',
-    false_start: 'false starts',
-    unknown: 'unclassified'
+  // ── Enrich with ref alignment context ──
+  // Build a set of alignment insights we can attach to each disfluency
+  if (alignment && alignment.length > 0) {
+    for (const d of disfluencies) {
+      // Normalize disfluent word for matching (strip trailing hyphens/punct)
+      const dNorm = d.word.toLowerCase().replace(/[^a-z']/g, '');
+
+      // Strategy 1: Check if this word's text matches a substitution's hyp in the alignment
+      // e.g., "pro" matches alignment entry {ref:"pronounced", hyp:"pro", type:"substitution"}
+      for (const entry of alignment) {
+        if (entry.type !== 'substitution') continue;
+        const hypNorm = (entry.hyp || '').toLowerCase().replace(/[^a-z']/g, '');
+        if (hypNorm === dNorm && entry.ref) {
+          d.refTarget = entry.ref;
+          break;
+        }
+      }
+
+      // Strategy 2: Check if an adjacent alignment insertion is flagged as self-correction
+      for (const entry of alignment) {
+        if (entry.type !== 'insertion') continue;
+        if (!entry._isSelfCorrection) continue;
+        const hypNorm = (entry.hyp || '').toLowerCase().replace(/[^a-z']/g, '');
+        if (hypNorm === dNorm) {
+          d.selfCorrection = true;
+          break;
+        }
+      }
+
+      // Strategy 3: Check if the next non-disfluent word is a substitution
+      // e.g., "are" inserted before "serve" which is a sub for "observe"
+      if (!d.refTarget && !d.selfCorrection && d.nextWord) {
+        const nextNorm = d.nextWord.toLowerCase().replace(/[^a-z']/g, '');
+        for (const entry of alignment) {
+          if (entry.type !== 'substitution') continue;
+          const hypNorm = (entry.hyp || '').toLowerCase().replace(/[^a-z']/g, '');
+          if (hypNorm === nextNorm && entry.ref) {
+            d.nearSubstitution = entry.ref;
+            break;
+          }
+        }
+      }
+    }
+  }
+
+  // ── Collapsed summary line ──
+  const typeLabels = {
+    filler: 'filler',
+    repetition: 'repetition',
+    false_start: 'false start',
+    unknown: 'extra word'
   };
-  const dominantText = dominant && maxCount > 0
-    ? ` (mostly ${dominantLabels[dominant] || dominant})`
-    : '';
 
-  // Collapsed summary line
-  summaryEl.textContent = `Disfluencies: ${disfluencyStats.total}${dominantText}`;
+  // Count by resolved type for summary
+  const typeCounts = {};
+  for (const d of disfluencies) {
+    const label = d.selfCorrection ? 'self-correction' : (typeLabels[d.type] || 'extra word');
+    typeCounts[label] = (typeCounts[label] || 0) + 1;
+  }
 
-  // Expanded detail breakdown
+  const summaryParts = [];
+  for (const [label, count] of Object.entries(typeCounts)) {
+    summaryParts.push(`${count} ${label}${count > 1 ? 's' : ''}`);
+  }
+  summaryEl.textContent = `Disfluencies: ${disfluencyStats.total}` +
+    (summaryParts.length > 0 ? ` (${summaryParts.join(', ')})` : '');
+
+  // ── Expanded detail: word-level rows ──
   detailsEl.innerHTML = '';
 
-  const typeDisplay = [
-    { key: 'filler', label: 'Fillers (um, uh)' },
-    { key: 'repetition', label: 'Repetitions' },
-    { key: 'false_start', label: 'False starts' },
-    { key: 'unknown', label: 'Other' }
-  ];
+  if (disfluencies.length === 0) {
+    // Fallback: no transcriptWords available, show old-style aggregate
+    detailsEl.textContent = `${disfluencyStats.total} disfluencies detected`;
+    return;
+  }
 
-  for (const { key, label } of typeDisplay) {
-    const count = byType[key] || 0;
-    if (count === 0) continue;
-
+  for (const d of disfluencies) {
     const row = document.createElement('div');
-    row.className = 'disfluency-type-row';
+    row.className = 'disfluency-word-row';
 
-    const labelSpan = document.createElement('span');
-    labelSpan.className = 'disfluency-type-label';
-    labelSpan.textContent = label;
+    // Play button — scrolls to word in STT Transcript and triggers click-to-play
+    const playBtn = document.createElement('button');
+    playBtn.className = 'disfluency-play-btn';
+    playBtn.textContent = '\u25B6';
+    playBtn.title = 'Listen in STT Transcript';
+    const tIdx = d.transcriptIndex;
+    playBtn.addEventListener('click', () => {
+      const sttSection = document.getElementById('sttTranscriptSection');
+      if (sttSection && !sttSection.classList.contains('expanded')) {
+        sttSection.classList.add('expanded');
+      }
+      // Select only the transcript word spans (exclude unconsumed xval words)
+      const wordSpans = document.querySelectorAll(
+        '#sttTranscriptWords .stt-disagreement-row .disagree-word:not(.disagree-unconsumed)'
+      );
+      const targetSpan = wordSpans[tIdx];
+      if (targetSpan) {
+        targetSpan.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        setTimeout(() => targetSpan.click(), 350);
+      }
+    });
+    row.appendChild(playBtn);
 
-    const countSpan = document.createElement('span');
-    countSpan.className = 'disfluency-type-count';
-    countSpan.textContent = count;
+    // Word itself
+    const wordSpan = document.createElement('span');
+    wordSpan.className = 'disfluency-word-text';
+    wordSpan.textContent = `"${d.word}"`;
+    row.appendChild(wordSpan);
 
-    row.appendChild(labelSpan);
-    row.appendChild(countSpan);
+    // Classification badge
+    const badge = document.createElement('span');
+    badge.className = 'disfluency-word-badge';
+    if (d.selfCorrection) {
+      badge.textContent = 'self-correction';
+      badge.classList.add('disfluency-badge-selfcorrection');
+    } else {
+      const label = typeLabels[d.type] || 'extra word';
+      badge.textContent = label;
+      badge.classList.add(`disfluency-badge-${d.type}`);
+    }
+    row.appendChild(badge);
+
+    // Context snippet: ...prev WORD next...
+    const ctx = document.createElement('span');
+    ctx.className = 'disfluency-word-context';
+    const prevText = d.prevWord ? d.prevWord + ' ' : '';
+    const nextText = d.nextWord ? ' ' + d.nextWord : '';
+    ctx.innerHTML = '';
+    if (prevText) {
+      const prevEl = document.createElement('span');
+      prevEl.className = 'disfluency-ctx-dim';
+      prevEl.textContent = prevText;
+      ctx.appendChild(prevEl);
+    }
+    const highlightEl = document.createElement('span');
+    highlightEl.className = 'disfluency-ctx-highlight';
+    highlightEl.textContent = d.word;
+    ctx.appendChild(highlightEl);
+    if (nextText) {
+      const nextEl = document.createElement('span');
+      nextEl.className = 'disfluency-ctx-dim';
+      nextEl.textContent = nextText;
+      ctx.appendChild(nextEl);
+    }
+    row.appendChild(ctx);
+
+    // Enrichment note from ref alignment
+    const note = document.createElement('span');
+    note.className = 'disfluency-word-note';
+    if (d.selfCorrection) {
+      note.textContent = '';  // badge already says it
+    } else if (d.refTarget) {
+      note.textContent = `target: "${d.refTarget}"`;
+    } else if (d.nearSubstitution) {
+      note.textContent = `before misread of "${d.nearSubstitution}"`;
+    } else if (d.crossValidation === 'unconfirmed') {
+      note.textContent = 'unconfirmed';
+    } else if (d.crossValidation === 'disagreed') {
+      note.textContent = 'models disagree';
+    }
+    if (note.textContent) {
+      row.appendChild(note);
+    }
+
     detailsEl.appendChild(row);
   }
 
   // Rate line at bottom
   if (disfluencyStats.rate) {
     const rateLine = document.createElement('div');
-    rateLine.style.marginTop = '0.5rem';
-    rateLine.style.color = '#888';
-    rateLine.style.fontSize = '0.8rem';
+    rateLine.className = 'disfluency-rate-line';
     rateLine.textContent = `Rate: ${disfluencyStats.rate} of words`;
     detailsEl.appendChild(rateLine);
   }

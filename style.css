@@ -522,6 +522,7 @@ body.dev-mode .dev-mode-toggle {
   line-height: 1.8;
 }
 
+/* Legacy aggregate rows (kept for fallback) */
 .disfluency-details .disfluency-type-row {
   display: flex;
   justify-content: space-between;
@@ -535,6 +536,88 @@ body.dev-mode .dev-mode-toggle {
 .disfluency-details .disfluency-type-count {
   font-weight: 600;
   color: #333;
+}
+
+/* Word-level disfluency rows */
+.disfluency-word-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.35rem 0;
+  border-bottom: 1px solid #eee;
+  flex-wrap: wrap;
+}
+.disfluency-word-row:last-child {
+  border-bottom: none;
+}
+
+.disfluency-play-btn {
+  background: none;
+  border: 1px solid #ccc;
+  border-radius: 50%;
+  width: 24px;
+  height: 24px;
+  font-size: 0.6rem;
+  color: #666;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  padding: 0;
+  line-height: 1;
+}
+.disfluency-play-btn:hover {
+  background: #e3f2fd;
+  border-color: #90caf9;
+  color: #1976d2;
+}
+
+.disfluency-word-text {
+  font-weight: 600;
+  color: #333;
+  white-space: nowrap;
+}
+
+.disfluency-word-badge {
+  font-size: 0.7rem;
+  padding: 1px 6px;
+  border-radius: 3px;
+  white-space: nowrap;
+  font-weight: 500;
+}
+.disfluency-badge-filler { background: #e8f5e9; color: #2e7d32; }
+.disfluency-badge-repetition { background: #fff3e0; color: #e65100; }
+.disfluency-badge-false_start { background: #fce4ec; color: #c62828; }
+.disfluency-badge-unknown { background: #f3e5f5; color: #6a1b9a; }
+.disfluency-badge-selfcorrection { background: #e3f2fd; color: #1565c0; }
+
+.disfluency-word-context {
+  font-size: 0.8rem;
+  color: #888;
+  font-style: italic;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.disfluency-ctx-dim { color: #aaa; }
+.disfluency-ctx-highlight {
+  color: #d32f2f;
+  font-weight: 600;
+  font-style: normal;
+}
+
+.disfluency-word-note {
+  font-size: 0.75rem;
+  color: #999;
+  margin-left: auto;
+  white-space: nowrap;
+}
+
+.disfluency-rate-line {
+  margin-top: 0.5rem;
+  color: #888;
+  font-size: 0.8rem;
 }
 
 /* Collapsible prosody section — matches stt-transcript/disfluency pattern */
