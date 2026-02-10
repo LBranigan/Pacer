@@ -240,6 +240,11 @@ function buildEnhancedTooltip(item, sttWord) {
     lines.push('Omitted (not read)');
   } else if (item.type === 'self-correction') {
     lines.push(`"${item.hyp}" (self-correction)`);
+  } else if (item._recovered) {
+    lines.push(`"${item.ref}" — recovered from omission`);
+    lines.push('Originally marked as omission (not read)');
+    lines.push('Parakeet heard this word; Reverb heard nothing');
+    lines.push('Evidence is weak — single biased source, may need verification');
   } else {
     lines.push(item.ref || '');
   }
@@ -270,9 +275,12 @@ function buildEnhancedTooltip(item, sttWord) {
     lines.push(`  Reverb v0.0: ${fmtTs(rcStart, rcEnd)}`);
 
     // What each model heard (word text)
-    const reverbWord = sttWord._alignment?.verbatim || sttWord.word;
+    const reverbWord = sttWord._alignment?.verbatim || (sttWord._recovered ? null : sttWord.word);
     const xvalWord = sttWord._xvalWord;
-    if (xvalWord) {
+    if (sttWord._recovered) {
+      lines.push(`${xvalLabel} heard: "${xvalWord || sttWord.word}"`);
+      lines.push('Reverb heard: [nothing]');
+    } else if (xvalWord) {
       lines.push(`${xvalLabel} heard: "${xvalWord}"`);
       lines.push(`Reverb heard: "${reverbWord}"`);
     } else if (xvalWord === null) {
@@ -289,7 +297,8 @@ function buildEnhancedTooltip(item, sttWord) {
         confirmed: ' (both agree)',
         disagreed: ' (models heard different words)',
         unconfirmed: ` (Reverb only — ${xvalLabel} heard nothing)`,
-        unavailable: ` (${xvalLabel} offline)`
+        unavailable: ` (${xvalLabel} offline)`,
+        recovered: ` (${xvalLabel} only — Reverb heard nothing, weak evidence)`
       };
       lines.push(`Cross-validation: ${xval}${xvalLabels[xval] || ''}`);
     }
