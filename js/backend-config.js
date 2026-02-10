@@ -1,28 +1,49 @@
 /**
  * Backend Configuration — Single source of truth for backend URL and auth.
  *
- * Values read from localStorage once at module load time.
- * Changing the URL or token requires a page reload.
+ * Priority order:
+ * 1. localStorage (set by user or URL params)
+ * 2. backend-config.json (auto-updated by start_services.bat)
+ * 3. localhost fallback (for local development)
  *
- * This uses top-level const exports (not function-based re-reads like
- * cross-validator.js) because backend URL is infrastructure config that
- * changes rarely and all consuming modules bind it at import time.
+ * Changing the URL or token requires a page reload.
  */
 
 function getDefaultBackendUrl() {
   const saved = localStorage.getItem('orf_backend_url');
   if (saved) return saved;
-  // If running locally, use localhost
   if (['localhost', '127.0.0.1'].includes(location.hostname)) {
     return 'http://localhost:8765';
   }
-  // If deployed remotely, no default — force user to configure
   return '';
 }
 
-export const BACKEND_URL = getDefaultBackendUrl();
+function getDefaultBackendToken() {
+  return localStorage.getItem('orf_backend_token') || '';
+}
 
-export const BACKEND_TOKEN = localStorage.getItem('orf_backend_token') || '';
+export let BACKEND_URL = getDefaultBackendUrl();
+export let BACKEND_TOKEN = getDefaultBackendToken();
+
+/**
+ * Fetch backend config from backend-config.json if no settings exist.
+ * Returns a promise that resolves when config is ready.
+ */
+export const backendReady = (BACKEND_URL)
+  ? Promise.resolve()
+  : fetch('backend-config.json?t=' + Date.now())
+      .then(r => r.json())
+      .then(cfg => {
+        if (cfg.backendUrl && !BACKEND_URL) {
+          BACKEND_URL = cfg.backendUrl;
+          localStorage.setItem('orf_backend_url', cfg.backendUrl);
+        }
+        if (cfg.backendToken && !BACKEND_TOKEN) {
+          BACKEND_TOKEN = cfg.backendToken;
+          localStorage.setItem('orf_backend_token', cfg.backendToken);
+        }
+      })
+      .catch(() => {}); // Silent fail — user can configure manually
 
 /**
  * Build fetch headers with optional auth token.

@@ -147,6 +147,10 @@ function refreshStudentUI() {
 }
 
 async function runAnalysis() {
+  // Ensure backend config is loaded (fetches from backend-config.json if needed)
+  const { backendReady } = await import('./backend-config.js');
+  await backendReady;
+
   // Initialize debug logging for this assessment
   initDebugLog();
   addStage('start', { codeVersion: CODE_VERSION, timestamp: new Date().toISOString() });
