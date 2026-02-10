@@ -284,6 +284,58 @@ const DIAGNOSTIC_MISCUES = {
 };
 
 // ============================================================================
+// ABBREVIATION HANDLING (alignment.js + app.js)
+// These prevent false errors when reference text contains abbreviations
+// ============================================================================
+
+const ABBREVIATION_RULES = {
+  abbreviationCompoundMerge: {
+    description: 'Internal-period abbreviation (i.e., e.g., U.S.) stripped to letter sequence and merged via compound word detection when ASR outputs individual letters',
+    detector: 'text-normalize.js → normalizeText() (period strip) + alignment.js → mergeCompoundWords()',
+    countsAsError: false, // Correctly read abbreviation, not an error
+    config: {
+      periodStrip: 'normalizeText strips all internal periods: "i.e." → "ie"',
+      compoundMerge: 'Existing mergeCompoundWords matches sub(ref="ie", hyp="i") + ins(hyp="e") → correct'
+    },
+    example: {
+      reference: 'content-i.e., who',
+      spoken: '"eye ee"',
+      result: 'Reverb: "i"+"e" → compound merge: "i"+"e"="ie" → correct'
+    }
+  },
+
+  abbreviationExpansionMerge: {
+    description: 'Multi-word abbreviation expansion where student reads the full meaning instead of letter-by-letter',
+    detector: 'alignment.js → mergeAbbreviationExpansions()',
+    countsAsError: false,
+    config: {
+      expansions: 'ABBREVIATION_EXPANSIONS table in alignment.js (ie→"that is", eg→"for example", etc.)',
+      position: 'Runs after mergeCompoundWords, before mergeContractions'
+    },
+    example: {
+      reference: 'i.e.',
+      spoken: '"that is"',
+      result: 'sub(ref="ie", hyp="that") + ins(hyp="is") → matches expansion → correct'
+    }
+  },
+
+  xvalAbbreviationConfirmation: {
+    description: 'Cross-validator (Parakeet/Deepgram) confirms abbreviation reading when primary ASR (Reverb) splits it into fragments',
+    detector: 'app.js → cross-validator abbreviation confirmation step (after omission recovery)',
+    countsAsError: false,
+    config: {
+      mechanism: 'Parakeet ITN reassembles spoken letters back to written form (e.g., "eye ee" → "i.e.")',
+      guard: 'Substitution hyp must be a fragment of the ref word or ≤2 chars'
+    },
+    example: {
+      reference: 'i.e.',
+      spoken: '"eye ee"',
+      result: 'Reverb: sub("ie"/"e"), Parakeet: confirmed "i.e." → reclassify as correct'
+    }
+  }
+};
+
+// ============================================================================
 // FORGIVENESS RULES (detected in metrics.js / alignment post-processing)
 // These identify errors that should NOT count against the student
 // ============================================================================
@@ -356,6 +408,9 @@ export const MISCUE_REGISTRY = {
   // Diagnostics (fluency indicators)
   ...DIAGNOSTIC_MISCUES,
 
+  // Abbreviation handling
+  ...ABBREVIATION_RULES,
+
   // Forgiveness rules
   ...FORGIVENESS_RULES
 };
@@ -427,4 +482,7 @@ export function getDetectorLocation(type) {
  * - reverb_filler: Filler word (um, uh) via Reverb model diff
  * - reverb_repetition: Word repetition via Reverb model diff
  * - reverb_false_start: False start via Reverb model diff
+ * - abbreviationCompoundMerge: i.e./e.g./U.S. read letter-by-letter → compound merged
+ * - abbreviationExpansionMerge: i.e. read as "that is" → expansion merged
+ * - xvalAbbreviationConfirmation: Cross-validator confirms abbreviation reading
  */

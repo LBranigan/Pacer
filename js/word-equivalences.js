@@ -29,6 +29,17 @@ const EQUIVALENCE_GROUPS = [
   ['prof', 'professor'],
   ['rev', 'reverend'],
 
+  // Trailing-period abbreviation expansions (after normalizeText strips periods)
+  ['etc', 'etcetera'],
+  ['mt', 'mount', 'mountain'],
+  ['ft', 'fort', 'foot', 'feet'],
+  ['inc', 'incorporated'],
+  ['ltd', 'limited'],
+  ['co', 'company', 'county'],
+  ['corp', 'corporation'],
+  ['vol', 'volume'],
+  ['fig', 'figure'],
+
   // Contractions ↔ expanded forms
   ["can't", 'cannot', 'can not'],
   ["won't", 'will not'],

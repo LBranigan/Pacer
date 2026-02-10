@@ -743,6 +743,50 @@ async function runAnalysis() {
     }
   }
 
+  // Cross-validator abbreviation confirmation (fallback for Steps 1-3).
+  // When Parakeet/Deepgram outputs a confirmed word whose period-stripped form
+  // matches a substitution's ref word, reclassify the substitution as correct.
+  // Example: Reverb splits "i.e." → "i"+"e" causing sub("ie"/"e"), but Parakeet
+  // outputs "i.e." as a single confirmed word — we trust Parakeet here.
+  const xvalRawWords = data._kitchenSink?.xvalRawWords || [];
+  if (xvalRawWords.length > 0) {
+    const xvalConfirmedSet = new Set();
+    for (const xw of xvalRawWords) {
+      if (xw.word) {
+        // Strip periods and normalize to match ref format (e.g., "i.e." → "ie")
+        const stripped = xw.word.toLowerCase().replace(/\./g, '').replace(/[^a-z'-]/g, '');
+        if (stripped) xvalConfirmedSet.add(stripped);
+      }
+    }
+
+    const abbrConfirmed = [];
+    for (const entry of alignment) {
+      if (entry.type !== 'substitution' || !entry.ref) continue;
+      const refNorm = entry.ref.toLowerCase();
+      // Check if the cross-validator confirmed this exact word form
+      if (xvalConfirmedSet.has(refNorm)) {
+        // Additional guard: the substitution's hyp should be a fragment/letter
+        // of the abbreviation (e.g., hyp="e" for ref="ie") — not a completely
+        // unrelated word that happens to share a cross-validator match
+        const hypNorm = (entry.hyp || '').toLowerCase();
+        if (refNorm.includes(hypNorm) || hypNorm.length <= 2) {
+          entry.type = 'correct';
+          entry._xvalAbbrConfirmed = true;
+          abbrConfirmed.push({ ref: entry.ref, hyp: entry.hyp });
+        }
+      }
+    }
+
+    if (abbrConfirmed.length > 0) {
+      addStage('xval_abbreviation_confirmation', {
+        count: abbrConfirmed.length,
+        confirmed: abbrConfirmed
+      });
+      console.log(`[xval-abbr] Confirmed ${abbrConfirmed.length} abbreviation(s) via cross-validator:`,
+        abbrConfirmed.map(c => `${c.ref}/${c.hyp}`));
+    }
+  }
+
   // Resolve near-miss clusters — Path 2: decoding struggle (single pass)
   // Runs AFTER omission recovery so recovered 'correct' words can serve as
   // self-correction anchors (e.g., ins(epi-) → recovered correct(epiphany))

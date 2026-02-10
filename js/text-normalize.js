@@ -22,6 +22,7 @@ export function normalizeText(text) {
     .toLowerCase()
     .split(/\s+/)
     .map(w => w.replace(/^[^\w'-]+|[^\w'-]+$/g, ''))
+    .map(w => w.replace(/\./g, ''))   // Strip internal periods (abbreviations: i.e. → ie, U.S.A. → usa)
     .filter(w => w.length > 0);
 
   // Merge trailing-hyphen tokens with next token (line-break artifacts from OCR).

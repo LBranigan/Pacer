@@ -130,6 +130,178 @@ function mergeCompoundWords(alignment) {
 }
 
 /**
+ * Known abbreviation → multi-word expansion mappings.
+ * Keys are period-stripped forms (after normalizeText).
+ * Values are arrays of acceptable spoken expansions.
+ */
+const ABBREVIATION_EXPANSIONS = {
+  'ie':    [['that', 'is']],
+  'eg':    [['for', 'example']],
+  'etc':   [['et', 'cetera']],
+  'aka':   [['also', 'known', 'as']],
+  'diy':   [['do', 'it', 'yourself']],
+  'rsvp':  [['please', 'respond']],
+  'bc':    [['before', 'christ']],
+  'ad':    [['anno', 'domini']],
+  'ps':    [['post', 'script']],
+  'us':    [['united', 'states']],
+  'usa':   [['united', 'states', 'of', 'america']],
+  'uk':    [['united', 'kingdom']],
+  'dc':    [['district', 'of', 'columbia']],
+  'am':    [['in', 'the', 'morning']],
+  'pm':    [['in', 'the', 'afternoon'], ['in', 'the', 'evening']],
+};
+
+/**
+ * Post-process alignment to detect abbreviation → multi-word expansions.
+ * When a student reads an abbreviation as its full English meaning,
+ * we get 1 ref token mapping to N hyp tokens of different words.
+ *
+ * Example: ref="ie" (after period strip), student says "that is"
+ *   → sub(ref="ie", hyp="that") + ins(hyp="is")
+ *   → reclassified as correct (compound merge with abbreviation expansion)
+ *
+ * Position in pipeline: after mergeCompoundWords, before mergeContractions.
+ */
+function mergeAbbreviationExpansions(alignment) {
+  const result = [];
+  let i = 0;
+
+  while (i < alignment.length) {
+    const current = alignment[i];
+
+    // Pattern A: substitution followed by insertions matching an expansion
+    if (current.type === 'substitution' && current.ref && current.hyp) {
+      const refNorm = current.ref.toLowerCase();
+      const expansions = ABBREVIATION_EXPANSIONS[refNorm];
+
+      if (expansions) {
+        let matched = false;
+
+        for (const expansion of expansions) {
+          // First word of expansion must match the substitution's hyp
+          if (current.hyp.toLowerCase() !== expansion[0]) continue;
+
+          // Remaining expansion words must match following insertions
+          const remaining = expansion.slice(1);
+          let allMatch = true;
+
+          for (let k = 0; k < remaining.length; k++) {
+            const nextIdx = i + 1 + k;
+            if (nextIdx >= alignment.length ||
+                alignment[nextIdx].type !== 'insertion' ||
+                alignment[nextIdx].hyp?.toLowerCase() !== remaining[k]) {
+              allMatch = false;
+              break;
+            }
+          }
+
+          if (allMatch) {
+            // Reclassify as correct compound
+            const parts = [current.hyp, ...remaining.map((_, k) => alignment[i + 1 + k].hyp)];
+            result.push({
+              ref: current.ref,
+              hyp: parts.join(' '),
+              type: 'correct',
+              compound: true,
+              _abbreviationExpansion: true,
+              parts
+            });
+            i += 1 + remaining.length;
+            matched = true;
+            break;
+          }
+        }
+
+        if (!matched) {
+          result.push(current);
+          i++;
+        }
+        continue;
+      }
+    }
+
+    // Pattern B: insertions followed by substitution matching an expansion
+    // e.g., ins(hyp="for") + sub(ref="eg", hyp="example")
+    if (current.type === 'insertion' && current.hyp) {
+      // Collect consecutive insertions
+      let insertionCount = 0;
+      while (i + insertionCount < alignment.length && alignment[i + insertionCount].type === 'insertion') {
+        insertionCount++;
+      }
+
+      const subIdx = i + insertionCount;
+      if (subIdx < alignment.length && alignment[subIdx].type === 'substitution' && alignment[subIdx].ref) {
+        const refNorm = alignment[subIdx].ref.toLowerCase();
+        const expansions = ABBREVIATION_EXPANSIONS[refNorm];
+
+        if (expansions) {
+          let matched = false;
+
+          for (const expansion of expansions) {
+            // Last word of expansion must match the substitution's hyp
+            if (alignment[subIdx].hyp?.toLowerCase() !== expansion[expansion.length - 1]) continue;
+
+            // Preceding insertion words must match the expansion prefix
+            const prefix = expansion.slice(0, -1);
+            if (prefix.length > insertionCount) continue;
+
+            let allMatch = true;
+            const startIns = insertionCount - prefix.length;
+            for (let k = 0; k < prefix.length; k++) {
+              if (alignment[i + startIns + k].hyp?.toLowerCase() !== prefix[k]) {
+                allMatch = false;
+                break;
+              }
+            }
+
+            if (allMatch) {
+              // Push non-matching insertions before the expansion
+              for (let k = 0; k < startIns; k++) {
+                result.push(alignment[i + k]);
+              }
+
+              const parts = [...prefix.map((_, k) => alignment[i + startIns + k].hyp), alignment[subIdx].hyp];
+              result.push({
+                ref: alignment[subIdx].ref,
+                hyp: parts.join(' '),
+                type: 'correct',
+                compound: true,
+                _abbreviationExpansion: true,
+                parts
+              });
+              i = subIdx + 1;
+              matched = true;
+              break;
+            }
+          }
+
+          if (!matched) {
+            for (let k = 0; k < insertionCount; k++) {
+              result.push(alignment[i + k]);
+            }
+            i += insertionCount;
+          }
+          continue;
+        }
+      }
+
+      // No abbreviation match — push insertions normally
+      for (let k = 0; k < insertionCount; k++) {
+        result.push(alignment[i + k]);
+      }
+      i += insertionCount;
+      continue;
+    }
+
+    result.push(current);
+    i++;
+  }
+
+  return result;
+}
+
+/**
  * Post-process alignment to detect ASR merging two reference words into one.
  * Mirror of mergeCompoundWords — handles the reverse direction.
  *
@@ -351,8 +523,11 @@ export function alignWords(referenceText, transcriptWords) {
     }
   }
 
-  // Post-process: merge compound words split by ASR (e.g., "hotdog" → "hot" + "dog")
-  // then merge contractions spanning two ref words (e.g., "you will" → "you'll")
+  // Post-process pipeline:
+  // 1. Merge compound words split by ASR (e.g., "hotdog" → "hot" + "dog", "ie" → "i" + "e")
+  // 2. Merge abbreviation expansions (e.g., ref "ie" → hyp "that is")
+  // 3. Merge contractions spanning two ref words (e.g., "you will" → "you'll")
   const merged = mergeCompoundWords(result);
-  return mergeContractions(merged);
+  const abbrMerged = mergeAbbreviationExpansions(merged);
+  return mergeContractions(abbrMerged);
 }
