@@ -914,3 +914,20 @@ body.dev-mode .dev-mode-toggle {
   border-radius: 3px;
 }
 
+/* Insertion & self-correction highlight overlay */
+.word-highlight-insertion {
+  box-shadow: 0 0 0 3px rgba(21, 101, 192, 0.4);
+  outline: 2px solid #1565c0;
+  outline-offset: 2px;
+}
+
+.word-highlight-self-correction {
+  box-shadow: 0 0 0 3px rgba(106, 27, 154, 0.3);
+  outline: 2px solid #6a1b9a;
+  outline-offset: 2px;
+}
+
+.word[data-start-time] {
+  transition: box-shadow 0.2s ease, outline 0.2s ease;
+}
+

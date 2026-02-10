@@ -46,9 +46,77 @@ function showWordTooltip(span, playFn) {
   tip.style.top = top + 'px';
 }
 
+// ── Insertion/SC highlight overlay (coupled to tooltip lifecycle) ─────────────
+let _highlightedSpans = [];
+
+function clearHighlightOverlay() {
+  for (const s of _highlightedSpans) {
+    s.classList.remove('word-highlight-insertion', 'word-highlight-self-correction');
+  }
+  _highlightedSpans = [];
+}
+
+function findBracketingSpans(wordsDiv, startTime, endTime) {
+  if (startTime === 0 && endTime === 0) return { prevSpan: null, nextSpan: null };
+  const allSpans = [...wordsDiv.querySelectorAll('[data-start-time]')];
+  const insMid = (startTime + endTime) / 2;
+  let prevSpan = null;
+  let nextSpan = null;
+  for (const span of allSpans) {
+    const spanStart = parseFloat(span.dataset.startTime) || 0;
+    const spanEnd = parseFloat(span.dataset.endTime) || 0;
+    const spanMid = (spanStart + spanEnd) / 2;
+    if (spanMid <= insMid) {
+      prevSpan = span;
+    } else if (!nextSpan) {
+      nextSpan = span;
+    }
+  }
+  return { prevSpan, nextSpan };
+}
+
+function highlightSpanRange(wordsDiv, prevSpan, nextSpan, highlightClass) {
+  const allSpans = [...wordsDiv.querySelectorAll('[data-start-time]')];
+  const startIdx = prevSpan ? allSpans.indexOf(prevSpan) : 0;
+  const endIdx = nextSpan ? allSpans.indexOf(nextSpan) : allSpans.length - 1;
+  for (let i = startIdx; i <= endIdx; i++) {
+    allSpans[i].classList.add(highlightClass);
+    _highlightedSpans.push(allSpans[i]);
+  }
+  return { firstSpan: allSpans[startIdx], lastSpan: allSpans[endIdx] };
+}
+
+function scrollToHighlightIfNeeded(firstSpan, lastSpan) {
+  const first = firstSpan || lastSpan;
+  const last = lastSpan || firstSpan;
+  const firstRect = first.getBoundingClientRect();
+  const lastRect = last.getBoundingClientRect();
+  const firstVisible = firstRect.top >= 0 && firstRect.bottom <= window.innerHeight;
+  const lastVisible = lastRect.top >= 0 && lastRect.bottom <= window.innerHeight;
+  if (!firstVisible || !lastVisible) {
+    const target = !firstVisible ? first : last;
+    target.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+}
+
+function applyHighlightOverlay(span, highlightClass) {
+  const start = parseFloat(span.dataset.startTime) || 0;
+  const end = parseFloat(span.dataset.endTime) || 0;
+  if (start > 0 || end > 0) {
+    const wordsDiv = document.getElementById('resultWords');
+    if (!wordsDiv) return;
+    const { prevSpan, nextSpan } = findBracketingSpans(wordsDiv, start, end);
+    if (prevSpan || nextSpan) {
+      const { firstSpan, lastSpan } = highlightSpanRange(wordsDiv, prevSpan, nextSpan, highlightClass);
+      scrollToHighlightIfNeeded(firstSpan, lastSpan);
+    }
+  }
+}
+
 function hideWordTooltip() {
   if (_tooltipEl) { _tooltipEl.remove(); _tooltipEl = null; }
   if (_tooltipOwner) { _tooltipOwner.classList.remove('word-active-tooltip'); _tooltipOwner = null; }
+  clearHighlightOverlay();
 }
 
 // Dismiss on click-away
@@ -857,6 +925,12 @@ export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, di
       }
     }
 
+    // Store timestamps for highlight overlay targeting
+    if (sttWord) {
+      span.dataset.startTime = parseSttTime(sttWord.startTime).toFixed(3);
+      span.dataset.endTime = parseSttTime(sttWord.endTime).toFixed(3);
+    }
+
     // NL tier class and tooltip info
     if (item.nl) {
       span.classList.add('word-tier-' + item.nl.tier);
@@ -1082,14 +1156,21 @@ export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, di
         }
       }
 
+      // Store timestamps for highlight overlay targeting
+      if (meta) {
+        span.dataset.startTime = parseSttTime(meta.startTime).toFixed(3);
+        span.dataset.endTime = parseSttTime(meta.endTime).toFixed(3);
+      }
+
       // Special ASR token (e.g., <unknown> from Reverb CTC decoder)
       if (meta && isSpecialASTToken(meta.word)) {
         span.textContent = '?';
         const start = parseFloat(meta.startTime?.replace('s', '')) || 0;
         const end = parseFloat(meta.endTime?.replace('s', '')) || 0;
+        const durationMs = Math.round((end - start) * 1000);
         const tipLines = [
           '? — speech detected but not recognized as a word',
-          `${start.toFixed(2)}s – ${end.toFixed(2)}s`
+          `${start.toFixed(2)}s – ${end.toFixed(2)}s (${durationMs}ms)`
         ];
         if (meta._xvalWord) {
           const xvalLabel = meta._xvalEngine ? meta._xvalEngine.charAt(0).toUpperCase() + meta._xvalEngine.slice(1) : 'Cross-validator';
@@ -1113,7 +1194,7 @@ export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, di
           }
         }
         if (ins._prevRef) {
-          tipLines.push(`Attempted after: "${ins._prevRef}"`);
+          tipLines.push(`Located after: "${ins._prevRef}"`);
         }
         span.dataset.tooltip = tipLines.join('\n');
       } else {
@@ -1121,11 +1202,20 @@ export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, di
         if (meta) {
           const start = parseFloat(meta.startTime?.replace('s', '')) || 0;
           const end = parseFloat(meta.endTime?.replace('s', '')) || 0;
-          span.dataset.tooltip = ins.hyp + `\n${start.toFixed(2)}s – ${end.toFixed(2)}s  |  ${meta.crossValidation || 'N/A'}`;
+          const durationMs = Math.round((end - start) * 1000);
+          const tipLines = [
+            `Inserted word: "${ins.hyp}"`,
+            `${start.toFixed(2)}s – ${end.toFixed(2)}s (${durationMs}ms)`,
+            `Cross-validation: ${meta.crossValidation || 'N/A'}`
+          ];
+          if (ins._prevRef) {
+            tipLines.push(`Located after: "${ins._prevRef}"`);
+          }
+          span.dataset.tooltip = tipLines.join('\n');
         }
       }
 
-      // Click-to-play audio for insertion words (especially useful for [unknown])
+      // Click-to-play audio + highlight overlay for insertion words
       if (wordAudioEl && meta) {
         const start = parseSttTime(meta.startTime);
         const end = parseSttTime(meta.endTime);
@@ -1143,12 +1233,24 @@ export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, di
             wordAudioEl.addEventListener('timeupdate', onTime);
             wordAudioEl.play().catch(() => {});
           };
-          span.addEventListener('click', (e) => { e.stopPropagation(); showWordTooltip(span, playFn); });
+          span.addEventListener('click', (e) => {
+            e.stopPropagation();
+            showWordTooltip(span, playFn);
+            applyHighlightOverlay(span, 'word-highlight-insertion');
+          });
         } else {
-          span.addEventListener('click', (e) => { e.stopPropagation(); showWordTooltip(span, null); });
+          span.addEventListener('click', (e) => {
+            e.stopPropagation();
+            showWordTooltip(span, null);
+            applyHighlightOverlay(span, 'word-highlight-insertion');
+          });
         }
       } else {
-        span.addEventListener('click', (e) => { e.stopPropagation(); showWordTooltip(span, null); });
+        span.addEventListener('click', (e) => {
+          e.stopPropagation();
+          showWordTooltip(span, null);
+          applyHighlightOverlay(span, 'word-highlight-insertion');
+        });
       }
 
       insertSection.appendChild(span);
@@ -1171,7 +1273,51 @@ export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, di
       span.className = 'word word-self-correction';
       const repeats = sc.type === 'phrase-repeat' ? sc.count / 2 : sc.count - 1;
       span.textContent = sc.words + (repeats > 1 ? ' (repeated ' + repeats + 'x)' : ' (repeated)');
-      span.dataset.tooltip = sc.type + ' at position ' + sc.startIndex;
+
+      // Map startIndex through transcriptWords to get timestamps
+      const scWord = transcriptWords?.[sc.startIndex];
+      if (scWord) {
+        span.dataset.startTime = parseSttTime(scWord.startTime).toFixed(3);
+        span.dataset.endTime = parseSttTime(scWord.endTime).toFixed(3);
+      }
+
+      const scStart = scWord ? parseSttTime(scWord.startTime) : 0;
+      const scEnd = scWord ? parseSttTime(scWord.endTime) : 0;
+      const tipLines = [
+        `Self-correction: "${sc.words}" (${sc.type})`,
+        scStart > 0 ? `${scStart.toFixed(2)}s – ${scEnd.toFixed(2)}s (${Math.round((scEnd - scStart) * 1000)}ms)` : `Position ${sc.startIndex}`,
+        repeats > 1 ? `Repeated ${repeats}x` : 'Repeated once'
+      ];
+      span.dataset.tooltip = tipLines.join('\n');
+
+      // Click handler: tooltip + highlight overlay
+      if (wordAudioEl && scWord && (scStart > 0 || scEnd > 0)) {
+        span.classList.add('word-clickable');
+        const playFn = () => {
+          wordAudioEl.pause();
+          wordAudioEl.currentTime = scStart;
+          const onTime = () => {
+            if (wordAudioEl.currentTime >= scEnd) {
+              wordAudioEl.pause();
+              wordAudioEl.removeEventListener('timeupdate', onTime);
+            }
+          };
+          wordAudioEl.addEventListener('timeupdate', onTime);
+          wordAudioEl.play().catch(() => {});
+        };
+        span.addEventListener('click', (e) => {
+          e.stopPropagation();
+          showWordTooltip(span, playFn);
+          applyHighlightOverlay(span, 'word-highlight-self-correction');
+        });
+      } else {
+        span.addEventListener('click', (e) => {
+          e.stopPropagation();
+          showWordTooltip(span, null);
+          applyHighlightOverlay(span, 'word-highlight-self-correction');
+        });
+      }
+
       scSection.appendChild(span);
       scSection.appendChild(document.createTextNode(' '));
     }
@@ -1192,7 +1338,57 @@ export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, di
       const span = document.createElement('span');
       span.className = 'word word-self-correction';
       span.textContent = `"${sc.hyp}" \u2192 "${sc._nearMissTarget}"`;
-      span.dataset.tooltip = `Near-miss self-correction: student said "${sc.hyp}", then correctly said "${sc._nearMissTarget}"`;
+
+      // Look up STT metadata (entries never consumed by regularInsertions — filtered at line 1128)
+      let scMeta = null;
+      if (sc.hyp && sttLookup) {
+        const queue = sttLookup.get(sc.hyp);
+        if (queue && queue.length > 0) {
+          scMeta = queue.shift();
+        }
+      }
+      if (scMeta) {
+        span.dataset.startTime = parseSttTime(scMeta.startTime).toFixed(3);
+        span.dataset.endTime = parseSttTime(scMeta.endTime).toFixed(3);
+      }
+
+      const nmStart = scMeta ? parseSttTime(scMeta.startTime) : 0;
+      const nmEnd = scMeta ? parseSttTime(scMeta.endTime) : 0;
+      const tipLines = [
+        `Near-miss self-correction: "${sc.hyp}" \u2192 "${sc._nearMissTarget}"`,
+        nmStart > 0 ? `${nmStart.toFixed(2)}s – ${nmEnd.toFixed(2)}s (${Math.round((nmEnd - nmStart) * 1000)}ms)` : null,
+        `Student said "${sc.hyp}", then correctly said "${sc._nearMissTarget}"`
+      ].filter(Boolean);
+      span.dataset.tooltip = tipLines.join('\n');
+
+      // Click handler: tooltip + play + highlight
+      if (wordAudioEl && scMeta && (nmStart > 0 || nmEnd > 0)) {
+        span.classList.add('word-clickable');
+        const playFn = () => {
+          wordAudioEl.pause();
+          wordAudioEl.currentTime = nmStart;
+          const onTime = () => {
+            if (wordAudioEl.currentTime >= nmEnd) {
+              wordAudioEl.pause();
+              wordAudioEl.removeEventListener('timeupdate', onTime);
+            }
+          };
+          wordAudioEl.addEventListener('timeupdate', onTime);
+          wordAudioEl.play().catch(() => {});
+        };
+        span.addEventListener('click', (e) => {
+          e.stopPropagation();
+          showWordTooltip(span, playFn);
+          applyHighlightOverlay(span, 'word-highlight-self-correction');
+        });
+      } else {
+        span.addEventListener('click', (e) => {
+          e.stopPropagation();
+          showWordTooltip(span, null);
+          applyHighlightOverlay(span, 'word-highlight-self-correction');
+        });
+      }
+
       nmscSection.appendChild(span);
       nmscSection.appendChild(document.createTextNode(' '));
     }
