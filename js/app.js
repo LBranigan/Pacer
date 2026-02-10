@@ -1220,7 +1220,6 @@ async function runAnalysis() {
     : computePaceConsistency(phrasing.overallPhrasing, transcriptWords);
   await loadPhonemeData(); // Ensure CMUdict phoneme counts are loaded before normalization
   const wordOutliers = computeWordDurationOutliers(transcriptWords, alignment);
-  const xvalRawWords = data._kitchenSink?.xvalRawWords || [];
   const wordSpeedTiers = computeWordSpeedTiers(wordOutliers, alignment, xvalRawWords, transcriptWords, referenceText);
 
   diagnostics.prosody = { phrasing, pauseAtPunctuation, paceConsistency, wordOutliers };
@@ -1648,6 +1647,20 @@ if (backendUrlInput) {
   const savedToken = localStorage.getItem('orf_backend_token') || '';
   if (!backendUrlInput.value && savedUrl) backendUrlInput.value = savedUrl;
   if (!backendTokenInput.value && savedToken) backendTokenInput.value = savedToken;
+
+  // Auto-fetch backend config from GitHub Pages if no settings exist yet
+  if (!backendUrlInput.value) {
+    fetch('backend-config.json?t=' + Date.now()).then(r => r.json()).then(cfg => {
+      if (cfg.backendUrl && !backendUrlInput.value) {
+        backendUrlInput.value = cfg.backendUrl;
+        localStorage.setItem('orf_backend_url', cfg.backendUrl);
+      }
+      if (cfg.backendToken && !backendTokenInput.value) {
+        backendTokenInput.value = cfg.backendToken;
+        localStorage.setItem('orf_backend_token', cfg.backendToken);
+      }
+    }).catch(() => {}); // Silent fail — user can configure manually
+  }
 
   // Track whether values have changed since page load
   const initialUrl = savedUrl;
