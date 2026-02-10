@@ -56,9 +56,12 @@ function clearHighlightOverlay() {
   _highlightedSpans = [];
 }
 
+// Selector: only main alignment spans (excludes insertion/SC sections below)
+const MAIN_SPAN_SEL = '.word-main[data-start-time]';
+
 function findBracketingSpans(wordsDiv, startTime, endTime) {
   if (startTime === 0 && endTime === 0) return { prevSpan: null, nextSpan: null };
-  const allSpans = [...wordsDiv.querySelectorAll('[data-start-time]')];
+  const allSpans = [...wordsDiv.querySelectorAll(MAIN_SPAN_SEL)];
   const insMid = (startTime + endTime) / 2;
   let prevSpan = null;
   let nextSpan = null;
@@ -76,7 +79,7 @@ function findBracketingSpans(wordsDiv, startTime, endTime) {
 }
 
 function highlightSpanRange(wordsDiv, prevSpan, nextSpan, highlightClass) {
-  const allSpans = [...wordsDiv.querySelectorAll('[data-start-time]')];
+  const allSpans = [...wordsDiv.querySelectorAll(MAIN_SPAN_SEL)];
   const startIdx = prevSpan ? allSpans.indexOf(prevSpan) : 0;
   const endIdx = nextSpan ? allSpans.indexOf(nextSpan) : allSpans.length - 1;
   for (let i = startIdx; i <= endIdx; i++) {
@@ -909,7 +912,7 @@ export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, di
     const span = document.createElement('span');
     // Forgiven words (proper nouns) render as correct — they don't count as errors
     const displayType = item.forgiven ? 'correct' : item.type;
-    span.className = 'word word-' + displayType;
+    span.className = 'word word-main word-' + displayType;
     span.textContent = item._displayRef || item.ref || '';
 
     // Look up STT word metadata for tooltip
@@ -1718,7 +1721,7 @@ export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, di
   // Disfluency diagnostics section (Phase 24)
   // disfluencySummary carries Kitchen Sink disfluencyStats when available
   if (disfluencySummary && disfluencySummary.total !== undefined) {
-    renderDisfluencySection(disfluencySummary, transcriptWords, enrichedAlignment);
+    renderDisfluencySection(disfluencySummary, transcriptWords, enrichedAlignment, wordAudioEl);
   }
 
   jsonDiv.textContent = JSON.stringify({
@@ -1739,8 +1742,9 @@ export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, di
  *   { total, contentWords, rate, byType: { filler, repetition, false_start, unknown } }
  * @param {Array|null} transcriptWords - Full transcript word list with isDisfluency flags
  * @param {Array|null} alignment - Ref-vs-STT alignment entries for context enrichment
+ * @param {HTMLAudioElement|null} audioEl - Shared audio element for click-to-play
  */
-function renderDisfluencySection(disfluencyStats, transcriptWords, alignment) {
+function renderDisfluencySection(disfluencyStats, transcriptWords, alignment, audioEl) {
   const section = document.getElementById('disfluencySection');
   const summaryEl = document.getElementById('disfluencySummaryText');
   const detailsEl = document.getElementById('disfluencyDetails');
@@ -1764,22 +1768,21 @@ function renderDisfluencySection(disfluencyStats, transcriptWords, alignment) {
   }
 
   // ── Build word-level disfluency list from transcriptWords ──
+  const CONTEXT_RADIUS = 4;
   const disfluencies = [];
   if (transcriptWords && transcriptWords.length > 0) {
     for (let i = 0; i < transcriptWords.length; i++) {
       const w = transcriptWords[i];
       if (!w.isDisfluency) continue;
 
-      // Gather context: previous and next non-disfluent words
-      let prevWord = null;
-      for (let j = i - 1; j >= 0; j--) {
-        prevWord = transcriptWords[j].word;
-        break;  // always take immediate neighbor for readable context
+      // Gather expanded context: up to CONTEXT_RADIUS words before and after
+      const prevWords = [];
+      for (let j = i - 1; j >= 0 && prevWords.length < CONTEXT_RADIUS; j--) {
+        prevWords.unshift(transcriptWords[j].word);
       }
-      let nextWord = null;
-      for (let j = i + 1; j < transcriptWords.length; j++) {
-        nextWord = transcriptWords[j].word;
-        break;
+      const nextWords = [];
+      for (let j = i + 1; j < transcriptWords.length && nextWords.length < CONTEXT_RADIUS; j++) {
+        nextWords.push(transcriptWords[j].word);
       }
 
       disfluencies.push({
@@ -1787,8 +1790,11 @@ function renderDisfluencySection(disfluencyStats, transcriptWords, alignment) {
         type: w.disfluencyType || 'unknown',
         crossValidation: w.crossValidation,
         transcriptIndex: i,
-        prevWord,
-        nextWord
+        startTime: parseSttTime(w.startTime),
+        endTime: parseSttTime(w.endTime),
+        prevWords,
+        nextWords,
+        nextWord: nextWords[0] || null  // kept for enrichment strategy 3
       });
     }
   }
