@@ -250,9 +250,14 @@ function buildEnhancedTooltip(item, sttWord) {
     lines.push(`"${item.hyp}" (self-correction)`);
   } else if (item._recovered) {
     lines.push(`"${item.ref}" — recovered from omission`);
-    lines.push('Originally marked as omission (not read)');
-    lines.push('Parakeet heard this word; Reverb heard nothing');
-    lines.push('Evidence is weak — single biased source, may need verification');
+    if (item._isLastRefWord) {
+      lines.push('Reverb missed the final word (known CTC end-of-utterance limitation)');
+      lines.push('Parakeet confirmed this word — expected for final position');
+    } else {
+      lines.push('Originally marked as omission (not read)');
+      lines.push('Parakeet heard this word; Reverb heard nothing');
+      lines.push('Evidence is weak — single biased source, may need verification');
+    }
   } else {
     lines.push(item.ref || '');
   }
@@ -301,12 +306,15 @@ function buildEnhancedTooltip(item, sttWord) {
     // Cross-validation status
     const xval = sttWord.crossValidation;
     if (xval) {
+      const recoveredLabel = sttWord._isLastRefWord
+        ? ` (${xvalLabel} only — final word, Reverb CTC truncation)`
+        : ` (${xvalLabel} only — Reverb heard nothing, weak evidence)`;
       const xvalLabels = {
         confirmed: ' (both agree)',
         disagreed: ' (models heard different words)',
         unconfirmed: ` (Reverb only — ${xvalLabel} heard nothing)`,
         unavailable: ` (${xvalLabel} offline)`,
-        recovered: ` (${xvalLabel} only — Reverb heard nothing, weak evidence)`
+        recovered: recoveredLabel
       };
       lines.push(`Cross-validation: ${xval}${xvalLabels[xval] || ''}`);
     }
@@ -318,7 +326,7 @@ function buildEnhancedTooltip(item, sttWord) {
     }
 
     // Recovery warning (Parakeet-only omission recovery)
-    if (sttWord._recovered) {
+    if (sttWord._recovered && !sttWord._isLastRefWord) {
       lines.push('Recovered from Parakeet only — Reverb heard nothing. Evidence is weak.');
     }
 
@@ -1004,8 +1012,11 @@ export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, di
     }
 
     // Recovery warning badge (!) — weak-evidence words (Parakeet-only recovery or Reverb CTC failure)
+    // Skip badge for last-ref-word recoveries: CTC final-word truncation is a known limitation,
+    // not weak evidence. Parakeet (transducer) is structurally better at utterance boundaries.
     const isReverbGarbage = sttWord && isSpecialASTToken(sttWord.word) && sttWord._xvalWord;
-    if (item._recovered || sttWord?._recovered || isReverbGarbage) {
+    const isLastWordRecovery = item._isLastRefWord && item._recovered;
+    if (!isLastWordRecovery && (item._recovered || sttWord?._recovered || isReverbGarbage)) {
       span.classList.add('word-recovered-badge');
     }
 
@@ -1279,7 +1290,11 @@ export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, di
             tipLines.push('Recovered from Parakeet only');
             tipLines.push('Reverb heard: [nothing]');
             tipLines.push(`${xvalLabel} heard: "${xvalWord || w.word}"`);
-            tipLines.push('Evidence is weak — single biased source');
+            if (w._isLastRefWord) {
+              tipLines.push('Final word — Reverb CTC truncation (known limitation)');
+            } else {
+              tipLines.push('Evidence is weak — single biased source');
+            }
           } else if (category === 'disfluency') {
             const typeLabels = { filler: 'Filler (um, uh)', repetition: 'Repetition', false_start: 'False start', unknown: 'Disfluency' };
             tipLines.push(`Verbatim-only disfluency: ${typeLabels[w.disfluencyType] || 'Disfluency'}`);

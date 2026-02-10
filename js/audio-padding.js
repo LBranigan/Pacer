@@ -14,14 +14,14 @@
  * the raw signal through untouched.
  */
 
-const PADDING_DURATION_MS = 500; // 500ms of silence
+const PADDING_DURATION_MS = 1000; // 1000ms of silence — CTC models need ≥1s trailing context
 
 /**
  * Append silence to an audio blob.
  * Creates a new blob with the original audio + padding silence.
  *
  * @param {Blob} audioBlob - Original audio blob
- * @param {number} paddingMs - Duration of silence to add (default 500ms)
+ * @param {number} paddingMs - Duration of silence to add (default 1000ms)
  * @returns {Promise<{blob: Blob, sampleRate: number}>} New blob with silence and sample rate
  */
 export async function padAudioWithSilence(audioBlob, paddingMs = PADDING_DURATION_MS) {

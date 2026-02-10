@@ -25,14 +25,14 @@ echo ""
 
 # 2. Kill old tunnels
 echo "[2/4] Killing old tunnels..."
-pkill -f cloudflared 2>/dev/null || true
+pkill -f /home/brani/bin/cloudflared 2>/dev/null; true
 sleep 1
 echo "      Done."
 echo ""
 
 # 3. Start tunnel
 echo "[3/4] Starting tunnel..."
-cloudflared tunnel --url http://localhost:8765 2>/tmp/pacer_tunnel.log &
+/home/brani/bin/cloudflared tunnel --url http://localhost:8765 2>/tmp/pacer_tunnel.log &
 TUNNEL_PID=$!
 
 TUNNEL_URL=""

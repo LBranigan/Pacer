@@ -174,7 +174,7 @@ async function runAnalysis() {
     sampleRateHertz = padResult.sampleRate;
     // Padded audio is re-encoded as WAV (LINEAR16)
     effectiveEncoding = 'LINEAR16';
-    addStage('audio_padding', { applied: true, paddingMs: 500, encoding: 'LINEAR16', sampleRate: sampleRateHertz });
+    addStage('audio_padding', { applied: true, paddingMs: 1000, encoding: 'LINEAR16', sampleRate: sampleRateHertz });
   } catch (err) {
     console.warn('[ORF] Audio padding failed:', err.message);
     paddedAudioBlob = appState.audioBlob;
@@ -825,6 +825,16 @@ async function runAnalysis() {
     }
 
     if (recovered.length > 0) {
+      // Flag last-ref-word recoveries — CTC truncation of final words is a known
+      // architectural limitation, not weak evidence, so suppress the (!) badge.
+      const lastRefIdx = alignment.reduce((acc, e, i) => e.ref != null ? i : acc, -1);
+      if (lastRefIdx >= 0 && alignment[lastRefIdx]._recovered) {
+        alignment[lastRefIdx]._isLastRefWord = true;
+        // Also flag the transcriptWords entry so the STT confidence view can see it
+        const recWord = sttLookup.get(alignment[lastRefIdx].hyp?.toLowerCase().replace(/^[^\w'-]+|[^\w'-]+$/g, '').replace(/\./g, ''));
+        if (recWord) recWord.forEach(w => { w._isLastRefWord = true; });
+      }
+
       addStage('omission_recovery', {
         recoveredCount: recovered.length,
         recovered,
