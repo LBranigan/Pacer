@@ -376,10 +376,10 @@ function buildEnhancedTooltip(item, sttWord, extras) {
     const posLabel = POS_LABELS[item.nl.pos] || item.nl.pos;
     const parts = [posLabel];
     if (item.nl.entityType && item.nl.entityType !== 'OTHER') {
-      parts.push(ENTITY_LABELS[item.nl.entityType] || item.nl.entityType);
+      parts.push('\ud83d\udccd ' + (ENTITY_LABELS[item.nl.entityType] || item.nl.entityType));
     }
     const tierLabel = TIER_LABELS[item.nl.tier];
-    if (tierLabel) parts.push(tierLabel);
+    if (tierLabel) parts.push('\ud83d\udcda ' + tierLabel);
     lines.push(parts.join(' \u00b7 '));
   }
 
