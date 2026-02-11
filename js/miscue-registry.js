@@ -251,7 +251,7 @@ const DIAGNOSTIC_MISCUES = {
 
   struggle: {
     description: 'Substitution+ — student failed to produce the word, with additional evidence of decoding difficulty (long pause, near-miss fragments, and/or abandoned attempt). Always an error.',
-    detector: 'diagnostics.js → resolveNearMissClusters() (Path 2: decoding) + detectStruggleWords() (Path 1: hesitation, Path 3: abandoned attempt)',
+    detector: 'app.js (Path 4: divergence) + diagnostics.js → resolveNearMissClusters() (Path 2: decoding) + detectStruggleWords() (Path 1: hesitation, Path 3: abandoned attempt)',
     countsAsError: true, // Struggle = substitution+ = always an error
     config: {
       // Path 1: substitution + pause >= 3s + ref word > 3 chars
@@ -271,7 +271,8 @@ const DIAGNOSTIC_MISCUES = {
     pathways: {
       hesitation: 'Path 1: substitution + 3s+ pause before the word → student hesitated then failed',
       decoding: 'Path 2: substitution + near-miss insertions around it → multiple failed decoding attempts',
-      abandoned: 'Path 3: substitution + cross-validator N/A + near-miss match → partial/garbled attempt only verbatim STT detected'
+      abandoned: 'Path 3: substitution + cross-validator N/A + near-miss match → partial/garbled attempt only verbatim STT detected',
+      divergence: 'Path 4: V2 correct + multiple V1 fragments → V0 cleaned up the word but V1 shows acoustic struggle (e.g., "apo-" + "a" + "pe-peal" → "appeal")'
     },
     fragmentAbsorption: {
       description: 'When Reverb fragments a single utterance into multiple BPE tokens (e.g., "platforms" → "pla" + "for"), orphan insertions are absorbed into the parent mispronunciation using temporal containment. NOTE: Pre-alignment reference-aware fragment merge (app.js) now handles many of these cases upstream — adjacent short Reverb words whose concatenation matches a reference word are merged before NW alignment. This post-alignment absorption remains as a safety net for cases that escape the pre-merge.',
@@ -280,7 +281,7 @@ const DIAGNOSTIC_MISCUES = {
       tolerance: '150ms on xval timestamp window edges',
       guards: ['Insertion must not already be _isSelfCorrection', 'Uses hypIndex for direct timestamp lookup from transcriptWords', 'Absorbs orphan BPE fragments into parent mispronunciation']
     },
-    note: 'The struggle alignment type is always "substitution+". It only exists when the student failed to produce the word. A word can match multiple pathways simultaneously. Correct words with hesitation do not become struggle — they remain correct with onset delay information (DIAG-05).'
+    note: 'A word can match multiple pathways simultaneously. Paths 1-3 require a substitution base (student said wrong word). Path 4 (divergence) reclassifies correct words where V1 fragmented — the student eventually produced the word but struggled acoustically.'
   },
 
   reverbCtcFailure: {

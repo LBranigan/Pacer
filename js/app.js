@@ -1097,6 +1097,39 @@ async function runAnalysis() {
     }
   }
 
+  // ── Path 4: Divergence block struggle reclassification ─────────
+  // Words where V0 clean matched reference (type=correct) but V1 showed
+  // multiple struggle fragments get reclassified as struggle. This is
+  // direct acoustic evidence of decoding difficulty — the student made
+  // multiple attempts before the ASR's clean pass recognized the word.
+  {
+    const divStruggles = [];
+    for (const entry of alignment) {
+      if (entry.type !== 'correct') continue;
+      if (entry.hypIndex == null || entry.hypIndex < 0) continue;
+      const tw = transcriptWords[entry.hypIndex];
+      if (!tw?._v2Merged || !tw._v2OriginalFragments) continue;
+      if (tw._v2OriginalFragments.length < 2) continue;
+
+      entry.type = 'struggle';
+      entry._strugglePath = 'divergence';
+      entry._nearMissEvidence = tw._v2OriginalFragments.map(f => f.word);
+      divStruggles.push({
+        ref: entry.ref,
+        hyp: entry.hyp,
+        fragments: entry._nearMissEvidence
+      });
+    }
+    if (divStruggles.length > 0) {
+      addStage('divergence_struggle', {
+        count: divStruggles.length,
+        entries: divStruggles
+      });
+      console.log(`[Path 4] Reclassified ${divStruggles.length} divergence block(s) as struggle:`,
+        divStruggles.map(s => `"${s.ref}" ← [${s.fragments.join(', ')}]`));
+    }
+  }
+
   // Resolve near-miss clusters — Path 2: decoding struggle (single pass)
   // Runs AFTER omission recovery so recovered 'correct' words can serve as
   // self-correction anchors (e.g., ins(epi-) → recovered correct(epiphany))
