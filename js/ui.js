@@ -2497,7 +2497,6 @@ function renderWordSpeedInto(parent, wordSpeedData, wordAudioEl, transcriptWords
     { cls: 'ws-slow', label: 'Slow' },
     { cls: 'ws-struggling', label: 'Struggling' },
     { cls: 'ws-stalled', label: 'Stalled' },
-    { cls: 'ws-short-word', label: '1-syl word' },
     { cls: 'ws-omitted', label: 'Omitted' },
     { cls: 'ws-no-data', label: 'No data' }
   ];
@@ -2608,11 +2607,9 @@ function buildWordSpeedTooltip(w) {
     return lines.join('\n');
   }
 
-  // Duration line with phoneme + syllable counts
+  // Duration line with phoneme count
   if (w.durationMs != null) {
-    const phonemeStr = w.phonemes != null ? `${w.phonemes} ph` : '';
-    const sylStr = w.syllables != null ? `${w.syllables} syl` : '';
-    const countsStr = [phonemeStr, sylStr].filter(Boolean).join(', ');
+    const countsStr = w.phonemes != null ? `${w.phonemes} ph` : '';
     const sourceTag = w.phonemeSource === 'fallback' ? ' (est.)' : '';
     if (w._gapBeforeMs != null && w._gapBeforeMs > 0) {
       lines.push(`Duration: ${w.durationMs}ms (word) + ${w._gapBeforeMs}ms (pause) = ${w._effectiveDurationMs}ms | ${countsStr}${sourceTag} | ${w.normalizedMs} ms/ph`);
@@ -2622,13 +2619,6 @@ function buildWordSpeedTooltip(w) {
     if (w._tsSource === 'primary' || w._tsSource === 'metric4') {
       lines.push('Timestamps: Reverb (cross-validator unavailable)');
     }
-  }
-
-  if (w.tier === 'short-word') {
-    lines.push('Tier: short-word — few phonemes, timing not classified');
-    if (w._medianMs) lines.push(`Student median: ${w._medianMs} ms/ph`);
-    if (w.sentenceFinal) lines.push('(sentence-final — duration may be inflated)');
-    return lines.join('\n');
   }
 
   // Ratio + tier with range
@@ -2706,7 +2696,6 @@ function renderWordSpeedSummary(container, data) {
   countsLine.style.fontSize = '0.8em';
   countsLine.style.marginTop = '4px';
   const countParts = [`${classifiable} classifiable words`];
-  if (d['short-word'] > 0) countParts.push(`${d['short-word']} single-syl`);
   if (d.omitted > 0) countParts.push(`${d.omitted} omitted`);
   if (d['no-data'] > 0) countParts.push(`${d['no-data']} no data`);
   countsLine.textContent = countParts.join(' | ');

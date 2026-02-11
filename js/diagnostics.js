@@ -1245,10 +1245,10 @@ export function computeWordDurationOutliers(transcriptWords, alignment) {
   const variance = durations.reduce((sum, d) => sum + (d - meanDur) ** 2, 0) / durations.length;
   const sdDur = Math.sqrt(variance);
 
-  // Flag outliers (only words with enough phonemes for meaningful normalization)
+  // Flag outliers
   const outliers = [];
   for (const w of allWords) {
-    if (w.normalizedDurationMs > upperFence && w.phonemes > 3) {
+    if (w.normalizedDurationMs > upperFence) {
       w.isOutlier = true;
       outliers.push({
         hypIndex: w.hypIndex,
@@ -1316,7 +1316,6 @@ export function computeWordDurationOutliers(transcriptWords, alignment) {
  * Falls back to Metric 4 data (from computeWordDurationOutliers) when raw
  * xval words are unavailable.
  *
- * Words with <= 3 phonemes get a distinct 'short-word' tier (timing unreliable at this granularity).
  *
  * @param {object} wordOutliers - Output from computeWordDurationOutliers()
  * @param {Array} alignment - Alignment entries from alignWords()
@@ -1503,9 +1502,7 @@ export function computeWordSpeedTiers(wordOutliers, alignment, xvalRawWords, tra
     w._medianMs = Math.round(medianMs);
     w._upperFence = wordOutliers.baseline?.upperFence || null;
 
-    if (w.phonemes <= 3) {
-      w.tier = 'short-word';
-    } else if (ratio < 0.75) {
+    if (ratio < 0.75) {
       w.tier = 'quick';
     } else if (ratio < 1.25) {
       w.tier = 'steady';
@@ -1519,7 +1516,7 @@ export function computeWordSpeedTiers(wordOutliers, alignment, xvalRawWords, tra
   }
 
   // Count distribution per tier
-  const distribution = { quick: 0, steady: 0, slow: 0, struggling: 0, stalled: 0, 'short-word': 0, omitted: 0, 'no-data': 0 };
+  const distribution = { quick: 0, steady: 0, slow: 0, struggling: 0, stalled: 0, omitted: 0, 'no-data': 0 };
   for (const w of words) {
     if (distribution[w.tier] !== undefined) distribution[w.tier]++;
   }
@@ -1616,7 +1613,7 @@ export function recomputeWordSpeedWithPauses(wordSpeedData, transcriptWords, ref
   if (!medianMs || medianMs <= 0) return wordSpeedData;
 
   // Re-classify tiers
-  const distribution = { quick: 0, steady: 0, slow: 0, struggling: 0, stalled: 0, 'short-word': 0, omitted: 0, 'no-data': 0 };
+  const distribution = { quick: 0, steady: 0, slow: 0, struggling: 0, stalled: 0, omitted: 0, 'no-data': 0 };
   for (const w of words) {
     if (w.tier === 'omitted' || w.tier === 'no-data') {
       distribution[w.tier]++;
@@ -1632,9 +1629,7 @@ export function recomputeWordSpeedWithPauses(wordSpeedData, transcriptWords, ref
     w.ratio = Math.round(ratio * 100) / 100;
     w._medianMs = Math.round(medianMs);
 
-    if (w.phonemes <= 3) {
-      w.tier = 'short-word';
-    } else if (ratio < 0.75) {
+    if (ratio < 0.75) {
       w.tier = 'quick';
     } else if (ratio < 1.25) {
       w.tier = 'steady';
