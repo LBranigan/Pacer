@@ -519,6 +519,116 @@ async function runAnalysis() {
     transcriptWords.push(...v2Words);
   }
 
+  // ── V3 reference-anchored collapsing ──────────────────────────────
+  // Same anchor logic as V0/V1 divergence detection, but now between
+  // V2 (Reverb's combined output) and the reference text. Catches cases
+  // where BOTH V0 and V1 agree on fragments (e.g. "cone"+"tent") but
+  // they don't match the reference word ("content"). Between two anchor
+  // points (words that match reference), everything is a divergence block.
+  //
+  // Example:
+  //   V2:  ... your | cone  tent | in ...
+  //   Ref: ... your | content    | in ...
+  //         anchor   DIVERGENCE    anchor
+  //
+  //   → Collapse "cone"+"tent" to "content" (from reference)
+  //   → NW alignment then sees "content" → ref "content" → correct
+  //   → Path 4 reclassifies as struggle (has _v3OriginalFragments)
+  {
+    const { normalizeText: ntV3 } = await import('./text-normalize.js');
+    const { alignTranscripts: alignV3 } = await import('./sequence-aligner.js');
+
+    // Reference words — same normalization that NW alignment uses
+    const refNorm = ntV3(referenceText);
+
+    // Build pseudo-word objects (alignTranscripts expects {word: ...})
+    // V2 = "verbatim" side, Reference = "clean" side in aligner terms
+    const v2Pseudo = transcriptWords.map((w, idx) => ({ word: w.word, _twIdx: idx }));
+    const refPseudo = refNorm.map(w => ({ word: w }));
+
+    const v3Alignment = alignV3(v2Pseudo, refPseudo);
+
+    // Group into anchors and divergence blocks
+    const v3Blocks = [];
+    let curDiv = null;
+    for (const entry of v3Alignment) {
+      if (entry.type === 'match') {
+        if (curDiv) { v3Blocks.push(curDiv); curDiv = null; }
+        v3Blocks.push({ kind: 'anchor', entries: [entry] });
+      } else {
+        if (!curDiv) curDiv = { kind: 'divergence', entries: [] };
+        curDiv.entries.push(entry);
+      }
+    }
+    if (curDiv) v3Blocks.push(curDiv);
+
+    // Build V3 word list — collapse multi-fragment divergence blocks
+    const v3Words = [];
+    for (const block of v3Blocks) {
+      if (block.kind === 'anchor') {
+        const twIdx = block.entries[0].verbatimData._twIdx;
+        v3Words.push(transcriptWords[twIdx]);
+      } else {
+        // Collect V2 fragments and reference targets from divergence block
+        const frags = [];
+        const refTargets = [];
+        for (const entry of block.entries) {
+          if (entry.verbatim !== null) { // insertion or mismatch — consumes a V2 word
+            frags.push(transcriptWords[entry.verbatimData._twIdx]);
+          }
+          if (entry.clean !== null) { // deletion or mismatch — consumes a ref word
+            refTargets.push(entry.clean);
+          }
+        }
+
+        if (refTargets.length > 0 && frags.length >= 2) {
+          // Multiple V2 words mapping to reference target(s) — collapse
+          const fragSummary = frags.map(f => ({
+            word: f.word, startTime: f.startTime, endTime: f.endTime
+          }));
+          const first = frags[0];
+          const last = frags[frags.length - 1];
+
+          // Expand reference targets through normalizeText (handles hyphens etc)
+          const expandedRef = [];
+          for (const rw of refTargets) expandedRef.push(...ntV3(rw));
+
+          for (const refWord of expandedRef) {
+            v3Words.push({
+              ...first,
+              word: refWord,
+              endTime: last.endTime,
+              _reverbStartTime: first._reverbStartTime || first.startTime,
+              _reverbEndTime: last._reverbEndTime || last.endTime,
+              _v3Merged: true,
+              _v3OriginalFragments: fragSummary,
+              _v3RefTarget: refTargets.join(' ')
+            });
+          }
+        } else {
+          // Single-word mismatch or no ref target — pass through unchanged
+          for (const frag of frags) v3Words.push(frag);
+        }
+      }
+    }
+
+    // Debug stage
+    const v3Collapsed = v3Words.filter(w => w._v3Merged);
+    if (v3Collapsed.length > 0) {
+      addStage('v3_reference_anchor', {
+        count: v3Collapsed.length,
+        entries: v3Collapsed.map(w => ({
+          word: w.word,
+          fragments: w._v3OriginalFragments.map(f => f.word),
+          refTarget: w._v3RefTarget
+        }))
+      });
+    }
+
+    transcriptWords.length = 0;
+    transcriptWords.push(...v3Words);
+  }
+
   // ── Reference-aware fragment pre-merge ───────────────────────────
   // Reverb BPE sometimes splits a single spoken word into fragments
   // (e.g., "platforms" → "pla" + "forms"). Detect adjacent short words
@@ -1098,26 +1208,38 @@ async function runAnalysis() {
   }
 
   // ── Path 4: Divergence block struggle reclassification ─────────
-  // Words where V0 clean matched reference (type=correct) but V1 showed
-  // multiple struggle fragments get reclassified as struggle. This is
-  // direct acoustic evidence of decoding difficulty — the student made
-  // multiple attempts before the ASR's clean pass recognized the word.
+  // Words where the pipeline collapsed multiple fragments into a single
+  // word that matched reference (type=correct) get reclassified as struggle.
+  // Two sources of fragments:
+  //   V2 merged (_v2Merged): V0 clean matched ref, but V1 showed fragments
+  //   V3 merged (_v3Merged): V2-vs-Reference anchor mismatch (e.g. "cone"+"tent" → "content")
   {
     const divStruggles = [];
     for (const entry of alignment) {
       if (entry.type !== 'correct') continue;
       if (entry.hypIndex == null || entry.hypIndex < 0) continue;
       const tw = transcriptWords[entry.hypIndex];
-      if (!tw?._v2Merged || !tw._v2OriginalFragments) continue;
-      if (tw._v2OriginalFragments.length < 2) continue;
+
+      // Check V2 merge (V0/V1 divergence)
+      const isV2 = tw?._v2Merged && tw._v2OriginalFragments && tw._v2OriginalFragments.length >= 2;
+      // Check V3 merge (V2/Reference divergence)
+      const isV3 = tw?._v3Merged && tw._v3OriginalFragments && tw._v3OriginalFragments.length >= 2;
+
+      if (!isV2 && !isV3) continue;
+
+      const fragments = isV2
+        ? tw._v2OriginalFragments.map(f => f.word)
+        : tw._v3OriginalFragments.map(f => f.word);
 
       entry.type = 'struggle';
       entry._strugglePath = 'divergence';
-      entry._nearMissEvidence = tw._v2OriginalFragments.map(f => f.word);
+      entry._nearMissEvidence = fragments;
+      entry._divergenceSource = isV2 ? 'v2' : 'v3';
       divStruggles.push({
         ref: entry.ref,
         hyp: entry.hyp,
-        fragments: entry._nearMissEvidence
+        fragments,
+        source: isV2 ? 'v2' : 'v3'
       });
     }
     if (divStruggles.length > 0) {
@@ -1552,6 +1674,7 @@ async function runAnalysis() {
       forgiven: a.forgiven,
       partOfForgiven: a.partOfForgiven,
       _strugglePath: a._strugglePath || null,
+      _divergenceSource: a._divergenceSource || null,
       _nearMissEvidence: a._nearMissEvidence || null,
       _abandonedAttempt: a._abandonedAttempt || false,
       _isSelfCorrection: a._isSelfCorrection || false,

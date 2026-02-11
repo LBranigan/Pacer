@@ -272,7 +272,7 @@ const DIAGNOSTIC_MISCUES = {
       hesitation: 'Path 1: substitution + 3s+ pause before the word → student hesitated then failed',
       decoding: 'Path 2: substitution + near-miss insertions around it → multiple failed decoding attempts',
       abandoned: 'Path 3: substitution + cross-validator N/A + near-miss match → partial/garbled attempt only verbatim STT detected',
-      divergence: 'Path 4: V2 correct + multiple V1 fragments → V0 cleaned up the word but V1 shows acoustic struggle (e.g., "apo-" + "a" + "pe-peal" → "appeal")'
+      divergence: 'Path 4: correct + multiple collapsed fragments. Two sources: (a) V2 merge — V0 recovered the word but V1 shows fragments (e.g., "apo-"+"a"+"pe-peal" → "appeal"); (b) V3 merge — V0 and V1 agree on fragments but they don\'t match reference (e.g., "cone"+"tent" → "content"). Both indicate acoustic struggle.'
     },
     fragmentAbsorption: {
       description: 'When Reverb fragments a single utterance into multiple BPE tokens (e.g., "platforms" → "pla" + "for"), orphan insertions are absorbed into the parent mispronunciation using temporal containment. NOTE: Pre-alignment reference-aware fragment merge (app.js) now handles many of these cases upstream — adjacent short Reverb words whose concatenation matches a reference word are merged before NW alignment. This post-alignment absorption remains as a safety net for cases that escape the pre-merge.',
@@ -281,7 +281,7 @@ const DIAGNOSTIC_MISCUES = {
       tolerance: '150ms on xval timestamp window edges',
       guards: ['Insertion must not already be _isSelfCorrection', 'Uses hypIndex for direct timestamp lookup from transcriptWords', 'Absorbs orphan BPE fragments into parent mispronunciation']
     },
-    note: 'A word can match multiple pathways simultaneously. Paths 1-3 require a substitution base (student said wrong word). Path 4 (divergence) reclassifies correct words where V1 fragmented — the student eventually produced the word but struggled acoustically.'
+    note: 'A word can match multiple pathways simultaneously. Paths 1-3 require a substitution base (student said wrong word). Path 4 (divergence) reclassifies correct words where multiple fragments were collapsed — V2 merge (V0/V1 divergence) or V3 merge (V2/Reference divergence). Both represent acoustic evidence of decoding difficulty.'
   },
 
   reverbCtcFailure: {

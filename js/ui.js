@@ -1485,7 +1485,11 @@ export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, di
       const { step, body } = makeStep(1, 'Reverb V0 \u2194 V1 \u2194 V2',
         'how clean and verbatim transcripts align, and the combined result');
 
-      // Group transcriptWords into aligned blocks (anchors + divergence)
+      // Group transcriptWords into aligned blocks
+      // Three block kinds:
+      //   'anchor' — all versions agree
+      //   'v2div'  — V0/V1 divergence (V2 collapsed from V1 fragments using V0 target)
+      //   'v3div'  — V2/Ref divergence (V3 collapsed from V2 fragments using ref target)
       const blocks = [];
       if (transcriptWords && transcriptWords.length > 0) {
         let currentBlock = null;
@@ -1496,7 +1500,7 @@ export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, di
             if (!currentBlock || currentBlock.id !== divId) {
               if (currentBlock) blocks.push(currentBlock);
               currentBlock = {
-                kind: 'divergence',
+                kind: 'v2div',
                 id: divId,
                 cleanTarget: w._divergence.cleanTarget,
                 cleanWords: w._divergence.cleanWords || [],
@@ -1506,6 +1510,15 @@ export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, di
             } else {
               currentBlock.words.push(w);
             }
+          } else if (w._v3Merged && w._v3OriginalFragments) {
+            // V3 block — V2/Reference divergence
+            if (currentBlock) { blocks.push(currentBlock); currentBlock = null; }
+            blocks.push({
+              kind: 'v3div',
+              words: [w],
+              refTarget: w._v3RefTarget || w.word,
+              v2Fragments: w._v3OriginalFragments.map(f => f.word)
+            });
           } else {
             if (currentBlock) { blocks.push(currentBlock); currentBlock = null; }
             blocks.push({ kind: 'anchor', words: [w] });
@@ -1520,15 +1533,13 @@ export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, di
         msg.textContent = 'No Reverb data available';
         body.appendChild(msg);
       } else {
-        // Build the three-row comparison table
+        // Build four-row comparison: Reference, V0 clean, V1 verbatim, Result
         const table = document.createElement('div');
         table.className = 'pipeline-v012-table';
 
-        // Row labels
-        const labels = ['V0 clean', 'V1 verbatim', 'V2 result'];
-        const labelClasses = ['pipeline-v012-lbl-v0', 'pipeline-v012-lbl-v1', 'pipeline-v012-lbl-v2'];
+        const labels = ['Reference', 'V0 clean', 'V1 verbatim', 'Result'];
+        const labelClasses = ['pipeline-v012-lbl-ref', 'pipeline-v012-lbl-v0', 'pipeline-v012-lbl-v1', 'pipeline-v012-lbl-v2'];
 
-        // Build three row containers
         const rows = labels.map((lbl, ri) => {
           const row = document.createElement('div');
           row.className = 'pipeline-v012-row';
@@ -1539,21 +1550,20 @@ export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, di
           return row;
         });
 
-        let divCount = 0;
+        let v2DivCount = 0, v3DivCount = 0;
         for (const b of blocks) {
           if (b.kind === 'anchor') {
             const word = b.words[0].word;
-            // V0, V1, V2 all show the same word
-            for (let ri = 0; ri < 3; ri++) {
+            for (let ri = 0; ri < 4; ri++) {
               const cell = document.createElement('span');
               cell.className = 'pipeline-v012-cell pipeline-v012-anchor';
               cell.textContent = word;
               rows[ri].appendChild(cell);
             }
-          } else {
-            divCount++;
+          } else if (b.kind === 'v2div') {
+            // V0/V1 divergence — V0 and V1 differ, but V0 matches reference
+            v2DivCount++;
             const v0Text = b.cleanTarget || '?';
-            // Recover V1 fragments: prefer _v2OriginalFragments (post-V2 collapse), fall back to verbatimWords
             const firstW = b.words[0];
             let v1Fragments;
             if (firstW._v2Merged && firstW._v2OriginalFragments) {
@@ -1561,23 +1571,31 @@ export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, di
             } else {
               v1Fragments = b.verbatimWords.length > 0 ? b.verbatimWords : b.words.map(w => w.word);
             }
-            // V2 result = the word(s) that actually get fed to NW alignment
-            const v2Words = b.words.map(w => w.word);
+            const resultWord = b.words.map(w => w.word).join(' ');
 
-            const tip = 'Divergence #' + b.id
+            const tip = 'V0/V1 Divergence #' + b.id
               + '\nV0 clean: "' + v0Text + '"'
               + '\nV1 verbatim: ' + v1Fragments.map(f => '"' + f + '"').join(' ')
-              + '\nV2 result: "' + v2Words.join(' ') + '"';
+              + '\nResult: "' + resultWord + '"'
+              + '\nV0 recovered the word; V1 shows the struggle';
 
-            // V0 cell
+            // Reference row — same as V0 (clean matched reference)
+            const cellRef = document.createElement('span');
+            cellRef.className = 'pipeline-v012-cell pipeline-v012-div pipeline-v012-div-ref';
+            cellRef.textContent = v0Text;
+            cellRef.dataset.tooltip = tip;
+            cellRef.addEventListener('click', (e) => { e.stopPropagation(); showWordTooltip(cellRef, null); });
+            rows[0].appendChild(cellRef);
+
+            // V0 cell — correct (green)
             const cellV0 = document.createElement('span');
             cellV0.className = 'pipeline-v012-cell pipeline-v012-div pipeline-v012-div-v0';
             cellV0.textContent = v0Text;
             cellV0.dataset.tooltip = tip;
             cellV0.addEventListener('click', (e) => { e.stopPropagation(); showWordTooltip(cellV0, null); });
-            rows[0].appendChild(cellV0);
+            rows[1].appendChild(cellV0);
 
-            // V1 cell — show fragments stacked
+            // V1 cell — fragments (red)
             const cellV1 = document.createElement('span');
             cellV1.className = 'pipeline-v012-cell pipeline-v012-div pipeline-v012-div-v1';
             cellV1.dataset.tooltip = tip;
@@ -1594,15 +1612,69 @@ export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, di
               frag.textContent = v1Fragments[fi];
               cellV1.appendChild(frag);
             }
-            rows[1].appendChild(cellV1);
+            rows[2].appendChild(cellV1);
 
-            // V2 cell
-            const cellV2 = document.createElement('span');
-            cellV2.className = 'pipeline-v012-cell pipeline-v012-div pipeline-v012-div-v2';
-            cellV2.textContent = v2Words.join(' ');
-            cellV2.dataset.tooltip = tip;
-            cellV2.addEventListener('click', (e) => { e.stopPropagation(); showWordTooltip(cellV2, null); });
-            rows[2].appendChild(cellV2);
+            // Result cell — collapsed (purple)
+            const cellRes = document.createElement('span');
+            cellRes.className = 'pipeline-v012-cell pipeline-v012-div pipeline-v012-div-v2';
+            cellRes.textContent = resultWord;
+            cellRes.dataset.tooltip = tip;
+            cellRes.addEventListener('click', (e) => { e.stopPropagation(); showWordTooltip(cellRes, null); });
+            rows[3].appendChild(cellRes);
+
+          } else if (b.kind === 'v3div') {
+            // V2/Reference divergence — V0 and V1 agree but don't match reference
+            v3DivCount++;
+            const refTarget = b.refTarget;
+            const v2Frags = b.v2Fragments;
+            const resultWord = b.words.map(w => w.word).join(' ');
+
+            const tip = 'V2/Reference Divergence'
+              + '\nReference: "' + refTarget + '"'
+              + '\nV0 & V1 heard: ' + v2Frags.map(f => '"' + f + '"').join(' ')
+              + '\nResult: "' + resultWord + '"'
+              + '\nBoth Reverb passes agree on fragments; student split the word';
+
+            // Reference row — the target word
+            const cellRef = document.createElement('span');
+            cellRef.className = 'pipeline-v012-cell pipeline-v012-div pipeline-v012-div-ref';
+            cellRef.textContent = refTarget;
+            cellRef.dataset.tooltip = tip;
+            cellRef.addEventListener('click', (e) => { e.stopPropagation(); showWordTooltip(cellRef, null); });
+            rows[0].appendChild(cellRef);
+
+            // V0 cell — shows fragments (both V0 and V1 agree)
+            const cellV0 = document.createElement('span');
+            cellV0.className = 'pipeline-v012-cell pipeline-v012-div pipeline-v012-div-v3';
+            cellV0.dataset.tooltip = tip;
+            cellV0.addEventListener('click', (e) => { e.stopPropagation(); showWordTooltip(cellV0, null); });
+            for (let fi = 0; fi < v2Frags.length; fi++) {
+              if (fi > 0) {
+                const sep = document.createElement('span');
+                sep.className = 'pipeline-v012-frag-sep';
+                sep.textContent = '\u00b7';
+                cellV0.appendChild(sep);
+              }
+              const frag = document.createElement('span');
+              frag.className = 'pipeline-v012-frag';
+              frag.textContent = v2Frags[fi];
+              cellV0.appendChild(frag);
+            }
+            rows[1].appendChild(cellV0);
+
+            // V1 cell — same fragments
+            const cellV1 = cellV0.cloneNode(true);
+            cellV1.dataset.tooltip = tip;
+            cellV1.addEventListener('click', (e) => { e.stopPropagation(); showWordTooltip(cellV1, null); });
+            rows[2].appendChild(cellV1);
+
+            // Result cell — collapsed to reference
+            const cellRes = document.createElement('span');
+            cellRes.className = 'pipeline-v012-cell pipeline-v012-div pipeline-v012-div-v2';
+            cellRes.textContent = resultWord;
+            cellRes.dataset.tooltip = tip;
+            cellRes.addEventListener('click', (e) => { e.stopPropagation(); showWordTooltip(cellRes, null); });
+            rows[3].appendChild(cellRes);
           }
         }
 
@@ -1610,9 +1682,12 @@ export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, di
         body.appendChild(table);
 
         const anchors = blocks.filter(b => b.kind === 'anchor').length;
+        const parts = [anchors + ' anchors'];
+        if (v2DivCount > 0) parts.push(v2DivCount + ' V0\u2260V1 (Reverb divergence)');
+        if (v3DivCount > 0) parts.push(v3DivCount + ' V2\u2260Ref (reference divergence)');
         const summary = document.createElement('div');
         summary.className = 'pipeline-step-summary';
-        summary.textContent = anchors + ' anchors (V0=V1), ' + divCount + ' divergence block' + (divCount !== 1 ? 's' : '') + ' (V0\u2260V1)';
+        summary.textContent = parts.join(', ');
         body.appendChild(summary);
       }
 
@@ -1624,13 +1699,22 @@ export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, di
       const { step, body } = makeStep(2, 'Reference Alignment',
         'NW alignment of each engine\'s transcript to the reference passage');
 
-      if (parakeetRef.length > 0 && parakeetRef.length === reverbRef.length) {
+      // Helper: build a 3-column alignment table (engine vs reference)
+      const buildAlignTable = (label, entries, ins, engineKey) => {
+        const wrapper = document.createElement('div');
+        wrapper.className = 'pipeline-engine-section';
+
+        const heading = document.createElement('div');
+        heading.className = 'pipeline-engine-heading';
+        heading.textContent = label;
+        wrapper.appendChild(heading);
+
         const table = document.createElement('table');
         table.className = 'pipeline-table';
 
         const thead = document.createElement('thead');
         const hrow = document.createElement('tr');
-        for (const h of ['#', 'Reference', 'Reverb heard', 'R. type', 'Parakeet heard', 'P. type']) {
+        for (const h of ['#', 'Reference', label + ' heard', 'Type']) {
           const th = document.createElement('th');
           th.textContent = h;
           hrow.appendChild(th);
@@ -1639,9 +1723,8 @@ export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, di
         table.appendChild(thead);
 
         const tbody = document.createElement('tbody');
-        for (let i = 0; i < reverbRef.length; i++) {
-          const r = reverbRef[i];
-          const p = parakeetRef[i];
+        for (let i = 0; i < entries.length; i++) {
+          const e = entries[i];
           const tr = document.createElement('tr');
 
           const tdIdx = document.createElement('td');
@@ -1651,87 +1734,86 @@ export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, di
 
           const tdRef = document.createElement('td');
           tdRef.className = 'pipeline-td-ref';
-          tdRef.textContent = r.ref || p.ref || '?';
+          tdRef.textContent = e.ref || '?';
           tr.appendChild(tdRef);
 
-          const tdRHyp = document.createElement('td');
-          if (r.type === 'omission') {
-            tdRHyp.textContent = '\u2014';
-            tdRHyp.className = 'pipeline-td-omission';
-          } else if (r.type === 'correct') {
-            tdRHyp.textContent = r.hyp;
-            tdRHyp.className = 'pipeline-td-correct';
+          const tdHyp = document.createElement('td');
+          if (e.type === 'omission') {
+            tdHyp.textContent = '\u2014';
+            tdHyp.className = 'pipeline-td-omission';
+          } else if (e.type === 'correct') {
+            tdHyp.textContent = e.hyp;
+            tdHyp.className = 'pipeline-td-correct';
           } else {
-            tdRHyp.textContent = r.hyp || '?';
-            tdRHyp.className = 'pipeline-td-sub';
+            tdHyp.textContent = e.hyp || '?';
+            tdHyp.className = 'pipeline-td-sub';
           }
-          // Show original V1 fragments when V2 collapsing was used
-          if (r.hypIndex != null && r.hypIndex >= 0) {
-            const tw = transcriptWords[r.hypIndex];
-            if (tw && tw._v2Merged && tw._v2OriginalFragments) {
-              const fragText = tw._v2OriginalFragments.map(f => f.word).join(' ');
-              if (fragText !== r.hyp) {
-                const fragSpan = document.createElement('div');
-                fragSpan.className = 'pipeline-v2-fragments';
-                fragSpan.textContent = '\u2190 ' + fragText;
-                tdRHyp.appendChild(fragSpan);
+          // Show original fragments when V2/V3 collapsing was used (Reverb only)
+          if (engineKey === 'reverb' && e.hypIndex != null && e.hypIndex >= 0) {
+            const tw = transcriptWords[e.hypIndex];
+            if (tw) {
+              const frags = tw._v2Merged ? tw._v2OriginalFragments
+                          : tw._v3Merged ? tw._v3OriginalFragments
+                          : null;
+              if (frags) {
+                const fragText = frags.map(f => f.word).join(' ');
+                if (fragText !== e.hyp) {
+                  const fragSpan = document.createElement('div');
+                  fragSpan.className = 'pipeline-v2-fragments';
+                  fragSpan.textContent = '\u2190 ' + fragText;
+                  tdHyp.appendChild(fragSpan);
+                }
               }
             }
           }
-          tr.appendChild(tdRHyp);
+          tr.appendChild(tdHyp);
 
-          const tdRType = document.createElement('td');
-          tdRType.className = 'pipeline-td-type pipeline-td-type-' + r.type;
-          tdRType.textContent = r.type;
-          tr.appendChild(tdRType);
-
-          const tdPHyp = document.createElement('td');
-          if (p.type === 'omission') {
-            tdPHyp.textContent = '\u2014';
-            tdPHyp.className = 'pipeline-td-omission';
-          } else if (p.type === 'correct') {
-            tdPHyp.textContent = p.hyp;
-            tdPHyp.className = 'pipeline-td-correct';
-          } else {
-            tdPHyp.textContent = p.hyp || '?';
-            tdPHyp.className = 'pipeline-td-sub';
-          }
-          tr.appendChild(tdPHyp);
-
-          const tdPType = document.createElement('td');
-          tdPType.className = 'pipeline-td-type pipeline-td-type-' + p.type;
-          tdPType.textContent = p.type;
-          tr.appendChild(tdPType);
+          const tdType = document.createElement('td');
+          tdType.className = 'pipeline-td-type pipeline-td-type-' + e.type;
+          tdType.textContent = e.type;
+          tr.appendChild(tdType);
 
           tbody.appendChild(tr);
         }
         table.appendChild(tbody);
-        body.appendChild(table);
+        wrapper.appendChild(table);
 
-        if (reverbIns.length > 0 || parakeetIns.length > 0) {
+        // Insertions
+        if (ins.length > 0) {
           const insDiv = document.createElement('div');
           insDiv.className = 'pipeline-insertions';
-          if (reverbIns.length > 0) {
-            const rLabel = document.createElement('strong');
-            rLabel.textContent = 'Reverb insertions (' + reverbIns.length + '): ';
-            insDiv.appendChild(rLabel);
-            insDiv.appendChild(document.createTextNode(reverbIns.map(e => e.hyp).join(', ')));
-          }
-          if (parakeetIns.length > 0) {
-            if (reverbIns.length > 0) insDiv.appendChild(document.createElement('br'));
-            const pLabel = document.createElement('strong');
-            pLabel.textContent = 'Parakeet insertions (' + parakeetIns.length + '): ';
-            insDiv.appendChild(pLabel);
-            insDiv.appendChild(document.createTextNode(parakeetIns.map(e => e.hyp).join(', ')));
-          }
-          body.appendChild(insDiv);
+          const insLabel = document.createElement('strong');
+          insLabel.textContent = 'Insertions (' + ins.length + '): ';
+          insDiv.appendChild(insLabel);
+          insDiv.appendChild(document.createTextNode(ins.map(e => e.hyp).join(', ')));
+          wrapper.appendChild(insDiv);
+        }
+
+        return wrapper;
+      };
+
+      if (reverbRef.length > 0) {
+        // Reverb V2 vs Reference (primary — shown first)
+        body.appendChild(buildAlignTable('Reverb', reverbRef, reverbIns, 'reverb'));
+
+        // Parakeet vs Reference (secondary — shown below)
+        if (parakeetRef.length > 0 && parakeetRef.length === reverbRef.length) {
+          body.appendChild(buildAlignTable('Parakeet', parakeetRef, parakeetIns, 'parakeet'));
+        } else if (parakeetRef.length > 0) {
+          const msg = document.createElement('div');
+          msg.className = 'pipeline-step-summary';
+          msg.textContent = 'Length mismatch: Reverb ' + reverbRef.length + ' vs Parakeet ' + parakeetRef.length;
+          body.appendChild(msg);
+        } else {
+          const msg = document.createElement('div');
+          msg.className = 'pipeline-step-summary';
+          msg.textContent = 'No Parakeet alignment data available';
+          body.appendChild(msg);
         }
       } else {
         const msg = document.createElement('div');
         msg.className = 'pipeline-step-summary';
-        msg.textContent = parakeetRef.length === 0
-          ? 'No Parakeet alignment data available'
-          : 'Length mismatch: Reverb ' + reverbRef.length + ' vs Parakeet ' + parakeetRef.length;
+        msg.textContent = 'No alignment data available';
         body.appendChild(msg);
       }
 
