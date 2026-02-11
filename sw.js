@@ -1,4 +1,4 @@
-const CACHE_NAME = 'orf-v39';
+const CACHE_NAME = 'orf-v40';
 
 const SHELL = [
   // --- HTML pages ---
@@ -94,6 +94,11 @@ self.addEventListener('activate', (event) => {
 self.addEventListener('fetch', (event) => {
   // Skip Google APIs (NL API, etc.) — always go to network
   if (event.request.url.includes('googleapis.com')) {
+    return;
+  }
+
+  // Always fetch backend-config.json from network (tunnel URL changes on every restart)
+  if (event.request.url.includes('backend-config.json')) {
     return;
   }
 
