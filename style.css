@@ -423,48 +423,58 @@ body.dev-mode .dev-mode-toggle {
   font-style: italic;
 }
 
-/* Reference-Aligned Comparison Table */
+/* Reference-Aligned Comparison Table (column-per-word layout) */
 .ref-align-table {
   display: flex;
-  flex-direction: column;
-  gap: 2px;
+  flex-wrap: wrap;
+  gap: 3px;
   margin-bottom: 0.5rem;
+  align-items: stretch;
 }
 
-.ref-align-row {
+.ref-align-col {
   display: flex;
-  align-items: start;
-  gap: 4px;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+}
+
+.ref-align-labels {
+  align-items: flex-end;
+  margin-right: 4px;
+  flex-shrink: 0;
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  background: #fff;
 }
 
 .ref-align-label {
-  min-width: 70px;
-  font-size: 0.75rem;
+  font-size: 0.7rem;
   font-weight: 600;
-  color: #666;
-  padding: 3px 6px;
-  flex-shrink: 0;
-  line-height: 1.8;
+  color: #888;
+  padding: 2px 4px;
+  white-space: nowrap;
+  height: 24px;
+  display: flex;
+  align-items: center;
 }
 
 .ref-align-label-reverb { color: #1565c0; }
 .ref-align-label-parakeet { color: #7b1fa2; }
-.ref-align-label-verdict { color: #999; font-size: 0.7rem; }
-
-.ref-align-words {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 2px;
-  line-height: 1.8;
-}
+.ref-align-label-verdict { color: #999; font-size: 0.65rem; }
 
 .ref-align-cell {
-  display: inline-block;
   padding: 2px 5px;
   border-radius: 3px;
-  font-size: 0.85rem;
+  font-size: 0.82rem;
   text-align: center;
-  min-width: 28px;
+  min-width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  white-space: nowrap;
 }
 
 .ref-align-ref {
@@ -491,8 +501,7 @@ body.dev-mode .dev-mode-toggle {
 }
 
 .ref-align-verdict {
-  font-size: 0.75rem;
-  min-width: 28px;
+  font-size: 0.7rem;
   padding: 1px 5px;
 }
 
@@ -500,11 +509,6 @@ body.dev-mode .dev-mode-toggle {
 .ref-align-verdict-disagreed { color: #c62828; }
 .ref-align-verdict-recovered { color: #1565c0; }
 .ref-align-verdict-unconfirmed { color: #e65100; }
-
-.ref-align-verdict-row {
-  border-top: 1px solid #eee;
-  padding-top: 1px;
-}
 
 .ref-align-insertions {
   font-size: 0.8rem;

@@ -1608,44 +1608,6 @@ export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, di
     const parakeetIns = pAlignment.filter(e => e.type === 'insertion');
 
     if (parakeetRef.length > 0 && parakeetRef.length === reverbRef.length) {
-      const table = document.createElement('div');
-      table.className = 'ref-align-table';
-
-      // Build column data
-      const cols = [];
-      for (let i = 0; i < reverbRef.length; i++) {
-        const rEntry = reverbRef[i];
-        const pEntry = parakeetRef[i];
-        const refWord = rEntry.ref || pEntry.ref || '?';
-        const rType = rEntry.type; // correct, substitution, omission, struggle
-        const pType = pEntry.type;
-        const rHyp = rType === 'omission' ? null : (rEntry.hyp || null);
-        const pHyp = pType === 'omission' ? null : (pEntry.hyp || null);
-
-        // Derive verdict from crossValidation on alignment entry
-        const xval = rEntry.crossValidation || null;
-
-        cols.push({ refWord, rType, pType, rHyp, pHyp, xval, rEntry, pEntry });
-      }
-
-      // --- Reference row ---
-      const refRow = document.createElement('div');
-      refRow.className = 'ref-align-row';
-      const refLabel = document.createElement('span');
-      refLabel.className = 'ref-align-label';
-      refLabel.textContent = 'Reference';
-      refRow.appendChild(refLabel);
-      const refWords = document.createElement('div');
-      refWords.className = 'ref-align-words';
-      for (const col of cols) {
-        const cell = document.createElement('span');
-        cell.className = 'ref-align-cell ref-align-ref';
-        cell.textContent = col.refWord;
-        refWords.appendChild(cell);
-      }
-      refRow.appendChild(refWords);
-      table.appendChild(refRow);
-
       // Helper: build audio play function for a raw STT word array entry
       const makePlayFn = (sttWords, hypIndex) => {
         if (!wordAudioEl || hypIndex == null || hypIndex < 0 || !sttWords) return null;
@@ -1671,120 +1633,118 @@ export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, di
       const reverbVerbatim = rawSttSources?.reverbVerbatim || [];
       const xvalRaw = rawSttSources?.xvalRaw || [];
 
-      // --- Reverb row ---
-      const rRow = document.createElement('div');
-      rRow.className = 'ref-align-row';
-      const rLabel = document.createElement('span');
-      rLabel.className = 'ref-align-label ref-align-label-reverb';
-      rLabel.textContent = 'Reverb';
-      rRow.appendChild(rLabel);
-      const rWords = document.createElement('div');
-      rWords.className = 'ref-align-words';
-      for (const col of cols) {
-        const cell = document.createElement('span');
-        cell.className = 'ref-align-cell';
-        if (col.rType === 'omission') {
-          cell.classList.add('ref-align-omission');
-          cell.textContent = '\u2014'; // em-dash
-          cell.dataset.tooltip = `Reverb: omitted "${col.refWord}"`;
-        } else if (col.rType === 'correct') {
-          cell.classList.add('ref-align-correct');
-          cell.textContent = col.rHyp;
-          cell.dataset.tooltip = `Reverb: correct "${col.rHyp}"`;
+      // Column-per-word layout: each ref word is a vertical stack that wraps as a unit
+      const table = document.createElement('div');
+      table.className = 'ref-align-table';
+
+      // Row labels (left gutter)
+      const labelCol = document.createElement('div');
+      labelCol.className = 'ref-align-col ref-align-labels';
+      for (const [text, cls] of [['Reference', ''], ['Reverb', 'ref-align-label-reverb'], ['Parakeet', 'ref-align-label-parakeet'], ['Verdict', 'ref-align-label-verdict']]) {
+        const lbl = document.createElement('div');
+        lbl.className = 'ref-align-label' + (cls ? ' ' + cls : '');
+        lbl.textContent = text;
+        labelCol.appendChild(lbl);
+      }
+      table.appendChild(labelCol);
+
+      for (let i = 0; i < reverbRef.length; i++) {
+        const rEntry = reverbRef[i];
+        const pEntry = parakeetRef[i];
+        const refWord = rEntry.ref || pEntry.ref || '?';
+        const rType = rEntry.type;
+        const pType = pEntry.type;
+        const rHyp = rType === 'omission' ? null : (rEntry.hyp || null);
+        const pHyp = pType === 'omission' ? null : (pEntry.hyp || null);
+        const xval = rEntry.crossValidation || null;
+
+        const col = document.createElement('div');
+        col.className = 'ref-align-col';
+
+        // Row 1: Reference word
+        const refCell = document.createElement('div');
+        refCell.className = 'ref-align-cell ref-align-ref';
+        refCell.textContent = refWord;
+        col.appendChild(refCell);
+
+        // Row 2: Reverb
+        const rCell = document.createElement('div');
+        rCell.className = 'ref-align-cell';
+        if (rType === 'omission') {
+          rCell.classList.add('ref-align-omission');
+          rCell.textContent = '\u2014';
+          rCell.dataset.tooltip = `Reverb: omitted "${refWord}"`;
+        } else if (rType === 'correct') {
+          rCell.classList.add('ref-align-correct');
+          rCell.textContent = rHyp;
+          rCell.dataset.tooltip = `Reverb: correct "${rHyp}"`;
         } else {
-          cell.classList.add('ref-align-sub');
-          cell.textContent = col.rHyp || '?';
-          cell.dataset.tooltip = `Reverb: heard "${col.rHyp}" (expected "${col.refWord}") [${col.rType}]`;
+          rCell.classList.add('ref-align-sub');
+          rCell.textContent = rHyp || '?';
+          rCell.dataset.tooltip = `Reverb: heard "${rHyp}" (expected "${refWord}") [${rType}]`;
         }
-        // Click-to-play from Reverb verbatim timestamps
-        const rPlayFn = makePlayFn(reverbVerbatim, col.rEntry.hypIndex);
+        const rPlayFn = makePlayFn(reverbVerbatim, rEntry.hypIndex);
         if (rPlayFn) {
-          cell.classList.add('word-clickable');
-          cell.addEventListener('click', (e) => { e.stopPropagation(); showWordTooltip(cell, rPlayFn); });
+          rCell.classList.add('word-clickable');
+          rCell.addEventListener('click', (e) => { e.stopPropagation(); showWordTooltip(rCell, rPlayFn); });
         } else {
-          cell.addEventListener('click', (e) => { e.stopPropagation(); showWordTooltip(cell, null); });
+          rCell.addEventListener('click', (e) => { e.stopPropagation(); showWordTooltip(rCell, null); });
         }
-        rWords.appendChild(cell);
-      }
-      rRow.appendChild(rWords);
-      table.appendChild(rRow);
+        col.appendChild(rCell);
 
-      // --- Parakeet row ---
-      const pRow = document.createElement('div');
-      pRow.className = 'ref-align-row';
-      const pLabel = document.createElement('span');
-      pLabel.className = 'ref-align-label ref-align-label-parakeet';
-      pLabel.textContent = 'Parakeet';
-      pRow.appendChild(pLabel);
-      const pWords = document.createElement('div');
-      pWords.className = 'ref-align-words';
-      for (const col of cols) {
-        const cell = document.createElement('span');
-        cell.className = 'ref-align-cell';
-        if (col.pType === 'omission') {
-          cell.classList.add('ref-align-omission');
-          cell.textContent = '\u2014';
-          cell.dataset.tooltip = `Parakeet: omitted "${col.refWord}"`;
-        } else if (col.pType === 'correct') {
-          cell.classList.add('ref-align-correct');
-          cell.textContent = col.pHyp;
-          cell.dataset.tooltip = `Parakeet: correct "${col.pHyp}"`;
+        // Row 3: Parakeet
+        const pCell = document.createElement('div');
+        pCell.className = 'ref-align-cell';
+        if (pType === 'omission') {
+          pCell.classList.add('ref-align-omission');
+          pCell.textContent = '\u2014';
+          pCell.dataset.tooltip = `Parakeet: omitted "${refWord}"`;
+        } else if (pType === 'correct') {
+          pCell.classList.add('ref-align-correct');
+          pCell.textContent = pHyp;
+          pCell.dataset.tooltip = `Parakeet: correct "${pHyp}"`;
         } else {
-          cell.classList.add('ref-align-sub');
-          cell.textContent = col.pHyp || '?';
-          cell.dataset.tooltip = `Parakeet: heard "${col.pHyp}" (expected "${col.refWord}") [${col.pType}]`;
+          pCell.classList.add('ref-align-sub');
+          pCell.textContent = pHyp || '?';
+          pCell.dataset.tooltip = `Parakeet: heard "${pHyp}" (expected "${refWord}") [${pType}]`;
         }
-        // Click-to-play from Parakeet/xval timestamps
-        const pPlayFn = makePlayFn(xvalRaw, col.pEntry.hypIndex);
+        const pPlayFn = makePlayFn(xvalRaw, pEntry.hypIndex);
         if (pPlayFn) {
-          cell.classList.add('word-clickable');
-          cell.addEventListener('click', (e) => { e.stopPropagation(); showWordTooltip(cell, pPlayFn); });
+          pCell.classList.add('word-clickable');
+          pCell.addEventListener('click', (e) => { e.stopPropagation(); showWordTooltip(pCell, pPlayFn); });
         } else {
-          cell.addEventListener('click', (e) => { e.stopPropagation(); showWordTooltip(cell, null); });
+          pCell.addEventListener('click', (e) => { e.stopPropagation(); showWordTooltip(pCell, null); });
         }
-        pWords.appendChild(cell);
-      }
-      pRow.appendChild(pWords);
-      table.appendChild(pRow);
+        col.appendChild(pCell);
 
-      // --- Verdict row ---
-      const vRow = document.createElement('div');
-      vRow.className = 'ref-align-row ref-align-verdict-row';
-      const vLabel = document.createElement('span');
-      vLabel.className = 'ref-align-label ref-align-label-verdict';
-      vLabel.textContent = 'Verdict';
-      vRow.appendChild(vLabel);
-      const vWords = document.createElement('div');
-      vWords.className = 'ref-align-words';
-      for (const col of cols) {
-        const cell = document.createElement('span');
-        cell.className = 'ref-align-cell ref-align-verdict';
-        const v = col.xval;
-        if (v === 'confirmed') {
-          cell.classList.add('ref-align-verdict-confirmed');
-          cell.textContent = '\u2713'; // checkmark
-          cell.dataset.tooltip = 'Confirmed — both engines agree';
-        } else if (v === 'disagreed') {
-          cell.classList.add('ref-align-verdict-disagreed');
-          cell.textContent = '\u2717'; // X mark
-          cell.dataset.tooltip = 'Disagreed — engines heard different words';
-        } else if (v === 'recovered') {
-          cell.classList.add('ref-align-verdict-recovered');
-          cell.textContent = '\u21bb'; // clockwise arrow
-          cell.dataset.tooltip = 'Recovered — Parakeet heard it, Reverb missed it';
-        } else if (v === 'unconfirmed') {
-          cell.classList.add('ref-align-verdict-unconfirmed');
-          cell.textContent = '?';
-          cell.dataset.tooltip = 'Unconfirmed — Reverb only, Parakeet missed it';
+        // Row 4: Verdict
+        const vCell = document.createElement('div');
+        vCell.className = 'ref-align-cell ref-align-verdict';
+        if (xval === 'confirmed') {
+          vCell.classList.add('ref-align-verdict-confirmed');
+          vCell.textContent = '\u2713';
+          vCell.dataset.tooltip = 'Confirmed — both engines agree';
+        } else if (xval === 'disagreed') {
+          vCell.classList.add('ref-align-verdict-disagreed');
+          vCell.textContent = '\u2717';
+          vCell.dataset.tooltip = 'Disagreed — engines heard different words';
+        } else if (xval === 'recovered') {
+          vCell.classList.add('ref-align-verdict-recovered');
+          vCell.textContent = '\u21bb';
+          vCell.dataset.tooltip = 'Recovered — Parakeet heard it, Reverb missed it';
+        } else if (xval === 'unconfirmed') {
+          vCell.classList.add('ref-align-verdict-unconfirmed');
+          vCell.textContent = '?';
+          vCell.dataset.tooltip = 'Unconfirmed — Reverb only, Parakeet missed it';
         } else {
-          cell.textContent = '\u00b7'; // middle dot
-          cell.dataset.tooltip = v || 'No verdict';
+          vCell.textContent = '\u00b7';
+          vCell.dataset.tooltip = xval || 'No verdict';
         }
-        cell.addEventListener('click', (e) => { e.stopPropagation(); showWordTooltip(cell, null); });
-        vWords.appendChild(cell);
+        vCell.addEventListener('click', (e) => { e.stopPropagation(); showWordTooltip(vCell, null); });
+        col.appendChild(vCell);
+
+        table.appendChild(col);
       }
-      vRow.appendChild(vWords);
-      table.appendChild(vRow);
 
       confWordsDiv.appendChild(table);
 
