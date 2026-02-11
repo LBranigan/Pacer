@@ -1480,63 +1480,24 @@ export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, di
       return span;
     };
 
-    // ── STEP 1: Raw ASR Outputs ──
+    // ── STEP 1: Reverb V0 ↔ V1 ↔ V2 Comparison ──
     {
-      const { step, body } = makeStep(1, 'Raw ASR Outputs', 'what each engine heard independently');
+      const { step, body } = makeStep(1, 'Reverb V0 \u2194 V1 \u2194 V2',
+        'how clean and verbatim transcripts align, and the combined result');
 
-      const sources = [
-        { label: 'Reverb v1.0 (verbatim)', words: reverbVerbatim, cls: 'pipeline-src-v1' },
-        { label: 'Reverb v0.0 (clean)', words: reverbClean, cls: 'pipeline-src-v0' },
-        { label: 'Parakeet', words: xvalRaw, cls: 'pipeline-src-pk' }
-      ];
-
-      for (const src of sources) {
-        const row = document.createElement('div');
-        row.className = 'pipeline-word-row';
-        const lbl = document.createElement('span');
-        lbl.className = 'pipeline-row-label ' + src.cls;
-        lbl.textContent = src.label + ':';
-        row.appendChild(lbl);
-        const wordsSpan = document.createElement('span');
-        wordsSpan.className = 'pipeline-row-words';
-        if (src.words.length === 0) {
-          wordsSpan.textContent = '(no data)';
-          wordsSpan.style.color = '#999';
-        } else {
-          for (let i = 0; i < src.words.length; i++) {
-            const w = src.words[i];
-            const start = parseSttTime(w.startTime);
-            const end = parseSttTime(w.endTime);
-            const dur = Math.round((end - start) * 1000);
-            const tip = '"' + w.word + '" [' + start.toFixed(2) + 's\u2013' + end.toFixed(2) + 's, ' + dur + 'ms]';
-            const span = makeWordSpan(w.word, null, tip, src.words, i);
-            wordsSpan.appendChild(span);
-            wordsSpan.appendChild(document.createTextNode(' '));
-          }
-        }
-        row.appendChild(wordsSpan);
-        body.appendChild(row);
-      }
-
-      confWordsDiv.appendChild(step);
-    }
-
-    // ── STEP 2: v1/v0 Divergence Blocks ──
-    {
-      const { step, body } = makeStep(2, 'v1/v0 Divergence Detection',
-        'where verbatim and clean transcripts disagree (student struggled)');
-
-      // Group transcriptWords into anchors and divergence blocks
+      // Group transcriptWords into aligned blocks (anchors + divergence)
       const blocks = [];
       if (transcriptWords && transcriptWords.length > 0) {
         let currentBlock = null;
         for (const w of transcriptWords) {
-          if (w.isDisfluency && w._divergence) {
-            if (!currentBlock || currentBlock.id !== w._divergence.id) {
+          const isDivWord = (w.isDisfluency && w._divergence) || w._v2Merged;
+          const divId = w._divergence?.id;
+          if (isDivWord && divId != null) {
+            if (!currentBlock || currentBlock.id !== divId) {
               if (currentBlock) blocks.push(currentBlock);
               currentBlock = {
                 kind: 'divergence',
-                id: w._divergence.id,
+                id: divId,
                 cleanTarget: w._divergence.cleanTarget,
                 cleanWords: w._divergence.cleanWords || [],
                 verbatimWords: w._divergence.verbatimWords || [],
@@ -1547,48 +1508,120 @@ export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, di
             }
           } else {
             if (currentBlock) { blocks.push(currentBlock); currentBlock = null; }
-            blocks.push({ kind: 'anchor', word: w.word, words: [w] });
+            blocks.push({ kind: 'anchor', words: [w] });
           }
         }
         if (currentBlock) blocks.push(currentBlock);
       }
 
-      const flowDiv = document.createElement('div');
-      flowDiv.className = 'pipeline-divergence-flow';
-      let divCount = 0;
-      for (const b of blocks) {
-        if (b.kind === 'anchor') {
-          const span = document.createElement('span');
-          span.className = 'pipeline-anchor';
-          span.textContent = b.word;
-          flowDiv.appendChild(span);
-          flowDiv.appendChild(document.createTextNode(' '));
-        } else {
-          divCount++;
-          const span = document.createElement('span');
-          span.className = 'pipeline-divergence-block';
-          const v0Text = b.cleanTarget || '?';
-          const v1Text = b.verbatimWords.map(w => '"' + w + '"').join(', ');
-          span.textContent = 'v0="' + v0Text + '" \u2190 v1=' + v1Text;
-          span.dataset.tooltip = 'Divergence #' + b.id + '\nClean (v0): "' + v0Text + '"\nVerbatim (v1): ' + v1Text + '\nStudent struggled with this word';
-          span.addEventListener('click', (e) => { e.stopPropagation(); showWordTooltip(span, null); });
-          flowDiv.appendChild(span);
-          flowDiv.appendChild(document.createTextNode(' '));
-        }
-      }
-      body.appendChild(flowDiv);
+      if (blocks.length === 0 && reverbVerbatim.length === 0) {
+        const msg = document.createElement('div');
+        msg.className = 'pipeline-step-summary';
+        msg.textContent = 'No Reverb data available';
+        body.appendChild(msg);
+      } else {
+        // Build the three-row comparison table
+        const table = document.createElement('div');
+        table.className = 'pipeline-v012-table';
 
-      const summary = document.createElement('div');
-      summary.className = 'pipeline-step-summary';
-      summary.textContent = blocks.filter(b => b.kind === 'anchor').length + ' anchors, ' + divCount + ' divergence blocks';
-      body.appendChild(summary);
+        // Row labels
+        const labels = ['V0 clean', 'V1 verbatim', 'V2 result'];
+        const labelClasses = ['pipeline-v012-lbl-v0', 'pipeline-v012-lbl-v1', 'pipeline-v012-lbl-v2'];
+
+        // Build three row containers
+        const rows = labels.map((lbl, ri) => {
+          const row = document.createElement('div');
+          row.className = 'pipeline-v012-row';
+          const labelEl = document.createElement('span');
+          labelEl.className = 'pipeline-v012-label ' + labelClasses[ri];
+          labelEl.textContent = lbl;
+          row.appendChild(labelEl);
+          return row;
+        });
+
+        let divCount = 0;
+        for (const b of blocks) {
+          if (b.kind === 'anchor') {
+            const word = b.words[0].word;
+            // V0, V1, V2 all show the same word
+            for (let ri = 0; ri < 3; ri++) {
+              const cell = document.createElement('span');
+              cell.className = 'pipeline-v012-cell pipeline-v012-anchor';
+              cell.textContent = word;
+              rows[ri].appendChild(cell);
+            }
+          } else {
+            divCount++;
+            const v0Text = b.cleanTarget || '?';
+            // Recover V1 fragments: prefer _v2OriginalFragments (post-V2 collapse), fall back to verbatimWords
+            const firstW = b.words[0];
+            let v1Fragments;
+            if (firstW._v2Merged && firstW._v2OriginalFragments) {
+              v1Fragments = firstW._v2OriginalFragments.map(f => f.word);
+            } else {
+              v1Fragments = b.verbatimWords.length > 0 ? b.verbatimWords : b.words.map(w => w.word);
+            }
+            // V2 result = the word(s) that actually get fed to NW alignment
+            const v2Words = b.words.map(w => w.word);
+
+            const tip = 'Divergence #' + b.id
+              + '\nV0 clean: "' + v0Text + '"'
+              + '\nV1 verbatim: ' + v1Fragments.map(f => '"' + f + '"').join(' ')
+              + '\nV2 result: "' + v2Words.join(' ') + '"';
+
+            // V0 cell
+            const cellV0 = document.createElement('span');
+            cellV0.className = 'pipeline-v012-cell pipeline-v012-div pipeline-v012-div-v0';
+            cellV0.textContent = v0Text;
+            cellV0.dataset.tooltip = tip;
+            cellV0.addEventListener('click', (e) => { e.stopPropagation(); showWordTooltip(cellV0, null); });
+            rows[0].appendChild(cellV0);
+
+            // V1 cell — show fragments stacked
+            const cellV1 = document.createElement('span');
+            cellV1.className = 'pipeline-v012-cell pipeline-v012-div pipeline-v012-div-v1';
+            cellV1.dataset.tooltip = tip;
+            cellV1.addEventListener('click', (e) => { e.stopPropagation(); showWordTooltip(cellV1, null); });
+            for (let fi = 0; fi < v1Fragments.length; fi++) {
+              if (fi > 0) {
+                const sep = document.createElement('span');
+                sep.className = 'pipeline-v012-frag-sep';
+                sep.textContent = '\u00b7';
+                cellV1.appendChild(sep);
+              }
+              const frag = document.createElement('span');
+              frag.className = 'pipeline-v012-frag';
+              frag.textContent = v1Fragments[fi];
+              cellV1.appendChild(frag);
+            }
+            rows[1].appendChild(cellV1);
+
+            // V2 cell
+            const cellV2 = document.createElement('span');
+            cellV2.className = 'pipeline-v012-cell pipeline-v012-div pipeline-v012-div-v2';
+            cellV2.textContent = v2Words.join(' ');
+            cellV2.dataset.tooltip = tip;
+            cellV2.addEventListener('click', (e) => { e.stopPropagation(); showWordTooltip(cellV2, null); });
+            rows[2].appendChild(cellV2);
+          }
+        }
+
+        for (const row of rows) table.appendChild(row);
+        body.appendChild(table);
+
+        const anchors = blocks.filter(b => b.kind === 'anchor').length;
+        const summary = document.createElement('div');
+        summary.className = 'pipeline-step-summary';
+        summary.textContent = anchors + ' anchors (V0=V1), ' + divCount + ' divergence block' + (divCount !== 1 ? 's' : '') + ' (V0\u2260V1)';
+        body.appendChild(summary);
+      }
 
       confWordsDiv.appendChild(step);
     }
 
-    // ── STEP 3: Reference Alignment ──
+    // ── STEP 2: Reference Alignment ──
     {
-      const { step, body } = makeStep(3, 'Reference Alignment',
+      const { step, body } = makeStep(2, 'Reference Alignment',
         'NW alignment of each engine\'s transcript to the reference passage');
 
       if (parakeetRef.length > 0 && parakeetRef.length === reverbRef.length) {
@@ -1705,9 +1738,9 @@ export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, di
       confWordsDiv.appendChild(step);
     }
 
-    // ── STEP 4: Cross-Validation Verdicts ──
+    // ── STEP 3: Cross-Validation Verdicts ──
     {
-      const { step, body } = makeStep(4, 'Cross-Validation Verdicts',
+      const { step, body } = makeStep(3, 'Cross-Validation Verdicts',
         'per-reference-word comparison of Reverb vs Parakeet (decision matrix)');
 
       if (parakeetRef.length > 0 && parakeetRef.length === reverbRef.length) {
@@ -1808,9 +1841,9 @@ export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, di
       confWordsDiv.appendChild(step);
     }
 
-    // ── STEP 5: Post-Processing ──
+    // ── STEP 4: Post-Processing ──
     {
-      const { step, body } = makeStep(5, 'Post-Processing',
+      const { step, body } = makeStep(4, 'Post-Processing',
         'omission recovery, compound merges, self-corrections, near-miss clusters, CTC artifacts');
 
       const lists = [];
@@ -1912,9 +1945,9 @@ export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, di
       confWordsDiv.appendChild(step);
     }
 
-    // ── STEP 6: Final Scored Alignment ──
+    // ── STEP 5: Final Scored Alignment ──
     {
-      const { step, body } = makeStep(6, 'Final Scored Alignment',
+      const { step, body } = makeStep(5, 'Final Scored Alignment',
         'the result used for WCPM and accuracy scoring');
 
       const table = document.createElement('table');

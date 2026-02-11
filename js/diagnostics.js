@@ -175,7 +175,7 @@ export function resolveNearMissClusters(alignment) {
     }
 
     // PRIORITY 2 — Pre-struggle (look ahead for failure)
-    if (nextEntry && nextEntry.type === 'substitution' &&
+    if (nextEntry && (nextEntry.type === 'substitution' || nextEntry.type === 'struggle') &&
         clean(nextEntry.ref).length >= 3 &&
         isNearMiss(entry.hyp, nextEntry.ref)) {
       entry._partOfStruggle = true;
@@ -186,7 +186,7 @@ export function resolveNearMissClusters(alignment) {
     }
 
     // PRIORITY 3 — Post-struggle (look behind for failure)
-    if (prevEntry && prevEntry.type === 'substitution' &&
+    if (prevEntry && (prevEntry.type === 'substitution' || prevEntry.type === 'struggle') &&
         clean(prevEntry.ref).length >= 3 &&
         isNearMiss(entry.hyp, prevEntry.ref)) {
       entry._partOfStruggle = true;
@@ -198,8 +198,9 @@ export function resolveNearMissClusters(alignment) {
   }
 
   // After the pass — upgrade substitutions with near-miss evidence
+  // Skip entries already classified as struggle (e.g. Path 4 divergence)
   for (const entry of alignment) {
-    if (entry._nearMissEvidence && entry._nearMissEvidence.length > 0) {
+    if (entry._nearMissEvidence && entry._nearMissEvidence.length > 0 && entry.type !== 'struggle') {
       entry._originalType = entry.type;
       entry.type = 'struggle';
       entry._strugglePath = 'decoding';

@@ -1,4 +1,4 @@
-const CACHE_NAME = 'orf-v49';
+const CACHE_NAME = 'orf-v51';
 
 const SHELL = [
   // --- HTML pages ---
