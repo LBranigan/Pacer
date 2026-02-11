@@ -1,4 +1,4 @@
-const CACHE_NAME = 'orf-v42';
+const CACHE_NAME = 'orf-v43';
 
 const SHELL = [
   // --- HTML pages ---
@@ -79,7 +79,11 @@ const SHELL = [
 self.addEventListener('install', (event) => {
   self.skipWaiting();
   event.waitUntil(
-    caches.open(CACHE_NAME).then(c => c.addAll(SHELL))
+    caches.open(CACHE_NAME).then(c =>
+      Promise.all(SHELL.map(url =>
+        fetch(url, { cache: 'no-store' }).then(r => c.put(url, r))
+      ))
+    )
   );
 });
 

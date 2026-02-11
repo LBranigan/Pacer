@@ -31,7 +31,7 @@ console.log('[ORF] Code version:', CODE_VERSION);
 loadPhonemeData();
 
 if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.register('./sw.js')
+  navigator.serviceWorker.register('./sw.js', { updateViaCache: 'none' })
     .then(reg => console.log('SW registered:', reg.scope))
     .catch(err => console.warn('SW registration failed:', err));
 }
