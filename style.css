@@ -423,100 +423,227 @@ body.dev-mode .dev-mode-toggle {
   font-style: italic;
 }
 
-/* Reference-Aligned Comparison Table (column-per-word layout) */
-.ref-align-table {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 3px;
-  margin-bottom: 0.5rem;
-  align-items: stretch;
+/* Pipeline Trace Steps */
+.pipeline-step {
+  margin-bottom: 0.75rem;
+  border: 1px solid #e0e0e0;
+  border-radius: 6px;
+  overflow: hidden;
 }
 
-.ref-align-col {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 1px;
-}
-
-.ref-align-labels {
-  align-items: flex-end;
-  margin-right: 4px;
-  flex-shrink: 0;
-  position: sticky;
-  left: 0;
-  z-index: 1;
-  background: #fff;
-}
-
-.ref-align-label {
-  font-size: 0.7rem;
-  font-weight: 600;
-  color: #888;
-  padding: 2px 4px;
-  white-space: nowrap;
-  height: 24px;
-  display: flex;
-  align-items: center;
-}
-
-.ref-align-label-reverb { color: #1565c0; }
-.ref-align-label-parakeet { color: #7b1fa2; }
-.ref-align-label-verdict { color: #999; font-size: 0.65rem; }
-
-.ref-align-cell {
-  padding: 2px 5px;
-  border-radius: 3px;
-  font-size: 0.82rem;
-  text-align: center;
-  min-width: 24px;
-  height: 24px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  white-space: nowrap;
-}
-
-.ref-align-ref {
-  font-weight: 600;
-  color: #444;
+.pipeline-step-header {
   background: #f5f5f5;
+  padding: 6px 10px;
+  font-size: 0.85rem;
+  border-bottom: 1px solid #e0e0e0;
 }
 
-.ref-align-correct {
-  background: #e8f5e9;
-  color: #2e7d32;
-}
-
-.ref-align-sub {
-  background: #ffebee;
-  color: #c62828;
-}
-
-.ref-align-omission {
-  background: #eee;
-  color: #999;
-  border: 1px dashed #ccc;
-  font-style: italic;
-}
-
-.ref-align-verdict {
+.pipeline-step-num {
+  display: inline-block;
+  background: #1565c0;
+  color: #fff;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  text-align: center;
+  line-height: 20px;
   font-size: 0.7rem;
-  padding: 1px 5px;
+  font-weight: 700;
 }
 
-.ref-align-verdict-confirmed { color: #2e7d32; }
-.ref-align-verdict-disagreed { color: #c62828; }
-.ref-align-verdict-recovered { color: #1565c0; }
-.ref-align-verdict-unconfirmed { color: #e65100; }
+.pipeline-step-desc {
+  color: #888;
+  font-size: 0.78rem;
+}
 
-.ref-align-insertions {
+.pipeline-step-body {
+  padding: 8px 10px;
+  overflow-x: auto;
+}
+
+.pipeline-step-summary {
+  font-size: 0.78rem;
+  color: #888;
+  margin-top: 6px;
+  padding-top: 4px;
+  border-top: 1px solid #eee;
+}
+
+/* Step 1: Word rows */
+.pipeline-word-row {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  margin-bottom: 4px;
+  flex-wrap: wrap;
+}
+
+.pipeline-row-label {
+  font-weight: 600;
+  font-size: 0.78rem;
+  white-space: nowrap;
+  min-width: 140px;
+  flex-shrink: 0;
+}
+
+.pipeline-src-v1 { color: #1565c0; }
+.pipeline-src-v0 { color: #2e7d32; }
+.pipeline-src-pk { color: #7b1fa2; }
+
+.pipeline-row-words {
+  font-size: 0.82rem;
+  line-height: 1.6;
+}
+
+.pipeline-word {
+  display: inline-block;
+  padding: 1px 4px;
+  border-radius: 3px;
+  background: #f8f8f8;
+  border: 1px solid #e0e0e0;
+  cursor: default;
+}
+
+.pipeline-word:hover {
+  background: #e3f2fd;
+}
+
+/* Step 2: Divergence flow */
+.pipeline-divergence-flow {
+  line-height: 2;
+  font-size: 0.82rem;
+}
+
+.pipeline-anchor {
+  display: inline-block;
+  padding: 1px 4px;
+  color: #666;
+}
+
+.pipeline-divergence-block {
+  display: inline-block;
+  padding: 2px 6px;
+  background: #fff3e0;
+  border: 1px solid #ffb74d;
+  border-radius: 4px;
+  color: #e65100;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.pipeline-divergence-block:hover {
+  background: #ffe0b2;
+}
+
+/* Steps 3-6: Tables */
+.pipeline-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.78rem;
+}
+
+.pipeline-table th {
+  background: #f5f5f5;
+  padding: 4px 8px;
+  text-align: left;
+  font-weight: 600;
+  border-bottom: 2px solid #ddd;
+  white-space: nowrap;
+}
+
+.pipeline-table td {
+  padding: 3px 8px;
+  border-bottom: 1px solid #eee;
+  vertical-align: top;
+}
+
+.pipeline-table tbody tr:hover {
+  background: #f8f9fa;
+}
+
+.pipeline-td-idx {
+  color: #bbb;
+  text-align: right;
+  width: 30px;
+}
+
+.pipeline-td-ref {
+  font-weight: 600;
+}
+
+.pipeline-td-correct { color: #2e7d32; background: #e8f5e9; }
+.pipeline-td-sub { color: #c62828; background: #ffebee; }
+.pipeline-td-omission { color: #999; font-style: italic; background: #fafafa; }
+
+.pipeline-td-type { font-size: 0.72rem; }
+.pipeline-td-type-correct { color: #2e7d32; }
+.pipeline-td-type-substitution { color: #c62828; }
+.pipeline-td-type-omission { color: #999; }
+.pipeline-td-type-insertion { color: #1565c0; }
+.pipeline-td-type-struggle { color: #d84315; }
+.pipeline-td-type-self-correction { color: #6a1b9a; }
+
+.pipeline-td-reason {
+  color: #888;
+  font-size: 0.72rem;
+}
+
+/* Cross-validation verdict colors */
+.pipeline-verdict-confirmed { color: #2e7d32; font-weight: 600; }
+.pipeline-verdict-disagreed { color: #c62828; font-weight: 600; }
+.pipeline-verdict-recovered { color: #1565c0; font-weight: 600; }
+.pipeline-verdict-unconfirmed { color: #e65100; font-weight: 600; }
+
+/* Row highlighting for xval status */
+.pipeline-xval-disagreed { background: #fff8f8; }
+.pipeline-xval-recovered { background: #f8f8ff; }
+.pipeline-xval-unconfirmed { background: #fffaf5; }
+
+/* Final alignment row colors */
+.pipeline-final-correct { }
+.pipeline-final-substitution { background: #fff8f8; }
+.pipeline-final-omission { background: #fafafa; }
+.pipeline-final-insertion { background: #f5f8ff; }
+.pipeline-final-struggle { background: #fff5f0; }
+.pipeline-final-self-correction { background: #faf5ff; }
+
+/* Step 5: Post-processing lists */
+.pipeline-insertions {
   font-size: 0.8rem;
   color: #666;
   padding: 4px 8px;
   margin-top: 4px;
   background: #fafafa;
   border-radius: 3px;
+}
+
+.pipeline-pp-section {
+  margin-bottom: 6px;
+}
+
+.pipeline-pp-label {
+  font-weight: 600;
+  font-size: 0.8rem;
+  color: #444;
+}
+
+.pipeline-pp-recovered .pipeline-pp-label { color: #1565c0; }
+.pipeline-pp-compound .pipeline-pp-label { color: #2e7d32; }
+.pipeline-pp-selfcorr .pipeline-pp-label { color: #6a1b9a; }
+.pipeline-pp-struggle .pipeline-pp-label { color: #d84315; }
+.pipeline-pp-absorbed .pipeline-pp-label { color: #e65100; }
+.pipeline-pp-artifact .pipeline-pp-label { color: #999; }
+.pipeline-pp-forgiven .pipeline-pp-label { color: #00695c; }
+
+.pipeline-pp-list {
+  margin: 2px 0 0 18px;
+  padding: 0;
+  font-size: 0.78rem;
+  color: #555;
+}
+
+.pipeline-pp-list li {
+  margin-bottom: 2px;
 }
 
 /* Struggle word indicator (DIAG-07)

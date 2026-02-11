@@ -347,17 +347,21 @@ function buildEnhancedTooltip(item, sttWord) {
     // What each model heard (word text)
     const reverbWord = sttWord._alignment?.verbatim || (sttWord._recovered ? null : sttWord.word);
     const xvalWord = sttWord._xvalWord;
+    // Show full divergence block story when available (e.g., "apo- a pe-peal" instead of just "pe-peal")
+    const reverbFull = sttWord._divergence && sttWord._divergence.verbatimWords.length > 1
+      ? sttWord._divergence.verbatimWords.join(' ')
+      : reverbWord;
     if (sttWord._recovered) {
       lines.push(`${xvalLabel} heard: "${xvalWord || sttWord.word}"`);
       lines.push('Reverb heard: [nothing]');
     } else if (xvalWord) {
       lines.push(`${xvalLabel} heard: "${xvalWord}"`);
-      lines.push(`Reverb heard: "${reverbWord}"`);
+      lines.push(`Reverb heard: "${reverbFull}"`);
     } else if (xvalWord === null) {
       lines.push(`${xvalLabel} heard: [null]`);
-      lines.push(`Reverb heard: "${reverbWord}"`);
+      lines.push(`Reverb heard: "${reverbFull}"`);
     } else {
-      lines.push(`Reverb heard: "${reverbWord}"`);
+      lines.push(`Reverb heard: "${reverbFull}"`);
     }
 
     // Cross-validation status
@@ -1392,136 +1396,62 @@ export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, di
     wordsDiv.appendChild(nmscSection);
   }
 
+
   // ─────────────────────────────────────────────────────────────────────────
-  // STT Transcript View — shows what each engine detected
+  // STT Transcript View — Pipeline Trace (step-by-step processing)
   // ─────────────────────────────────────────────────────────────────────────
   const confWordsDiv = document.getElementById('sttTranscriptWords');
   if (confWordsDiv) {
     confWordsDiv.innerHTML = '';
 
-    // ── Model Disagreements row — rendered first (topmost) ──
-    if (transcriptWords && transcriptWords.length > 0) {
-      const disagreeRow = document.createElement('div');
-      disagreeRow.className = 'stt-source-row stt-disagreement-row';
+    const pAlignment = rawSttSources?.parakeetAlignment || [];
+    const reverbVerbatim = rawSttSources?.reverbVerbatim || [];
+    const reverbClean = rawSttSources?.reverbClean || [];
+    const xvalRaw = rawSttSources?.xvalRaw || [];
+    const reverbRef = alignment.filter(e => e.type !== 'insertion');
+    const parakeetRef = pAlignment.filter(e => e.type !== 'insertion');
+    const reverbIns = alignment.filter(e => e.type === 'insertion');
+    const parakeetIns = pAlignment.filter(e => e.type === 'insertion');
 
-      const disagreeLabel = document.createElement('div');
-      disagreeLabel.className = 'stt-source-label';
-      disagreeLabel.style.cssText = 'background:#fff3e0;color:#e65100;';
-      const disagreedCount = transcriptWords.filter(w =>
-        (w.crossValidation !== 'confirmed' || w._recovered || w.isDisfluency) && !w._healed
-      ).length;
-      disagreeLabel.textContent = `Model Disagreements (${disagreedCount})`;
-      disagreeRow.appendChild(disagreeLabel);
-
-      // Legend
-      const legend = document.createElement('div');
-      legend.className = 'disagree-legend';
-      const legendItems = [
-        { cls: 'disagree-disagreed', text: 'Disagreed' },
-        { cls: 'disagree-unconfirmed', text: 'Reverb only' },
-        { cls: 'disagree-recovered', text: 'Parakeet only' },
-        { cls: 'disagree-disfluency', text: 'Disfluency' },
-        { cls: 'disagree-unconsumed', text: 'Unconsumed xval' }
-      ];
-      for (const li of legendItems) {
-        const s = document.createElement('span');
-        s.className = li.cls;
-        s.textContent = li.text;
-        legend.appendChild(s);
+    // Helper: create a pipeline step container
+    const makeStep = (num, title, description) => {
+      const step = document.createElement('div');
+      step.className = 'pipeline-step';
+      const header = document.createElement('div');
+      header.className = 'pipeline-step-header';
+      const numSpan = document.createElement('span');
+      numSpan.className = 'pipeline-step-num';
+      numSpan.textContent = num;
+      header.appendChild(numSpan);
+      header.appendChild(document.createTextNode(' '));
+      const b = document.createElement('strong');
+      b.textContent = title;
+      header.appendChild(b);
+      if (description) {
+        const desc = document.createElement('span');
+        desc.className = 'pipeline-step-desc';
+        desc.textContent = ' \u2014 ' + description;
+        header.appendChild(desc);
       }
-      disagreeRow.appendChild(legend);
+      step.appendChild(header);
+      const body = document.createElement('div');
+      body.className = 'pipeline-step-body';
+      step.appendChild(body);
+      return { step, body };
+    };
 
-      const disagreeWords = document.createElement('div');
-      disagreeWords.className = 'stt-source-words';
-
-      for (const w of transcriptWords) {
-        const span = document.createElement('span');
-        span.className = 'disagree-word';
-
-        const isUnk = isSpecialASTToken(w.word);
-        span.textContent = isUnk ? '?' : w.word;
-
-        // Classify the word
-        let category;
-        if (w._healed) {
-          // Alignment resolved this as correct despite cross-validation disagreement
-          // (e.g., compound merge for abbreviations, Tier 1 near-match override)
-          category = 'agreed';
-          span.classList.add('disagree-agreed');
-        } else if (w._recovered) {
-          category = 'recovered';
-          span.classList.add('disagree-recovered');
-        } else if (w.isDisfluency) {
-          category = 'disfluency';
-          span.classList.add('disagree-disfluency');
-        } else if (w.crossValidation === 'confirmed') {
-          category = 'agreed';
-          span.classList.add('disagree-agreed');
-        } else if (w.crossValidation === 'disagreed') {
-          category = 'disagreed';
-          span.classList.add('disagree-disagreed');
-        } else if (w.crossValidation === 'unconfirmed') {
-          category = 'unconfirmed';
-          span.classList.add('disagree-unconfirmed');
-        } else {
-          category = 'agreed';
-          span.classList.add('disagree-agreed');
-        }
-
-        // Build tooltip for non-agreed words
-        if (category !== 'agreed') {
-          const tipLines = [];
-          tipLines.push(`"${w.word}"`);
-
-          // What each model heard
-          const reverbWord = w._alignment?.verbatim || w.word;
-          const reverbClean = w._alignment?.clean;
-          const xvalWord = w._xvalWord;
-          const xvalLabel = w._xvalEngine ? w._xvalEngine.charAt(0).toUpperCase() + w._xvalEngine.slice(1) : 'Parakeet';
-
-          if (category === 'recovered') {
-            tipLines.push('Recovered from Parakeet only');
-            tipLines.push('Reverb heard: [nothing]');
-            tipLines.push(`${xvalLabel} heard: "${xvalWord || w.word}"`);
-            if (w._isLastRefWord) {
-              tipLines.push('Final word — Reverb CTC truncation (known limitation)');
-            } else {
-              tipLines.push('Evidence is weak — single biased source');
-            }
-          } else if (category === 'disfluency') {
-            if (w._divergence) {
-              const d = w._divergence;
-              tipLines.push(`Struggle with "${d.cleanTarget || '?'}"`);
-              tipLines.push(`Attempts: ${d.verbatimWords.map(f => `"${f}"`).join(', ')}`);
-              tipLines.push(`This word: "${reverbWord}" (${d.role || 'fragment'})`);
-            } else {
-              tipLines.push('Verbatim-only disfluency');
-              tipLines.push(`Reverb v1 heard: "${reverbWord}"`);
-              if (reverbClean) tipLines.push(`Reverb v0 heard: "${reverbClean}"`);
-              else tipLines.push('Reverb v0: [removed in clean pass]');
-            }
-          } else if (category === 'disagreed') {
-            tipLines.push('Models heard different words');
-            tipLines.push(`Reverb heard: "${reverbWord}"`);
-            tipLines.push(`${xvalLabel} heard: "${xvalWord != null ? xvalWord : '[N/A]'}"`);
-          } else if (category === 'unconfirmed') {
-            tipLines.push(`Reverb only — ${xvalLabel} heard nothing`);
-            tipLines.push(`Reverb heard: "${reverbWord}"`);
-          }
-
-          // Timestamps
+    // Helper: create a word span with optional click-to-play
+    const makeWordSpan = (text, cls, tooltip, sttWordsArr, hypIdx) => {
+      const span = document.createElement('span');
+      span.className = 'pipeline-word' + (cls ? ' ' + cls : '');
+      span.textContent = text;
+      if (tooltip) span.dataset.tooltip = tooltip;
+      if (wordAudioEl && sttWordsArr && hypIdx != null && hypIdx >= 0) {
+        const w = sttWordsArr[hypIdx];
+        if (w) {
           const start = parseSttTime(w.startTime);
           const end = parseSttTime(w.endTime);
-          const durMs = Math.round((end - start) * 1000);
-          tipLines.push(`Time: ${start.toFixed(2)}s – ${end.toFixed(2)}s (${durMs}ms)`);
-
-          // Cross-validation status
-          tipLines.push(`Cross-validation: ${w.crossValidation || 'N/A'}`);
-
-          span.dataset.tooltip = tipLines.join('\n');
-
-          // Click-to-play audio
-          if (wordAudioEl && start > 0) {
+          if (start > 0) {
             span.classList.add('word-clickable');
             const playFn = () => {
               wordAudioEl.pause();
@@ -1536,268 +1466,511 @@ export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, di
               wordAudioEl.play().catch(() => {});
             };
             span.addEventListener('click', (e) => { e.stopPropagation(); showWordTooltip(span, playFn); });
-          } else {
-            span.addEventListener('click', (e) => { e.stopPropagation(); showWordTooltip(span, null); });
-          }
-        }
-
-        disagreeWords.appendChild(span);
-        disagreeWords.appendChild(document.createTextNode(' '));
-      }
-
-      // Unconsumed xval words — Parakeet heard these but they weren't matched to any Reverb word
-      const xvalRaw = rawSttSources?.xvalRaw || [];
-      if (xvalRaw.length > 0 && transcriptWords.length > 0) {
-        // Build set of consumed xval words (those matched into transcriptWords)
-        const consumedXval = new Set();
-        for (const tw of transcriptWords) {
-          if (tw._xvalWord && tw._xvalStartTime != null) {
-            consumedXval.add(`${tw._xvalWord}|${parseSttTime(tw._xvalStartTime).toFixed(3)}`);
-          }
-        }
-        const unconsumed = xvalRaw.filter(xw => {
-          const key = `${xw.word}|${parseSttTime(xw.startTime).toFixed(3)}`;
-          return !consumedXval.has(key);
-        });
-
-        if (unconsumed.length > 0) {
-          // Add separator
-          const sep = document.createElement('span');
-          sep.style.cssText = 'color:#999;font-size:0.75rem;margin:0 4px;';
-          sep.textContent = '|';
-          disagreeWords.appendChild(sep);
-
-          for (const xw of unconsumed) {
-            const span = document.createElement('span');
-            span.className = 'disagree-word disagree-unconsumed word-clickable';
-            span.textContent = xw.word;
-
-            const start = parseSttTime(xw.startTime);
-            const end = parseSttTime(xw.endTime);
-            const durMs = Math.round((end - start) * 1000);
-            const xvalLabel = xw._xvalEngine ? xw._xvalEngine.charAt(0).toUpperCase() + xw._xvalEngine.slice(1) : 'Parakeet';
-            span.dataset.tooltip = [
-              `"${xw.word}"`,
-              `${xvalLabel} heard this, Reverb did not`,
-              'Not matched to any omission',
-              `Time: ${start.toFixed(2)}s – ${end.toFixed(2)}s (${durMs}ms)`
-            ].join('\n');
-
-            if (wordAudioEl && start > 0) {
-              const playFn = () => {
-                wordAudioEl.pause();
-                wordAudioEl.currentTime = start;
-                const onTime = () => {
-                  if (wordAudioEl.currentTime >= end) {
-                    wordAudioEl.pause();
-                    wordAudioEl.removeEventListener('timeupdate', onTime);
-                  }
-                };
-                wordAudioEl.addEventListener('timeupdate', onTime);
-                wordAudioEl.play().catch(() => {});
-              };
-              span.addEventListener('click', (e) => { e.stopPropagation(); showWordTooltip(span, playFn); });
-            } else {
-              span.addEventListener('click', (e) => { e.stopPropagation(); showWordTooltip(span, null); });
-            }
-
-            disagreeWords.appendChild(span);
-            disagreeWords.appendChild(document.createTextNode(' '));
+            return span;
           }
         }
       }
+      if (tooltip) {
+        span.addEventListener('click', (e) => { e.stopPropagation(); showWordTooltip(span, null); });
+      }
+      return span;
+    };
 
-      disagreeRow.appendChild(disagreeWords);
-      confWordsDiv.appendChild(disagreeRow);
+    // ── STEP 1: Raw ASR Outputs ──
+    {
+      const { step, body } = makeStep(1, 'Raw ASR Outputs', 'what each engine heard independently');
+
+      const sources = [
+        { label: 'Reverb v1.0 (verbatim)', words: reverbVerbatim, cls: 'pipeline-src-v1' },
+        { label: 'Reverb v0.0 (clean)', words: reverbClean, cls: 'pipeline-src-v0' },
+        { label: 'Parakeet', words: xvalRaw, cls: 'pipeline-src-pk' }
+      ];
+
+      for (const src of sources) {
+        const row = document.createElement('div');
+        row.className = 'pipeline-word-row';
+        const lbl = document.createElement('span');
+        lbl.className = 'pipeline-row-label ' + src.cls;
+        lbl.textContent = src.label + ':';
+        row.appendChild(lbl);
+        const wordsSpan = document.createElement('span');
+        wordsSpan.className = 'pipeline-row-words';
+        if (src.words.length === 0) {
+          wordsSpan.textContent = '(no data)';
+          wordsSpan.style.color = '#999';
+        } else {
+          for (let i = 0; i < src.words.length; i++) {
+            const w = src.words[i];
+            const start = parseSttTime(w.startTime);
+            const end = parseSttTime(w.endTime);
+            const dur = Math.round((end - start) * 1000);
+            const tip = '"' + w.word + '" [' + start.toFixed(2) + 's\u2013' + end.toFixed(2) + 's, ' + dur + 'ms]';
+            const span = makeWordSpan(w.word, null, tip, src.words, i);
+            wordsSpan.appendChild(span);
+            wordsSpan.appendChild(document.createTextNode(' '));
+          }
+        }
+        row.appendChild(wordsSpan);
+        body.appendChild(row);
+      }
+
+      confWordsDiv.appendChild(step);
     }
 
-    // ── Reference-Aligned Comparison Table ──
-    const pAlignment = rawSttSources?.parakeetAlignment || [];
-    const reverbRef = alignment.filter(e => e.type !== 'insertion');
-    const parakeetRef = pAlignment.filter(e => e.type !== 'insertion');
-    const reverbIns = alignment.filter(e => e.type === 'insertion');
-    const parakeetIns = pAlignment.filter(e => e.type === 'insertion');
+    // ── STEP 2: v1/v0 Divergence Blocks ──
+    {
+      const { step, body } = makeStep(2, 'v1/v0 Divergence Detection',
+        'where verbatim and clean transcripts disagree (student struggled)');
 
-    if (parakeetRef.length > 0 && parakeetRef.length === reverbRef.length) {
-      // Helper: build audio play function for a raw STT word array entry
-      const makePlayFn = (sttWords, hypIndex) => {
-        if (!wordAudioEl || hypIndex == null || hypIndex < 0 || !sttWords) return null;
-        const w = sttWords[hypIndex];
-        if (!w) return null;
-        const start = parseSttTime(w.startTime);
-        const end = parseSttTime(w.endTime);
-        if (start <= 0) return null;
-        return () => {
-          wordAudioEl.pause();
-          wordAudioEl.currentTime = start;
-          const onTime = () => {
-            if (wordAudioEl.currentTime >= end) {
-              wordAudioEl.pause();
-              wordAudioEl.removeEventListener('timeupdate', onTime);
+      // Group transcriptWords into anchors and divergence blocks
+      const blocks = [];
+      if (transcriptWords && transcriptWords.length > 0) {
+        let currentBlock = null;
+        for (const w of transcriptWords) {
+          if (w.isDisfluency && w._divergence) {
+            if (!currentBlock || currentBlock.id !== w._divergence.id) {
+              if (currentBlock) blocks.push(currentBlock);
+              currentBlock = {
+                kind: 'divergence',
+                id: w._divergence.id,
+                cleanTarget: w._divergence.cleanTarget,
+                cleanWords: w._divergence.cleanWords || [],
+                verbatimWords: w._divergence.verbatimWords || [],
+                words: [w]
+              };
+            } else {
+              currentBlock.words.push(w);
             }
-          };
-          wordAudioEl.addEventListener('timeupdate', onTime);
-          wordAudioEl.play().catch(() => {});
-        };
-      };
-
-      const reverbVerbatim = rawSttSources?.reverbVerbatim || [];
-      const xvalRaw = rawSttSources?.xvalRaw || [];
-
-      // Column-per-word layout: each ref word is a vertical stack that wraps as a unit
-      const table = document.createElement('div');
-      table.className = 'ref-align-table';
-
-      // Row labels (left gutter)
-      const labelCol = document.createElement('div');
-      labelCol.className = 'ref-align-col ref-align-labels';
-      for (const [text, cls] of [['Reference', ''], ['Reverb', 'ref-align-label-reverb'], ['Parakeet', 'ref-align-label-parakeet'], ['Verdict', 'ref-align-label-verdict']]) {
-        const lbl = document.createElement('div');
-        lbl.className = 'ref-align-label' + (cls ? ' ' + cls : '');
-        lbl.textContent = text;
-        labelCol.appendChild(lbl);
-      }
-      table.appendChild(labelCol);
-
-      for (let i = 0; i < reverbRef.length; i++) {
-        const rEntry = reverbRef[i];
-        const pEntry = parakeetRef[i];
-        const refWord = rEntry.ref || pEntry.ref || '?';
-        const rType = rEntry.type;
-        const pType = pEntry.type;
-        const rHyp = rType === 'omission' ? null : (rEntry.hyp || null);
-        const pHyp = pType === 'omission' ? null : (pEntry.hyp || null);
-        const xval = rEntry.crossValidation || null;
-
-        const col = document.createElement('div');
-        col.className = 'ref-align-col';
-
-        // Row 1: Reference word
-        const refCell = document.createElement('div');
-        refCell.className = 'ref-align-cell ref-align-ref';
-        refCell.textContent = refWord;
-        col.appendChild(refCell);
-
-        // Row 2: Reverb
-        const rCell = document.createElement('div');
-        rCell.className = 'ref-align-cell';
-        if (rType === 'omission') {
-          rCell.classList.add('ref-align-omission');
-          rCell.textContent = '\u2014';
-          rCell.dataset.tooltip = `Reverb: omitted "${refWord}"`;
-        } else if (rType === 'correct') {
-          rCell.classList.add('ref-align-correct');
-          rCell.textContent = rHyp;
-          rCell.dataset.tooltip = `Reverb: correct "${rHyp}"`;
-        } else {
-          rCell.classList.add('ref-align-sub');
-          rCell.textContent = rHyp || '?';
-          rCell.dataset.tooltip = `Reverb: heard "${rHyp}" (expected "${refWord}") [${rType}]`;
+          } else {
+            if (currentBlock) { blocks.push(currentBlock); currentBlock = null; }
+            blocks.push({ kind: 'anchor', word: w.word, words: [w] });
+          }
         }
-        const rPlayFn = makePlayFn(reverbVerbatim, rEntry.hypIndex);
-        if (rPlayFn) {
-          rCell.classList.add('word-clickable');
-          rCell.addEventListener('click', (e) => { e.stopPropagation(); showWordTooltip(rCell, rPlayFn); });
-        } else {
-          rCell.addEventListener('click', (e) => { e.stopPropagation(); showWordTooltip(rCell, null); });
-        }
-        col.appendChild(rCell);
-
-        // Row 3: Parakeet
-        const pCell = document.createElement('div');
-        pCell.className = 'ref-align-cell';
-        if (pType === 'omission') {
-          pCell.classList.add('ref-align-omission');
-          pCell.textContent = '\u2014';
-          pCell.dataset.tooltip = `Parakeet: omitted "${refWord}"`;
-        } else if (pType === 'correct') {
-          pCell.classList.add('ref-align-correct');
-          pCell.textContent = pHyp;
-          pCell.dataset.tooltip = `Parakeet: correct "${pHyp}"`;
-        } else {
-          pCell.classList.add('ref-align-sub');
-          pCell.textContent = pHyp || '?';
-          pCell.dataset.tooltip = `Parakeet: heard "${pHyp}" (expected "${refWord}") [${pType}]`;
-        }
-        const pPlayFn = makePlayFn(xvalRaw, pEntry.hypIndex);
-        if (pPlayFn) {
-          pCell.classList.add('word-clickable');
-          pCell.addEventListener('click', (e) => { e.stopPropagation(); showWordTooltip(pCell, pPlayFn); });
-        } else {
-          pCell.addEventListener('click', (e) => { e.stopPropagation(); showWordTooltip(pCell, null); });
-        }
-        col.appendChild(pCell);
-
-        // Row 4: Verdict
-        const vCell = document.createElement('div');
-        vCell.className = 'ref-align-cell ref-align-verdict';
-        if (xval === 'confirmed') {
-          vCell.classList.add('ref-align-verdict-confirmed');
-          vCell.textContent = '\u2713';
-          vCell.dataset.tooltip = 'Confirmed — both engines agree';
-        } else if (xval === 'disagreed') {
-          vCell.classList.add('ref-align-verdict-disagreed');
-          vCell.textContent = '\u2717';
-          vCell.dataset.tooltip = 'Disagreed — engines heard different words';
-        } else if (xval === 'recovered') {
-          vCell.classList.add('ref-align-verdict-recovered');
-          vCell.textContent = '\u21bb';
-          vCell.dataset.tooltip = 'Recovered — Parakeet heard it, Reverb missed it';
-        } else if (xval === 'unconfirmed') {
-          vCell.classList.add('ref-align-verdict-unconfirmed');
-          vCell.textContent = '?';
-          vCell.dataset.tooltip = 'Unconfirmed — Reverb only, Parakeet missed it';
-        } else {
-          vCell.textContent = '\u00b7';
-          vCell.dataset.tooltip = xval || 'No verdict';
-        }
-        vCell.addEventListener('click', (e) => { e.stopPropagation(); showWordTooltip(vCell, null); });
-        col.appendChild(vCell);
-
-        table.appendChild(col);
+        if (currentBlock) blocks.push(currentBlock);
       }
 
-      confWordsDiv.appendChild(table);
+      const flowDiv = document.createElement('div');
+      flowDiv.className = 'pipeline-divergence-flow';
+      let divCount = 0;
+      for (const b of blocks) {
+        if (b.kind === 'anchor') {
+          const span = document.createElement('span');
+          span.className = 'pipeline-anchor';
+          span.textContent = b.word;
+          flowDiv.appendChild(span);
+          flowDiv.appendChild(document.createTextNode(' '));
+        } else {
+          divCount++;
+          const span = document.createElement('span');
+          span.className = 'pipeline-divergence-block';
+          const v0Text = b.cleanTarget || '?';
+          const v1Text = b.verbatimWords.map(w => '"' + w + '"').join(', ');
+          span.textContent = 'v0="' + v0Text + '" \u2190 v1=' + v1Text;
+          span.dataset.tooltip = 'Divergence #' + b.id + '\nClean (v0): "' + v0Text + '"\nVerbatim (v1): ' + v1Text + '\nStudent struggled with this word';
+          span.addEventListener('click', (e) => { e.stopPropagation(); showWordTooltip(span, null); });
+          flowDiv.appendChild(span);
+          flowDiv.appendChild(document.createTextNode(' '));
+        }
+      }
+      body.appendChild(flowDiv);
 
-      // --- Insertions summary ---
-      if (reverbIns.length > 0 || parakeetIns.length > 0) {
-        const insDiv = document.createElement('div');
-        insDiv.className = 'ref-align-insertions';
-        if (reverbIns.length > 0) {
-          const rLabel = document.createElement('strong');
-          rLabel.textContent = 'Reverb insertions: ';
-          insDiv.appendChild(rLabel);
-          insDiv.appendChild(document.createTextNode(reverbIns.map(e => e.hyp).join(', ')));
+      const summary = document.createElement('div');
+      summary.className = 'pipeline-step-summary';
+      summary.textContent = blocks.filter(b => b.kind === 'anchor').length + ' anchors, ' + divCount + ' divergence blocks';
+      body.appendChild(summary);
+
+      confWordsDiv.appendChild(step);
+    }
+
+    // ── STEP 3: Reference Alignment ──
+    {
+      const { step, body } = makeStep(3, 'Reference Alignment',
+        'NW alignment of each engine\'s transcript to the reference passage');
+
+      if (parakeetRef.length > 0 && parakeetRef.length === reverbRef.length) {
+        const table = document.createElement('table');
+        table.className = 'pipeline-table';
+
+        const thead = document.createElement('thead');
+        const hrow = document.createElement('tr');
+        for (const h of ['#', 'Reference', 'Reverb heard', 'R. type', 'Parakeet heard', 'P. type']) {
+          const th = document.createElement('th');
+          th.textContent = h;
+          hrow.appendChild(th);
         }
-        if (parakeetIns.length > 0) {
-          if (reverbIns.length > 0) insDiv.appendChild(document.createTextNode('  \u00b7  '));
-          const pLabel = document.createElement('strong');
-          pLabel.textContent = 'Parakeet insertions: ';
-          insDiv.appendChild(pLabel);
-          insDiv.appendChild(document.createTextNode(parakeetIns.map(e => e.hyp).join(', ')));
+        thead.appendChild(hrow);
+        table.appendChild(thead);
+
+        const tbody = document.createElement('tbody');
+        for (let i = 0; i < reverbRef.length; i++) {
+          const r = reverbRef[i];
+          const p = parakeetRef[i];
+          const tr = document.createElement('tr');
+
+          const tdIdx = document.createElement('td');
+          tdIdx.className = 'pipeline-td-idx';
+          tdIdx.textContent = i + 1;
+          tr.appendChild(tdIdx);
+
+          const tdRef = document.createElement('td');
+          tdRef.className = 'pipeline-td-ref';
+          tdRef.textContent = r.ref || p.ref || '?';
+          tr.appendChild(tdRef);
+
+          const tdRHyp = document.createElement('td');
+          if (r.type === 'omission') {
+            tdRHyp.textContent = '\u2014';
+            tdRHyp.className = 'pipeline-td-omission';
+          } else if (r.type === 'correct') {
+            tdRHyp.textContent = r.hyp;
+            tdRHyp.className = 'pipeline-td-correct';
+          } else {
+            tdRHyp.textContent = r.hyp || '?';
+            tdRHyp.className = 'pipeline-td-sub';
+          }
+          tr.appendChild(tdRHyp);
+
+          const tdRType = document.createElement('td');
+          tdRType.className = 'pipeline-td-type pipeline-td-type-' + r.type;
+          tdRType.textContent = r.type;
+          tr.appendChild(tdRType);
+
+          const tdPHyp = document.createElement('td');
+          if (p.type === 'omission') {
+            tdPHyp.textContent = '\u2014';
+            tdPHyp.className = 'pipeline-td-omission';
+          } else if (p.type === 'correct') {
+            tdPHyp.textContent = p.hyp;
+            tdPHyp.className = 'pipeline-td-correct';
+          } else {
+            tdPHyp.textContent = p.hyp || '?';
+            tdPHyp.className = 'pipeline-td-sub';
+          }
+          tr.appendChild(tdPHyp);
+
+          const tdPType = document.createElement('td');
+          tdPType.className = 'pipeline-td-type pipeline-td-type-' + p.type;
+          tdPType.textContent = p.type;
+          tr.appendChild(tdPType);
+
+          tbody.appendChild(tr);
         }
-        confWordsDiv.appendChild(insDiv);
+        table.appendChild(tbody);
+        body.appendChild(table);
+
+        if (reverbIns.length > 0 || parakeetIns.length > 0) {
+          const insDiv = document.createElement('div');
+          insDiv.className = 'pipeline-insertions';
+          if (reverbIns.length > 0) {
+            const rLabel = document.createElement('strong');
+            rLabel.textContent = 'Reverb insertions (' + reverbIns.length + '): ';
+            insDiv.appendChild(rLabel);
+            insDiv.appendChild(document.createTextNode(reverbIns.map(e => e.hyp).join(', ')));
+          }
+          if (parakeetIns.length > 0) {
+            if (reverbIns.length > 0) insDiv.appendChild(document.createElement('br'));
+            const pLabel = document.createElement('strong');
+            pLabel.textContent = 'Parakeet insertions (' + parakeetIns.length + '): ';
+            insDiv.appendChild(pLabel);
+            insDiv.appendChild(document.createTextNode(parakeetIns.map(e => e.hyp).join(', ')));
+          }
+          body.appendChild(insDiv);
+        }
+      } else {
+        const msg = document.createElement('div');
+        msg.className = 'pipeline-step-summary';
+        msg.textContent = parakeetRef.length === 0
+          ? 'No Parakeet alignment data available'
+          : 'Length mismatch: Reverb ' + reverbRef.length + ' vs Parakeet ' + parakeetRef.length;
+        body.appendChild(msg);
       }
 
-      // --- Agreement metric ---
-      let agree = 0;
-      for (let ai = 0; ai < reverbRef.length; ai++) {
-        if (parakeetRef[ai].type === reverbRef[ai].type) agree++;
-      }
-      const agreePct = (100 * agree / reverbRef.length).toFixed(0);
-      const metricDiv = document.createElement('div');
-      metricDiv.style.cssText = 'font-size:0.75rem;color:#aaa;padding:2px 8px;';
-      metricDiv.textContent = `Agreement: ${agree}/${reverbRef.length} (${agreePct}%) — Parakeet vs Reverb on reference words`;
-      confWordsDiv.appendChild(metricDiv);
+      confWordsDiv.appendChild(step);
+    }
 
-    } else {
-      // Fallback: no Parakeet alignment or length mismatch — show simple message
-      const fallback = document.createElement('div');
-      fallback.className = 'stt-no-data';
-      fallback.textContent = parakeetRef.length === 0
-        ? 'Reference-aligned comparison unavailable (no Parakeet alignment data)'
-        : `Reference-aligned comparison unavailable (length mismatch: Reverb ${reverbRef.length} vs Parakeet ${parakeetRef.length})`;
-      confWordsDiv.appendChild(fallback);
+    // ── STEP 4: Cross-Validation Verdicts ──
+    {
+      const { step, body } = makeStep(4, 'Cross-Validation Verdicts',
+        'per-reference-word comparison of Reverb vs Parakeet (decision matrix)');
+
+      if (parakeetRef.length > 0 && parakeetRef.length === reverbRef.length) {
+        const table = document.createElement('table');
+        table.className = 'pipeline-table';
+
+        const thead = document.createElement('thead');
+        const hrow = document.createElement('tr');
+        for (const h of ['#', 'Reference', 'Reverb', 'Parakeet', 'Verdict', 'Reason']) {
+          const th = document.createElement('th');
+          th.textContent = h;
+          hrow.appendChild(th);
+        }
+        thead.appendChild(hrow);
+        table.appendChild(thead);
+
+        const tbody = document.createElement('tbody');
+        let confirmedN = 0, disagreedN = 0, recoveredN = 0, unconfirmedN = 0;
+        for (let i = 0; i < reverbRef.length; i++) {
+          const r = reverbRef[i];
+          const p = parakeetRef[i];
+          const xval = r.crossValidation || 'pending';
+
+          if (xval === 'confirmed') confirmedN++;
+          else if (xval === 'disagreed') disagreedN++;
+          else if (xval === 'recovered') recoveredN++;
+          else if (xval === 'unconfirmed') unconfirmedN++;
+
+          const tr = document.createElement('tr');
+          tr.className = 'pipeline-xval-' + xval;
+
+          const tdIdx = document.createElement('td');
+          tdIdx.className = 'pipeline-td-idx';
+          tdIdx.textContent = i + 1;
+          tr.appendChild(tdIdx);
+
+          const tdRef = document.createElement('td');
+          tdRef.className = 'pipeline-td-ref';
+          tdRef.textContent = r.ref || '?';
+          tr.appendChild(tdRef);
+
+          const tdR = document.createElement('td');
+          tdR.className = 'pipeline-td-type-' + r.type;
+          tdR.textContent = r.type === 'omission' ? '\u2014 omitted' : '"' + r.hyp + '" (' + r.type + ')';
+          tr.appendChild(tdR);
+
+          const tdP = document.createElement('td');
+          tdP.className = 'pipeline-td-type-' + p.type;
+          tdP.textContent = p.type === 'omission' ? '\u2014 omitted' : '"' + p.hyp + '" (' + p.type + ')';
+          tr.appendChild(tdP);
+
+          const tdV = document.createElement('td');
+          tdV.className = 'pipeline-verdict pipeline-verdict-' + xval;
+          const verdictSymbols = { confirmed: '\u2713', disagreed: '\u2717', recovered: '\u21bb', unconfirmed: '?' };
+          tdV.textContent = (verdictSymbols[xval] || '\u00b7') + ' ' + xval;
+          tr.appendChild(tdV);
+
+          const tdReason = document.createElement('td');
+          tdReason.className = 'pipeline-td-reason';
+          const rT = r.type, pT = p.type;
+          if (xval === 'confirmed' && rT === 'correct' && pT === 'correct') {
+            tdReason.textContent = 'both correct';
+          } else if (xval === 'confirmed' && rT === 'correct') {
+            tdReason.textContent = 'Reverb correct (sufficient)';
+          } else if (xval === 'confirmed' && rT === 'substitution' && pT === 'substitution') {
+            const rNorm = (r.hyp || '').toLowerCase();
+            const pNorm = (p.hyp || '').toLowerCase();
+            tdReason.textContent = rNorm === pNorm ? 'both said "' + r.hyp + '"' : 'Reverb: "' + r.hyp + '", Parakeet: "' + p.hyp + '"';
+          } else if (xval === 'disagreed') {
+            tdReason.textContent = 'R: ' + r.type + '="' + (r.hyp || '\u2014') + '", P: ' + p.type + '="' + (p.hyp || '\u2014') + '"';
+          } else if (xval === 'recovered') {
+            tdReason.textContent = 'Reverb omitted, Parakeet heard it';
+          } else if (xval === 'unconfirmed') {
+            tdReason.textContent = 'Parakeet omitted, Reverb-only evidence';
+          } else {
+            tdReason.textContent = 'R: ' + rT + ', P: ' + pT;
+          }
+          tr.appendChild(tdReason);
+
+          tbody.appendChild(tr);
+        }
+        table.appendChild(tbody);
+        body.appendChild(table);
+
+        const summary = document.createElement('div');
+        summary.className = 'pipeline-step-summary';
+        summary.textContent = 'Confirmed: ' + confirmedN + ' | Disagreed: ' + disagreedN + ' | Recovered: ' + recoveredN + ' | Unconfirmed: ' + unconfirmedN;
+        const agreePct = (100 * confirmedN / reverbRef.length).toFixed(0);
+        summary.textContent += ' | Agreement: ' + agreePct + '%';
+        body.appendChild(summary);
+      } else {
+        const msg = document.createElement('div');
+        msg.className = 'pipeline-step-summary';
+        msg.textContent = 'Cross-validation unavailable (no paired alignment data)';
+        body.appendChild(msg);
+      }
+
+      confWordsDiv.appendChild(step);
+    }
+
+    // ── STEP 5: Post-Processing ──
+    {
+      const { step, body } = makeStep(5, 'Post-Processing',
+        'omission recovery, compound merges, self-corrections, near-miss clusters, CTC artifacts');
+
+      const lists = [];
+
+      const recoveries = alignment.filter(e => e._recovered);
+      if (recoveries.length > 0) {
+        lists.push({
+          label: 'Omission Recoveries (' + recoveries.length + ')',
+          cls: 'pipeline-pp-recovered',
+          items: recoveries.map(e => '"' + e.ref + '" \u2014 Reverb omitted, Parakeet heard "' + (e._xvalWord || e.hyp) + '"' + (e._isLastRefWord ? ' (final word, CTC truncation)' : ''))
+        });
+      }
+
+      const compounds = alignment.filter(e => e.compound);
+      if (compounds.length > 0) {
+        lists.push({
+          label: 'Compound Merges (' + compounds.length + ')',
+          cls: 'pipeline-pp-compound',
+          items: compounds.map(e => '"' + e.parts.join('" + "') + '" \u2192 "' + e.hyp + '" (ref: "' + e.ref + '")')
+        });
+      }
+
+      const selfCorrs = alignment.filter(e => e.type === 'self-correction' || e._isSelfCorrection);
+      if (selfCorrs.length > 0) {
+        lists.push({
+          label: 'Self-Corrections (' + selfCorrs.length + ')',
+          cls: 'pipeline-pp-selfcorr',
+          items: selfCorrs.map(e => '"' + e.hyp + '" (near "' + (e.ref || e._selfCorrectionTarget || '?') + '")')
+        });
+      }
+
+      const struggles = alignment.filter(e => e.type === 'struggle');
+      if (struggles.length > 0) {
+        lists.push({
+          label: 'Struggle Words (' + struggles.length + ')',
+          cls: 'pipeline-pp-struggle',
+          items: struggles.map(e => {
+            const paths = [];
+            if (e._hasHesitation) paths.push('hesitation');
+            if (e._nearMissEvidence && e._nearMissEvidence.length > 0) paths.push('decoding');
+            if (e._abandonedAttempt) paths.push('abandoned');
+            return '"' + e.ref + '" \u2014 said "' + e.hyp + '" [' + (paths.join(', ') || 'base struggle') + ']';
+          })
+        });
+      }
+
+      const absorbed = alignment.filter(e => e._partOfStruggle);
+      if (absorbed.length > 0) {
+        lists.push({
+          label: 'Absorbed Near-Miss Fragments (' + absorbed.length + ')',
+          cls: 'pipeline-pp-absorbed',
+          items: absorbed.map(e => '"' + e.hyp + '" absorbed into struggle for "' + (e._struggleRef || '?') + '"')
+        });
+      }
+
+      const artifacts = (transcriptWords || []).filter(w => w._ctcArtifact);
+      if (artifacts.length > 0) {
+        lists.push({
+          label: 'CTC Artifacts Filtered (' + artifacts.length + ')',
+          cls: 'pipeline-pp-artifact',
+          items: artifacts.map(w => '"' + w.word + '" (' + Math.round((parseSttTime(w.endTime) - parseSttTime(w.startTime)) * 1000) + 'ms, overlaps confirmed word)')
+        });
+      }
+
+      const forgiven = alignment.filter(e => e.forgiven);
+      if (forgiven.length > 0) {
+        lists.push({
+          label: 'Forgiven Proper Nouns (' + forgiven.length + ')',
+          cls: 'pipeline-pp-forgiven',
+          items: forgiven.map(e => '"' + e.ref + '" \u2014 said "' + e.hyp + '" (' + (e.phoneticRatio || '?') + '% similar)')
+        });
+      }
+
+      if (lists.length === 0) {
+        const msg = document.createElement('div');
+        msg.className = 'pipeline-step-summary';
+        msg.textContent = 'No post-processing modifications applied';
+        body.appendChild(msg);
+      } else {
+        for (const list of lists) {
+          const section = document.createElement('div');
+          section.className = 'pipeline-pp-section ' + list.cls;
+          const label = document.createElement('div');
+          label.className = 'pipeline-pp-label';
+          label.textContent = list.label;
+          section.appendChild(label);
+          const ul = document.createElement('ul');
+          ul.className = 'pipeline-pp-list';
+          for (const item of list.items) {
+            const li = document.createElement('li');
+            li.textContent = item;
+            ul.appendChild(li);
+          }
+          section.appendChild(ul);
+          body.appendChild(section);
+        }
+      }
+
+      confWordsDiv.appendChild(step);
+    }
+
+    // ── STEP 6: Final Scored Alignment ──
+    {
+      const { step, body } = makeStep(6, 'Final Scored Alignment',
+        'the result used for WCPM and accuracy scoring');
+
+      const table = document.createElement('table');
+      table.className = 'pipeline-table';
+
+      const thead = document.createElement('thead');
+      const hrow = document.createElement('tr');
+      for (const h of ['#', 'Reference', 'Hypothesis', 'Type', 'Cross-Val', 'Notes']) {
+        const th = document.createElement('th');
+        th.textContent = h;
+        hrow.appendChild(th);
+      }
+      thead.appendChild(hrow);
+      table.appendChild(thead);
+
+      const tbody = document.createElement('tbody');
+      let rowNum = 0;
+      for (const item of alignment) {
+        rowNum++;
+        const tr = document.createElement('tr');
+        tr.className = 'pipeline-final-' + item.type;
+
+        const tdIdx = document.createElement('td');
+        tdIdx.className = 'pipeline-td-idx';
+        tdIdx.textContent = rowNum;
+        tr.appendChild(tdIdx);
+
+        const tdRef = document.createElement('td');
+        tdRef.className = 'pipeline-td-ref';
+        tdRef.textContent = item.type === 'insertion' ? '\u2014' : (item.ref || '?');
+        tr.appendChild(tdRef);
+
+        const tdHyp = document.createElement('td');
+        if (item.type === 'omission') {
+          tdHyp.textContent = '\u2014';
+          tdHyp.className = 'pipeline-td-omission';
+        } else {
+          tdHyp.textContent = item.hyp || '?';
+          tdHyp.className = item.type === 'correct' ? 'pipeline-td-correct' : 'pipeline-td-sub';
+        }
+        tr.appendChild(tdHyp);
+
+        const tdType = document.createElement('td');
+        tdType.className = 'pipeline-td-type pipeline-td-type-' + item.type;
+        tdType.textContent = item.type + (item.forgiven ? ' (forgiven)' : '') + (item.compound ? ' (compound)' : '');
+        tr.appendChild(tdType);
+
+        const tdXval = document.createElement('td');
+        const xv = item.crossValidation || '';
+        tdXval.className = 'pipeline-verdict pipeline-verdict-' + xv;
+        tdXval.textContent = xv || '\u2014';
+        tr.appendChild(tdXval);
+
+        const tdNotes = document.createElement('td');
+        tdNotes.className = 'pipeline-td-reason';
+        const notes = [];
+        if (item._recovered) notes.push('recovered');
+        if (item._isSelfCorrection) notes.push('self-correction');
+        if (item._partOfStruggle) notes.push('part of struggle');
+        if (item._nearMissEvidence && item._nearMissEvidence.length > 0) notes.push('near-miss: ' + item._nearMissEvidence.join(', '));
+        if (item._hasHesitation) notes.push('hesitation');
+        if (item._abandonedAttempt) notes.push('abandoned attempt');
+        if (item._healed) notes.push('healed');
+        if (item.compound) notes.push('parts: ' + item.parts.join('+'));
+        tdNotes.textContent = notes.join('; ') || '';
+        tr.appendChild(tdNotes);
+
+        tbody.appendChild(tr);
+      }
+      table.appendChild(tbody);
+      body.appendChild(table);
+
+      confWordsDiv.appendChild(step);
     }
   }
 
