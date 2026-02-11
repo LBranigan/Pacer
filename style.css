@@ -574,6 +574,7 @@ body.dev-mode .dev-mode-toggle {
 .pipeline-td-correct { color: #2e7d32; background: #e8f5e9; }
 .pipeline-td-sub { color: #c62828; background: #ffebee; }
 .pipeline-td-omission { color: #999; font-style: italic; background: #fafafa; }
+.pipeline-v2-fragments { font-size: 0.7rem; color: #e65100; margin-top: 2px; }
 
 .pipeline-td-type { font-size: 0.72rem; }
 .pipeline-td-type-correct { color: #2e7d32; }

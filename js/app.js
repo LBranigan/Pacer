@@ -428,6 +428,97 @@ async function runAnalysis() {
   // system in kitchen-sink-merger.js now groups these naturally via v1/v0 anchoring.
   const parseT = (t) => parseFloat(String(t).replace('s', '')) || 0;
 
+  // ── V2 divergence block collapsing ───────────────────────────────
+  // Collapse divergence block fragments into single entries using the
+  // V0 clean target as the word for NW alignment. This prevents
+  // normalizeText() from splitting BPE-joined tokens like "pe-peal"
+  // and ensures the aligner sees the clean word (e.g., "appeal")
+  // instead of multiple messy fragments.
+  //
+  // The divergence metadata is preserved on the V2 entry for display:
+  //   V2.word = "appeal" (for alignment)
+  //   V2._divergence.verbatimWords = ["apo-", "a", "pe-peal"] (for tooltip)
+  {
+    const { normalizeText: ntV2 } = await import('./text-normalize.js');
+    const v2Words = [];
+    let i = 0;
+
+    while (i < transcriptWords.length) {
+      const w = transcriptWords[i];
+
+      if (w._divergence && w._divergence.id != null) {
+        // Collect all fragments with same divergence block id
+        const blockId = w._divergence.id;
+        const fragments = [];
+        while (i < transcriptWords.length && transcriptWords[i]._divergence?.id === blockId) {
+          fragments.push(transcriptWords[i]);
+          i++;
+        }
+
+        const cleanWords = fragments[0]._divergence.cleanWords || [];
+        const cleanTarget = fragments[0]._divergence.cleanTarget;
+
+        if (cleanTarget && cleanWords.length > 0) {
+          const first = fragments[0];
+          const last = fragments[fragments.length - 1];
+          const fragSummary = fragments.map(f => ({
+            word: f.word, startTime: f.startTime, endTime: f.endTime
+          }));
+
+          // Expand clean words through normalizeText to handle any hyphens
+          // (e.g., V0 "self-esteem" → ["self", "esteem"])
+          const expandedClean = [];
+          for (const cw of cleanWords) {
+            expandedClean.push(...ntV2(cw));
+          }
+
+          // Emit one V2 entry per expanded clean word
+          for (let ci = 0; ci < expandedClean.length; ci++) {
+            v2Words.push({
+              ...first,
+              word: expandedClean[ci],
+              endTime: last.endTime,
+              _reverbStartTime: first._reverbStartTime || first.startTime,
+              _reverbEndTime: last._reverbEndTime || last.endTime,
+              _v2Merged: true,
+              _v2OriginalFragments: fragSummary,
+              _divergence: {
+                ...first._divergence,
+                role: 'merged'
+              }
+            });
+          }
+
+          console.log(`[V2] Collapsed #${blockId}: "${cleanTarget}" ← [${fragments.map(f => f.word).join(', ')}]`);
+        } else {
+          // No clean target (pure insertions) — keep individual fragments
+          for (const frag of fragments) {
+            v2Words.push(frag);
+          }
+        }
+      } else {
+        v2Words.push(w);
+        i++;
+      }
+    }
+
+    const v2Collapsed = v2Words.filter(w => w._v2Merged);
+    if (v2Collapsed.length > 0) {
+      addStage('v2_divergence_collapse', {
+        collapsedCount: v2Collapsed.length,
+        originalFragmentCount: transcriptWords.filter(w => w._divergence?.id != null).length,
+        entries: v2Collapsed.map(w => ({
+          word: w.word,
+          fragments: w._v2OriginalFragments.map(f => f.word),
+          cleanTarget: w._divergence?.cleanTarget
+        }))
+      });
+    }
+
+    transcriptWords.length = 0;
+    transcriptWords.push(...v2Words);
+  }
+
   // ── Reference-aware fragment pre-merge ───────────────────────────
   // Reverb BPE sometimes splits a single spoken word into fragments
   // (e.g., "platforms" → "pla" + "forms"). Detect adjacent short words

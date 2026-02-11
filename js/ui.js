@@ -387,7 +387,11 @@ function buildEnhancedTooltip(item, sttWord) {
         const target = d.cleanTarget || '?';
         const fragments = d.verbatimWords.map(w => `"${w}"`).join(', ');
         lines.push(`Struggle with "${target}" — attempts: ${fragments}`);
-        lines.push(`Role: ${d.role === 'final' ? 'final attempt' : 'fragment'} (not an error)`);
+        if (d.role === 'merged') {
+          lines.push('Divergence block (V2 collapsed)');
+        } else {
+          lines.push(`Role: ${d.role === 'final' ? 'final attempt' : 'fragment'} (not an error)`);
+        }
       } else {
         lines.push('Disfluency (not an error)');
       }
@@ -1627,6 +1631,19 @@ export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, di
           } else {
             tdRHyp.textContent = r.hyp || '?';
             tdRHyp.className = 'pipeline-td-sub';
+          }
+          // Show original V1 fragments when V2 collapsing was used
+          if (r.hypIndex != null && r.hypIndex >= 0) {
+            const tw = transcriptWords[r.hypIndex];
+            if (tw && tw._v2Merged && tw._v2OriginalFragments) {
+              const fragText = tw._v2OriginalFragments.map(f => f.word).join(' ');
+              if (fragText !== r.hyp) {
+                const fragSpan = document.createElement('div');
+                fragSpan.className = 'pipeline-v2-fragments';
+                fragSpan.textContent = '\u2190 ' + fragText;
+                tdRHyp.appendChild(fragSpan);
+              }
+            }
           }
           tr.appendChild(tdRHyp);
 
