@@ -546,7 +546,10 @@ async function runAnalysis() {
     const v2Pseudo = transcriptWords.map((w, idx) => ({ word: w.word, _twIdx: idx }));
     const refPseudo = refNorm.map(w => ({ word: w }));
 
-    const v3Alignment = alignV3(v2Pseudo, refPseudo);
+    // Use low gapDelete: V3 aligns ~30 spoken words against ~300+ ref words,
+    // so ref-word-deletion (skipping unread portions) must be cheap.
+    // Default gapDelete=-2 (tuned for V0/V1) makes skipping OCR junk too expensive.
+    const v3Alignment = alignV3(v2Pseudo, refPseudo, { gapDelete: -0.5 });
 
     // Group into anchors and divergence blocks
     const v3Blocks = [];
@@ -581,7 +584,7 @@ async function runAnalysis() {
           }
         }
 
-        if (refTargets.length > 0 && frags.length >= 2) {
+        if (refTargets.length > 0 && frags.length >= 2 && refTargets.length <= frags.length * 3) {
           // Multiple V2 words mapping to reference target(s) — collapse
           const fragSummary = frags.map(f => ({
             word: f.word, startTime: f.startTime, endTime: f.endTime,
