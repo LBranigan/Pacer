@@ -584,7 +584,11 @@ async function runAnalysis() {
         if (refTargets.length > 0 && frags.length >= 2) {
           // Multiple V2 words mapping to reference target(s) — collapse
           const fragSummary = frags.map(f => ({
-            word: f.word, startTime: f.startTime, endTime: f.endTime
+            word: f.word, startTime: f.startTime, endTime: f.endTime,
+            _v2Merged: f._v2Merged || false,
+            _v1Words: f._v2Merged && f._v2OriginalFragments
+              ? f._v2OriginalFragments.map(x => x.word)
+              : null
           }));
           const first = frags[0];
           const last = frags[frags.length - 1];

@@ -1517,7 +1517,8 @@ export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, di
               kind: 'v3div',
               words: [w],
               refTarget: w._v3RefTarget || w.word,
-              v2Fragments: w._v3OriginalFragments.map(f => f.word)
+              v2Fragments: w._v3OriginalFragments.map(f => f.word),
+              v2FragmentData: w._v3OriginalFragments
             });
           } else {
             if (currentBlock) { blocks.push(currentBlock); currentBlock = null; }
@@ -1623,17 +1624,37 @@ export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, di
             rows[3].appendChild(cellRes);
 
           } else if (b.kind === 'v3div') {
-            // V2/Reference divergence — V0 and V1 agree but don't match reference
+            // V2/Reference divergence — V0 and V1 may or may not agree
             v3DivCount++;
             const refTarget = b.refTarget;
             const v2Frags = b.v2Fragments;
+            const fragData = b.v2FragmentData || [];
             const resultWord = b.words.map(w => w.word).join(' ');
 
-            const tip = 'V2/Reference Divergence'
-              + '\nReference: "' + refTarget + '"'
-              + '\nV0 & V1 heard: ' + v2Frags.map(f => '"' + f + '"').join(' ')
-              + '\nResult: "' + resultWord + '"'
-              + '\nBoth Reverb passes agree on fragments; student split the word';
+            // Check if any fragment had a V2 merge (V0≠V1 at that position)
+            const hasV2Diff = fragData.some(f => f._v2Merged);
+
+            // Build V1 words: use _v1Words where V2 modified, else same as V0
+            const v1Words = [];
+            for (const fd of fragData) {
+              if (fd._v1Words && fd._v1Words.length > 0) {
+                v1Words.push(...fd._v1Words);
+              } else {
+                v1Words.push(fd.word);
+              }
+            }
+
+            const tip = hasV2Diff
+              ? 'V2/Reference Divergence'
+                + '\nReference: "' + refTarget + '"'
+                + '\nV0 clean: ' + v2Frags.map(f => '"' + f + '"').join(' ')
+                + '\nV1 verbatim: ' + v1Words.map(f => '"' + f + '"').join(' ')
+                + '\nResult: "' + resultWord + '"'
+              : 'V2/Reference Divergence'
+                + '\nReference: "' + refTarget + '"'
+                + '\nV0 & V1 heard: ' + v2Frags.map(f => '"' + f + '"').join(' ')
+                + '\nResult: "' + resultWord + '"'
+                + '\nBoth Reverb passes agree on fragments; student split the word';
 
             // Reference row — the target word
             const cellRef = document.createElement('span');
@@ -1643,9 +1664,8 @@ export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, di
             cellRef.addEventListener('click', (e) => { e.stopPropagation(); showWordTooltip(cellRef, null); });
             rows[0].appendChild(cellRef);
 
-            // V0 cell — shows fragments (both V0 and V1 agree)
+            // V0 cell — shows V2 fragment words (= V0's words, since V2 uses V0 as target)
             const cellV0 = document.createElement('span');
-            cellV0.className = 'pipeline-v012-cell pipeline-v012-div pipeline-v012-div-v3';
             cellV0.dataset.tooltip = tip;
             cellV0.addEventListener('click', (e) => { e.stopPropagation(); showWordTooltip(cellV0, null); });
             for (let fi = 0; fi < v2Frags.length; fi++) {
@@ -1660,13 +1680,38 @@ export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, di
               frag.textContent = v2Frags[fi];
               cellV0.appendChild(frag);
             }
+            // Color: if V0≠V1, V0 gets green; otherwise orange
+            cellV0.className = hasV2Diff
+              ? 'pipeline-v012-cell pipeline-v012-div pipeline-v012-div-v0'
+              : 'pipeline-v012-cell pipeline-v012-div pipeline-v012-div-v3';
             rows[1].appendChild(cellV0);
 
-            // V1 cell — same fragments
-            const cellV1 = cellV0.cloneNode(true);
-            cellV1.dataset.tooltip = tip;
-            cellV1.addEventListener('click', (e) => { e.stopPropagation(); showWordTooltip(cellV1, null); });
-            rows[2].appendChild(cellV1);
+            // V1 cell — shows V1's original words where different
+            if (hasV2Diff) {
+              const cellV1 = document.createElement('span');
+              cellV1.className = 'pipeline-v012-cell pipeline-v012-div pipeline-v012-div-v1';
+              cellV1.dataset.tooltip = tip;
+              cellV1.addEventListener('click', (e) => { e.stopPropagation(); showWordTooltip(cellV1, null); });
+              for (let fi = 0; fi < v1Words.length; fi++) {
+                if (fi > 0) {
+                  const sep = document.createElement('span');
+                  sep.className = 'pipeline-v012-frag-sep';
+                  sep.textContent = '\u00b7';
+                  cellV1.appendChild(sep);
+                }
+                const frag = document.createElement('span');
+                frag.className = 'pipeline-v012-frag';
+                frag.textContent = v1Words[fi];
+                cellV1.appendChild(frag);
+              }
+              rows[2].appendChild(cellV1);
+            } else {
+              // V0 and V1 fully agree — clone
+              const cellV1 = cellV0.cloneNode(true);
+              cellV1.dataset.tooltip = tip;
+              cellV1.addEventListener('click', (e) => { e.stopPropagation(); showWordTooltip(cellV1, null); });
+              rows[2].appendChild(cellV1);
+            }
 
             // Result cell — collapsed to reference
             const cellRes = document.createElement('span');
