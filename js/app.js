@@ -843,6 +843,15 @@ async function runAnalysis() {
       console.table(table);
       const agreed = table.filter(t => t.reverb === t.parakeet).length;
       console.log(`[xval-ref] Agreement: ${agreed}/${len} (${(100 * agreed / len).toFixed(0)}%)`);
+      addStage('reference_anchored_xval', {
+        refWords: len,
+        agreed,
+        agreementPct: (100 * agreed / len).toFixed(0) + '%',
+        confirmed: table.filter(t => t.status === 'confirmed').length,
+        disagreed: table.filter(t => t.status === 'disagreed').length,
+        recovered: table.filter(t => t.status === 'recovered').length,
+        unconfirmed: table.filter(t => t.status === 'unconfirmed').length
+      });
     }
   }
 
