@@ -1452,18 +1452,16 @@ export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, di
             if (!entry || twSymbol === 'n/a') {
               td.className = 'engine-unavailable';
               td.textContent = 'n/a';
-            } else if (entry.type === 'correct') {
-              td.className = 'engine-correct';
-              td.textContent = entry.hyp;
-              if (entry.compound && entry.parts) {
-                const fragSpan = document.createElement('div');
-                fragSpan.className = 'engine-compound-frags';
-                fragSpan.textContent = entry.parts.join(' + ');
-                td.appendChild(fragSpan);
-              }
             } else if (entry.type === 'omission') {
               td.className = 'engine-omit';
               td.textContent = '\u2014';
+            } else if (entry.compound && entry.parts) {
+              // Compound merge — show fragments (applies to both correct and struggle)
+              td.className = entry.type === 'correct' || entry.type === 'struggle' ? 'engine-correct' : 'engine-sub';
+              td.textContent = entry.parts.join(' + ');
+            } else if (entry.type === 'correct' || entry.type === 'struggle') {
+              td.className = 'engine-correct';
+              td.textContent = entry.hyp;
             } else {
               td.className = 'engine-sub';
               td.textContent = entry.hyp || '?';
@@ -1556,7 +1554,7 @@ export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, di
           if (e.type === 'omission') {
             tdHyp.textContent = '\u2014';
             tdHyp.className = 'pipeline-td-omission';
-          } else if (e.type === 'correct') {
+          } else if (e.type === 'correct' || (e.type === 'struggle' && e.compound)) {
             tdHyp.textContent = e.hyp;
             tdHyp.className = 'pipeline-td-correct';
           } else {
