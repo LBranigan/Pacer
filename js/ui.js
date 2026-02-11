@@ -1534,35 +1534,65 @@ export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, di
         msg.textContent = 'No Reverb data available';
         body.appendChild(msg);
       } else {
-        // Build four-row comparison: Reference, V0 clean, V1 verbatim, Result
-        const table = document.createElement('div');
-        table.className = 'pipeline-v012-table';
+        // Build vertical table: one row per word, columns = V0 / V1 / V2 / Type
+        const table = document.createElement('table');
+        table.className = 'pipeline-table';
 
-        const labels = ['Reference', 'V0 clean', 'V1 verbatim', 'Result'];
-        const labelClasses = ['pipeline-v012-lbl-ref', 'pipeline-v012-lbl-v0', 'pipeline-v012-lbl-v1', 'pipeline-v012-lbl-v2'];
+        const thead = document.createElement('thead');
+        const headRow = document.createElement('tr');
+        for (const hdr of ['#', 'V0 (clean)', 'V1 (verbatim)', 'V2 (result)', 'Type']) {
+          const th = document.createElement('th');
+          th.textContent = hdr;
+          headRow.appendChild(th);
+        }
+        thead.appendChild(headRow);
+        table.appendChild(thead);
 
-        const rows = labels.map((lbl, ri) => {
-          const row = document.createElement('div');
-          row.className = 'pipeline-v012-row';
-          const labelEl = document.createElement('span');
-          labelEl.className = 'pipeline-v012-label ' + labelClasses[ri];
-          labelEl.textContent = lbl;
-          row.appendChild(labelEl);
-          return row;
-        });
+        const tbody = document.createElement('tbody');
 
-        let v2DivCount = 0, v3DivCount = 0;
+        // Helper: build a <td> with fragment spans separated by middot
+        const buildFragCell = (fragments, className, tip) => {
+          const td = document.createElement('td');
+          td.className = className;
+          for (let fi = 0; fi < fragments.length; fi++) {
+            if (fi > 0) {
+              const sep = document.createElement('span');
+              sep.className = 'pipeline-v012-frag-sep';
+              sep.textContent = '\u00b7';
+              td.appendChild(sep);
+            }
+            const frag = document.createElement('span');
+            frag.textContent = fragments[fi];
+            td.appendChild(frag);
+          }
+          if (tip) {
+            td.dataset.tooltip = tip;
+            td.style.cursor = 'pointer';
+            td.addEventListener('click', (e) => { e.stopPropagation(); showWordTooltip(td, null); });
+          }
+          return td;
+        };
+
+        let v2DivCount = 0, v3DivCount = 0, rowNum = 0;
         for (const b of blocks) {
+          rowNum++;
           if (b.kind === 'anchor') {
             const word = b.words[0].word;
-            for (let ri = 0; ri < 4; ri++) {
-              const cell = document.createElement('span');
-              cell.className = 'pipeline-v012-cell pipeline-v012-anchor';
-              cell.textContent = word;
-              rows[ri].appendChild(cell);
+            const tr = document.createElement('tr');
+            const tdIdx = document.createElement('td');
+            tdIdx.className = 'pipeline-td-idx';
+            tdIdx.textContent = rowNum;
+            tr.appendChild(tdIdx);
+            for (let c = 0; c < 3; c++) {
+              const td = document.createElement('td');
+              td.className = 'pipeline-td-v012-anchor';
+              td.textContent = word;
+              tr.appendChild(td);
             }
+            tr.appendChild(document.createElement('td')); // empty Type
+            tbody.appendChild(tr);
+
           } else if (b.kind === 'v2div') {
-            // V0/V1 divergence — V0 and V1 differ, but V0 matches reference
             v2DivCount++;
             const v0Text = b.cleanTarget || '?';
             const firstW = b.words[0];
@@ -1580,61 +1610,54 @@ export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, di
               + '\nResult: "' + resultWord + '"'
               + '\nV0 recovered the word; V1 shows the struggle';
 
-            // Reference row — same as V0 (clean matched reference)
-            const cellRef = document.createElement('span');
-            cellRef.className = 'pipeline-v012-cell pipeline-v012-div pipeline-v012-div-ref';
-            cellRef.textContent = v0Text;
-            cellRef.dataset.tooltip = tip;
-            cellRef.addEventListener('click', (e) => { e.stopPropagation(); showWordTooltip(cellRef, null); });
-            rows[0].appendChild(cellRef);
+            const tr = document.createElement('tr');
 
-            // V0 cell — correct (green)
-            const cellV0 = document.createElement('span');
-            cellV0.className = 'pipeline-v012-cell pipeline-v012-div pipeline-v012-div-v0';
-            cellV0.textContent = v0Text;
-            cellV0.dataset.tooltip = tip;
-            cellV0.addEventListener('click', (e) => { e.stopPropagation(); showWordTooltip(cellV0, null); });
-            rows[1].appendChild(cellV0);
+            // # column
+            const tdIdx = document.createElement('td');
+            tdIdx.className = 'pipeline-td-idx';
+            tdIdx.textContent = rowNum;
+            tr.appendChild(tdIdx);
 
-            // V1 cell — fragments (red)
-            const cellV1 = document.createElement('span');
-            cellV1.className = 'pipeline-v012-cell pipeline-v012-div pipeline-v012-div-v1';
-            cellV1.dataset.tooltip = tip;
-            cellV1.addEventListener('click', (e) => { e.stopPropagation(); showWordTooltip(cellV1, null); });
-            for (let fi = 0; fi < v1Fragments.length; fi++) {
-              if (fi > 0) {
-                const sep = document.createElement('span');
-                sep.className = 'pipeline-v012-frag-sep';
-                sep.textContent = '\u00b7';
-                cellV1.appendChild(sep);
-              }
-              const frag = document.createElement('span');
-              frag.className = 'pipeline-v012-frag';
-              frag.textContent = v1Fragments[fi];
-              cellV1.appendChild(frag);
-            }
-            rows[2].appendChild(cellV1);
+            // V0 cell — green
+            const tdV0 = document.createElement('td');
+            tdV0.className = 'pipeline-td-v0-match';
+            tdV0.textContent = v0Text;
+            tdV0.dataset.tooltip = tip;
+            tdV0.style.cursor = 'pointer';
+            tdV0.addEventListener('click', (e) => { e.stopPropagation(); showWordTooltip(tdV0, null); });
+            tr.appendChild(tdV0);
 
-            // Result cell — collapsed (purple)
-            const cellRes = document.createElement('span');
-            cellRes.className = 'pipeline-v012-cell pipeline-v012-div pipeline-v012-div-v2';
-            cellRes.textContent = resultWord;
-            cellRes.dataset.tooltip = tip;
-            cellRes.addEventListener('click', (e) => { e.stopPropagation(); showWordTooltip(cellRes, null); });
-            rows[3].appendChild(cellRes);
+            // V1 cell — red with fragments
+            tr.appendChild(buildFragCell(v1Fragments, 'pipeline-td-v1-diff', tip));
+
+            // V2 result cell — purple
+            const tdV2 = document.createElement('td');
+            tdV2.className = 'pipeline-td-v2-result';
+            tdV2.textContent = resultWord;
+            tdV2.dataset.tooltip = tip;
+            tdV2.style.cursor = 'pointer';
+            tdV2.addEventListener('click', (e) => { e.stopPropagation(); showWordTooltip(tdV2, null); });
+            tr.appendChild(tdV2);
+
+            // Type badge
+            const tdType = document.createElement('td');
+            const badge = document.createElement('span');
+            badge.className = 'pipeline-v012-badge pipeline-v012-badge-v2';
+            badge.textContent = 'V0\u2260V1';
+            tdType.appendChild(badge);
+            tr.appendChild(tdType);
+
+            tbody.appendChild(tr);
 
           } else if (b.kind === 'v3div') {
-            // V2/Reference divergence — V0 and V1 may or may not agree
             v3DivCount++;
             const refTarget = b.refTarget;
             const v2Frags = b.v2Fragments;
             const fragData = b.v2FragmentData || [];
             const resultWord = b.words.map(w => w.word).join(' ');
 
-            // Check if any fragment had a V2 merge (V0≠V1 at that position)
             const hasV2Diff = fragData.some(f => f._v2Merged);
 
-            // Build V1 words: use _v1Words where V2 modified, else same as V0
             const v1Words = [];
             for (const fd of fragData) {
               if (fd._v1Words && fd._v1Words.length > 0) {
@@ -1656,74 +1679,53 @@ export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, di
                 + '\nResult: "' + resultWord + '"'
                 + '\nBoth Reverb passes agree on fragments; student split the word';
 
-            // Reference row — the target word
-            const cellRef = document.createElement('span');
-            cellRef.className = 'pipeline-v012-cell pipeline-v012-div pipeline-v012-div-ref';
-            cellRef.textContent = refTarget;
-            cellRef.dataset.tooltip = tip;
-            cellRef.addEventListener('click', (e) => { e.stopPropagation(); showWordTooltip(cellRef, null); });
-            rows[0].appendChild(cellRef);
+            const tr = document.createElement('tr');
 
-            // V0 cell — shows V2 fragment words (= V0's words, since V2 uses V0 as target)
-            const cellV0 = document.createElement('span');
-            cellV0.dataset.tooltip = tip;
-            cellV0.addEventListener('click', (e) => { e.stopPropagation(); showWordTooltip(cellV0, null); });
-            for (let fi = 0; fi < v2Frags.length; fi++) {
-              if (fi > 0) {
-                const sep = document.createElement('span');
-                sep.className = 'pipeline-v012-frag-sep';
-                sep.textContent = '\u00b7';
-                cellV0.appendChild(sep);
-              }
-              const frag = document.createElement('span');
-              frag.className = 'pipeline-v012-frag';
-              frag.textContent = v2Frags[fi];
-              cellV0.appendChild(frag);
-            }
-            // Color: if V0≠V1, V0 gets green; otherwise orange
-            cellV0.className = hasV2Diff
-              ? 'pipeline-v012-cell pipeline-v012-div pipeline-v012-div-v0'
-              : 'pipeline-v012-cell pipeline-v012-div pipeline-v012-div-v3';
-            rows[1].appendChild(cellV0);
+            // # column
+            const tdIdx = document.createElement('td');
+            tdIdx.className = 'pipeline-td-idx';
+            tdIdx.textContent = rowNum;
+            tr.appendChild(tdIdx);
 
-            // V1 cell — shows V1's original words where different
+            // V0 cell — green if V0≠V1, orange if V0=V1
+            const v0Class = hasV2Diff ? 'pipeline-td-v0-match' : 'pipeline-td-v3-frag';
+            tr.appendChild(buildFragCell(v2Frags, v0Class, tip));
+
+            // V1 cell — red if V0≠V1, orange if V0=V1
             if (hasV2Diff) {
-              const cellV1 = document.createElement('span');
-              cellV1.className = 'pipeline-v012-cell pipeline-v012-div pipeline-v012-div-v1';
-              cellV1.dataset.tooltip = tip;
-              cellV1.addEventListener('click', (e) => { e.stopPropagation(); showWordTooltip(cellV1, null); });
-              for (let fi = 0; fi < v1Words.length; fi++) {
-                if (fi > 0) {
-                  const sep = document.createElement('span');
-                  sep.className = 'pipeline-v012-frag-sep';
-                  sep.textContent = '\u00b7';
-                  cellV1.appendChild(sep);
-                }
-                const frag = document.createElement('span');
-                frag.className = 'pipeline-v012-frag';
-                frag.textContent = v1Words[fi];
-                cellV1.appendChild(frag);
-              }
-              rows[2].appendChild(cellV1);
+              tr.appendChild(buildFragCell(v1Words, 'pipeline-td-v1-diff', tip));
             } else {
-              // V0 and V1 fully agree — clone
-              const cellV1 = cellV0.cloneNode(true);
-              cellV1.dataset.tooltip = tip;
-              cellV1.addEventListener('click', (e) => { e.stopPropagation(); showWordTooltip(cellV1, null); });
-              rows[2].appendChild(cellV1);
+              tr.appendChild(buildFragCell(v2Frags, 'pipeline-td-v3-frag', tip));
             }
 
-            // Result cell — collapsed to reference
-            const cellRes = document.createElement('span');
-            cellRes.className = 'pipeline-v012-cell pipeline-v012-div pipeline-v012-div-v2';
-            cellRes.textContent = resultWord;
-            cellRes.dataset.tooltip = tip;
-            cellRes.addEventListener('click', (e) => { e.stopPropagation(); showWordTooltip(cellRes, null); });
-            rows[3].appendChild(cellRes);
+            // V2 result cell — purple + ref note
+            const tdV2 = document.createElement('td');
+            tdV2.className = 'pipeline-td-v2-result';
+            tdV2.dataset.tooltip = tip;
+            tdV2.style.cursor = 'pointer';
+            tdV2.addEventListener('click', (e) => { e.stopPropagation(); showWordTooltip(tdV2, null); });
+            const wordSpan = document.createElement('span');
+            wordSpan.textContent = resultWord;
+            tdV2.appendChild(wordSpan);
+            const refNote = document.createElement('div');
+            refNote.className = 'pipeline-v012-ref-note';
+            refNote.textContent = '\u2190 ref: ' + refTarget;
+            tdV2.appendChild(refNote);
+            tr.appendChild(tdV2);
+
+            // Type badge
+            const tdType = document.createElement('td');
+            const badge = document.createElement('span');
+            badge.className = 'pipeline-v012-badge pipeline-v012-badge-v3';
+            badge.textContent = hasV2Diff ? 'V0\u2260V1 + V2\u2260Ref' : 'V2\u2260Ref';
+            tdType.appendChild(badge);
+            tr.appendChild(tdType);
+
+            tbody.appendChild(tr);
           }
         }
 
-        for (const row of rows) table.appendChild(row);
+        table.appendChild(tbody);
         body.appendChild(table);
 
         const anchors = blocks.filter(b => b.kind === 'anchor').length;
