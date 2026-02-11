@@ -12,6 +12,49 @@ export function parseTime(t) {
 }
 
 /**
+ * Compute the longest contiguous silence between two timestamps,
+ * subtracting Reverb-timestamped speech from skipped (unconfirmed) words.
+ * Unconfirmed words lack cross-validator timestamps but still have valid
+ * Reverb timestamps showing the student was actively speaking.
+ */
+function longestSilenceInGap(gapStart, gapEnd, skippedWords) {
+  if (!skippedWords || skippedWords.length === 0) return gapEnd - gapStart;
+
+  // Collect speech intervals clamped to gap boundaries
+  const intervals = [];
+  for (const sw of skippedWords) {
+    const sStart = parseTime(sw._reverbStartTime || sw.startTime);
+    const sEnd = parseTime(sw._reverbEndTime || sw.endTime);
+    if (sEnd > sStart && sStart < gapEnd && sEnd > gapStart) {
+      intervals.push([Math.max(sStart, gapStart), Math.min(sEnd, gapEnd)]);
+    }
+  }
+
+  if (intervals.length === 0) return gapEnd - gapStart;
+
+  // Merge overlapping intervals
+  intervals.sort((a, b) => a[0] - b[0]);
+  const merged = [intervals[0].slice()];
+  for (let m = 1; m < intervals.length; m++) {
+    const last = merged[merged.length - 1];
+    if (intervals[m][0] <= last[1]) {
+      last[1] = Math.max(last[1], intervals[m][1]);
+    } else {
+      merged.push(intervals[m].slice());
+    }
+  }
+
+  // Find longest silence: before first speech, between speech blocks, after last speech
+  let maxSilence = merged[0][0] - gapStart;
+  for (let m = 1; m < merged.length; m++) {
+    maxSilence = Math.max(maxSilence, merged[m][0] - merged[m - 1][1]);
+  }
+  maxSilence = Math.max(maxSilence, gapEnd - merged[merged.length - 1][1]);
+
+  return maxSilence;
+}
+
+/**
  * Scan referenceText for trailing punctuation on each word.
  * Returns Map<refWordIndex, 'period'|'comma'>.
  */
@@ -311,6 +354,13 @@ export function detectOnsetDelays(transcriptWords, referenceText, alignment) {
     const prevEnd = parseTime(transcriptWords[prevIdx].endTime);
     gap = start - prevEnd;
 
+    // If unconfirmed words were skipped, their Reverb-timestamped speech
+    // may fill the gap — use the actual longest silence instead
+    if (i - prevIdx > 1) {
+      const skipped = transcriptWords.slice(prevIdx + 1, i);
+      gap = longestSilenceInGap(prevEnd, start, skipped);
+    }
+
     // Determine threshold based on punctuation after previous word
     let threshold = 0.5; // 500ms default
     let punctuationType = null;
@@ -361,13 +411,38 @@ export function detectLongPauses(transcriptWords) {
 
     const end = parseTime(transcriptWords[i].endTime);
     const nextStart = parseTime(transcriptWords[nextIdx].startTime);
-    const gap = nextStart - end;
+    const rawGap = nextStart - end;
 
-    if (gap >= 3) {
-      results.push({
-        afterWordIndex: i,
-        gap: Math.round(gap * 10) / 10
-      });
+    if (rawGap >= 3) {
+      // If unconfirmed words were skipped, their Reverb-timestamped speech
+      // may fill the gap — use the actual longest silence instead
+      let effectiveGap = rawGap;
+      if (nextIdx > i + 1) {
+        const skipped = transcriptWords.slice(i + 1, nextIdx);
+        console.log('[detectLongPauses] gap candidate:', {
+          afterWord: transcriptWords[i].word, beforeWord: transcriptWords[nextIdx].word,
+          end, nextStart, rawGap,
+          skippedWords: skipped.map(s => ({
+            word: s.word, xval: s.crossValidation,
+            _reverbStart: s._reverbStartTime, _reverbEnd: s._reverbEndTime,
+            start: s.startTime, end: s.endTime
+          }))
+        });
+        effectiveGap = longestSilenceInGap(end, nextStart, skipped);
+        console.log('[detectLongPauses] effectiveGap after longestSilenceInGap:', effectiveGap);
+      } else {
+        console.log('[detectLongPauses] gap candidate (no skipped):', {
+          afterWord: transcriptWords[i].word, beforeWord: transcriptWords[nextIdx].word,
+          end, nextStart, rawGap, nextIdx, iPlusOne: i + 1
+        });
+      }
+
+      if (effectiveGap >= 3) {
+        results.push({
+          afterWordIndex: i,
+          gap: Math.round(effectiveGap * 10) / 10
+        });
+      }
     }
   }
   return results;
