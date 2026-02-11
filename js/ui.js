@@ -376,10 +376,17 @@ function buildEnhancedTooltip(item, sttWord) {
       lines.push(`Cross-validation: ${xval}${xvalLabels[xval] || ''}`);
     }
 
-    // Disfluency info
+    // Disfluency info (divergence block from v1/v0 diff)
     if (sttWord.isDisfluency) {
-      const typeLabels = { filler: 'Filler (um, uh)', repetition: 'Repetition', false_start: 'False start', unknown: 'Disfluency' };
-      lines.push(`Disfluency: ${typeLabels[sttWord.disfluencyType] || 'Yes'} (not an error)`);
+      if (sttWord._divergence) {
+        const d = sttWord._divergence;
+        const target = d.cleanTarget || '?';
+        const fragments = d.verbatimWords.map(w => `"${w}"`).join(', ');
+        lines.push(`Struggle with "${target}" — attempts: ${fragments}`);
+        lines.push(`Role: ${d.role === 'final' ? 'final attempt' : 'fragment'} (not an error)`);
+      } else {
+        lines.push('Disfluency (not an error)');
+      }
     }
 
     // Recovery warning (Parakeet-only omission recovery)
@@ -1022,17 +1029,15 @@ export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, di
     }
 
     // Kitchen Sink disfluency dot marker (Phase 24)
-    // sttWord has isDisfluency and disfluencyType from kitchen-sink-merger.js
+    // sttWord has isDisfluency and _divergence from kitchen-sink-merger.js
     if (sttWord?.isDisfluency) {
       span.classList.add('word-disfluency');
-      const typeLabels = {
-        filler: 'Filler (um, uh)',
-        repetition: 'Repetition',
-        false_start: 'False start',
-        unknown: 'Disfluency'
-      };
-      const label = typeLabels[sttWord.disfluencyType] || 'Disfluency';
-      span.dataset.tooltip += '\n' + label + ' — not an error';
+      if (sttWord._divergence) {
+        const target = sttWord._divergence.cleanTarget || '?';
+        span.dataset.tooltip += `\nStruggle with "${target}" — not an error`;
+      } else {
+        span.dataset.tooltip += '\nDisfluency — not an error';
+      }
     }
 
     // Compound word indicator (e.g. "every"+"one" → "everyone")
@@ -1484,11 +1489,17 @@ export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, di
               tipLines.push('Evidence is weak — single biased source');
             }
           } else if (category === 'disfluency') {
-            const typeLabels = { filler: 'Filler (um, uh)', repetition: 'Repetition', false_start: 'False start', unknown: 'Disfluency' };
-            tipLines.push(`Verbatim-only disfluency: ${typeLabels[w.disfluencyType] || 'Disfluency'}`);
-            tipLines.push(`Reverb v1 heard: "${reverbWord}"`);
-            if (reverbClean) tipLines.push(`Reverb v0 heard: "${reverbClean}"`);
-            else tipLines.push('Reverb v0: [removed in clean pass]');
+            if (w._divergence) {
+              const d = w._divergence;
+              tipLines.push(`Struggle with "${d.cleanTarget || '?'}"`);
+              tipLines.push(`Attempts: ${d.verbatimWords.map(f => `"${f}"`).join(', ')}`);
+              tipLines.push(`This word: "${reverbWord}" (${d.role || 'fragment'})`);
+            } else {
+              tipLines.push('Verbatim-only disfluency');
+              tipLines.push(`Reverb v1 heard: "${reverbWord}"`);
+              if (reverbClean) tipLines.push(`Reverb v0 heard: "${reverbClean}"`);
+              else tipLines.push('Reverb v0: [removed in clean pass]');
+            }
           } else if (category === 'disagreed') {
             tipLines.push('Models heard different words');
             tipLines.push(`Reverb heard: "${reverbWord}"`);
@@ -1907,6 +1918,7 @@ function renderDisfluencySection(disfluencyStats, transcriptWords, alignment, au
       disfluencies.push({
         word: w.word,
         type: w.disfluencyType || 'unknown',
+        divergence: w._divergence || null,
         crossValidation: w.crossValidation,
         transcriptIndex: i,
         startTime: parseSttTime(w.startTime),
@@ -1920,25 +1932,17 @@ function renderDisfluencySection(disfluencyStats, transcriptWords, alignment, au
     }
   }
 
-  // ── Enrich with ref alignment context ──
-  // Build a set of alignment insights we can attach to each disfluency
-  if (alignment && alignment.length > 0) {
-    for (const d of disfluencies) {
-      // Normalize disfluent word for matching (strip trailing hyphens/punct)
+  // ── Enrich with divergence block context ──
+  // Divergence blocks already carry cleanTarget (the v0 word the student was trying to say)
+  for (const d of disfluencies) {
+    // Primary: divergence block cleanTarget from v1/v0 alignment
+    if (d.divergence && d.divergence.cleanTarget) {
+      d.refTarget = d.divergence.cleanTarget;
+    }
+
+    // Self-correction: check if alignment insertion is flagged
+    if (!d.selfCorrection && alignment && alignment.length > 0) {
       const dNorm = d.word.toLowerCase().replace(/[^a-z']/g, '');
-
-      // Strategy 1: Check if this word's text matches a substitution's hyp in the alignment
-      // e.g., "pro" matches alignment entry {ref:"pronounced", hyp:"pro", type:"substitution"}
-      for (const entry of alignment) {
-        if (entry.type !== 'substitution') continue;
-        const hypNorm = (entry.hyp || '').toLowerCase().replace(/[^a-z']/g, '');
-        if (hypNorm === dNorm && entry.ref) {
-          d.refTarget = entry.ref;
-          break;
-        }
-      }
-
-      // Strategy 2: Check if an adjacent alignment insertion is flagged as self-correction
       for (const entry of alignment) {
         if (entry.type !== 'insertion') continue;
         if (!entry._isSelfCorrection) continue;
@@ -1948,35 +1952,23 @@ function renderDisfluencySection(disfluencyStats, transcriptWords, alignment, au
           break;
         }
       }
-
-      // Strategy 3: Check if the next non-disfluent word is a substitution
-      // e.g., "are" inserted before "serve" which is a sub for "observe"
-      if (!d.refTarget && !d.selfCorrection && d.nextWord) {
-        const nextNorm = d.nextWord.toLowerCase().replace(/[^a-z']/g, '');
-        for (const entry of alignment) {
-          if (entry.type !== 'substitution') continue;
-          const hypNorm = (entry.hyp || '').toLowerCase().replace(/[^a-z']/g, '');
-          if (hypNorm === nextNorm && entry.ref) {
-            d.nearSubstitution = entry.ref;
-            break;
-          }
-        }
-      }
     }
   }
 
   // ── Collapsed summary line ──
   const typeLabels = {
-    filler: 'filler',
-    repetition: 'repetition',
-    false_start: 'false start',
-    unknown: 'extra word'
+    struggle: 'struggle',
+    mismatch: 'mismatch',
+    extra: 'extra word'
   };
 
   // Count by resolved type for summary
   const typeCounts = {};
   for (const d of disfluencies) {
-    const label = d.selfCorrection ? 'self-correction' : (typeLabels[d.type] || 'extra word');
+    let label;
+    if (d.selfCorrection) label = 'self-correction';
+    else if (d.divergence) label = d.divergence.cleanTarget ? 'struggle' : 'extra word';
+    else label = typeLabels[d.type] || 'extra word';
     typeCounts[label] = (typeCounts[label] || 0) + 1;
   }
 
@@ -2069,6 +2061,10 @@ function renderDisfluencySection(disfluencyStats, transcriptWords, alignment, au
     if (d.selfCorrection) {
       typeSpan.textContent = 'self-correction';
       typeSpan.classList.add('disfluency-meta-selfcorrection');
+    } else if (d.divergence) {
+      const label = d.divergence.cleanTarget ? 'struggle' : 'extra word';
+      typeSpan.textContent = label;
+      typeSpan.classList.add(d.divergence.cleanTarget ? 'disfluency-meta-struggle' : 'disfluency-meta-extra');
     } else {
       const label = typeLabels[d.type] || 'extra word';
       typeSpan.textContent = label;
@@ -2076,11 +2072,15 @@ function renderDisfluencySection(disfluencyStats, transcriptWords, alignment, au
     }
     meta.appendChild(typeSpan);
 
-    // Enrichment note
+    // Enrichment note — show clean target from divergence block
     let noteText = '';
     if (!d.selfCorrection) {
-      if (d.refTarget) noteText = `\u2192 ${d.refTarget}`;
-      else if (d.nearSubstitution) noteText = `near "${d.nearSubstitution}"`;
+      if (d.divergence && d.divergence.cleanTarget) {
+        const fragments = d.divergence.verbatimWords.map(w => `"${w}"`).join(', ');
+        noteText = `target "${d.divergence.cleanTarget}" \u2190 ${fragments}`;
+      } else if (d.refTarget) {
+        noteText = `\u2192 ${d.refTarget}`;
+      }
     }
     if (noteText) {
       meta.appendChild(document.createTextNode(' \u00B7 '));

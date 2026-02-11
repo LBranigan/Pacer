@@ -21,7 +21,8 @@
 
 import { isReverbAvailable, sendToReverbEnsemble } from './reverb-api.js';
 import { alignTranscripts } from './sequence-aligner.js';
-import { tagDisfluencies, computeDisfluencyStats } from './disfluency-tagger.js';
+// tagDisfluencies no longer used — divergence blocks replace individual classification
+// computeDisfluencyStats no longer used — stats computed inline from merged words
 import { sendToCrossValidator, getCrossValidatorEngine } from './cross-validator.js';
 
 // Feature flag stored in localStorage for A/B comparison
@@ -48,50 +49,139 @@ export function setKitchenSinkEnabled(enabled) {
 }
 
 /**
- * Build merged words from alignment result.
+ * Build merged words using anchor-based divergence block detection.
  *
- * Maps alignment entries back to verbatim words with disfluency flags.
- * Skips deletions (clean-only words) since they're not in verbatim output.
+ * Walks the v1/v0 alignment and finds "anchor" points where both transcripts
+ * agree (match entries). Everything between two anchors is a "divergence block"
+ * where the student struggled — the v0 (clean) side gives the target word(s),
+ * the v1 (verbatim) side gives all the messy fragments of the attempt.
+ *
+ * Example:
+ *   v1:  ... the | apo-  a  pe-peal | that ...
+ *   v0:  ... the |     appeal       | that ...
+ *         anchor   DIVERGENCE BLOCK   anchor
+ *
+ *   → cleanTarget: "appeal"
+ *   → verbatimFragments: ["apo-", "a", "pe-peal"]
+ *   → All three v1 words get isDisfluency: true, linked via _divergence
  *
  * @param {Array} verbatimWords - Words from Reverb v=1.0 transcript
- * @param {Array} taggedAlignment - Alignment with disfluencyType tags
- * @returns {Array} Merged words with isDisfluency and disfluencyType
+ * @param {Array} alignment - Alignment from alignTranscripts(v1, v0)
+ * @returns {Array} Merged words with isDisfluency and _divergence block data
  */
-function buildMergedWordsFromAlignment(verbatimWords, taggedAlignment) {
-  let vIdx = 0;
-  const merged = [];
+function buildMergedWordsFromAlignment(verbatimWords, alignment) {
+  // Step 1: Walk alignment, group into anchors and divergence blocks
+  const blocks = [];
+  let currentDiv = null;
 
-  for (const entry of taggedAlignment) {
-    // Skip deletions - these are clean-only words not present in verbatim
-    if (entry.type === 'deletion') {
-      continue;
-    }
-
-    // Get the corresponding verbatim word
-    const verbatimWord = verbatimWords[vIdx++];
-
-    // Preserve Reverb v=0.0 (clean) timestamps when available
-    // cleanData exists on match/mismatch entries from alignTranscripts()
-    const cleanTimestamps = {};
-    if (entry.cleanData) {
-      cleanTimestamps._reverbCleanStartTime = entry.cleanData.startTime;
-      cleanTimestamps._reverbCleanEndTime = entry.cleanData.endTime;
-    }
-
-    merged.push({
-      ...verbatimWord,
-      ...cleanTimestamps,
-      // Mark as disfluency if this is an insertion (verbatim-only)
-      isDisfluency: entry.type === 'insertion',
-      // Classification from disfluency-tagger.js (filler, repetition, false_start, unknown)
-      disfluencyType: entry.disfluencyType || null,
-      // Debug: preserve alignment info for inspection
-      _alignment: {
-        type: entry.type,
-        verbatim: entry.verbatim,
-        clean: entry.clean
+  for (const entry of alignment) {
+    if (entry.type === 'match') {
+      // Anchor point — close any open divergence block
+      if (currentDiv) {
+        blocks.push(currentDiv);
+        currentDiv = null;
       }
-    });
+      blocks.push({ kind: 'anchor', entries: [entry] });
+    } else {
+      // Divergence — accumulate
+      if (!currentDiv) {
+        currentDiv = { kind: 'divergence', entries: [] };
+      }
+      currentDiv.entries.push(entry);
+    }
+  }
+  if (currentDiv) blocks.push(currentDiv);
+
+  // Step 2: Build merged word array from blocks
+  const merged = [];
+  let vIdx = 0;
+  let divergenceId = 0;
+
+  for (const block of blocks) {
+    if (block.kind === 'anchor') {
+      const entry = block.entries[0];
+      const verbatimWord = verbatimWords[vIdx++];
+      const cleanTimestamps = {};
+      if (entry.cleanData) {
+        cleanTimestamps._reverbCleanStartTime = entry.cleanData.startTime;
+        cleanTimestamps._reverbCleanEndTime = entry.cleanData.endTime;
+      }
+      merged.push({
+        ...verbatimWord,
+        ...cleanTimestamps,
+        isDisfluency: false,
+        disfluencyType: null,
+        _divergence: null,
+        _alignment: { type: 'match', verbatim: entry.verbatim, clean: entry.clean }
+      });
+    } else {
+      // Divergence block — extract v1 words and v0 (clean) targets
+      divergenceId++;
+      const v1Entries = block.entries.filter(e => e.type !== 'deletion');
+      const v0Words = [];
+      const v1Words = [];
+
+      for (const entry of block.entries) {
+        if (entry.type === 'insertion') {
+          v1Words.push(entry.verbatim);
+        } else if (entry.type === 'deletion') {
+          v0Words.push(entry.clean);
+        } else if (entry.type === 'mismatch') {
+          v1Words.push(entry.verbatim);
+          v0Words.push(entry.clean);
+        }
+      }
+
+      const cleanTarget = v0Words.join(' ') || null;
+      const divergenceInfo = {
+        id: divergenceId,
+        cleanTarget,
+        cleanWords: [...v0Words],
+        verbatimWords: [...v1Words]
+      };
+
+      // Determine disfluency type for the block
+      let blockType = 'struggle'; // default: student struggled
+      if (v1Words.length === 1 && v0Words.length === 1) {
+        // Single word mismatch — could be a simple pronunciation difference
+        blockType = 'mismatch';
+      } else if (v0Words.length === 0) {
+        // Pure insertions with no clean counterpart (rare)
+        blockType = 'extra';
+      }
+
+      // Emit each v1 word in the block
+      let v1Count = 0;
+      for (const entry of block.entries) {
+        if (entry.type === 'deletion') continue; // v0-only, no v1 word
+
+        const verbatimWord = verbatimWords[vIdx++];
+        v1Count++;
+        const isLast = v1Count === v1Entries.length;
+
+        const cleanTimestamps = {};
+        if (entry.cleanData) {
+          cleanTimestamps._reverbCleanStartTime = entry.cleanData.startTime;
+          cleanTimestamps._reverbCleanEndTime = entry.cleanData.endTime;
+        }
+
+        merged.push({
+          ...verbatimWord,
+          ...cleanTimestamps,
+          isDisfluency: true,
+          disfluencyType: blockType,
+          _divergence: {
+            ...divergenceInfo,
+            role: isLast ? 'final' : 'fragment'
+          },
+          _alignment: { type: entry.type, verbatim: entry.verbatim, clean: entry.clean }
+        });
+      }
+
+      if (v1Words.length > 0) {
+        console.log(`[Divergence Block #${divergenceId}] v0: "${cleanTarget || '(none)'}" ← v1: ${v1Words.map(w => `"${w}"`).join(', ')} [${blockType}]`);
+      }
+    }
   }
 
   return merged;
@@ -214,25 +304,35 @@ export async function runKitchenSinkPipeline(blob, encoding, sampleRateHertz) {
     return await runXvalFallback(blob);
   }
 
-  // Step 4: Align verbatim vs clean to detect disfluencies
-  // Verbatim has fillers/repetitions; clean does not
-  // Insertions in alignment = disfluencies
+  // Step 4: Align verbatim vs clean using anchor-based divergence blocks.
+  // Finds where v1 and v0 agree (anchors) and groups all disagreements
+  // between anchors into divergence blocks. Each block links v1 fragments
+  // (the messy reality) to v0 target words (the clean version).
   const alignment = alignTranscripts(reverb.verbatim.words, reverb.clean.words);
 
-  // Step 5: Tag disfluencies by type
-  const taggedAlignment = tagDisfluencies(alignment);
-
-  // Step 6: Compute disfluency statistics
-  const disfluencyStats = computeDisfluencyStats(taggedAlignment);
-
-  // Step 7: Build merged word array from tagged alignment
-  // Each verbatim word gets isDisfluency and disfluencyType from alignment
+  // Step 5: Build merged word array from divergence blocks
+  // (replaces disfluency-tagger — classification happens via block grouping)
   const mergedWords = buildMergedWordsFromAlignment(
     reverb.verbatim.words,
-    taggedAlignment
+    alignment
   );
 
-  // Step 8: Mark words as pending cross-validation.
+  // Step 6: Compute disfluency statistics from merged words
+  const disfluencyCount = mergedWords.filter(w => w.isDisfluency).length;
+  const contentCount = mergedWords.filter(w => !w.isDisfluency).length;
+  const disfluencyStats = {
+    total: disfluencyCount,
+    contentWords: contentCount,
+    rate: contentCount > 0 ? (disfluencyCount / contentCount * 100).toFixed(1) + '%' : '0%',
+    byType: { filler: 0, repetition: 0, false_start: 0, unknown: 0, struggle: 0, mismatch: 0 }
+  };
+  for (const w of mergedWords) {
+    if (w.isDisfluency && w.disfluencyType) {
+      disfluencyStats.byType[w.disfluencyType] = (disfluencyStats.byType[w.disfluencyType] || 0) + 1;
+    }
+  }
+
+  // Step 7: Mark words as pending cross-validation.
   // Reference-anchored cross-validation happens in app.js AFTER alignment,
   // where both Reverb and Parakeet are independently aligned to the reference text.
   const validatedWords = mergedWords.map(w => ({
@@ -246,6 +346,7 @@ export async function runKitchenSinkPipeline(blob, encoding, sampleRateHertz) {
     verbatimWords: reverb.verbatim.words.length,
     cleanWords: reverb.clean.words.length,
     disfluencies: disfluencyStats.total,
+    divergenceBlocks: mergedWords.filter(w => w._divergence?.role === 'final').length,
     crossValidated: !!xvalRaw
   });
 
@@ -255,7 +356,7 @@ export async function runKitchenSinkPipeline(blob, encoding, sampleRateHertz) {
     reverb: reverb,
     xvalRaw: xvalRaw,
     disfluencyStats: disfluencyStats,
-    alignment: taggedAlignment,
+    alignment: alignment,
     _debug: {
       reverbAvailable: true,
       xvalAvailable: !!xvalRaw,

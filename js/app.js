@@ -422,51 +422,11 @@ async function runAnalysis() {
     }
   }
 
-  // Split hyphenated STT words into separate words before alignment.
-  // ASRs sometimes join consecutive words with hyphens (e.g., "wiggle-waggle")
-  // which causes false substitutions/omissions. Same logic as normalizeText()
-  // applies to reference text. Timestamps divided proportionally by char count.
+  // BPE hyphen-split REMOVED — Reverb's CTM parser joins BPE pieces with hyphens
+  // (e.g., "pe-peal") to represent a single acoustic event. Splitting them destroys
+  // the connection between fragments and their target word. The divergence-block
+  // system in kitchen-sink-merger.js now groups these naturally via v1/v0 anchoring.
   const parseT = (t) => parseFloat(String(t).replace('s', '')) || 0;
-  {
-    const expanded = [];
-    for (const w of transcriptWords) {
-      const stripped = w.word.replace(/^[^\w'-]+|[^\w'-]+$/g, '');
-      if (stripped.includes('-') && stripped.length > 1) {
-        const parts = stripped.split('-').filter(p => p.length > 0);
-        if (parts.length > 1) {
-          const start = parseT(w.startTime);
-          const end = parseT(w.endTime);
-          const dur = end - start;
-          const totalChars = parts.reduce((s, p) => s + p.length, 0);
-          let cursor = start;
-          for (const part of parts) {
-            const partDur = dur * (part.length / totalChars);
-            const partStart = `${cursor.toFixed(3)}s`;
-            const partEnd = `${(cursor + partDur).toFixed(3)}s`;
-            expanded.push({
-              ...w,
-              word: part,
-              startTime: partStart,
-              endTime: partEnd,
-              // Override all secondary timestamp sources so tooltip/playback
-              // use the split range, not the original combined word's range
-              _xvalStartTime: partStart,
-              _xvalEndTime: partEnd,
-              _reverbStartTime: partStart,
-              _reverbEndTime: partEnd,
-              _reverbCleanStartTime: partStart,
-              _reverbCleanEndTime: partEnd,
-            });
-            cursor += partDur;
-          }
-          continue;
-        }
-      }
-      expanded.push(w);
-    }
-    transcriptWords.length = 0;
-    transcriptWords.push(...expanded);
-  }
 
   // ── Reference-aware fragment pre-merge ───────────────────────────
   // Reverb BPE sometimes splits a single spoken word into fragments
