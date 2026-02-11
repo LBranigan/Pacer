@@ -419,22 +419,7 @@ export function detectLongPauses(transcriptWords) {
       let effectiveGap = rawGap;
       if (nextIdx > i + 1) {
         const skipped = transcriptWords.slice(i + 1, nextIdx);
-        console.log('[detectLongPauses] gap candidate:', {
-          afterWord: transcriptWords[i].word, beforeWord: transcriptWords[nextIdx].word,
-          end, nextStart, rawGap,
-          skippedWords: skipped.map(s => ({
-            word: s.word, xval: s.crossValidation,
-            _reverbStart: s._reverbStartTime, _reverbEnd: s._reverbEndTime,
-            start: s.startTime, end: s.endTime
-          }))
-        });
         effectiveGap = longestSilenceInGap(end, nextStart, skipped);
-        console.log('[detectLongPauses] effectiveGap after longestSilenceInGap:', effectiveGap);
-      } else {
-        console.log('[detectLongPauses] gap candidate (no skipped):', {
-          afterWord: transcriptWords[i].word, beforeWord: transcriptWords[nextIdx].word,
-          end, nextStart, rawGap, nextIdx, iPlusOne: i + 1
-        });
       }
 
       if (effectiveGap >= 3) {
