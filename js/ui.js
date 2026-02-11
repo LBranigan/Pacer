@@ -252,176 +252,135 @@ function isSpecialASTToken(word) {
 }
 
 /**
- * Build enhanced tooltip with ensemble debug info.
- * Per CONTEXT.md: Full debug info visible to ALL teachers (not dev mode gated).
+ * Build consolidated word tooltip with clean 8-section layout.
+ * Sections: Expected | V1 | V0 | Parakeet | Miscue type | Explanation | VAD | NL
  * @param {Object} item - Alignment item with type, ref, hyp
- * @param {Object|null} sttWord - STT word metadata with timestamps and _debug
+ * @param {Object|null} sttWord - STT word metadata with timestamps
+ * @param {Object} extras - { hesitationDelay, morphData }
  * @returns {string} Tooltip text
  */
-function buildEnhancedTooltip(item, sttWord) {
+function buildEnhancedTooltip(item, sttWord, extras) {
   const lines = [];
-
-  // Show ? for special ASR tokens instead of literal text
+  extras = extras || {};
   const isUnknown = sttWord && isSpecialASTToken(sttWord.word);
-  const saidText = isUnknown ? '?' : item.hyp;
 
-  // Existing type info
+  // Helper: format timestamp range concisely
+  const fmtTs = (startRaw, endRaw) => {
+    if (startRaw == null || endRaw == null) return '';
+    const s = parseSttTime(startRaw);
+    const e = parseSttTime(endRaw);
+    return ` (${s.toFixed(2)}s\u2013${e.toFixed(2)}s)`;
+  };
+
+  // -- 1. Expected --
+  lines.push(`Expected: ${item.ref || '\u2014'}`);
+
+  // -- 2-4. Engine lines --
+  if (sttWord) {
+    // V1 (Reverb verbatim)
+    let v1Text;
+    if (item._recovered || item.type === 'omission') {
+      v1Text = '\u2014';
+    } else if (isUnknown) {
+      v1Text = '[unknown]';
+    } else if (item.compound && item.parts) {
+      v1Text = item.parts.map(p => `"${p}"`).join(' + ');
+    } else {
+      v1Text = `"${item.hyp}"`;
+    }
+    lines.push(`V1: ${v1Text}${fmtTs(sttWord._reverbStartTime, sttWord._reverbEndTime)}`);
+
+    // V0 (Reverb clean) — from 3-way alignment
+    let v0Text;
+    if (item._recovered || item.type === 'omission') {
+      v0Text = '\u2014';
+    } else if (item._v0Word) {
+      v0Text = `"${item._v0Word}"`;
+    } else if (item._v0Type === 'omission') {
+      v0Text = '\u2014 (suppressed)';
+    } else {
+      v0Text = '\u2014';
+    }
+    lines.push(`V0: ${v0Text}${fmtTs(item._v0StartTime, item._v0EndTime)}`);
+
+    // Parakeet / Cross-validator
+    const xvalLabel = sttWord._xvalEngine
+      ? sttWord._xvalEngine.charAt(0).toUpperCase() + sttWord._xvalEngine.slice(1)
+      : 'Parakeet';
+    let pkText;
+    if (sttWord._recovered) {
+      pkText = `"${sttWord._xvalWord || sttWord.word}"`;
+    } else if (sttWord._xvalWord) {
+      pkText = `"${sttWord._xvalWord}"`;
+    } else {
+      pkText = '\u2014';
+    }
+    lines.push(`${xvalLabel}: ${pkText}${fmtTs(sttWord._xvalStartTime, sttWord._xvalEndTime)}`);
+  }
+
+  // -- 5 & 6. Miscue type + short explanation --
   if (item.type === 'substitution') {
-    lines.push(`Expected: ${item.ref}, Said: ${saidText}`);
-    if (isUnknown) lines.push('Speech detected but not recognized as a word');
-    if (isUnknown && sttWord?._xvalWord) {
-      const xvalLabel = sttWord._xvalEngine
-        ? sttWord._xvalEngine.charAt(0).toUpperCase() + sttWord._xvalEngine.slice(1)
-        : 'Cross-val';
-      lines.push(`${xvalLabel} heard: "${sttWord._xvalWord}"`);
-      lines.push('Reverb could not decode this word (CTC failure)');
-      lines.push(`Only ${xvalLabel} provides evidence — single source, verify`);
+    if (item.forgiven) {
+      const ratioText = item.phoneticRatio ? ` (${item.phoneticRatio}% similar)` : '';
+      lines.push(`Forgiven substitution${ratioText}`);
+    } else {
+      lines.push('Substitution');
+      if (extras.morphData) {
+        lines.push(`Morphological: shared ${extras.morphData.matchType} "${extras.morphData.sharedPart}"`);
+      }
     }
   } else if (item.type === 'struggle') {
-    lines.push(`Expected: ${item.ref}, Said: ${saidText}`);
-    if (isUnknown) lines.push('Speech detected but not recognized as a word');
-    lines.push('');
-    lines.push('Struggle pathways:');
-
-    // Path 1: Hesitation — long pause before the word
-    const hasHesitationPath = item._strugglePath === 'hesitation' || item._hasHesitation;
-    if (hasHesitationPath && item._hesitationGap) {
-      const gapMs = Math.round(item._hesitationGap * 1000);
-      lines.push(`  Hesitation: ${gapMs}ms pause before failed word`);
-    }
-
-    // Path 2: Decoding — near-miss insertions around the word
-    const hasDecodingPath = item._strugglePath === 'decoding' || (item._nearMissEvidence && item._nearMissEvidence.length > 0);
-    if (hasDecodingPath && item._nearMissEvidence) {
+    const paths = [];
+    if (item._strugglePath === 'hesitation' || item._hasHesitation) paths.push('hesitation');
+    if (item._strugglePath === 'decoding' || (item._nearMissEvidence?.length > 0)) paths.push('decoding');
+    if (item._abandonedAttempt) paths.push('abandoned');
+    if (item._strugglePath === 'compound_fragments') paths.push('compound fragments');
+    const pathStr = paths.length > 0 ? ` (${paths.join(', ')})` : '';
+    lines.push(`Struggle${pathStr}`);
+    if (item._nearMissEvidence?.length > 0) {
       const attempts = [item.hyp, ...item._nearMissEvidence];
-      lines.push(`  Decoding: ${attempts.length} failed attempts (${attempts.join(', ')})`);
-    }
-
-    // Path 3: Abandoned Attempt — only verbatim STT detected, cross-validator N/A
-    if (item._abandonedAttempt) {
-      lines.push(`  Abandoned attempt: partial "${item.hyp}" (cross-validator N/A, verbatim-only)`);
+      lines.push(`Attempts: ${attempts.join(', ')}`);
     }
   } else if (item.type === 'omission') {
-    lines.push('Omitted (not read)');
-  } else if (item.type === 'self-correction') {
-    lines.push(`"${item.hyp}" (self-correction)`);
+    lines.push('Omission');
   } else if (item._recovered) {
-    lines.push(`"${item.ref}" — recovered from omission`);
-    if (item._isLastRefWord) {
-      lines.push('Reverb missed the final word (known CTC end-of-utterance limitation)');
-      lines.push('Parakeet confirmed this word — expected for final position');
-    } else {
-      lines.push('Originally marked as omission (not read)');
-      lines.push('Parakeet heard this word; Reverb heard nothing');
-      lines.push('Evidence is weak — single biased source, may need verification');
-    }
-  } else {
-    lines.push(item.ref || '');
+    lines.push(item._isLastRefWord ? 'Recovered (final word)' : 'Recovered');
+  } else if (item.type === 'self-correction') {
+    lines.push('Self-correction');
   }
 
-  // Timestamps with duration
-  if (sttWord) {
-    const start = parseSttTime(sttWord.startTime);
-    const end = parseSttTime(sttWord.endTime);
-    const durationMs = Math.round((end - start) * 1000);
-    lines.push(`Time: ${start.toFixed(2)}s - ${end.toFixed(2)}s (${durationMs}ms)`);
+  if (sttWord?.isDisfluency && item.type !== 'struggle') {
+    lines.push('Disfluency \u2014 not an error');
+  }
 
-    // All three timestamp sources for clinical comparison
-    const xvStart = sttWord._xvalStartTime != null ? parseSttTime(sttWord._xvalStartTime) : null;
-    const xvEnd = sttWord._xvalEndTime != null ? parseSttTime(sttWord._xvalEndTime) : null;
-    const rvStart = sttWord._reverbStartTime != null ? parseSttTime(sttWord._reverbStartTime) : null;
-    const rvEnd = sttWord._reverbEndTime != null ? parseSttTime(sttWord._reverbEndTime) : null;
-    const rcStart = sttWord._reverbCleanStartTime != null ? parseSttTime(sttWord._reverbCleanStartTime) : null;
-    const rcEnd = sttWord._reverbCleanEndTime != null ? parseSttTime(sttWord._reverbCleanEndTime) : null;
-
-    const fmtTs = (s, e) => {
-      if (s == null || e == null) return 'N/A';
-      const dur = Math.round((e - s) * 1000);
-      return `${s.toFixed(2)}s-${e.toFixed(2)}s (${dur}ms)`;
+  // Cross-validation verdict
+  if (item.crossValidation) {
+    const xvLabels = {
+      confirmed: 'Confirmed (engines agree)',
+      disagreed: 'Disagreed (engines differ)',
+      recovered: 'Recovered (another engine heard it)',
+      unconfirmed: 'Unconfirmed (V1 only)',
+      unavailable: 'Unavailable'
     };
-    const xvalLabel = sttWord._xvalEngine ? sttWord._xvalEngine.charAt(0).toUpperCase() + sttWord._xvalEngine.slice(1) : 'Cross-val';
-    lines.push(`  ${xvalLabel}:    ${fmtTs(xvStart, xvEnd)}`);
-    lines.push(`  Reverb v1.0: ${fmtTs(rvStart, rvEnd)}`);
-    lines.push(`  Reverb v0.0: ${fmtTs(rcStart, rcEnd)}`);
-
-    // What each model heard (word text)
-    const reverbWord = sttWord._alignment?.verbatim || (sttWord._recovered ? null : sttWord.word);
-    const xvalWord = sttWord._xvalWord;
-    // Show full divergence block story when available (e.g., "apo- a pe-peal" instead of just "pe-peal")
-    const reverbFull = sttWord._divergence && sttWord._divergence.verbatimWords.length > 1
-      ? sttWord._divergence.verbatimWords.join(' ')
-      : reverbWord;
-    if (sttWord._recovered) {
-      lines.push(`${xvalLabel} heard: "${xvalWord || sttWord.word}"`);
-      lines.push('Reverb heard: [nothing]');
-    } else if (xvalWord) {
-      lines.push(`${xvalLabel} heard: "${xvalWord}"`);
-      lines.push(`Reverb heard: "${reverbFull}"`);
-    } else if (xvalWord === null) {
-      lines.push(`${xvalLabel} heard: [null]`);
-      lines.push(`Reverb heard: "${reverbFull}"`);
-    } else {
-      lines.push(`Reverb heard: "${reverbFull}"`);
-    }
-
-    // Cross-validation status
-    const xval = sttWord.crossValidation;
-    if (xval) {
-      const recoveredLabel = sttWord._isLastRefWord
-        ? ` (${xvalLabel} only — final word, Reverb CTC truncation)`
-        : ` (${xvalLabel} only — Reverb heard nothing, weak evidence)`;
-      const xvalLabels = {
-        confirmed: ' (both agree)',
-        disagreed: ' (models heard different words)',
-        unconfirmed: ` (Reverb only — ${xvalLabel} heard nothing)`,
-        unavailable: ` (${xvalLabel} offline)`,
-        recovered: recoveredLabel
-      };
-      lines.push(`Cross-validation: ${xval}${xvalLabels[xval] || ''}`);
-    }
-
-    // Disfluency info (divergence block from v1/v0 diff)
-    if (sttWord.isDisfluency) {
-      if (sttWord._divergence) {
-        const d = sttWord._divergence;
-        const target = d.cleanTarget || '?';
-        const fragments = d.verbatimWords.map(w => `"${w}"`).join(', ');
-        lines.push(`Struggle with "${target}" — attempts: ${fragments}`);
-        if (d.role === 'merged') {
-          lines.push('Divergence block (V2 collapsed)');
-        } else {
-          lines.push(`Role: ${d.role === 'final' ? 'final attempt' : 'fragment'} (not an error)`);
-        }
-      } else {
-        lines.push('Disfluency (not an error)');
-      }
-    }
-
-    // Recovery warning (Parakeet-only omission recovery)
-    if (sttWord._recovered && !sttWord._isLastRefWord) {
-      lines.push('Recovered from Parakeet only — Reverb heard nothing. Evidence is weak.');
-    }
-
-    // Reverb internal diff (v=1.0 verbatim vs v=0.0 clean)
-    if (sttWord._alignment) {
-      const a = sttWord._alignment;
-      if (a.verbatim && a.clean) {
-        lines.push(`Reverb v=1.0: "${a.verbatim}" | v=0.0: "${a.clean}"`);
-      } else if (a.verbatim && !a.clean) {
-        lines.push(`Reverb v=1.0 only: "${a.verbatim}" (removed in v=0.0 clean pass)`);
-      }
-    }
+    lines.push(`Verdict: ${xvLabels[item.crossValidation] || item.crossValidation}`);
   }
 
-  // Google NL API annotations (POS, entity type, vocabulary tier)
+  // -- 7. VAD overhang --
+  if (extras.hesitationDelay?._vadOverhang) {
+    const vh = extras.hesitationDelay._vadOverhang;
+    lines.push(`VAD overhang: ${vh.overhangMs}ms (adjusted gap ${vh.adjustedGapMs}ms)`);
+  }
+
+  // -- 8. NL classifier --
   if (item.nl) {
-    const nlTip = buildNLTooltip(item.nl);
-    if (nlTip) lines.push(nlTip);
-  }
-
-  // Flags as text list (per CONTEXT.md: "no icons in tooltip")
-  if (sttWord?._flags && sttWord._flags.length > 0) {
-    lines.push(`Flags: ${sttWord._flags.join(', ')}`);
+    const posLabel = POS_LABELS[item.nl.pos] || item.nl.pos;
+    const parts = [posLabel];
+    if (item.nl.entityType && item.nl.entityType !== 'OTHER') {
+      parts.push(ENTITY_LABELS[item.nl.entityType] || item.nl.entityType);
+    }
+    const tierLabel = TIER_LABELS[item.nl.tier];
+    if (tierLabel) parts.push(tierLabel);
+    lines.push(parts.join(' \u00b7 '));
   }
 
   return lines.join('\n');
@@ -919,7 +878,6 @@ export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, di
     // Look up STT word metadata for tooltip
     const hypKey = item.hyp;
     let sttWord = null;
-    let sttInfo = '';
     if (hypKey && sttLookup) {
       const queue = sttLookup.get(hypKey);
       if (queue && queue.length > 0) {
@@ -935,10 +893,9 @@ export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, di
       span.dataset.endTime = parseSttTime(sttWord.endTime).toFixed(3);
     }
 
-    // NL tier class and tooltip info
+    // NL tier class
     if (item.nl) {
       span.classList.add('word-tier-' + item.nl.tier);
-      sttInfo += '\n' + buildNLTooltip(item.nl);
     }
 
     // Rate anomaly visual indicator (Phase 16)
@@ -946,20 +903,22 @@ export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, di
       span.classList.add('word-rate-anomaly');
     }
 
-    // Morphological prefix break indicator (ensemble-merger.js)
-    // Shows squiggly line when student sounded out a prefix separately (e.g., "un...nerved")
-    // This is NOT an error - it indicates the student used phonics skills to decode the word
+    // Morphological prefix break indicator
     if (sttWord?._debug?.morphologicalBreak) {
       span.classList.add('word-morphological');
-      const mb = sttWord._debug.morphologicalBreak;
-      const breakNote = `Prefix sounded out: "${mb.prefix}" + "${sttWord.word}" (${mb.gapMs}ms gap)`;
-      // Add prefix to display (optional - show what student sounded out)
-      span.dataset.morphPrefix = mb.prefix;
-      sttInfo += '\n' + breakNote;
+      span.dataset.morphPrefix = sttWord._debug.morphologicalBreak.prefix;
     }
 
-    // Build tooltip with enhanced debug info
-    span.dataset.tooltip = buildEnhancedTooltip(item, sttWord);
+    // Compute extras for consolidated tooltip
+    const currentHypIndex = (item.type !== 'omission') ? hypIndex : null;
+    const hesitationDelay = (currentHypIndex !== null && onsetDelayMap.has(currentHypIndex))
+      ? onsetDelayMap.get(currentHypIndex) : null;
+    const morphKey = (item.ref || '').toLowerCase() + '|' + (item.hyp || '').toLowerCase();
+    const morphData = (item.type === 'substitution' || item.type === 'struggle') && !item.forgiven
+      ? morphErrorMap.get(morphKey) : null;
+
+    // Build consolidated tooltip
+    span.dataset.tooltip = buildEnhancedTooltip(item, sttWord, { hesitationDelay, morphData });
 
     // Click-to-play word audio (Deepgram/Parakeet timestamps)
     if (wordAudioEl && sttWord) {
@@ -983,75 +942,24 @@ export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, di
       span.addEventListener('click', (e) => { e.stopPropagation(); showWordTooltip(span, null); });
     }
 
-    // Additional context for specific types
+    // CSS class overlays (tooltip content handled by buildEnhancedTooltip)
     if (item.type === 'substitution' || item.type === 'struggle') {
-      // Proper noun forgiveness indicator (phonetic proximity check passed)
-      // Check this FIRST - forgiven words should NOT be marked as morphological errors
       if (item.forgiven) {
         span.classList.add('word-forgiven');
-        const ratioText = item.phoneticRatio ? ' (' + item.phoneticRatio + '% similar)' : '';
-        const combinedText = item.combinedPronunciation ? '\nStudent said: "' + item.combinedPronunciation + '"' : '';
-        span.dataset.tooltip += '\n✓ Forgiven: proper name' + ratioText + combinedText + ' — vocabulary gap, not decoding error';
-      } else {
-        // Morphological error overlay (only for non-forgiven substitutions)
-        const morphKey = (item.ref || '').toLowerCase() + '|' + (item.hyp || '').toLowerCase();
-        const morphData = morphErrorMap.get(morphKey);
-        if (morphData) {
-          span.classList.add('word-morphological');
-          span.dataset.tooltip += `\n(Morphological: shared ${morphData.matchType} "${morphData.sharedPart}")`;
-        }
+      } else if (morphData) {
+        span.classList.add('word-morphological');
       }
     }
 
-    // NL tooltip and healed indicator are already included by buildEnhancedTooltip()
-
-    // Hesitation overlay (for items that have a hyp word)
-    const currentHypIndex = (item.type !== 'omission') ? hypIndex : null;
-    if (currentHypIndex !== null && onsetDelayMap.has(currentHypIndex)) {
-      const delay = onsetDelayMap.get(currentHypIndex);
+    if (hesitationDelay) {
       span.classList.add('word-hesitation');
-
-      // VAD visual distinction: orange if speech >= 30%
-      if (delay._vadAnalysis && delay._vadAnalysis.speechPercent >= 30) {
+      if (hesitationDelay._vadAnalysis && hesitationDelay._vadAnalysis.speechPercent >= 30) {
         span.classList.add('word-hesitation-vad');
       }
-
-      const gapMs = Math.round(delay.gap * 1000);
-      const threshMs = Math.round(delay.threshold * 1000);
-      let hesitationNote = '\nHesitation: ' + gapMs + 'ms';
-      if (delay.punctuationType === 'period') {
-        hesitationNote += ' (threshold ' + threshMs + 'ms after sentence end)';
-      } else if (delay.punctuationType === 'comma') {
-        hesitationNote += ' (threshold ' + threshMs + 'ms after comma)';
-      } else {
-        hesitationNote += ' (threshold ' + threshMs + 'ms)';
-      }
-      // Add VAD info to tooltip
-      hesitationNote += buildVADTooltipInfo(delay._vadAnalysis);
-      // Show VAD overhang adjustment if gap was corrected
-      if (delay._vadOverhang) {
-        hesitationNote += '\nVAD overhang: ' + delay._vadOverhang.overhangMs + 'ms'
-          + ' (STT gap ' + delay._vadOverhang.originalGapMs + 'ms → adjusted ' + delay._vadOverhang.adjustedGapMs + 'ms)';
-      }
-      span.dataset.tooltip += hesitationNote;
     }
 
-    // Kitchen Sink disfluency dot marker (Phase 24)
-    // sttWord has isDisfluency and _divergence from kitchen-sink-merger.js
     if (sttWord?.isDisfluency) {
       span.classList.add('word-disfluency');
-      if (sttWord._divergence) {
-        const target = sttWord._divergence.cleanTarget || '?';
-        span.dataset.tooltip += `\nStruggle with "${target}" — not an error`;
-      } else {
-        span.dataset.tooltip += '\nDisfluency — not an error';
-      }
-    }
-
-    // Compound word indicator (e.g. "every"+"one" → "everyone")
-    // Shows when STT split a word at a morpheme boundary and compound merger healed it
-    if (item.compound && item.parts) {
-      span.dataset.tooltip += '\nCompound: student said "' + item.parts.join('" + "') + '"';
     }
 
     // Insert pause indicator before this word if previous hyp word had a long pause
@@ -1480,67 +1388,27 @@ export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, di
       return span;
     };
 
-    // ── STEP 1: Reverb V0 ↔ V1 ↔ V2 Comparison ──
+    // ── STEP 1: Three-Engine Consensus ──
     {
-      const { step, body } = makeStep(1, 'Reverb V0 \u2194 V1 \u2194 V2',
-        'how clean and verbatim transcripts align, and the combined result');
+      const v0Align = rawSttSources?.v0Alignment || [];
+      const twTable = rawSttSources?.threeWayTable || [];
+      const v0Ref = v0Align.filter(e => e.type !== 'insertion');
 
-      // Group transcriptWords into aligned blocks
-      // Three block kinds:
-      //   'anchor' — all versions agree
-      //   'v2div'  — V0/V1 divergence (V2 collapsed from V1 fragments using V0 target)
-      //   'v3div'  — V2/Ref divergence (V3 collapsed from V2 fragments using ref target)
-      const blocks = [];
-      if (transcriptWords && transcriptWords.length > 0) {
-        let currentBlock = null;
-        for (const w of transcriptWords) {
-          const isDivWord = (w.isDisfluency && w._divergence) || w._v2Merged;
-          const divId = w._divergence?.id;
-          if (isDivWord && divId != null) {
-            if (!currentBlock || currentBlock.id !== divId) {
-              if (currentBlock) blocks.push(currentBlock);
-              currentBlock = {
-                kind: 'v2div',
-                id: divId,
-                cleanTarget: w._divergence.cleanTarget,
-                cleanWords: w._divergence.cleanWords || [],
-                verbatimWords: w._divergence.verbatimWords || [],
-                words: [w]
-              };
-            } else {
-              currentBlock.words.push(w);
-            }
-          } else if (w._v3Merged && w._v3OriginalFragments) {
-            // V3 block — V2/Reference divergence
-            if (currentBlock) { blocks.push(currentBlock); currentBlock = null; }
-            blocks.push({
-              kind: 'v3div',
-              words: [w],
-              refTarget: w._v3RefTarget || w.word,
-              v2Fragments: w._v3OriginalFragments.map(f => f.word),
-              v2FragmentData: w._v3OriginalFragments
-            });
-          } else {
-            if (currentBlock) { blocks.push(currentBlock); currentBlock = null; }
-            blocks.push({ kind: 'anchor', words: [w] });
-          }
-        }
-        if (currentBlock) blocks.push(currentBlock);
-      }
+      const { step, body } = makeStep(1, 'Three-Engine Consensus',
+        'per-reference-word comparison of V1 (verbatim), V0 (clean), and Parakeet');
 
-      if (blocks.length === 0 && reverbVerbatim.length === 0) {
+      if (twTable.length === 0) {
         const msg = document.createElement('div');
         msg.className = 'pipeline-step-summary';
-        msg.textContent = 'No Reverb data available';
+        msg.textContent = 'No three-way alignment data available';
         body.appendChild(msg);
       } else {
-        // Build vertical table: one row per word, columns = V0 / V1 / V2 / Type
         const table = document.createElement('table');
         table.className = 'pipeline-table';
 
         const thead = document.createElement('thead');
         const headRow = document.createElement('tr');
-        for (const hdr of ['#', 'V0 (clean)', 'V1 (verbatim)', 'V2 (result)', 'Type']) {
+        for (const hdr of ['#', 'Reference', 'V1 (Verbatim)', 'V0 (Clean)', 'Parakeet', 'Verdict']) {
           const th = document.createElement('th');
           th.textContent = hdr;
           headRow.appendChild(th);
@@ -1549,192 +1417,92 @@ export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, di
         table.appendChild(thead);
 
         const tbody = document.createElement('tbody');
+        let confirmedN = 0, disagreedN = 0, recoveredN = 0, unconfirmedN = 0, omittedN = 0;
 
-        // Helper: build a <td> with fragment spans separated by middot
-        const buildFragCell = (fragments, className, tip) => {
-          const td = document.createElement('td');
-          td.className = className;
-          for (let fi = 0; fi < fragments.length; fi++) {
-            if (fi > 0) {
-              const sep = document.createElement('span');
-              sep.className = 'pipeline-v012-frag-sep';
-              sep.textContent = '\u00b7';
-              td.appendChild(sep);
-            }
-            const frag = document.createElement('span');
-            frag.textContent = fragments[fi];
-            td.appendChild(frag);
-          }
-          if (tip) {
-            td.dataset.tooltip = tip;
-            td.style.cursor = 'pointer';
-            td.addEventListener('click', (e) => { e.stopPropagation(); showWordTooltip(td, null); });
-          }
-          return td;
-        };
+        for (let i = 0; i < twTable.length; i++) {
+          const tw = twTable[i];
+          const v1E = reverbRef[i];
+          const v0E = v0Ref[i];
+          const pkE = parakeetRef[i];
 
-        let v2DivCount = 0, v3DivCount = 0, rowNum = 0;
-        for (const b of blocks) {
-          rowNum++;
-          if (b.kind === 'anchor') {
-            const word = b.words[0].word;
-            const tr = document.createElement('tr');
-            const tdIdx = document.createElement('td');
-            tdIdx.className = 'pipeline-td-idx';
-            tdIdx.textContent = rowNum;
-            tr.appendChild(tdIdx);
-            for (let c = 0; c < 3; c++) {
-              const td = document.createElement('td');
-              td.className = 'pipeline-td-v012-anchor';
-              td.textContent = word;
-              tr.appendChild(td);
-            }
-            tr.appendChild(document.createElement('td')); // empty Type
-            tbody.appendChild(tr);
+          if (tw.status === 'confirmed') confirmedN++;
+          else if (tw.status === 'disagreed') disagreedN++;
+          else if (tw.status === 'recovered') recoveredN++;
+          else if (tw.status === 'unconfirmed') unconfirmedN++;
+          else if (tw.status === 'confirmed_omission') omittedN++;
 
-          } else if (b.kind === 'v2div') {
-            v2DivCount++;
-            const v0Text = b.cleanTarget || '?';
-            const firstW = b.words[0];
-            let v1Fragments;
-            if (firstW._v2Merged && firstW._v2OriginalFragments) {
-              v1Fragments = firstW._v2OriginalFragments.map(f => f.word);
-            } else {
-              v1Fragments = b.verbatimWords.length > 0 ? b.verbatimWords : b.words.map(w => w.word);
-            }
-            const resultWord = b.words.map(w => w.word).join(' ');
+          const tr = document.createElement('tr');
+          tr.className = 'pipeline-xval-' + (tw.status === 'confirmed_omission' ? 'confirmed' : tw.status);
 
-            const tip = 'V0/V1 Divergence #' + b.id
-              + '\nV0 clean: "' + v0Text + '"'
-              + '\nV1 verbatim: ' + v1Fragments.map(f => '"' + f + '"').join(' ')
-              + '\nResult: "' + resultWord + '"'
-              + '\nV0 recovered the word; V1 shows the struggle';
+          // # column
+          const tdIdx = document.createElement('td');
+          tdIdx.className = 'pipeline-td-idx';
+          tdIdx.textContent = i + 1;
+          tr.appendChild(tdIdx);
 
-            const tr = document.createElement('tr');
+          // Reference column
+          const tdRef = document.createElement('td');
+          tdRef.className = 'pipeline-td-ref';
+          tdRef.textContent = tw.ref || '?';
+          tr.appendChild(tdRef);
 
-            // # column
-            const tdIdx = document.createElement('td');
-            tdIdx.className = 'pipeline-td-idx';
-            tdIdx.textContent = rowNum;
-            tr.appendChild(tdIdx);
-
-            // V0 cell — green
-            const tdV0 = document.createElement('td');
-            tdV0.className = 'pipeline-td-v0-match';
-            tdV0.textContent = v0Text;
-            tdV0.dataset.tooltip = tip;
-            tdV0.style.cursor = 'pointer';
-            tdV0.addEventListener('click', (e) => { e.stopPropagation(); showWordTooltip(tdV0, null); });
-            tr.appendChild(tdV0);
-
-            // V1 cell — red with fragments
-            tr.appendChild(buildFragCell(v1Fragments, 'pipeline-td-v1-diff', tip));
-
-            // V2 result cell — purple
-            const tdV2 = document.createElement('td');
-            tdV2.className = 'pipeline-td-v2-result';
-            tdV2.textContent = resultWord;
-            tdV2.dataset.tooltip = tip;
-            tdV2.style.cursor = 'pointer';
-            tdV2.addEventListener('click', (e) => { e.stopPropagation(); showWordTooltip(tdV2, null); });
-            tr.appendChild(tdV2);
-
-            // Type badge
-            const tdType = document.createElement('td');
-            const badge = document.createElement('span');
-            badge.className = 'pipeline-v012-badge pipeline-v012-badge-v2';
-            badge.textContent = 'V0\u2260V1';
-            tdType.appendChild(badge);
-            tr.appendChild(tdType);
-
-            tbody.appendChild(tr);
-
-          } else if (b.kind === 'v3div') {
-            v3DivCount++;
-            const refTarget = b.refTarget;
-            const v2Frags = b.v2Fragments;
-            const fragData = b.v2FragmentData || [];
-            const resultWord = b.words.map(w => w.word).join(' ');
-
-            const hasV2Diff = fragData.some(f => f._v2Merged);
-
-            const v1Words = [];
-            for (const fd of fragData) {
-              if (fd._v1Words && fd._v1Words.length > 0) {
-                v1Words.push(...fd._v1Words);
-              } else {
-                v1Words.push(fd.word);
+          // Engine cell helper
+          const makeEngineCell = (entry, twSymbol) => {
+            const td = document.createElement('td');
+            if (!entry || twSymbol === 'n/a') {
+              td.className = 'engine-unavailable';
+              td.textContent = 'n/a';
+            } else if (entry.type === 'correct') {
+              td.className = 'engine-correct';
+              td.textContent = entry.hyp;
+              if (entry.compound && entry.parts) {
+                const fragSpan = document.createElement('div');
+                fragSpan.className = 'engine-compound-frags';
+                fragSpan.textContent = entry.parts.join(' + ');
+                td.appendChild(fragSpan);
               }
-            }
-
-            const tip = hasV2Diff
-              ? 'V2/Reference Divergence'
-                + '\nReference: "' + refTarget + '"'
-                + '\nV0 clean: ' + v2Frags.map(f => '"' + f + '"').join(' ')
-                + '\nV1 verbatim: ' + v1Words.map(f => '"' + f + '"').join(' ')
-                + '\nResult: "' + resultWord + '"'
-              : 'V2/Reference Divergence'
-                + '\nReference: "' + refTarget + '"'
-                + '\nV0 & V1 heard: ' + v2Frags.map(f => '"' + f + '"').join(' ')
-                + '\nResult: "' + resultWord + '"'
-                + '\nBoth Reverb passes agree on fragments; student split the word';
-
-            const tr = document.createElement('tr');
-
-            // # column
-            const tdIdx = document.createElement('td');
-            tdIdx.className = 'pipeline-td-idx';
-            tdIdx.textContent = rowNum;
-            tr.appendChild(tdIdx);
-
-            // V0 cell — green if V0≠V1, orange if V0=V1
-            const v0Class = hasV2Diff ? 'pipeline-td-v0-match' : 'pipeline-td-v3-frag';
-            tr.appendChild(buildFragCell(v2Frags, v0Class, tip));
-
-            // V1 cell — red if V0≠V1, orange if V0=V1
-            if (hasV2Diff) {
-              tr.appendChild(buildFragCell(v1Words, 'pipeline-td-v1-diff', tip));
+            } else if (entry.type === 'omission') {
+              td.className = 'engine-omit';
+              td.textContent = '\u2014';
             } else {
-              tr.appendChild(buildFragCell(v2Frags, 'pipeline-td-v3-frag', tip));
+              td.className = 'engine-sub';
+              td.textContent = entry.hyp || '?';
             }
+            return td;
+          };
 
-            // V2 result cell — purple + ref note
-            const tdV2 = document.createElement('td');
-            tdV2.className = 'pipeline-td-v2-result';
-            tdV2.dataset.tooltip = tip;
-            tdV2.style.cursor = 'pointer';
-            tdV2.addEventListener('click', (e) => { e.stopPropagation(); showWordTooltip(tdV2, null); });
-            const wordSpan = document.createElement('span');
-            wordSpan.textContent = resultWord;
-            tdV2.appendChild(wordSpan);
-            const refNote = document.createElement('div');
-            refNote.className = 'pipeline-v012-ref-note';
-            refNote.textContent = '\u2190 ref: ' + refTarget;
-            tdV2.appendChild(refNote);
-            tr.appendChild(tdV2);
+          tr.appendChild(makeEngineCell(v1E, tw.v1));
+          tr.appendChild(makeEngineCell(v0E, tw.v0));
+          tr.appendChild(makeEngineCell(pkE, tw.pk));
 
-            // Type badge
-            const tdType = document.createElement('td');
-            const badge = document.createElement('span');
-            badge.className = 'pipeline-v012-badge pipeline-v012-badge-v3';
-            badge.textContent = hasV2Diff ? 'V0\u2260V1 + V2\u2260Ref' : 'V2\u2260Ref';
-            tdType.appendChild(badge);
-            tr.appendChild(tdType);
+          // Verdict column
+          const tdV = document.createElement('td');
+          const verdictSymbols = {
+            confirmed: '\u2713', disagreed: '\u2717', recovered: '\u21bb',
+            unconfirmed: '?', confirmed_omission: '\u2014'
+          };
+          const verdictLabels = {
+            confirmed: 'confirmed', disagreed: 'disagreed', recovered: 'recovered',
+            unconfirmed: 'unconfirmed', confirmed_omission: 'omitted'
+          };
+          const verdictCls = tw.status === 'confirmed_omission' ? 'pipeline-verdict-omission' : 'pipeline-verdict-' + tw.status;
+          tdV.className = 'pipeline-verdict ' + verdictCls;
+          tdV.textContent = (verdictSymbols[tw.status] || '\u00b7') + ' ' + (verdictLabels[tw.status] || tw.status);
+          tr.appendChild(tdV);
 
-            tbody.appendChild(tr);
-          }
+          tbody.appendChild(tr);
         }
 
         table.appendChild(tbody);
         body.appendChild(table);
 
-        const anchors = blocks.filter(b => b.kind === 'anchor').length;
-        const parts = [anchors + ' anchors'];
-        if (v2DivCount > 0) parts.push(v2DivCount + ' V0\u2260V1 (Reverb divergence)');
-        if (v3DivCount > 0) parts.push(v3DivCount + ' V2\u2260Ref (reference divergence)');
         const summary = document.createElement('div');
         summary.className = 'pipeline-step-summary';
-        summary.textContent = parts.join(', ');
+        summary.textContent = 'Confirmed: ' + confirmedN + ' | Disagreed: ' + disagreedN
+          + ' | Recovered: ' + recoveredN + ' | Unconfirmed: ' + unconfirmedN
+          + ' | Omitted: ' + omittedN;
+        const agreePct = twTable.length > 0 ? (100 * confirmedN / twTable.length).toFixed(0) : '0';
+        summary.textContent += ' | Agreement: ' + agreePct + '%';
         body.appendChild(summary);
       }
 
@@ -1795,23 +1563,12 @@ export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, di
             tdHyp.textContent = e.hyp || '?';
             tdHyp.className = 'pipeline-td-sub';
           }
-          // Show original fragments when V2/V3 collapsing was used (Reverb only)
-          if (engineKey === 'reverb' && e.hypIndex != null && e.hypIndex >= 0) {
-            const tw = transcriptWords[e.hypIndex];
-            if (tw) {
-              const frags = tw._v2Merged ? tw._v2OriginalFragments
-                          : tw._v3Merged ? tw._v3OriginalFragments
-                          : null;
-              if (frags) {
-                const fragText = frags.map(f => f.word).join(' ');
-                if (fragText !== e.hyp) {
-                  const fragSpan = document.createElement('div');
-                  fragSpan.className = 'pipeline-v2-fragments';
-                  fragSpan.textContent = '\u2190 ' + fragText;
-                  tdHyp.appendChild(fragSpan);
-                }
-              }
-            }
+          // Show compound merge fragments
+          if (e.compound && e.parts && e.parts.length > 1) {
+            const fragSpan = document.createElement('div');
+            fragSpan.className = 'pipeline-v2-fragments';
+            fragSpan.textContent = '\u2190 ' + e.parts.join(' + ');
+            tdHyp.appendChild(fragSpan);
           }
           tr.appendChild(tdHyp);
 
@@ -1839,18 +1596,27 @@ export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, di
         return wrapper;
       };
 
-      if (reverbRef.length > 0) {
-        // Reverb V2 vs Reference (primary — shown first)
-        body.appendChild(buildAlignTable('Reverb', reverbRef, reverbIns, 'reverb'));
+      const v0AlignFull = rawSttSources?.v0Alignment || [];
+      const v0RefStep2 = v0AlignFull.filter(e => e.type !== 'insertion');
+      const v0InsStep2 = v0AlignFull.filter(e => e.type === 'insertion');
 
-        // Parakeet vs Reference (secondary — shown below)
-        if (parakeetRef.length > 0 && parakeetRef.length === reverbRef.length) {
-          body.appendChild(buildAlignTable('Parakeet', parakeetRef, parakeetIns, 'parakeet'));
-        } else if (parakeetRef.length > 0) {
+      if (reverbRef.length > 0) {
+        // Reverb V1 (verbatim) vs Reference (primary — shown first)
+        body.appendChild(buildAlignTable('Reverb V1 (verbatim)', reverbRef, reverbIns, 'reverb'));
+
+        // Reverb V0 (clean) vs Reference
+        if (v0RefStep2.length > 0) {
+          body.appendChild(buildAlignTable('Reverb V0 (clean)', v0RefStep2, v0InsStep2, 'v0'));
+        } else {
           const msg = document.createElement('div');
           msg.className = 'pipeline-step-summary';
-          msg.textContent = 'Length mismatch: Reverb ' + reverbRef.length + ' vs Parakeet ' + parakeetRef.length;
+          msg.textContent = 'No V0 (clean) alignment data available';
           body.appendChild(msg);
+        }
+
+        // Parakeet vs Reference
+        if (parakeetRef.length > 0) {
+          body.appendChild(buildAlignTable('Parakeet', parakeetRef, parakeetIns, 'parakeet'));
         } else {
           const msg = document.createElement('div');
           msg.className = 'pipeline-step-summary';
@@ -1867,112 +1633,9 @@ export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, di
       confWordsDiv.appendChild(step);
     }
 
-    // ── STEP 3: Cross-Validation Verdicts ──
+    // ── STEP 3: Post-Processing ──
     {
-      const { step, body } = makeStep(3, 'Cross-Validation Verdicts',
-        'per-reference-word comparison of Reverb vs Parakeet (decision matrix)');
-
-      if (parakeetRef.length > 0 && parakeetRef.length === reverbRef.length) {
-        const table = document.createElement('table');
-        table.className = 'pipeline-table';
-
-        const thead = document.createElement('thead');
-        const hrow = document.createElement('tr');
-        for (const h of ['#', 'Reference', 'Reverb', 'Parakeet', 'Verdict', 'Reason']) {
-          const th = document.createElement('th');
-          th.textContent = h;
-          hrow.appendChild(th);
-        }
-        thead.appendChild(hrow);
-        table.appendChild(thead);
-
-        const tbody = document.createElement('tbody');
-        let confirmedN = 0, disagreedN = 0, recoveredN = 0, unconfirmedN = 0;
-        for (let i = 0; i < reverbRef.length; i++) {
-          const r = reverbRef[i];
-          const p = parakeetRef[i];
-          const xval = r.crossValidation || 'pending';
-
-          if (xval === 'confirmed') confirmedN++;
-          else if (xval === 'disagreed') disagreedN++;
-          else if (xval === 'recovered') recoveredN++;
-          else if (xval === 'unconfirmed') unconfirmedN++;
-
-          const tr = document.createElement('tr');
-          tr.className = 'pipeline-xval-' + xval;
-
-          const tdIdx = document.createElement('td');
-          tdIdx.className = 'pipeline-td-idx';
-          tdIdx.textContent = i + 1;
-          tr.appendChild(tdIdx);
-
-          const tdRef = document.createElement('td');
-          tdRef.className = 'pipeline-td-ref';
-          tdRef.textContent = r.ref || '?';
-          tr.appendChild(tdRef);
-
-          const tdR = document.createElement('td');
-          tdR.className = 'pipeline-td-type-' + r.type;
-          tdR.textContent = r.type === 'omission' ? '\u2014 omitted' : '"' + r.hyp + '" (' + r.type + ')';
-          tr.appendChild(tdR);
-
-          const tdP = document.createElement('td');
-          tdP.className = 'pipeline-td-type-' + p.type;
-          tdP.textContent = p.type === 'omission' ? '\u2014 omitted' : '"' + p.hyp + '" (' + p.type + ')';
-          tr.appendChild(tdP);
-
-          const tdV = document.createElement('td');
-          tdV.className = 'pipeline-verdict pipeline-verdict-' + xval;
-          const verdictSymbols = { confirmed: '\u2713', disagreed: '\u2717', recovered: '\u21bb', unconfirmed: '?' };
-          tdV.textContent = (verdictSymbols[xval] || '\u00b7') + ' ' + xval;
-          tr.appendChild(tdV);
-
-          const tdReason = document.createElement('td');
-          tdReason.className = 'pipeline-td-reason';
-          const rT = r.type, pT = p.type;
-          if (xval === 'confirmed' && rT === 'correct' && pT === 'correct') {
-            tdReason.textContent = 'both correct';
-          } else if (xval === 'confirmed' && rT === 'correct') {
-            tdReason.textContent = 'Reverb correct (sufficient)';
-          } else if (xval === 'confirmed' && rT === 'substitution' && pT === 'substitution') {
-            const rNorm = (r.hyp || '').toLowerCase();
-            const pNorm = (p.hyp || '').toLowerCase();
-            tdReason.textContent = rNorm === pNorm ? 'both said "' + r.hyp + '"' : 'Reverb: "' + r.hyp + '", Parakeet: "' + p.hyp + '"';
-          } else if (xval === 'disagreed') {
-            tdReason.textContent = 'R: ' + r.type + '="' + (r.hyp || '\u2014') + '", P: ' + p.type + '="' + (p.hyp || '\u2014') + '"';
-          } else if (xval === 'recovered') {
-            tdReason.textContent = 'Reverb omitted, Parakeet heard it';
-          } else if (xval === 'unconfirmed') {
-            tdReason.textContent = 'Parakeet omitted, Reverb-only evidence';
-          } else {
-            tdReason.textContent = 'R: ' + rT + ', P: ' + pT;
-          }
-          tr.appendChild(tdReason);
-
-          tbody.appendChild(tr);
-        }
-        table.appendChild(tbody);
-        body.appendChild(table);
-
-        const summary = document.createElement('div');
-        summary.className = 'pipeline-step-summary';
-        summary.textContent = 'Confirmed: ' + confirmedN + ' | Disagreed: ' + disagreedN + ' | Recovered: ' + recoveredN + ' | Unconfirmed: ' + unconfirmedN;
-        const agreePct = (100 * confirmedN / reverbRef.length).toFixed(0);
-        summary.textContent += ' | Agreement: ' + agreePct + '%';
-        body.appendChild(summary);
-      } else {
-        const msg = document.createElement('div');
-        msg.className = 'pipeline-step-summary';
-        msg.textContent = 'Cross-validation unavailable (no paired alignment data)';
-        body.appendChild(msg);
-      }
-
-      confWordsDiv.appendChild(step);
-    }
-
-    // ── STEP 4: Post-Processing ──
-    {
-      const { step, body } = makeStep(4, 'Post-Processing',
+      const { step, body } = makeStep(3, 'Post-Processing',
         'omission recovery, compound merges, self-corrections, near-miss clusters, CTC artifacts');
 
       const lists = [];
@@ -2074,9 +1737,9 @@ export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, di
       confWordsDiv.appendChild(step);
     }
 
-    // ── STEP 5: Final Scored Alignment ──
+    // ── STEP 4: Final Scored Alignment ──
     {
-      const { step, body } = makeStep(5, 'Final Scored Alignment',
+      const { step, body } = makeStep(4, 'Final Scored Alignment',
         'the result used for WCPM and accuracy scoring');
 
       const table = document.createElement('table');
@@ -2270,7 +1933,6 @@ function renderDisfluencySection(disfluencyStats, transcriptWords, alignment, au
       disfluencies.push({
         word: w.word,
         type: w.disfluencyType || 'unknown',
-        divergence: w._divergence || null,
         crossValidation: w.crossValidation,
         transcriptIndex: i,
         startTime: parseSttTime(w.startTime),
@@ -2284,14 +1946,8 @@ function renderDisfluencySection(disfluencyStats, transcriptWords, alignment, au
     }
   }
 
-  // ── Enrich with divergence block context ──
-  // Divergence blocks already carry cleanTarget (the v0 word the student was trying to say)
+  // ── Enrich disfluencies with alignment context ──
   for (const d of disfluencies) {
-    // Primary: divergence block cleanTarget from v1/v0 alignment
-    if (d.divergence && d.divergence.cleanTarget) {
-      d.refTarget = d.divergence.cleanTarget;
-    }
-
     // Self-correction: check if alignment insertion is flagged
     if (!d.selfCorrection && alignment && alignment.length > 0) {
       const dNorm = d.word.toLowerCase().replace(/[^a-z']/g, '');
@@ -2319,7 +1975,6 @@ function renderDisfluencySection(disfluencyStats, transcriptWords, alignment, au
   for (const d of disfluencies) {
     let label;
     if (d.selfCorrection) label = 'self-correction';
-    else if (d.divergence) label = d.divergence.cleanTarget ? 'struggle' : 'extra word';
     else label = typeLabels[d.type] || 'extra word';
     typeCounts[label] = (typeCounts[label] || 0) + 1;
   }
@@ -2413,10 +2068,6 @@ function renderDisfluencySection(disfluencyStats, transcriptWords, alignment, au
     if (d.selfCorrection) {
       typeSpan.textContent = 'self-correction';
       typeSpan.classList.add('disfluency-meta-selfcorrection');
-    } else if (d.divergence) {
-      const label = d.divergence.cleanTarget ? 'struggle' : 'extra word';
-      typeSpan.textContent = label;
-      typeSpan.classList.add(d.divergence.cleanTarget ? 'disfluency-meta-struggle' : 'disfluency-meta-extra');
     } else {
       const label = typeLabels[d.type] || 'extra word';
       typeSpan.textContent = label;
@@ -2424,15 +2075,10 @@ function renderDisfluencySection(disfluencyStats, transcriptWords, alignment, au
     }
     meta.appendChild(typeSpan);
 
-    // Enrichment note — show clean target from divergence block
+    // Enrichment note
     let noteText = '';
-    if (!d.selfCorrection) {
-      if (d.divergence && d.divergence.cleanTarget) {
-        const fragments = d.divergence.verbatimWords.map(w => `"${w}"`).join(', ');
-        noteText = `target "${d.divergence.cleanTarget}" \u2190 ${fragments}`;
-      } else if (d.refTarget) {
-        noteText = `\u2192 ${d.refTarget}`;
-      }
+    if (!d.selfCorrection && d.refTarget) {
+      noteText = `\u2192 ${d.refTarget}`;
     }
     if (noteText) {
       meta.appendChild(document.createTextNode(' \u00B7 '));

@@ -215,7 +215,6 @@ async function runAnalysis() {
     console.log('[Pipeline] Kitchen Sink result:', {
       source: kitchenSinkResult.source,
       wordCount: kitchenSinkResult.words?.length || 0,
-      disfluencies: kitchenSinkResult.disfluencyStats?.total || 0,
       _debug: kitchenSinkResult._debug
     });
 
@@ -237,8 +236,6 @@ async function runAnalysis() {
     addStage('kitchen_sink_result', {
       source: kitchenSinkResult.source,
       totalWords: mergedWords.length,
-      disfluencies: kitchenSinkResult.disfluencyStats?.total || 0,
-      disfluencyBreakdown: kitchenSinkResult.disfluencyStats?.byType || null,
       crossValidated: kitchenSinkResult._debug?.xvalAvailable || false,
       stats: ensembleStats
     });
@@ -346,9 +343,7 @@ async function runAnalysis() {
     // =========================================================================
     // Kitchen Sink direct pass-through
     // =========================================================================
-    // Kitchen Sink words go directly to alignment — no legacy filtering needed.
-    // Disfluency data (isDisfluency, disfluencyType) is already on each word.
-    // Cross-validation data (crossValidation) is already on each word.
+    // Raw V1 words go directly to alignment — 3-way comparison happens after.
     const wordsForAlignment = mergedWords;
 
     // VAD processing — still needed for Phase 18 gap analysis (not ghost detection)
@@ -381,7 +376,6 @@ async function runAnalysis() {
         stats: ensembleStats
       },
       _kitchenSink: {
-        disfluencyStats: kitchenSinkResult.disfluencyStats || null,
         xvalRawWords: kitchenSinkResult.xvalRaw?.words || [],
         reverbVerbatimWords: kitchenSinkResult.reverb?.verbatim?.words || [],
         reverbCleanWords: kitchenSinkResult.reverb?.clean?.words || []
@@ -422,219 +416,7 @@ async function runAnalysis() {
     }
   }
 
-  // BPE hyphen-split REMOVED — Reverb's CTM parser joins BPE pieces with hyphens
-  // (e.g., "pe-peal") to represent a single acoustic event. Splitting them destroys
-  // the connection between fragments and their target word. The divergence-block
-  // system in kitchen-sink-merger.js now groups these naturally via v1/v0 anchoring.
   const parseT = (t) => parseFloat(String(t).replace('s', '')) || 0;
-
-  // ── V2 divergence block collapsing ───────────────────────────────
-  // Collapse divergence block fragments into single entries using the
-  // V0 clean target as the word for NW alignment. This prevents
-  // normalizeText() from splitting BPE-joined tokens like "pe-peal"
-  // and ensures the aligner sees the clean word (e.g., "appeal")
-  // instead of multiple messy fragments.
-  //
-  // The divergence metadata is preserved on the V2 entry for display:
-  //   V2.word = "appeal" (for alignment)
-  //   V2._divergence.verbatimWords = ["apo-", "a", "pe-peal"] (for tooltip)
-  {
-    const { normalizeText: ntV2 } = await import('./text-normalize.js');
-    const v2Words = [];
-    let i = 0;
-
-    while (i < transcriptWords.length) {
-      const w = transcriptWords[i];
-
-      if (w._divergence && w._divergence.id != null) {
-        // Collect all fragments with same divergence block id
-        const blockId = w._divergence.id;
-        const fragments = [];
-        while (i < transcriptWords.length && transcriptWords[i]._divergence?.id === blockId) {
-          fragments.push(transcriptWords[i]);
-          i++;
-        }
-
-        const cleanWords = fragments[0]._divergence.cleanWords || [];
-        const cleanTarget = fragments[0]._divergence.cleanTarget;
-
-        if (cleanTarget && cleanWords.length > 0) {
-          const first = fragments[0];
-          const last = fragments[fragments.length - 1];
-          const fragSummary = fragments.map(f => ({
-            word: f.word, startTime: f.startTime, endTime: f.endTime
-          }));
-
-          // Expand clean words through normalizeText to handle any hyphens
-          // (e.g., V0 "self-esteem" → ["self", "esteem"])
-          const expandedClean = [];
-          for (const cw of cleanWords) {
-            expandedClean.push(...ntV2(cw));
-          }
-
-          // Emit one V2 entry per expanded clean word
-          for (let ci = 0; ci < expandedClean.length; ci++) {
-            v2Words.push({
-              ...first,
-              word: expandedClean[ci],
-              endTime: last.endTime,
-              _reverbStartTime: first._reverbStartTime || first.startTime,
-              _reverbEndTime: last._reverbEndTime || last.endTime,
-              _v2Merged: true,
-              _v2OriginalFragments: fragSummary,
-              _divergence: {
-                ...first._divergence,
-                role: 'merged'
-              }
-            });
-          }
-
-          console.log(`[V2] Collapsed #${blockId}: "${cleanTarget}" ← [${fragments.map(f => f.word).join(', ')}]`);
-        } else {
-          // No clean target (pure insertions) — keep individual fragments
-          for (const frag of fragments) {
-            v2Words.push(frag);
-          }
-        }
-      } else {
-        v2Words.push(w);
-        i++;
-      }
-    }
-
-    const v2Collapsed = v2Words.filter(w => w._v2Merged);
-    if (v2Collapsed.length > 0) {
-      addStage('v2_divergence_collapse', {
-        collapsedCount: v2Collapsed.length,
-        originalFragmentCount: transcriptWords.filter(w => w._divergence?.id != null).length,
-        entries: v2Collapsed.map(w => ({
-          word: w.word,
-          fragments: w._v2OriginalFragments.map(f => f.word),
-          cleanTarget: w._divergence?.cleanTarget
-        }))
-      });
-    }
-
-    transcriptWords.length = 0;
-    transcriptWords.push(...v2Words);
-  }
-
-  // ── V3 reference-anchored collapsing ──────────────────────────────
-  // Same anchor logic as V0/V1 divergence detection, but now between
-  // V2 (Reverb's combined output) and the reference text. Catches cases
-  // where BOTH V0 and V1 agree on fragments (e.g. "cone"+"tent") but
-  // they don't match the reference word ("content"). Between two anchor
-  // points (words that match reference), everything is a divergence block.
-  //
-  // Example:
-  //   V2:  ... your | cone  tent | in ...
-  //   Ref: ... your | content    | in ...
-  //         anchor   DIVERGENCE    anchor
-  //
-  //   → Collapse "cone"+"tent" to "content" (from reference)
-  //   → NW alignment then sees "content" → ref "content" → correct
-  //   → Path 4 reclassifies as struggle (has _v3OriginalFragments)
-  {
-    const { normalizeText: ntV3 } = await import('./text-normalize.js');
-    const { alignTranscripts: alignV3 } = await import('./sequence-aligner.js');
-
-    // Reference words — same normalization that NW alignment uses
-    const refNorm = ntV3(referenceText);
-
-    // Build pseudo-word objects (alignTranscripts expects {word: ...})
-    // V2 = "verbatim" side, Reference = "clean" side in aligner terms
-    const v2Pseudo = transcriptWords.map((w, idx) => ({ word: w.word, _twIdx: idx }));
-    const refPseudo = refNorm.map(w => ({ word: w }));
-
-    // Use low gapDelete: V3 aligns ~30 spoken words against ~300+ ref words,
-    // so ref-word-deletion (skipping unread portions) must be cheap.
-    // Default gapDelete=-2 (tuned for V0/V1) makes skipping OCR junk too expensive.
-    const v3Alignment = alignV3(v2Pseudo, refPseudo, { gapDelete: -0.5 });
-
-    // Group into anchors and divergence blocks
-    const v3Blocks = [];
-    let curDiv = null;
-    for (const entry of v3Alignment) {
-      if (entry.type === 'match') {
-        if (curDiv) { v3Blocks.push(curDiv); curDiv = null; }
-        v3Blocks.push({ kind: 'anchor', entries: [entry] });
-      } else {
-        if (!curDiv) curDiv = { kind: 'divergence', entries: [] };
-        curDiv.entries.push(entry);
-      }
-    }
-    if (curDiv) v3Blocks.push(curDiv);
-
-    // Build V3 word list — collapse multi-fragment divergence blocks
-    const v3Words = [];
-    for (const block of v3Blocks) {
-      if (block.kind === 'anchor') {
-        const twIdx = block.entries[0].verbatimData._twIdx;
-        v3Words.push(transcriptWords[twIdx]);
-      } else {
-        // Collect V2 fragments and reference targets from divergence block
-        const frags = [];
-        const refTargets = [];
-        for (const entry of block.entries) {
-          if (entry.verbatim !== null) { // insertion or mismatch — consumes a V2 word
-            frags.push(transcriptWords[entry.verbatimData._twIdx]);
-          }
-          if (entry.clean !== null) { // deletion or mismatch — consumes a ref word
-            refTargets.push(entry.clean);
-          }
-        }
-
-        if (refTargets.length > 0 && frags.length >= 2 && refTargets.length <= frags.length * 3) {
-          // Multiple V2 words mapping to reference target(s) — collapse
-          const fragSummary = frags.map(f => ({
-            word: f.word, startTime: f.startTime, endTime: f.endTime,
-            _v2Merged: f._v2Merged || false,
-            _v1Words: f._v2Merged && f._v2OriginalFragments
-              ? f._v2OriginalFragments.map(x => x.word)
-              : null
-          }));
-          const first = frags[0];
-          const last = frags[frags.length - 1];
-
-          // Expand reference targets through normalizeText (handles hyphens etc)
-          const expandedRef = [];
-          for (const rw of refTargets) expandedRef.push(...ntV3(rw));
-
-          for (const refWord of expandedRef) {
-            v3Words.push({
-              ...first,
-              word: refWord,
-              endTime: last.endTime,
-              _reverbStartTime: first._reverbStartTime || first.startTime,
-              _reverbEndTime: last._reverbEndTime || last.endTime,
-              _v3Merged: true,
-              _v3OriginalFragments: fragSummary,
-              _v3RefTarget: refTargets.join(' ')
-            });
-          }
-        } else {
-          // Single-word mismatch or no ref target — pass through unchanged
-          for (const frag of frags) v3Words.push(frag);
-        }
-      }
-    }
-
-    // Debug stage
-    const v3Collapsed = v3Words.filter(w => w._v3Merged);
-    if (v3Collapsed.length > 0) {
-      addStage('v3_reference_anchor', {
-        count: v3Collapsed.length,
-        entries: v3Collapsed.map(w => ({
-          word: w.word,
-          fragments: w._v3OriginalFragments.map(f => f.word),
-          refTarget: w._v3RefTarget
-        }))
-      });
-    }
-
-    transcriptWords.length = 0;
-    transcriptWords.push(...v3Words);
-  }
 
   // ── Reference-aware fragment pre-merge ───────────────────────────
   // Reverb BPE sometimes splits a single spoken word into fragments
@@ -830,6 +612,12 @@ async function runAnalysis() {
     sttLookup.get(norm).push(w);
   }
 
+  // ── Three independent reference alignments (Plan 6) ──────────────
+  // V1 (Reverb verbatim), V0 (Reverb clean), and Parakeet are each
+  // independently NW-aligned to the reference text. Per-ref-word comparison
+  // determines final verdicts without the fragile V0→V1→V2→V3 chain.
+
+  // 4a. V1 alignment (primary — drives display, tooltips, audio)
   const alignment = alignWords(referenceText, transcriptWords);
 
   // Propagate severity from STT words to alignment items for WCPM range calculation
@@ -844,24 +632,36 @@ async function runAnalysis() {
     }
   });
 
-  const compoundWords = alignment.filter(a => a.compound);
-  addStage('alignment', {
+  // 4b. V0 alignment (Reverb clean)
+  const v0Words = data._kitchenSink?.reverbCleanWords || [];
+  const v0Alignment = v0Words.length > 0 ? alignWords(referenceText, v0Words) : null;
+
+  // 4c. Parakeet alignment
+  const parakeetWords = data._kitchenSink?.xvalRawWords || [];
+  const parakeetAlignment = parakeetWords.length > 0
+    ? alignWords(referenceText, parakeetWords)
+    : null;
+
+  addStage('v1_alignment', {
     totalEntries: alignment.length,
     correct: alignment.filter(a => a.type === 'correct').length,
     substitutions: alignment.filter(a => a.type === 'substitution').length,
     omissions: alignment.filter(a => a.type === 'omission').length,
     insertions: alignment.filter(a => a.type === 'insertion').length,
-    compoundWords: compoundWords.length,
-    compoundDetails: compoundWords.map(a => ({
-      ref: a.ref,
-      parts: a.parts
-    }))
+    compoundWords: alignment.filter(a => a.compound).length,
+    compoundDetails: alignment.filter(a => a.compound).map(a => ({ ref: a.ref, parts: a.parts }))
   });
+  if (v0Alignment) {
+    addStage('v0_alignment', {
+      totalEntries: v0Alignment.length,
+      correct: v0Alignment.filter(a => a.type === 'correct').length,
+      substitutions: v0Alignment.filter(a => a.type === 'substitution').length,
+      omissions: v0Alignment.filter(a => a.type === 'omission').length,
+      insertions: v0Alignment.filter(a => a.type === 'insertion').length
+    });
+  }
 
   // Create synthetic sttLookup entries for compound words
-  // Compound merger creates items like { hyp: "everyone", parts: ["every", "one"] }
-  // but sttLookup only has entries for "every" and "one" (not "everyone").
-  // Without this fix, tooltip for compound words shows no STT metadata.
   for (const item of alignment) {
     if (item.compound && item.parts) {
       const partWords = [];
@@ -875,19 +675,15 @@ async function runAnalysis() {
       if (partWords.length > 0) {
         const first = partWords[0];
         const last = partWords[partWords.length - 1];
-        // Store under the raw hyp key (ui.js looks up by item.hyp, not canonical)
         if (!sttLookup.has(item.hyp)) {
           sttLookup.set(item.hyp, []);
         }
         sttLookup.get(item.hyp).push({
           ...first,
           word: item.hyp,
-          // Span from first part start to last part end (all timestamp sources)
           endTime: last.endTime,
           _xvalEndTime: last._xvalEndTime || last.endTime,
           _reverbEndTime: last._reverbEndTime || last.endTime,
-          _reverbCleanEndTime: last._reverbCleanEndTime || null,
-          // Show what cross-validator heard (individual parts)
           _xvalWord: partWords.map(w => w._xvalWord || w.word).join(' + '),
           _compoundParts: partWords
         });
@@ -895,21 +691,14 @@ async function runAnalysis() {
     }
   }
 
-  // ── Reference-anchored cross-validation (Plan 5) ─────────────────
-  // Align Parakeet independently to the reference text, then compare
-  // per-reference-word verdicts between Reverb and Parakeet alignments.
-  const parakeetWords = data._kitchenSink?.xvalRawWords || [];
-  const parakeetAlignment = parakeetWords.length > 0
-    ? alignWords(referenceText, parakeetWords)
-    : null;
-
-  // Helper: get Parakeet timestamps via hypIndex (no text-based queue)
-  function _consumeParakeetTimestamp(parakeetEntry, pWords) {
-    if (!parakeetEntry || parakeetEntry.type === 'omission') return null;
-    if (parakeetEntry.hypIndex == null || parakeetEntry.hypIndex < 0) return null;
-    const pw = pWords[parakeetEntry.hypIndex];
-    if (!pw) return null;
-    return { word: pw.word, startTime: pw.startTime, endTime: pw.endTime };
+  // ── 3-way per-ref-word comparison ──────────────────────────────────
+  // Helper: get timestamps via hypIndex from an engine's word array
+  function _getEngineTimestamp(entry, words) {
+    if (!entry || entry.type === 'omission') return null;
+    if (entry.hypIndex == null || entry.hypIndex < 0) return null;
+    const w = words[entry.hypIndex];
+    if (!w) return null;
+    return { word: w.word, startTime: w.startTime, endTime: w.endTime };
   }
 
   // Helper: set crossValidation status + timestamps on alignment entry and its transcriptWord
@@ -933,99 +722,188 @@ async function runAnalysis() {
     }
   }
 
-  // Core cross-validation: compare per-reference-word verdicts
-  const xvalRecoveredOmissions = [];
-  if (!parakeetAlignment) {
-    // Parakeet unavailable — mark all as unavailable
-    for (const entry of alignment) {
-      if (entry.type === 'insertion') continue;
-      _setCrossValidation(entry, transcriptWords, 'unavailable', null);
-    }
-  } else {
-    const reverbRef = alignment.filter(e => e.type !== 'insertion');
-    const parakeetRef = parakeetAlignment.filter(e => e.type !== 'insertion');
+  // Filter insertions to get ref-entry arrays (same length = ref word count)
+  const v1Ref = alignment.filter(e => e.type !== 'insertion');
+  const v0Ref = v0Alignment ? v0Alignment.filter(e => e.type !== 'insertion') : [];
+  const pkRef = parakeetAlignment ? parakeetAlignment.filter(e => e.type !== 'insertion') : [];
 
-    if (reverbRef.length !== parakeetRef.length) {
-      console.error(`[xval-ref] INVARIANT VIOLATION: ref-entry count mismatch: Reverb=${reverbRef.length}, Parakeet=${parakeetRef.length}. Falling back to unavailable.`);
-      for (const entry of alignment) {
-        if (entry.type === 'insertion') continue;
-        _setCrossValidation(entry, transcriptWords, 'unavailable', null);
+  // Validate ref-entry count invariant
+  const hasV0 = v0Ref.length === v1Ref.length;
+  const hasPk = pkRef.length === v1Ref.length;
+  if (v0Alignment && !hasV0) {
+    console.warn(`[3-way] V0 ref count mismatch: V1=${v1Ref.length}, V0=${v0Ref.length}. Ignoring V0.`);
+  }
+  if (parakeetAlignment && !hasPk) {
+    console.warn(`[3-way] Parakeet ref count mismatch: V1=${v1Ref.length}, Pk=${pkRef.length}. Ignoring Parakeet.`);
+  }
+
+  const xvalRecoveredOmissions = [];
+  const threeWayTable = [];
+
+  for (let ri = 0; ri < v1Ref.length; ri++) {
+    const v1Entry = v1Ref[ri];
+    const v0Entry = hasV0 ? v0Ref[ri] : null;
+    const pkEntry = hasPk ? pkRef[ri] : null;
+
+    // Track what each engine produced for this ref word
+    const v0Type = v0Entry?.type || null;
+    const pkType = pkEntry?.type || null;
+
+    const parakeetTs = hasPk ? _getEngineTimestamp(pkEntry, parakeetWords) : null;
+    const v0Ts = hasV0 ? _getEngineTimestamp(v0Entry, v0Words) : null;
+
+    // Store V0 and Parakeet info on the V1 alignment entry
+    if (v0Entry) {
+      v1Entry._v0Word = v0Entry.hyp;
+      v1Entry._v0Type = v0Type;
+      if (v0Ts) {
+        v1Entry._v0StartTime = v0Ts.startTime;
+        v1Entry._v0EndTime = v0Ts.endTime;
+      }
+    }
+    if (pkEntry?.hyp) {
+      v1Entry._xvalWord = pkEntry.hyp;
+    }
+
+    // Count how many engines got this word correct
+    const v1Correct = v1Entry.type === 'correct';
+    const v0Correct = v0Type === 'correct';
+    const pkCorrect = pkType === 'correct';
+    const correctCount = (v1Correct ? 1 : 0) + (v0Correct ? 1 : 0) + (pkCorrect ? 1 : 0);
+
+    const v1Omitted = v1Entry.type === 'omission';
+    const v0Omitted = v0Type === 'omission';
+    const pkOmitted = pkType === 'omission';
+    const omitCount = (v1Omitted ? 1 : 0) + (v0Omitted ? 1 : 0) + (pkOmitted ? 1 : 0);
+
+    let status;
+
+    if (v1Omitted && pkOmitted && (!hasV0 || v0Omitted)) {
+      // All engines omitted — confirmed omission, skip
+      threeWayTable.push({ ref: v1Entry.ref, v1: '—', v0: v0Entry ? '—' : 'n/a', pk: pkEntry ? '—' : 'n/a', status: 'confirmed_omission' });
+      continue;
+    } else if (v1Omitted && (pkCorrect || (!hasPk && v0Correct))) {
+      // V1 omitted but another engine heard it → recovery
+      status = 'recovered';
+      const recoveryTs = parakeetTs || v0Ts;
+      xvalRecoveredOmissions.push({ refIndex: ri, entry: v1Entry, timestamps: recoveryTs });
+    } else if (correctCount >= 2) {
+      // Majority correct → confirmed
+      status = 'confirmed';
+    } else if (v1Correct && !v0Correct && !pkCorrect) {
+      // Only V1 heard it correctly
+      status = hasPk || hasV0 ? 'unconfirmed' : 'unavailable';
+    } else if (!v1Correct && pkCorrect) {
+      // V1 wrong but Parakeet correct → disagreed (Pk is strong)
+      status = 'disagreed';
+    } else if (!v1Correct && !pkCorrect && v0Correct) {
+      // V1 wrong, Pk wrong, V0 correct → disagreed (V0 tiebreak)
+      status = 'disagreed';
+    } else if (omitCount >= 2) {
+      // Majority omitted
+      status = 'confirmed';
+    } else if (v1Entry.type === 'substitution') {
+      // V1 has substitution — check if others agree on the wrong word
+      const v1Hyp = (v1Entry.hyp || '').toLowerCase().replace(/[^a-z'-]/g, '');
+      const pkHyp = (pkEntry?.hyp || '').toLowerCase().replace(/[^a-z'-]/g, '');
+      const v0Hyp = (v0Entry?.hyp || '').toLowerCase().replace(/[^a-z'-]/g, '');
+      if ((hasPk && v1Hyp === pkHyp) || (hasV0 && v1Hyp === v0Hyp)) {
+        status = 'confirmed';
+      } else {
+        status = 'disagreed';
       }
     } else {
-      const len = reverbRef.length;
-      for (let ri = 0; ri < len; ri++) {
-        const rEntry = reverbRef[ri];
-        const pEntry = parakeetRef[ri];
+      status = hasPk || hasV0 ? 'unconfirmed' : 'unavailable';
+    }
 
-        if (rEntry.ref !== pEntry.ref) {
-          console.warn(`[xval-ref] Ref word mismatch at index ${ri}: "${rEntry.ref}" vs "${pEntry.ref}"`);
-        }
+    _setCrossValidation(v1Entry, transcriptWords, status, parakeetTs);
 
-        let status;
-        let parakeetTs = _consumeParakeetTimestamp(pEntry, parakeetWords);
+    // Propagate _xvalWord to transcriptWord
+    if (pkEntry?.hyp && v1Entry.hypIndex != null && v1Entry.hypIndex >= 0) {
+      const tw = transcriptWords[v1Entry.hypIndex];
+      if (tw) tw._xvalWord = pkEntry.hyp;
+    }
 
-        if (rEntry.type === 'correct' && pEntry.type === 'correct') {
-          status = 'confirmed';
-        } else if (rEntry.type === 'correct' && pEntry.type !== 'correct') {
-          status = 'confirmed';
-        } else if (rEntry.type === 'substitution' && pEntry.type === 'correct') {
-          status = 'disagreed';
-        } else if (rEntry.type === 'substitution' && pEntry.type === 'substitution') {
-          const normR = rEntry.hyp?.toLowerCase().replace(/[^a-z'-]/g, '') || '';
-          const normP = pEntry.hyp?.toLowerCase().replace(/[^a-z'-]/g, '') || '';
-          status = (normR === normP) ? 'confirmed' : 'disagreed';
-        } else if (rEntry.type === 'omission' && pEntry.type !== 'omission') {
-          status = 'recovered';
-          xvalRecoveredOmissions.push({ refIndex: ri, entry: rEntry, parakeetEntry: pEntry, timestamps: parakeetTs });
-        } else if (rEntry.type !== 'omission' && pEntry.type === 'omission') {
-          status = 'unconfirmed';
-          parakeetTs = null;
-        } else if (rEntry.type === 'omission' && pEntry.type === 'omission') {
-          continue; // Both agree: confirmed omission
-        } else {
-          status = 'unconfirmed';
-        }
+    threeWayTable.push({
+      ref: v1Entry.ref,
+      v1: v1Entry.type === 'correct' ? '✓' : v1Entry.type === 'omission' ? '—' : `✗(${v1Entry.hyp})`,
+      v0: v0Entry ? (v0Type === 'correct' ? '✓' : v0Type === 'omission' ? '—' : `✗(${v0Entry.hyp})`) : 'n/a',
+      pk: pkEntry ? (pkType === 'correct' ? '✓' : pkType === 'omission' ? '—' : `✗(${pkEntry.hyp})`) : 'n/a',
+      status
+    });
+  }
 
-        _setCrossValidation(rEntry, transcriptWords, status, parakeetTs);
-        if (pEntry.hyp) {
-          rEntry._xvalWord = pEntry.hyp;
-          if (rEntry.hypIndex != null && rEntry.hypIndex >= 0) {
-            const tw = transcriptWords[rEntry.hypIndex];
-            if (tw) tw._xvalWord = pEntry.hyp;
-          }
-        }
+  // Store alignments on data for UI rendering
+  data._threeWay = { v1Ref, v0Ref: hasV0 ? v0Ref : null, pkRef: hasPk ? pkRef : null, table: threeWayTable };
+
+  console.table(threeWayTable);
+  const agreed3 = threeWayTable.filter(t => t.v1 === t.pk || t.v1 === t.v0).length;
+  console.log(`[3-way] Agreement: ${agreed3}/${threeWayTable.length}`);
+  addStage('three_way_verdict', {
+    refWords: v1Ref.length,
+    confirmed: threeWayTable.filter(t => t.status === 'confirmed').length,
+    disagreed: threeWayTable.filter(t => t.status === 'disagreed').length,
+    recovered: threeWayTable.filter(t => t.status === 'recovered').length,
+    unconfirmed: threeWayTable.filter(t => t.status === 'unconfirmed').length,
+    confirmedOmissions: threeWayTable.filter(t => t.status === 'confirmed_omission').length,
+    hasV0, hasPk
+  });
+
+  // ── Struggle detection (replaces Path 4) ───────────────────────────
+  // A word is struggle if ultimately correct BUT V1 shows difficulty:
+  //   - V1 used compound merge (fragments combined to correct)
+  //   - V1 had substitution but V0 or Pk had correct (disagreed → corrected)
+  {
+    const compoundStruggles = [];
+    for (const entry of alignment) {
+      // Compound-merged correct words: V1 needed multiple fragments
+      if (entry.type === 'correct' && entry.compound && entry.parts && entry.parts.length >= 2) {
+        entry.type = 'struggle';
+        entry._strugglePath = 'compound_fragments';
+        entry._nearMissEvidence = entry.parts;
+        compoundStruggles.push({ ref: entry.ref, hyp: entry.hyp, parts: entry.parts });
       }
-
-      // Diagnostic: per-reference-word comparison table
-      const table = [];
-      for (let ri = 0; ri < len; ri++) {
-        const r = reverbRef[ri];
-        const p = parakeetRef[ri];
-        table.push({
-          ref: r.ref,
-          reverb: r.type === 'correct' ? '✓' : r.type === 'omission' ? '—' : `✗(${r.hyp})`,
-          parakeet: p.type === 'correct' ? '✓' : p.type === 'omission' ? '—' : `✗(${p.hyp})`,
-          status: r.crossValidation || '?'
-        });
-      }
-      console.table(table);
-      const agreed = table.filter(t => t.reverb === t.parakeet).length;
-      console.log(`[xval-ref] Agreement: ${agreed}/${len} (${(100 * agreed / len).toFixed(0)}%)`);
-      addStage('reference_anchored_xval', {
-        refWords: len,
-        agreed,
-        agreementPct: (100 * agreed / len).toFixed(0) + '%',
-        confirmed: table.filter(t => t.status === 'confirmed').length,
-        disagreed: table.filter(t => t.status === 'disagreed').length,
-        recovered: table.filter(t => t.status === 'recovered').length,
-        unconfirmed: table.filter(t => t.status === 'unconfirmed').length
+    }
+    if (compoundStruggles.length > 0) {
+      addStage('compound_struggle', {
+        count: compoundStruggles.length,
+        entries: compoundStruggles
       });
+      console.log(`[Struggle] Reclassified ${compoundStruggles.length} compound merge(s) as struggle:`,
+        compoundStruggles.map(s => `"${s.ref}" ← [${s.parts.join(', ')}]`));
     }
   }
 
-  // ── Cross-validate insertions (Stage 7) ───────────────────────────
-  // Insertions don't participate in the reference-word comparison.
-  // Match Reverb insertions against Parakeet insertions by normalized text.
+  // ── Disfluency classification (V1 insertions vs V0) ────────────────
+  // V1 insertion present + V0 insertion absent → filler/false-start
+  // V1 insertion present + V0 insertion present → genuine extra word
+  {
+    const v1Insertions = alignment.filter(e => e.type === 'insertion');
+    const v0InsertionNorms = new Set();
+    if (v0Alignment) {
+      for (const e of v0Alignment) {
+        if (e.type === 'insertion' && e.hyp) {
+          v0InsertionNorms.add(e.hyp.toLowerCase().replace(/[^a-z'-]/g, ''));
+        }
+      }
+    }
+
+    const FILLER_WORDS = new Set(['um', 'uh', 'uh-huh', 'mm', 'hmm', 'er', 'ah']);
+    for (const ins of v1Insertions) {
+      if (!ins.hyp) continue;
+      const norm = ins.hyp.toLowerCase().replace(/[^a-z'-]/g, '');
+      const tw = ins.hypIndex >= 0 ? transcriptWords[ins.hypIndex] : null;
+
+      if (FILLER_WORDS.has(norm)) {
+        if (tw) { tw.isDisfluency = true; tw.disfluencyType = 'filler'; }
+      } else if (v0Alignment && !v0InsertionNorms.has(norm)) {
+        // V0 suppressed this word — likely a false start or repetition
+        if (tw) { tw.isDisfluency = true; tw.disfluencyType = 'false_start'; }
+      }
+    }
+  }
+
+  // ── Cross-validate insertions ──────────────────────────────────────
   if (parakeetAlignment) {
     const parakeetInsertions = parakeetAlignment.filter(e => e.type === 'insertion');
     const pInsNorms = new Map();
@@ -1042,7 +920,7 @@ async function runAnalysis() {
       const matches = pInsNorms.get(norm);
       if (matches && matches.length > 0) {
         const match = matches.shift();
-        const ts = _consumeParakeetTimestamp(match, parakeetWords);
+        const ts = _getEngineTimestamp(match, parakeetWords);
         _setCrossValidation(entry, transcriptWords, 'confirmed', ts);
         if (ts) {
           entry._xvalWord = ts.word;
@@ -1073,8 +951,6 @@ async function runAnalysis() {
   }
 
   // ── Flag CTC artifact <unknown> tokens ────────────────────────────
-  // Short (≤200ms) <unknown> overlapping a confirmed word → CTC noise.
-  // Must run AFTER cross-validation sets crossValidation status.
   for (let i = 0; i < transcriptWords.length; i++) {
     const w = transcriptWords[i];
     if (!(typeof w.word === 'string' && w.word.startsWith('<') && w.word.endsWith('>'))) continue;
@@ -1094,9 +970,7 @@ async function runAnalysis() {
     }
   }
 
-  // ── Omission recovery (Stage 4) ──────────────────────────────────
-  // Reference-anchored: when Reverb has omission but Parakeet matched,
-  // the recovered omissions were identified during cross-validation above.
+  // ── Omission recovery ─────────────────────────────────────────────
   const splicePositions = [];
   for (const recovery of xvalRecoveredOmissions) {
     const entry = recovery.entry;
@@ -1113,9 +987,7 @@ async function runAnalysis() {
       _xvalWord: ts.word,
       _reverbStartTime: null,
       _reverbEndTime: null,
-      _recovered: true,
-      isDisfluency: false,
-      disfluencyType: null
+      _recovered: true
     };
 
     const xvStart = parseT(ts.startTime);
@@ -1141,7 +1013,6 @@ async function runAnalysis() {
   }
 
   if (xvalRecoveredOmissions.length > 0) {
-    // Flag last-ref-word recovery (CTC truncation limitation)
     const lastRefIdx = alignment.reduce((acc, e, i) => e.ref != null ? i : acc, -1);
     if (lastRefIdx >= 0 && alignment[lastRefIdx]._recovered) {
       alignment[lastRefIdx]._isLastRefWord = true;
@@ -1150,12 +1021,11 @@ async function runAnalysis() {
       if (recQueue) recQueue.forEach(w => { w._isLastRefWord = true; });
     }
 
-    // Fix stale hypIndex values after splices
     if (splicePositions.length > 0) {
       splicePositions.sort((a, b) => a - b);
       for (const entry of alignment) {
         if (entry.hypIndex == null || entry.hypIndex < 0) continue;
-        if (entry._recovered) continue; // just set above
+        if (entry._recovered) continue;
         let displacement = 0;
         for (const pos of splicePositions) {
           if (pos <= entry.hypIndex + displacement) displacement++;
@@ -1174,13 +1044,11 @@ async function runAnalysis() {
       recoveredCount: recoveredList.length,
       recovered: recoveredList
     });
-    console.log(`[omission-recovery] Recovered ${recoveredList.length} omissions via reference-anchored cross-validation:`,
+    console.log(`[omission-recovery] Recovered ${recoveredList.length} omissions via 3-way cross-validation:`,
       recoveredList.map(r => r.word));
   }
 
-  // Cross-validator abbreviation confirmation (fallback for abbreviation handling).
-  // When Parakeet outputs a word whose period-stripped form matches a substitution's
-  // ref word, reclassify the substitution as correct.
+  // Cross-validator abbreviation confirmation
   const xvalRawWords = data._kitchenSink?.xvalRawWords || [];
   if (xvalRawWords.length > 0) {
     const xvalConfirmedSet = new Set();
@@ -1209,53 +1077,6 @@ async function runAnalysis() {
         count: abbrConfirmed.length,
         confirmed: abbrConfirmed
       });
-      console.log(`[xval-abbr] Confirmed ${abbrConfirmed.length} abbreviation(s) via cross-validator:`,
-        abbrConfirmed.map(c => `${c.ref}/${c.hyp}`));
-    }
-  }
-
-  // ── Path 4: Divergence block struggle reclassification ─────────
-  // Words where the pipeline collapsed multiple fragments into a single
-  // word that matched reference (type=correct) get reclassified as struggle.
-  // Two sources of fragments:
-  //   V2 merged (_v2Merged): V0 clean matched ref, but V1 showed fragments
-  //   V3 merged (_v3Merged): V2-vs-Reference anchor mismatch (e.g. "cone"+"tent" → "content")
-  {
-    const divStruggles = [];
-    for (const entry of alignment) {
-      if (entry.type !== 'correct') continue;
-      if (entry.hypIndex == null || entry.hypIndex < 0) continue;
-      const tw = transcriptWords[entry.hypIndex];
-
-      // Check V2 merge (V0/V1 divergence)
-      const isV2 = tw?._v2Merged && tw._v2OriginalFragments && tw._v2OriginalFragments.length >= 2;
-      // Check V3 merge (V2/Reference divergence)
-      const isV3 = tw?._v3Merged && tw._v3OriginalFragments && tw._v3OriginalFragments.length >= 2;
-
-      if (!isV2 && !isV3) continue;
-
-      const fragments = isV2
-        ? tw._v2OriginalFragments.map(f => f.word)
-        : tw._v3OriginalFragments.map(f => f.word);
-
-      entry.type = 'struggle';
-      entry._strugglePath = 'divergence';
-      entry._nearMissEvidence = fragments;
-      entry._divergenceSource = isV2 ? 'v2' : 'v3';
-      divStruggles.push({
-        ref: entry.ref,
-        hyp: entry.hyp,
-        fragments,
-        source: isV2 ? 'v2' : 'v3'
-      });
-    }
-    if (divStruggles.length > 0) {
-      addStage('divergence_struggle', {
-        count: divStruggles.length,
-        entries: divStruggles
-      });
-      console.log(`[Path 4] Reclassified ${divStruggles.length} divergence block(s) as struggle:`,
-        divStruggles.map(s => `"${s.ref}" ← [${s.fragments.join(', ')}]`));
     }
   }
 
@@ -1681,7 +1502,8 @@ async function runAnalysis() {
       forgiven: a.forgiven,
       partOfForgiven: a.partOfForgiven,
       _strugglePath: a._strugglePath || null,
-      _divergenceSource: a._divergenceSource || null,
+      _v0Word: a._v0Word || null,
+      _v0Type: a._v0Type || null,
       _nearMissEvidence: a._nearMissEvidence || null,
       _abandonedAttempt: a._abandonedAttempt || false,
       _isSelfCorrection: a._isSelfCorrection || false,
@@ -1804,15 +1626,16 @@ async function runAnalysis() {
     diagnostics,
     transcriptWords,
     tierBreakdown,
-    // Prefer Kitchen Sink disfluencyStats (Phase 24) over Phase 14 severity summary
-    data._kitchenSink?.disfluencyStats || null,
+    null,                                   // disfluencySummary (computed from alignment now)
     referenceText,                         // Raw reference text for cosmetic punctuation
     appState.audioBlob || null,            // Audio blob for click-to-play word audio
-    {                                       // Raw STT word lists for transcript view
+    {                                       // Raw STT word lists + 3-way alignment data
       reverbVerbatim: data._kitchenSink?.reverbVerbatimWords || [],
       reverbClean: data._kitchenSink?.reverbCleanWords || [],
       xvalRaw: data._kitchenSink?.xvalRawWords || [],
-      parakeetAlignment: parakeetAlignment || []
+      parakeetAlignment: parakeetAlignment || [],
+      v0Alignment: v0Alignment || [],
+      threeWayTable: threeWayTable || []
     }
   );
 

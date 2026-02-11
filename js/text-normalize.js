@@ -3,7 +3,7 @@
  * Handles case normalization, punctuation stripping, and disfluency filtering.
  */
 
-const DISFLUENCIES = new Set([
+export const DISFLUENCIES = new Set([
   'um', 'uh', 'uh-huh', 'mm', 'hmm', 'er', 'ah'
 ]);
 

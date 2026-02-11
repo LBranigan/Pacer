@@ -16,7 +16,7 @@
  *   Mismatch (graded):        -1.5 × (1 - levenshteinRatio)
  */
 
-import { normalizeText, filterDisfluencies } from './text-normalize.js';
+import { normalizeText, DISFLUENCIES } from './text-normalize.js';
 import { getCanonical } from './word-equivalences.js';
 import { levenshteinRatio } from './nl-api.js';
 
@@ -452,9 +452,15 @@ function scorePair(refWord, hypWord) {
  */
 export function alignWords(referenceText, transcriptWords) {
   const refWords = normalizeText(referenceText);
-  const hypWords = filterDisfluencies(
-    (transcriptWords || []).map(w => normalizeText(w.word)[0]).filter(Boolean)
-  );
+
+  // Build normalized hypothesis words, tracking original indices through disfluency filter.
+  // Raw V1 words include fillers ("uh", "um") that filterDisfluencies strips.
+  // hypIndex must map back to the original transcriptWords position, not the filtered position.
+  const rawNormed = (transcriptWords || [])
+    .map((w, i) => ({ norm: normalizeText(w.word)[0], origIdx: i }))
+    .filter(p => p.norm);
+  const filtered = rawNormed.filter(p => !DISFLUENCIES.has(p.norm));
+  const hypWords = filtered.map(p => p.norm);
 
   if (refWords.length === 0 && hypWords.length === 0) return [];
 
@@ -463,7 +469,7 @@ export function alignWords(referenceText, transcriptWords) {
 
   // Edge cases: one side empty
   if (m === 0) {
-    return hypWords.map((w, idx) => ({ ref: null, hyp: w, type: 'insertion', hypIndex: idx }));
+    return hypWords.map((w, idx) => ({ ref: null, hyp: w, type: 'insertion', hypIndex: filtered[idx].origIdx }));
   }
   if (n === 0) {
     return refWords.map(w => ({ ref: w, hyp: null, type: 'omission', hypIndex: -1 }));
@@ -519,14 +525,14 @@ export function alignWords(referenceText, transcriptWords) {
       const refCanon = getCanonical(refWords[i - 1]).replace(/'/g, '');
       const hypCanon = getCanonical(hypWords[j - 1]).replace(/'/g, '');
       const type = (refCanon === hypCanon) ? 'correct' : 'substitution';
-      result.unshift({ ref: refWords[i - 1], hyp: hypWords[j - 1], type, hypIndex: j - 1 });
+      result.unshift({ ref: refWords[i - 1], hyp: hypWords[j - 1], type, hypIndex: filtered[j - 1].origIdx });
       i--;
       j--;
     } else if (i > 0 && (j === 0 || P[i][j] === 'up')) {
       result.unshift({ ref: refWords[i - 1], hyp: null, type: 'omission', hypIndex: -1 });
       i--;
     } else {
-      result.unshift({ ref: null, hyp: hypWords[j - 1], type: 'insertion', hypIndex: j - 1 });
+      result.unshift({ ref: null, hyp: hypWords[j - 1], type: 'insertion', hypIndex: filtered[j - 1].origIdx });
       j--;
     }
   }

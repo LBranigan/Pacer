@@ -251,7 +251,7 @@ const DIAGNOSTIC_MISCUES = {
 
   struggle: {
     description: 'Substitution+ — student failed to produce the word, with additional evidence of decoding difficulty (long pause, near-miss fragments, and/or abandoned attempt). Always an error.',
-    detector: 'app.js (Path 4: divergence) + diagnostics.js → resolveNearMissClusters() (Path 2: decoding) + detectStruggleWords() (Path 1: hesitation, Path 3: abandoned attempt)',
+    detector: 'app.js (3-way compound struggle) + diagnostics.js → resolveNearMissClusters() (Path 2: decoding) + detectStruggleWords() (Path 1: hesitation, Path 3: abandoned attempt)',
     countsAsError: true, // Struggle = substitution+ = always an error
     config: {
       // Path 1: substitution + pause >= 3s + ref word > 3 chars
@@ -272,7 +272,7 @@ const DIAGNOSTIC_MISCUES = {
       hesitation: 'Path 1: substitution + 3s+ pause before the word → student hesitated then failed',
       decoding: 'Path 2: substitution + near-miss insertions around it → multiple failed decoding attempts',
       abandoned: 'Path 3: substitution + cross-validator N/A + near-miss match → partial/garbled attempt only verbatim STT detected',
-      divergence: 'Path 4: correct + multiple collapsed fragments. Two sources: (a) V2 merge — V0 recovered the word but V1 shows fragments (e.g., "apo-"+"a"+"pe-peal" → "appeal"); (b) V3 merge — V0 and V1 agree on fragments but they don\'t match reference (e.g., "cone"+"tent" → "content"). Both indicate acoustic struggle.'
+      compound_fragments: 'Compound struggle: correct + compound merge with 2+ fragments in V1 alignment (e.g., "spread"+"sheet" → "spreadsheet"). Detected via 3-way independent reference alignment — V1 needed fragment collapsing to match reference, indicating acoustic difficulty.'
     },
     fragmentAbsorption: {
       description: 'When Reverb fragments a single utterance into multiple BPE tokens (e.g., "platforms" → "pla" + "for"), orphan insertions are absorbed into the parent mispronunciation using temporal containment. NOTE: Pre-alignment reference-aware fragment merge (app.js) now handles many of these cases upstream — adjacent short Reverb words whose concatenation matches a reference word are merged before NW alignment. This post-alignment absorption remains as a safety net for cases that escape the pre-merge.',
@@ -281,7 +281,7 @@ const DIAGNOSTIC_MISCUES = {
       tolerance: '150ms on xval timestamp window edges',
       guards: ['Insertion must not already be _isSelfCorrection', 'Uses hypIndex for direct timestamp lookup from transcriptWords', 'Absorbs orphan BPE fragments into parent mispronunciation']
     },
-    note: 'A word can match multiple pathways simultaneously. Paths 1-3 require a substitution base (student said wrong word). Path 4 (divergence) reclassifies correct words where multiple fragments were collapsed — V2 merge (V0/V1 divergence) or V3 merge (V2/Reference divergence). Both represent acoustic evidence of decoding difficulty.'
+    note: 'A word can match multiple pathways simultaneously. Paths 1-3 require a substitution base (student said wrong word). Compound fragments pathway reclassifies correct words where V1 compound merge combined 2+ fragments — detected via independent 3-way reference alignment (V1, V0, Parakeet each aligned to reference separately).'
   },
 
   reverbCtcFailure: {
