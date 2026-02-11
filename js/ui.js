@@ -1600,10 +1600,28 @@ export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, di
       confWordsDiv.appendChild(disagreeRow);
     }
 
+    // ── Three-panel engine comparison with alignment color coding ──
+    // Build lookup from Parakeet alignment for verdict coloring
+    const pAlignment = rawSttSources?.parakeetAlignment || [];
+    const pAlignVerdicts = new Map(); // hypIndex → type
+    for (const e of pAlignment) {
+      if (e.hypIndex != null && e.hypIndex >= 0 && e.hyp) {
+        pAlignVerdicts.set(e.hypIndex, e.type);
+      }
+    }
+
+    // Build lookup from Reverb alignment (already available as `alignment` parameter)
+    const rAlignVerdicts = new Map();
+    for (const e of alignment) {
+      if (e.hypIndex != null && e.hypIndex >= 0 && e.hyp) {
+        rAlignVerdicts.set(e.hypIndex, e.type);
+      }
+    }
+
     const sources = [
-      { label: 'Reverb v1 (verbatim)', words: rawSttSources?.reverbVerbatim || [], cssClass: 'stt-reverb-v1' },
-      { label: 'Reverb v0 (clean)', words: rawSttSources?.reverbClean || [], cssClass: 'stt-reverb-v0' },
-      { label: 'Parakeet', words: rawSttSources?.xvalRaw || [], cssClass: 'stt-parakeet' }
+      { label: 'Parakeet', words: rawSttSources?.xvalRaw || [], cssClass: 'stt-parakeet', verdicts: pAlignVerdicts },
+      { label: 'Reverb v0 (clean)', words: rawSttSources?.reverbClean || [], cssClass: 'stt-reverb-v0', verdicts: null },
+      { label: 'Reverb v1 (verbatim)', words: rawSttSources?.reverbVerbatim || [], cssClass: 'stt-reverb-v1', verdicts: null }
     ];
 
     for (const src of sources) {
@@ -1624,18 +1642,31 @@ export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, di
         emptySpan.textContent = 'No data (service unavailable)';
         wordsRow.appendChild(emptySpan);
       } else {
-        for (const w of src.words) {
+        for (let wi = 0; wi < src.words.length; wi++) {
+          const w = src.words[wi];
           const span = document.createElement('span');
           span.className = 'conf-word ' + src.cssClass;
           const isUnkToken = isSpecialASTToken(w.word);
           span.textContent = isUnkToken ? '?' : w.word;
 
+          // Color coding from alignment verdict
+          if (src.verdicts) {
+            const verdict = src.verdicts.get(wi);
+            if (verdict === 'correct') span.classList.add('stt-verdict-correct');
+            else if (verdict === 'substitution' || verdict === 'struggle') span.classList.add('stt-verdict-error');
+          }
+          // For Reverb V1: highlight disfluencies
+          if (src.cssClass === 'stt-reverb-v1' && w.isDisfluency) {
+            span.classList.add('stt-verdict-disfluency');
+          }
+
           const start = parseSttTime(w.startTime);
           const end = parseSttTime(w.endTime);
           const dur = ((end - start) * 1000).toFixed(0);
+          const verdictLabel = src.verdicts ? (src.verdicts.get(wi) || 'insertion') : '';
           span.dataset.tooltip = isUnkToken
             ? `? — speech detected but not recognized as a word\nDuration: ${dur}ms\n${start.toFixed(2)}s – ${end.toFixed(2)}s`
-            : `"${w.word}"\nDuration: ${dur}ms\n${start.toFixed(2)}s – ${end.toFixed(2)}s`;
+            : `"${w.word}"${verdictLabel ? ' [' + verdictLabel + ']' : ''}\nDuration: ${dur}ms\n${start.toFixed(2)}s – ${end.toFixed(2)}s`;
 
           // Click-to-play word audio
           if (wordAudioEl && start > 0) {
@@ -1664,6 +1695,23 @@ export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, di
 
       row.appendChild(wordsRow);
       confWordsDiv.appendChild(row);
+    }
+
+    // Agreement metric
+    if (pAlignment.length > 0) {
+      const pRef = pAlignment.filter(e => e.type !== 'insertion');
+      const rRef = alignment.filter(e => e.type !== 'insertion');
+      if (pRef.length === rRef.length && pRef.length > 0) {
+        let agree = 0;
+        for (let ai = 0; ai < pRef.length; ai++) {
+          if (pRef[ai].type === rRef[ai].type) agree++;
+        }
+        const agreePct = (100 * agree / pRef.length).toFixed(0);
+        const metricDiv = document.createElement('div');
+        metricDiv.style.cssText = 'font-size:0.75rem;color:#aaa;padding:2px 8px;';
+        metricDiv.textContent = `Agreement: ${agree}/${pRef.length} (${agreePct}%) — Parakeet vs Reverb on reference words`;
+        confWordsDiv.appendChild(metricDiv);
+      }
     }
   }
 

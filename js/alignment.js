@@ -53,6 +53,7 @@ function mergeCompoundWords(alignment) {
             hyp: combined,
             type: 'correct',
             compound: true,
+            hypIndex: current.hypIndex,
             parts: [current.hyp, ...alignment.slice(i + 1, i + 1 + insertionsConsumed).map(a => a.hyp)]
           });
           i += 1 + insertionsConsumed;
@@ -97,6 +98,7 @@ function mergeCompoundWords(alignment) {
               hyp: withSub,
               type: 'correct',
               compound: true,
+              hypIndex: alignment[subIdx].hypIndex,
               parts
             });
             i = subIdx + 1;
@@ -204,6 +206,7 @@ function mergeAbbreviationExpansions(alignment) {
               hyp: parts.join(' '),
               type: 'correct',
               compound: true,
+              hypIndex: current.hypIndex,
               _abbreviationExpansion: true,
               parts
             });
@@ -267,6 +270,7 @@ function mergeAbbreviationExpansions(alignment) {
                 hyp: parts.join(' '),
                 type: 'correct',
                 compound: true,
+                hypIndex: alignment[subIdx].hypIndex,
                 _abbreviationExpansion: true,
                 parts
               });
@@ -345,6 +349,7 @@ function mergeContractions(alignment) {
           hyp: current.hyp,
           type: 'correct',
           compound: true,
+          hypIndex: current.hypIndex,
           _mergedFrom: spaced
         });
         result.push({
@@ -352,6 +357,7 @@ function mergeContractions(alignment) {
           hyp: current.hyp,
           type: 'correct',
           compound: true,
+          hypIndex: current.hypIndex,
           _mergedInto: current.hyp
         });
         i += 2;
@@ -377,6 +383,7 @@ function mergeContractions(alignment) {
           hyp: next.hyp,
           type: 'correct',
           compound: true,
+          hypIndex: next.hypIndex,
           _mergedFrom: spaced
         });
         result.push({
@@ -384,6 +391,7 @@ function mergeContractions(alignment) {
           hyp: next.hyp,
           type: 'correct',
           compound: true,
+          hypIndex: next.hypIndex,
           _mergedInto: next.hyp
         });
         i += 2;
@@ -455,10 +463,10 @@ export function alignWords(referenceText, transcriptWords) {
 
   // Edge cases: one side empty
   if (m === 0) {
-    return hypWords.map(w => ({ ref: null, hyp: w, type: 'insertion' }));
+    return hypWords.map((w, idx) => ({ ref: null, hyp: w, type: 'insertion', hypIndex: idx }));
   }
   if (n === 0) {
-    return refWords.map(w => ({ ref: w, hyp: null, type: 'omission' }));
+    return refWords.map(w => ({ ref: w, hyp: null, type: 'omission', hypIndex: -1 }));
   }
 
   // --- Needleman-Wunsch dynamic programming ---
@@ -511,14 +519,14 @@ export function alignWords(referenceText, transcriptWords) {
       const refCanon = getCanonical(refWords[i - 1]).replace(/'/g, '');
       const hypCanon = getCanonical(hypWords[j - 1]).replace(/'/g, '');
       const type = (refCanon === hypCanon) ? 'correct' : 'substitution';
-      result.unshift({ ref: refWords[i - 1], hyp: hypWords[j - 1], type });
+      result.unshift({ ref: refWords[i - 1], hyp: hypWords[j - 1], type, hypIndex: j - 1 });
       i--;
       j--;
     } else if (i > 0 && (j === 0 || P[i][j] === 'up')) {
-      result.unshift({ ref: refWords[i - 1], hyp: null, type: 'omission' });
+      result.unshift({ ref: refWords[i - 1], hyp: null, type: 'omission', hypIndex: -1 });
       i--;
     } else {
-      result.unshift({ ref: null, hyp: hypWords[j - 1], type: 'insertion' });
+      result.unshift({ ref: null, hyp: hypWords[j - 1], type: 'insertion', hypIndex: j - 1 });
       j--;
     }
   }

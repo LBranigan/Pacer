@@ -210,181 +210,57 @@ export function resolveNearMissClusters(alignment) {
 // ── Fragment Absorption (Temporal Containment) ──────────────────────
 
 /**
- * Absorb Reverb fragments into their parent struggle/substitution.
+ * Absorb BPE fragments of mispronounced words into their parent struggle/substitution.
+ * Simplified version: uses temporal containment only. Substitution entries already
+ * carry Parakeet timestamps from reference-anchored cross-validation (Plan 5),
+ * so no separate cross-engine pairing or xvalRawWords parameter is needed.
  *
- * When Reverb fragments a single utterance (e.g., "platforms" → "pla" + "for"),
- * the alignment creates a struggle for one fragment and an insertion for the other.
- * This function absorbs those orphan insertions using temporal containment:
- * if an insertion's Reverb timestamp falls within the Parakeet word's time window
- * for a nearby struggle, it's part of the same utterance.
- *
- * Also propagates Parakeet timestamps to the struggle's sttWord so the alignment
- * tooltip shows accurate timing data instead of "N/A".
- *
- * Must run AFTER resolveNearMissClusters (which handles text-similarity absorption).
+ * Must run AFTER resolveNearMissClusters (which handles text-similarity absorption)
+ * and AFTER omission recovery (which adjusts hypIndex values).
  *
  * @param {Array} alignment - Alignment entries (mutated in place)
  * @param {Array} transcriptWords - STT words with timestamps
- * @param {Array} xvalRawWords - Raw cross-validator words with timestamps
- * @returns {Array} List of absorbed fragments (for debug logging)
  */
-export function absorbStruggleFragments(alignment, transcriptWords, xvalRawWords) {
-  if (!xvalRawWords || xvalRawWords.length === 0 || !transcriptWords) return [];
+export function absorbMispronunciationFragments(alignment, transcriptWords) {
+  const TOLERANCE_S = 0.15;
+  const MAX_FRAG_LEN = 4;
 
-  const TOLERANCE_S = 0.15; // 150ms tolerance on Parakeet window edges
-  const absorbed = [];
-  const clean = (text) => (text || '').toLowerCase().replace(/[^a-z']/g, '');
-
-  // ── Timestamp offset logging ──
-  // Measure actual Reverb-Parakeet offset from confirmed words to evaluate
-  // whether the fixed 150ms tolerance is adequate. Data-gathering only.
-  const offsets = [];
-  for (const w of transcriptWords) {
-    if (w.crossValidation !== 'confirmed') continue;
-    const reverbStart = parseTime(w._reverbStartTime);
-    const xvalStart = parseTime(w._xvalStartTime);
-    if (reverbStart > 0 && xvalStart > 0) {
-      offsets.push(Math.abs(reverbStart - xvalStart));
-    }
-  }
-  if (offsets.length >= 4) {
-    offsets.sort((a, b) => a - b);
-    const Q1 = offsets[Math.floor(offsets.length * 0.25)];
-    const Q3 = offsets[Math.floor(offsets.length * 0.75)];
-    const IQR = Q3 - Q1;
-    const tukeyFence = Q3 + 1.5 * Math.max(IQR, 0.030);
-    const median = offsets[Math.floor(offsets.length / 2)];
-    const max = offsets[offsets.length - 1];
-    const pct95 = offsets[Math.floor(offsets.length * 0.95)];
-    const wouldExceed150ms = offsets.filter(o => o > 0.15).length;
-    console.log(`[fragment-absorption] Reverb-Parakeet offset distribution (${offsets.length} confirmed words):`,
-      { medianMs: +(median * 1000).toFixed(0), Q1ms: +(Q1 * 1000).toFixed(0), Q3ms: +(Q3 * 1000).toFixed(0),
-        IQRms: +(IQR * 1000).toFixed(0), tukeyFenceMs: +(tukeyFence * 1000).toFixed(0),
-        p95ms: +(pct95 * 1000).toFixed(0), maxMs: +(max * 1000).toFixed(0),
-        wouldExceed150ms, currentTolerance: '150ms' });
-  } else {
-    console.log(`[fragment-absorption] Insufficient confirmed words for offset analysis (${offsets.length})`);
-  }
-
-  // Step 1: For each struggle/substitution, find its matching Parakeet word
-  // by temporal proximity + ref word text match
-  const strugglePairings = []; // { alignIdx, refWord, parakeet: {startS, endS, word}, hypIndex }
-
-  let hypIndex = 0;
+  // Collect substitutions/struggles with their timestamp windows.
+  // _xvalStartTime/_xvalEndTime on alignment entries (set by crossValidateByReference).
+  // _reverbStartTime/_reverbEndTime on transcriptWords (accessed via hypIndex).
+  const subs = [];
   for (let i = 0; i < alignment.length; i++) {
     const entry = alignment[i];
-
-    if (entry.type === 'insertion') {
-      hypIndex += entry.compound && entry.parts ? entry.parts.length : 1;
-      continue;
-    }
-    if (entry.type === 'omission' || entry.type === 'deletion') {
-      continue;
-    }
-
-    // Spoken word (correct, substitution, struggle)
-    if (entry.type === 'struggle' || entry.type === 'substitution') {
-      const tw = transcriptWords[hypIndex];
-      if (tw && entry.ref) {
-        const reverbStartS = parseTime(tw._reverbStartTime || tw.startTime);
-        const refClean = clean(entry.ref);
-
-        // Find the Parakeet word: temporally close + matches ref
-        let bestMatch = null;
-        let bestDist = Infinity;
-        for (const xw of xvalRawWords) {
-          const xwStartS = parseTime(xw.startTime);
-          const xwEndS = parseTime(xw.endTime);
-          if (xwStartS >= xwEndS) continue;
-          const xwClean = clean(xw.word);
-
-          // Reverb start must fall within or near the xval window
-          if (reverbStartS < xwStartS - TOLERANCE_S || reverbStartS > xwEndS + TOLERANCE_S) continue;
-
-          // Word must match ref (exact or near-miss)
-          if (xwClean !== refClean && !isNearMiss(xwClean, refClean)) continue;
-
-          const dist = Math.abs(reverbStartS - xwStartS);
-          if (dist < bestDist) {
-            bestDist = dist;
-            bestMatch = { startS: xwStartS, endS: xwEndS, word: xw.word };
-          }
-        }
-
-        if (bestMatch) {
-          strugglePairings.push({
-            alignIdx: i,
-            refWord: entry.ref,
-            parakeet: bestMatch,
-            hypIndex
-          });
-        }
-      }
-    }
-
-    hypIndex += entry.compound && entry.parts ? entry.parts.length : 1;
+    if (entry.type !== 'substitution' && entry.type !== 'struggle') continue;
+    const tw = (entry.hypIndex != null && entry.hypIndex >= 0) ? transcriptWords[entry.hypIndex] : null;
+    const startS = parseTime(entry._xvalStartTime || tw?._reverbStartTime || tw?.startTime);
+    const endS = parseTime(entry._xvalEndTime || tw?._reverbEndTime || tw?.endTime);
+    if (startS == null || endS == null || startS >= endS) continue;
+    subs.push({ index: i, entry, startS, endS });
   }
 
-  if (strugglePairings.length === 0) return [];
+  if (subs.length === 0) return;
 
-  // Step 2: For each insertion, check if its Reverb timestamp falls within
-  // any struggle's Parakeet word window (temporal containment)
-  hypIndex = 0;
-  for (let i = 0; i < alignment.length; i++) {
-    const entry = alignment[i];
+  // Check each insertion: if it's a short fragment temporally inside a substitution's window, absorb it
+  for (const entry of alignment) {
+    if (entry.type !== 'insertion') continue;
+    if (entry._partOfStruggle || entry._isSelfCorrection) continue;
+    const hyp = entry.hyp || '';
+    if (hyp.replace(/[^a-zA-Z]/g, '').length > MAX_FRAG_LEN) continue;
 
-    if (entry.type === 'insertion' && !entry._partOfStruggle && !entry._isSelfCorrection) {
-      const tw = transcriptWords[hypIndex];
+    if (entry.hypIndex == null || entry.hypIndex < 0) continue;
+    const tw = transcriptWords[entry.hypIndex];
+    if (!tw) continue;
+    const fragStartS = parseTime(tw._reverbStartTime || tw.startTime);
+    if (fragStartS == null) continue;
 
-      if (tw && tw.crossValidation !== 'confirmed') {
-        // Use Reverb timestamp — the actual acoustic position of this fragment
-        const reverbStartS = parseTime(tw._reverbStartTime || tw.startTime);
-
-        for (const pair of strugglePairings) {
-          if (reverbStartS >= pair.parakeet.startS - TOLERANCE_S &&
-              reverbStartS <= pair.parakeet.endS + TOLERANCE_S) {
-            entry._partOfStruggle = true;
-            entry._absorbedByRef = pair.refWord;
-
-            absorbed.push({
-              hyp: entry.hyp,
-              absorbedBy: pair.refWord,
-              parakeetWord: pair.parakeet.word,
-              reverbStartS: +reverbStartS.toFixed(3),
-              parakeetWindow: `${pair.parakeet.startS.toFixed(2)}s-${pair.parakeet.endS.toFixed(2)}s`
-            });
-
-            // Propagate xval timestamps to the struggle's sttWord
-            // so the alignment tooltip shows Parakeet timing instead of "N/A"
-            const struggleTw = transcriptWords[pair.hypIndex];
-            if (struggleTw && struggleTw._xvalStartTime == null) {
-              if (tw._xvalStartTime != null) {
-                struggleTw._xvalStartTime = tw._xvalStartTime;
-                struggleTw._xvalEndTime = tw._xvalEndTime;
-              } else {
-                // Fragment is unconfirmed — use the Parakeet word's timestamps directly
-                struggleTw._xvalStartTime = pair.parakeet.startS + 's';
-                struggleTw._xvalEndTime = pair.parakeet.endS + 's';
-              }
-              struggleTw._xvalWord = pair.parakeet.word;
-              if (tw._xvalEngine) struggleTw._xvalEngine = tw._xvalEngine;
-            }
-
-            break;
-          }
-        }
+    for (const sub of subs) {
+      if (fragStartS >= sub.startS - TOLERANCE_S && fragStartS <= sub.endS + TOLERANCE_S) {
+        entry._partOfStruggle = true;
+        break;
       }
     }
-
-    // Track hypIndex
-    if (entry.type === 'insertion') {
-      hypIndex += entry.compound && entry.parts ? entry.parts.length : 1;
-    } else if (entry.type !== 'omission' && entry.type !== 'deletion') {
-      hypIndex += entry.compound && entry.parts ? entry.parts.length : 1;
-    }
   }
-
-  return absorbed;
 }
 
 // ── DIAG-01: Onset Delays (Hesitations) ─────────────────────────────
@@ -634,6 +510,11 @@ export function detectMorphologicalErrors(alignment, transcriptWords) {
 
         // Use whichever is longer
         const sharedLen = Math.max(prefixLen, suffixLen);
+
+        // Skip 1-character differences (e.g., "formats"/"format", "dog"/"dogs")
+        // — too minor to flag as morphological error
+        const diffLen = Math.abs(ref.length - hyp.length) + (Math.min(ref.length, hyp.length) - sharedLen);
+        if (diffLen <= 1) continue;
 
         if (sharedLen >= 3) {
           const sttWord = transcriptWords?.[hypIndex];

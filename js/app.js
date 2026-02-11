@@ -6,7 +6,7 @@ import { alignWords } from './alignment.js';
 import { getCanonical } from './word-equivalences.js';
 import { computeWCPM, computeAccuracy, computeWCPMRange } from './metrics.js';
 import { setStatus, displayResults, displayAlignmentResults, showAudioPlayback, renderStudentSelector, renderHistory } from './ui.js';
-import { runDiagnostics, computeTierBreakdown, resolveNearMissClusters, absorbStruggleFragments, computePhrasingQuality, computePauseAtPunctuation, computePaceConsistency, computeWordDurationOutliers, computeWordSpeedTiers } from './diagnostics.js';
+import { runDiagnostics, computeTierBreakdown, resolveNearMissClusters, absorbMispronunciationFragments, computePhrasingQuality, computePauseAtPunctuation, computePaceConsistency, computeWordDurationOutliers, computeWordSpeedTiers } from './diagnostics.js';
 import { extractTextFromImage } from './ocr-api.js';
 import { trimPassageToAttempted } from './passage-trimmer.js';
 import { analyzePassageText, levenshteinRatio } from './nl-api.js';
@@ -273,18 +273,6 @@ async function runAnalysis() {
       });
     }
 
-    // Unconsumed cross-validator words (heard by xval but not Reverb — dropped during cross-validation)
-    if (kitchenSinkResult.unconsumedXval?.length > 0) {
-      addStage('xval_unconsumed', {
-        count: kitchenSinkResult.unconsumedXval.length,
-        words: kitchenSinkResult.unconsumedXval.map(w => ({
-          word: w.word,
-          start: w.startTime,
-          end: w.endTime
-        }))
-      });
-    }
-
     // Raw Reverb word lists (before alignment/cross-validation)
     if (kitchenSinkResult.reverb) {
       const rev = kitchenSinkResult.reverb;
@@ -394,7 +382,6 @@ async function runAnalysis() {
       },
       _kitchenSink: {
         disfluencyStats: kitchenSinkResult.disfluencyStats || null,
-        unconsumedXval: kitchenSinkResult.unconsumedXval || [],
         xvalRawWords: kitchenSinkResult.xvalRaw?.words || [],
         reverbVerbatimWords: kitchenSinkResult.reverb?.verbatim?.words || [],
         reverbCleanWords: kitchenSinkResult.reverb?.clean?.words || []
@@ -481,81 +468,63 @@ async function runAnalysis() {
     transcriptWords.push(...expanded);
   }
 
-  // ── Pre-alignment fragment merge ─────────────────────────────────
+  // ── Reference-aware fragment pre-merge ───────────────────────────
   // Reverb BPE sometimes splits a single spoken word into fragments
-  // (e.g., "ideation" → "i" + "d"). Detect adjacent unconfirmed/disagreed
-  // Reverb words whose timestamps fall within the same cross-validator
-  // word's time window, and merge them into a single token before NW
-  // alignment sees them. This prevents orphan insertions and false
-  // substitutions caused by BPE fragmentation.
+  // (e.g., "platforms" → "pla" + "forms"). Detect adjacent short words
+  // whose concatenation matches a reference word, and merge them into a
+  // single token before NW alignment. This prevents NW from scattering
+  // fragments to wrong reference slots.
+  //
+  // Uses normalized reference words as authority — no crossValidation dependency.
   {
-    const TOLERANCE_S = 0.3; // 300ms tolerance for Reverb timestamp jitter
+    const { normalizeText } = await import('./text-normalize.js');
+    const refNormSet = new Set(normalizeText(referenceText).map(w => w.toLowerCase().replace(/[^a-z'-]/g, '')));
+    const MAX_FRAG_LEN = 4;
+    const MAX_GAP_S = 0.3;
     const merged = [];
     let i = 0;
+
     while (i < transcriptWords.length) {
       const w = transcriptWords[i];
+      const wStripped = w.word.replace(/[^a-zA-Z']/g, '');
 
-      // Only try to merge fragments that lack xval confirmation
-      if (w.crossValidation === 'unconfirmed' || w.crossValidation === 'disagreed') {
-        // Look ahead for adjacent fragments sharing the same xval time window
-        // Find an anchor: the first word in the run that has _xvalWord
-        let anchor = null;
-        let anchorIdx = -1;
+      if (wStripped.length <= MAX_FRAG_LEN) {
         const group = [i];
-
-        // Scan forward for fragments that share the same xval window
         for (let j = i + 1; j < transcriptWords.length; j++) {
           const next = transcriptWords[j];
-          const nextXv = next.crossValidation;
-          if (nextXv !== 'unconfirmed' && nextXv !== 'disagreed') break;
-
-          // Check temporal proximity: Reverb timestamps should be close
-          const prevEnd = parseT(transcriptWords[j - 1]._reverbEndTime || transcriptWords[j - 1].endTime);
-          const nextStart = parseT(next._reverbStartTime || next.startTime);
-          if (nextStart - prevEnd > 2.0) break; // too far apart
-
+          const nextStripped = next.word.replace(/[^a-zA-Z']/g, '');
+          if (nextStripped.length > MAX_FRAG_LEN) break;
+          const prevEnd = parseT(transcriptWords[j - 1].endTime);
+          const nextStart = parseT(next.startTime);
+          if (nextStart - prevEnd > MAX_GAP_S) break;
           group.push(j);
         }
 
-        // Find the anchor word (one with _xvalWord) in the group
-        for (const idx of group) {
-          if (transcriptWords[idx]._xvalWord) {
-            anchor = transcriptWords[idx];
-            anchorIdx = idx;
-            break;
+        if (group.length >= 2) {
+          let matched = false;
+          let concat = '';
+          for (let k = 0; k < group.length; k++) {
+            concat += transcriptWords[group[k]].word;
+            const concatNorm = concat.toLowerCase().replace(/[^a-z'-]/g, '');
+            if (k > 0 && refNormSet.has(concatNorm)) {
+              const parts = group.slice(0, k + 1).map(idx => transcriptWords[idx].word);
+              const first = transcriptWords[group[0]];
+              const last = transcriptWords[group[k]];
+              merged.push({
+                ...first,
+                word: concat,
+                endTime: last.endTime,
+                _reverbEndTime: last._reverbEndTime || last.endTime,
+                _mergedFragments: parts,
+                _mergedFrom: 'pre-alignment-fragment-merge'
+              });
+              console.log(`[Fragment Merge] Merged ${parts.length} Reverb fragments: "${parts.join('" + "')}" → "${concat}" (ref match)`);
+              i = group[k] + 1;
+              matched = true;
+              break;
+            }
           }
-        }
-
-        // Only merge if we have 2+ fragments and an anchor with xval data
-        if (group.length >= 2 && anchor) {
-          // Verify all fragments fall within the anchor's xval time window
-          const xvStart = parseT(anchor._xvalStartTime) - TOLERANCE_S;
-          const xvEnd = parseT(anchor._xvalEndTime) + TOLERANCE_S;
-          const inWindow = group.every(idx => {
-            const rStart = parseT(transcriptWords[idx]._reverbStartTime || transcriptWords[idx].startTime);
-            return rStart >= xvStart && rStart <= xvEnd;
-          });
-
-          if (inWindow) {
-            // Merge: concatenate word text, use anchor's xval timestamps
-            const parts = group.map(idx => transcriptWords[idx].word);
-            const mergedWord = parts.join('');
-            const first = transcriptWords[group[0]];
-
-            merged.push({
-              ...anchor,
-              word: mergedWord,
-              startTime: anchor._xvalStartTime || first.startTime,
-              endTime: anchor._xvalEndTime || anchor.endTime,
-              _reverbStartTime: first._reverbStartTime || first.startTime,
-              _reverbEndTime: transcriptWords[group[group.length - 1]]._reverbEndTime || transcriptWords[group[group.length - 1]].endTime,
-              _mergedFragments: parts,
-              _mergedFrom: 'pre-alignment-fragment-merge'
-            });
-            console.log(`[Fragment Merge] Merged ${parts.length} Reverb fragments: "${parts.join('" + "')}" → "${mergedWord}" (xval: "${anchor._xvalWord}")`);
-            i = group[group.length - 1] + 1;
-            continue;
-          }
+          if (matched) continue;
         }
       }
 
@@ -682,27 +651,6 @@ async function runAnalysis() {
     });
   }
 
-  // Flag CTC artifact <unknown> tokens: short (≤200ms) and overlapping a confirmed word.
-  // Data is preserved in transcriptWords for research; flag used by UI to hide from teachers.
-  for (let i = 0; i < transcriptWords.length; i++) {
-    const w = transcriptWords[i];
-    if (!(typeof w.word === 'string' && w.word.startsWith('<') && w.word.endsWith('>'))) continue;
-    const wStart = parseT(w.startTime);
-    const wEnd = parseT(w.endTime);
-    if (wEnd - wStart > 0.12) continue; // single BPE token = 100ms; allow slight float margin
-    for (let j = 0; j < transcriptWords.length; j++) {
-      if (j === i) continue;
-      const o = transcriptWords[j];
-      if (o.crossValidation !== 'confirmed') continue;
-      const oStart = parseT(o.startTime);
-      const oEnd = parseT(o.endTime);
-      if (wStart < oEnd + 0.2 && oStart < wEnd + 0.2) {
-        w._ctcArtifact = true;
-        break;
-      }
-    }
-  }
-
   // Build lookup: normalized hyp word -> queue of STT metadata
   // Key by raw normalized word (NOT canonical) — alignment output uses raw
   // normalizeText() forms, not getCanonical(). Using canonical here caused
@@ -779,104 +727,288 @@ async function runAnalysis() {
     }
   }
 
-  // Recover omissions from unconsumed cross-validator words.
-  // If the cross-validator heard a word that matches an omitted reference word,
-  // the student DID say it — Reverb just missed it. Insert the word
-  // into transcriptWords with cross-validator timestamps so gap calculations
-  // also heal (no false hesitations around recovered words).
-  const unconsumedXv = data._kitchenSink?.unconsumedXval || [];
-  if (unconsumedXv.length > 0) {
-    const _norm = (w) => w.toLowerCase().replace(/[^a-z'-]/g, '');
-    // Build consumable pool
-    const xvPool = unconsumedXv.map(w => ({ ...w, _norm: _norm(w.word) }));
+  // ── Reference-anchored cross-validation (Plan 5) ─────────────────
+  // Align Parakeet independently to the reference text, then compare
+  // per-reference-word verdicts between Reverb and Parakeet alignments.
+  const parakeetWords = data._kitchenSink?.xvalRawWords || [];
+  const parakeetAlignment = parakeetWords.length > 0
+    ? alignWords(referenceText, parakeetWords)
+    : null;
 
-    const recovered = [];
-    for (const entry of alignment) {
-      if (entry.type !== 'omission') continue;
-      const refNorm = _norm(entry.ref);
-      const matchIdx = xvPool.findIndex(xv => xv._norm === refNorm);
-      if (matchIdx === -1) continue;
+  // Helper: get Parakeet timestamps via hypIndex (no text-based queue)
+  function _consumeParakeetTimestamp(parakeetEntry, pWords) {
+    if (!parakeetEntry || parakeetEntry.type === 'omission') return null;
+    if (parakeetEntry.hypIndex == null || parakeetEntry.hypIndex < 0) return null;
+    const pw = pWords[parakeetEntry.hypIndex];
+    if (!pw) return null;
+    return { word: pw.word, startTime: pw.startTime, endTime: pw.endTime };
+  }
 
-      const xvWord = xvPool.splice(matchIdx, 1)[0];
-
-      // Build recovered word with cross-validator timestamps
-      const recoveredWord = {
-        word: xvWord.word,
-        startTime: xvWord.startTime,
-        endTime: xvWord.endTime,
-        crossValidation: 'recovered',
-        _xvalStartTime: xvWord.startTime,
-        _xvalEndTime: xvWord.endTime,
-        _xvalWord: xvWord.word,
-        _xvalEngine: getCrossValidatorEngine(),
-        _reverbStartTime: null,
-        _reverbEndTime: null,
-        _recovered: true,
-        isDisfluency: false,
-        disfluencyType: null
-      };
-
-      // Insert into transcriptWords at correct timestamp position
-      const xvStart = parseT(xvWord.startTime);
-      let insertIdx = transcriptWords.length;
-      for (let i = 0; i < transcriptWords.length; i++) {
-        if (parseT(transcriptWords[i].startTime) > xvStart) {
-          insertIdx = i;
-          break;
+  // Helper: set crossValidation status + timestamps on alignment entry and its transcriptWord
+  function _setCrossValidation(entry, tWords, status, parakeetTs) {
+    entry.crossValidation = status;
+    if (parakeetTs) {
+      entry._xvalStartTime = parakeetTs.startTime;
+      entry._xvalEndTime = parakeetTs.endTime;
+    }
+    if (entry.hypIndex != null && entry.hypIndex >= 0) {
+      const tw = tWords[entry.hypIndex];
+      if (tw) {
+        tw.crossValidation = status;
+        if (parakeetTs) {
+          tw.startTime = parakeetTs.startTime;
+          tw.endTime = parakeetTs.endTime;
+          tw._xvalStartTime = parakeetTs.startTime;
+          tw._xvalEndTime = parakeetTs.endTime;
         }
       }
-      transcriptWords.splice(insertIdx, 0, recoveredWord);
-
-      // Heal alignment: omission → correct
-      entry.type = 'correct';
-      entry.hyp = xvWord.word;
-      entry._recovered = true;
-
-      // Add to sttLookup so tooltip works
-      const lookupKey = xvWord.word.toLowerCase().replace(/^[^\w'-]+|[^\w'-]+$/g, '').replace(/\./g, '');
-      if (!sttLookup.has(lookupKey)) sttLookup.set(lookupKey, []);
-      sttLookup.get(lookupKey).push(recoveredWord);
-
-      recovered.push({
-        word: xvWord.word,
-        start: xvWord.startTime,
-        end: xvWord.endTime,
-        insertedAt: insertIdx
-      });
-    }
-
-    if (recovered.length > 0) {
-      // Flag last-ref-word recoveries — CTC truncation of final words is a known
-      // architectural limitation, not weak evidence, so suppress the (!) badge.
-      const lastRefIdx = alignment.reduce((acc, e, i) => e.ref != null ? i : acc, -1);
-      if (lastRefIdx >= 0 && alignment[lastRefIdx]._recovered) {
-        alignment[lastRefIdx]._isLastRefWord = true;
-        // Also flag the transcriptWords entry so the STT confidence view can see it
-        const recWord = sttLookup.get(alignment[lastRefIdx].hyp?.toLowerCase().replace(/^[^\w'-]+|[^\w'-]+$/g, '').replace(/\./g, ''));
-        if (recWord) recWord.forEach(w => { w._isLastRefWord = true; });
-      }
-
-      addStage('omission_recovery', {
-        recoveredCount: recovered.length,
-        recovered,
-        remainingUnconsumed: xvPool.length
-      });
-      console.log(`[omission-recovery] Recovered ${recovered.length} omissions from unconsumed cross-validator words:`,
-        recovered.map(r => r.word));
     }
   }
 
-  // Cross-validator abbreviation confirmation (fallback for Steps 1-3).
-  // When Parakeet/Deepgram outputs a confirmed word whose period-stripped form
-  // matches a substitution's ref word, reclassify the substitution as correct.
-  // Example: Reverb splits "i.e." → "i"+"e" causing sub("ie"/"e"), but Parakeet
-  // outputs "i.e." as a single confirmed word — we trust Parakeet here.
+  // Core cross-validation: compare per-reference-word verdicts
+  const xvalRecoveredOmissions = [];
+  if (!parakeetAlignment) {
+    // Parakeet unavailable — mark all as unavailable
+    for (const entry of alignment) {
+      if (entry.type === 'insertion') continue;
+      _setCrossValidation(entry, transcriptWords, 'unavailable', null);
+    }
+  } else {
+    const reverbRef = alignment.filter(e => e.type !== 'insertion');
+    const parakeetRef = parakeetAlignment.filter(e => e.type !== 'insertion');
+
+    if (reverbRef.length !== parakeetRef.length) {
+      console.error(`[xval-ref] INVARIANT VIOLATION: ref-entry count mismatch: Reverb=${reverbRef.length}, Parakeet=${parakeetRef.length}. Falling back to unavailable.`);
+      for (const entry of alignment) {
+        if (entry.type === 'insertion') continue;
+        _setCrossValidation(entry, transcriptWords, 'unavailable', null);
+      }
+    } else {
+      const len = reverbRef.length;
+      for (let ri = 0; ri < len; ri++) {
+        const rEntry = reverbRef[ri];
+        const pEntry = parakeetRef[ri];
+
+        if (rEntry.ref !== pEntry.ref) {
+          console.warn(`[xval-ref] Ref word mismatch at index ${ri}: "${rEntry.ref}" vs "${pEntry.ref}"`);
+        }
+
+        let status;
+        let parakeetTs = _consumeParakeetTimestamp(pEntry, parakeetWords);
+
+        if (rEntry.type === 'correct' && pEntry.type === 'correct') {
+          status = 'confirmed';
+        } else if (rEntry.type === 'correct' && pEntry.type !== 'correct') {
+          status = 'confirmed';
+        } else if (rEntry.type === 'substitution' && pEntry.type === 'correct') {
+          status = 'disagreed';
+        } else if (rEntry.type === 'substitution' && pEntry.type === 'substitution') {
+          const normR = rEntry.hyp?.toLowerCase().replace(/[^a-z'-]/g, '') || '';
+          const normP = pEntry.hyp?.toLowerCase().replace(/[^a-z'-]/g, '') || '';
+          status = (normR === normP) ? 'confirmed' : 'disagreed';
+        } else if (rEntry.type === 'omission' && pEntry.type !== 'omission') {
+          status = 'recovered';
+          xvalRecoveredOmissions.push({ refIndex: ri, entry: rEntry, parakeetEntry: pEntry, timestamps: parakeetTs });
+        } else if (rEntry.type !== 'omission' && pEntry.type === 'omission') {
+          status = 'unconfirmed';
+          parakeetTs = null;
+        } else if (rEntry.type === 'omission' && pEntry.type === 'omission') {
+          continue; // Both agree: confirmed omission
+        } else {
+          status = 'unconfirmed';
+        }
+
+        _setCrossValidation(rEntry, transcriptWords, status, parakeetTs);
+        if (pEntry.hyp) {
+          rEntry._xvalWord = pEntry.hyp;
+          if (rEntry.hypIndex != null && rEntry.hypIndex >= 0) {
+            const tw = transcriptWords[rEntry.hypIndex];
+            if (tw) tw._xvalWord = pEntry.hyp;
+          }
+        }
+      }
+
+      // Diagnostic: per-reference-word comparison table
+      const table = [];
+      for (let ri = 0; ri < len; ri++) {
+        const r = reverbRef[ri];
+        const p = parakeetRef[ri];
+        table.push({
+          ref: r.ref,
+          reverb: r.type === 'correct' ? '✓' : r.type === 'omission' ? '—' : `✗(${r.hyp})`,
+          parakeet: p.type === 'correct' ? '✓' : p.type === 'omission' ? '—' : `✗(${p.hyp})`,
+          status: r.crossValidation || '?'
+        });
+      }
+      console.table(table);
+      const agreed = table.filter(t => t.reverb === t.parakeet).length;
+      console.log(`[xval-ref] Agreement: ${agreed}/${len} (${(100 * agreed / len).toFixed(0)}%)`);
+    }
+  }
+
+  // ── Cross-validate insertions (Stage 7) ───────────────────────────
+  // Insertions don't participate in the reference-word comparison.
+  // Match Reverb insertions against Parakeet insertions by normalized text.
+  if (parakeetAlignment) {
+    const parakeetInsertions = parakeetAlignment.filter(e => e.type === 'insertion');
+    const pInsNorms = new Map();
+    for (const ins of parakeetInsertions) {
+      const norm = (ins.hyp || '').toLowerCase().replace(/[^a-z'-]/g, '');
+      if (!pInsNorms.has(norm)) pInsNorms.set(norm, []);
+      pInsNorms.get(norm).push(ins);
+    }
+
+    for (const entry of alignment) {
+      if (entry.type !== 'insertion') continue;
+      if (entry.crossValidation && entry.crossValidation !== 'pending') continue;
+      const norm = (entry.hyp || '').toLowerCase().replace(/[^a-z'-]/g, '');
+      const matches = pInsNorms.get(norm);
+      if (matches && matches.length > 0) {
+        const match = matches.shift();
+        const ts = _consumeParakeetTimestamp(match, parakeetWords);
+        _setCrossValidation(entry, transcriptWords, 'confirmed', ts);
+        if (ts) {
+          entry._xvalWord = ts.word;
+          if (entry.hypIndex != null && entry.hypIndex >= 0) {
+            const tw = transcriptWords[entry.hypIndex];
+            if (tw) tw._xvalWord = ts.word;
+          }
+        }
+      }
+    }
+  }
+
+  // Sweep remaining pending entries as unconfirmed
+  for (const entry of alignment) {
+    if (entry.type !== 'insertion') continue;
+    if (!entry.crossValidation || entry.crossValidation === 'pending') {
+      entry.crossValidation = 'unconfirmed';
+      if (entry.hypIndex != null && entry.hypIndex >= 0) {
+        const tw = transcriptWords[entry.hypIndex];
+        if (tw) tw.crossValidation = 'unconfirmed';
+      }
+    }
+  }
+  for (const w of transcriptWords) {
+    if (w.crossValidation === 'pending') {
+      w.crossValidation = 'unconfirmed';
+    }
+  }
+
+  // ── Flag CTC artifact <unknown> tokens ────────────────────────────
+  // Short (≤200ms) <unknown> overlapping a confirmed word → CTC noise.
+  // Must run AFTER cross-validation sets crossValidation status.
+  for (let i = 0; i < transcriptWords.length; i++) {
+    const w = transcriptWords[i];
+    if (!(typeof w.word === 'string' && w.word.startsWith('<') && w.word.endsWith('>'))) continue;
+    const wStart = parseT(w.startTime);
+    const wEnd = parseT(w.endTime);
+    if (wEnd - wStart > 0.12) continue;
+    for (let j = 0; j < transcriptWords.length; j++) {
+      if (j === i) continue;
+      const o = transcriptWords[j];
+      if (o.crossValidation !== 'confirmed') continue;
+      const oStart = parseT(o.startTime);
+      const oEnd = parseT(o.endTime);
+      if (wStart < oEnd + 0.2 && oStart < wEnd + 0.2) {
+        w._ctcArtifact = true;
+        break;
+      }
+    }
+  }
+
+  // ── Omission recovery (Stage 4) ──────────────────────────────────
+  // Reference-anchored: when Reverb has omission but Parakeet matched,
+  // the recovered omissions were identified during cross-validation above.
+  const splicePositions = [];
+  for (const recovery of xvalRecoveredOmissions) {
+    const entry = recovery.entry;
+    const ts = recovery.timestamps;
+    if (!ts) continue;
+
+    const recoveredWord = {
+      word: ts.word,
+      startTime: ts.startTime,
+      endTime: ts.endTime,
+      crossValidation: 'recovered',
+      _xvalStartTime: ts.startTime,
+      _xvalEndTime: ts.endTime,
+      _xvalWord: ts.word,
+      _reverbStartTime: null,
+      _reverbEndTime: null,
+      _recovered: true,
+      isDisfluency: false,
+      disfluencyType: null
+    };
+
+    const xvStart = parseT(ts.startTime);
+    let insertIdx = transcriptWords.length;
+    for (let k = 0; k < transcriptWords.length; k++) {
+      if (parseT(transcriptWords[k].startTime) > xvStart) {
+        insertIdx = k;
+        break;
+      }
+    }
+    transcriptWords.splice(insertIdx, 0, recoveredWord);
+
+    entry.type = 'correct';
+    entry.hyp = ts.word;
+    entry.hypIndex = insertIdx;
+    entry._recovered = true;
+
+    const lookupKey = ts.word.toLowerCase().replace(/[^a-z'-]/g, '').replace(/\./g, '');
+    if (!sttLookup.has(lookupKey)) sttLookup.set(lookupKey, []);
+    sttLookup.get(lookupKey).push(recoveredWord);
+
+    splicePositions.push(insertIdx);
+  }
+
+  if (xvalRecoveredOmissions.length > 0) {
+    // Flag last-ref-word recovery (CTC truncation limitation)
+    const lastRefIdx = alignment.reduce((acc, e, i) => e.ref != null ? i : acc, -1);
+    if (lastRefIdx >= 0 && alignment[lastRefIdx]._recovered) {
+      alignment[lastRefIdx]._isLastRefWord = true;
+      const recKey = alignment[lastRefIdx].hyp?.toLowerCase().replace(/[^a-z'-]/g, '').replace(/\./g, '');
+      const recQueue = sttLookup.get(recKey);
+      if (recQueue) recQueue.forEach(w => { w._isLastRefWord = true; });
+    }
+
+    // Fix stale hypIndex values after splices
+    if (splicePositions.length > 0) {
+      splicePositions.sort((a, b) => a - b);
+      for (const entry of alignment) {
+        if (entry.hypIndex == null || entry.hypIndex < 0) continue;
+        if (entry._recovered) continue; // just set above
+        let displacement = 0;
+        for (const pos of splicePositions) {
+          if (pos <= entry.hypIndex + displacement) displacement++;
+          else break;
+        }
+        entry.hypIndex += displacement;
+      }
+    }
+
+    const recoveredList = xvalRecoveredOmissions.filter(r => r.timestamps).map(r => ({
+      word: r.timestamps.word,
+      start: r.timestamps.startTime,
+      end: r.timestamps.endTime
+    }));
+    addStage('omission_recovery', {
+      recoveredCount: recoveredList.length,
+      recovered: recoveredList
+    });
+    console.log(`[omission-recovery] Recovered ${recoveredList.length} omissions via reference-anchored cross-validation:`,
+      recoveredList.map(r => r.word));
+  }
+
+  // Cross-validator abbreviation confirmation (fallback for abbreviation handling).
+  // When Parakeet outputs a word whose period-stripped form matches a substitution's
+  // ref word, reclassify the substitution as correct.
   const xvalRawWords = data._kitchenSink?.xvalRawWords || [];
   if (xvalRawWords.length > 0) {
     const xvalConfirmedSet = new Set();
     for (const xw of xvalRawWords) {
       if (xw.word) {
-        // Strip periods and normalize to match ref format (e.g., "i.e." → "ie")
         const stripped = xw.word.toLowerCase().replace(/\./g, '').replace(/[^a-z'-]/g, '');
         if (stripped) xvalConfirmedSet.add(stripped);
       }
@@ -887,12 +1019,7 @@ async function runAnalysis() {
       if (entry.type !== 'substitution' || !entry.ref) continue;
       const refNorm = entry.ref.toLowerCase();
       const hypNorm = (entry.hyp || '').toLowerCase();
-      // Only apply to abbreviation-shaped words: ref is short (≤5 chars like
-      // "ie", "eg", "am", "usa") AND hyp is a single letter/fragment (≤2 chars).
-      // This prevents false matches like "formats"/"format" where ref.includes(hyp)
-      // is true but it's a morphological error, not an abbreviation.
       if (refNorm.length > 5 || hypNorm.length > 2) continue;
-      // Check if the cross-validator confirmed this exact word form
       if (xvalConfirmedSet.has(refNorm)) {
         entry.type = 'correct';
         entry._xvalAbbrConfirmed = true;
@@ -931,16 +1058,13 @@ async function runAnalysis() {
     });
   }
 
-  // Absorb Reverb fragments into their parent struggle/substitution
-  // Uses temporal containment: if a fragment's Reverb timestamp falls within the
-  // Parakeet word's time window for a nearby struggle, it's part of the same utterance.
-  const xvalRawForAbsorption = data._kitchenSink?.xvalRawWords || [];
-  const absorbedFragments = absorbStruggleFragments(alignment, transcriptWords, xvalRawForAbsorption);
-  if (absorbedFragments.length > 0) {
-    addStage('fragment_absorption', {
-      count: absorbedFragments.length,
-      fragments: absorbedFragments
-    });
+  // Absorb BPE fragments of mispronounced words into their parent struggle/substitution.
+  // Uses temporal containment: substitutions already carry Parakeet timestamps from
+  // reference-anchored cross-validation (no separate xvalRawWords needed).
+  absorbMispronunciationFragments(alignment, transcriptWords);
+  const absorbedCount = alignment.filter(e => e._partOfStruggle && e.type === 'insertion').length;
+  if (absorbedCount > 0) {
+    addStage('fragment_absorption', { count: absorbedCount });
   }
 
   // Run diagnostics (includes Path 1: pause struggle via modified detectStruggleWords)
@@ -1461,7 +1585,8 @@ async function runAnalysis() {
     {                                       // Raw STT word lists for transcript view
       reverbVerbatim: data._kitchenSink?.reverbVerbatimWords || [],
       reverbClean: data._kitchenSink?.reverbCleanWords || [],
-      xvalRaw: data._kitchenSink?.xvalRawWords || []
+      xvalRaw: data._kitchenSink?.xvalRawWords || [],
+      parakeetAlignment: parakeetAlignment || []
     }
   );
 

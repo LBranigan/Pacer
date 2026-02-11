@@ -22,7 +22,7 @@
 import { isReverbAvailable, sendToReverbEnsemble } from './reverb-api.js';
 import { alignTranscripts } from './sequence-aligner.js';
 import { tagDisfluencies, computeDisfluencyStats } from './disfluency-tagger.js';
-import { sendToCrossValidator, crossValidateTranscripts, getCrossValidatorEngine } from './cross-validator.js';
+import { sendToCrossValidator, getCrossValidatorEngine } from './cross-validator.js';
 
 // Feature flag stored in localStorage for A/B comparison
 const FEATURE_FLAG_KEY = 'orf_use_kitchen_sink';
@@ -232,12 +232,15 @@ export async function runKitchenSinkPipeline(blob, encoding, sampleRateHertz) {
     taggedAlignment
   );
 
-  // Step 8: Apply cross-validation against cross-validator
-  // Words in both sources are 'confirmed', Reverb-only are 'unconfirmed'
-  const xvalWords = xvalRaw?.words || null;
-  const xvalCrossResult = crossValidateTranscripts(mergedWords, xvalWords);
-  const validatedWords = xvalCrossResult.words;
-  const unconsumedXval = xvalCrossResult.unconsumedXval;
+  // Step 8: Mark words as pending cross-validation.
+  // Reference-anchored cross-validation happens in app.js AFTER alignment,
+  // where both Reverb and Parakeet are independently aligned to the reference text.
+  const validatedWords = mergedWords.map(w => ({
+    ...w,
+    crossValidation: 'pending',
+    _reverbStartTime: w.startTime,
+    _reverbEndTime: w.endTime
+  }));
 
   console.log('[kitchen-sink] Pipeline complete:', {
     verbatimWords: reverb.verbatim.words.length,
@@ -248,7 +251,6 @@ export async function runKitchenSinkPipeline(blob, encoding, sampleRateHertz) {
 
   return {
     words: validatedWords,
-    unconsumedXval: unconsumedXval,
     source: 'kitchen_sink',
     reverb: reverb,
     xvalRaw: xvalRaw,

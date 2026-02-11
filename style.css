@@ -406,6 +406,23 @@ body.dev-mode .dev-mode-toggle {
   color: #7b1fa2;
 }
 
+/* STT Transcript verdict coloring (Plan 5: Reference-Anchored Cross-Validation) */
+.conf-word.stt-verdict-correct {
+  background: #e8f5e9;
+  color: #2e7d32;
+}
+
+.conf-word.stt-verdict-error {
+  background: #ffebee;
+  color: #c62828;
+}
+
+.conf-word.stt-verdict-disfluency {
+  background: #fff3e0;
+  color: #e65100;
+  font-style: italic;
+}
+
 /* Struggle word indicator (DIAG-07)
  * Highlights words where student showed decoding difficulty:
  * 1. Pause/hesitation before word
