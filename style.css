@@ -423,6 +423,98 @@ body.dev-mode .dev-mode-toggle {
   font-style: italic;
 }
 
+/* Reference-Aligned Comparison Table */
+.ref-align-table {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-bottom: 0.5rem;
+}
+
+.ref-align-row {
+  display: flex;
+  align-items: start;
+  gap: 4px;
+}
+
+.ref-align-label {
+  min-width: 70px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #666;
+  padding: 3px 6px;
+  flex-shrink: 0;
+  line-height: 1.8;
+}
+
+.ref-align-label-reverb { color: #1565c0; }
+.ref-align-label-parakeet { color: #7b1fa2; }
+.ref-align-label-verdict { color: #999; font-size: 0.7rem; }
+
+.ref-align-words {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  line-height: 1.8;
+}
+
+.ref-align-cell {
+  display: inline-block;
+  padding: 2px 5px;
+  border-radius: 3px;
+  font-size: 0.85rem;
+  text-align: center;
+  min-width: 28px;
+}
+
+.ref-align-ref {
+  font-weight: 600;
+  color: #444;
+  background: #f5f5f5;
+}
+
+.ref-align-correct {
+  background: #e8f5e9;
+  color: #2e7d32;
+}
+
+.ref-align-sub {
+  background: #ffebee;
+  color: #c62828;
+}
+
+.ref-align-omission {
+  background: #eee;
+  color: #999;
+  border: 1px dashed #ccc;
+  font-style: italic;
+}
+
+.ref-align-verdict {
+  font-size: 0.75rem;
+  min-width: 28px;
+  padding: 1px 5px;
+}
+
+.ref-align-verdict-confirmed { color: #2e7d32; }
+.ref-align-verdict-disagreed { color: #c62828; }
+.ref-align-verdict-recovered { color: #1565c0; }
+.ref-align-verdict-unconfirmed { color: #e65100; }
+
+.ref-align-verdict-row {
+  border-top: 1px solid #eee;
+  padding-top: 1px;
+}
+
+.ref-align-insertions {
+  font-size: 0.8rem;
+  color: #666;
+  padding: 4px 8px;
+  margin-top: 4px;
+  background: #fafafa;
+  border-radius: 3px;
+}
+
 /* Struggle word indicator (DIAG-07)
  * Highlights words where student showed decoding difficulty:
  * 1. Pause/hesitation before word

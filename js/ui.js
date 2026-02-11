@@ -1600,118 +1600,233 @@ export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, di
       confWordsDiv.appendChild(disagreeRow);
     }
 
-    // ── Three-panel engine comparison with alignment color coding ──
-    // Build lookup from Parakeet alignment for verdict coloring
+    // ── Reference-Aligned Comparison Table ──
     const pAlignment = rawSttSources?.parakeetAlignment || [];
-    const pAlignVerdicts = new Map(); // hypIndex → type
-    for (const e of pAlignment) {
-      if (e.hypIndex != null && e.hypIndex >= 0 && e.hyp) {
-        pAlignVerdicts.set(e.hypIndex, e.type);
+    const reverbRef = alignment.filter(e => e.type !== 'insertion');
+    const parakeetRef = pAlignment.filter(e => e.type !== 'insertion');
+    const reverbIns = alignment.filter(e => e.type === 'insertion');
+    const parakeetIns = pAlignment.filter(e => e.type === 'insertion');
+
+    if (parakeetRef.length > 0 && parakeetRef.length === reverbRef.length) {
+      const table = document.createElement('div');
+      table.className = 'ref-align-table';
+
+      // Build column data
+      const cols = [];
+      for (let i = 0; i < reverbRef.length; i++) {
+        const rEntry = reverbRef[i];
+        const pEntry = parakeetRef[i];
+        const refWord = rEntry.ref || pEntry.ref || '?';
+        const rType = rEntry.type; // correct, substitution, omission, struggle
+        const pType = pEntry.type;
+        const rHyp = rType === 'omission' ? null : (rEntry.hyp || null);
+        const pHyp = pType === 'omission' ? null : (pEntry.hyp || null);
+
+        // Derive verdict from crossValidation on alignment entry
+        const xval = rEntry.crossValidation || null;
+
+        cols.push({ refWord, rType, pType, rHyp, pHyp, xval, rEntry, pEntry });
       }
-    }
 
-    // Build lookup from Reverb alignment (already available as `alignment` parameter)
-    const rAlignVerdicts = new Map();
-    for (const e of alignment) {
-      if (e.hypIndex != null && e.hypIndex >= 0 && e.hyp) {
-        rAlignVerdicts.set(e.hypIndex, e.type);
+      // --- Reference row ---
+      const refRow = document.createElement('div');
+      refRow.className = 'ref-align-row';
+      const refLabel = document.createElement('span');
+      refLabel.className = 'ref-align-label';
+      refLabel.textContent = 'Reference';
+      refRow.appendChild(refLabel);
+      const refWords = document.createElement('div');
+      refWords.className = 'ref-align-words';
+      for (const col of cols) {
+        const cell = document.createElement('span');
+        cell.className = 'ref-align-cell ref-align-ref';
+        cell.textContent = col.refWord;
+        refWords.appendChild(cell);
       }
-    }
+      refRow.appendChild(refWords);
+      table.appendChild(refRow);
 
-    const sources = [
-      { label: 'Parakeet', words: rawSttSources?.xvalRaw || [], cssClass: 'stt-parakeet', verdicts: pAlignVerdicts },
-      { label: 'Reverb v0 (clean)', words: rawSttSources?.reverbClean || [], cssClass: 'stt-reverb-v0', verdicts: null },
-      { label: 'Reverb v1 (verbatim)', words: rawSttSources?.reverbVerbatim || [], cssClass: 'stt-reverb-v1', verdicts: null }
-    ];
-
-    for (const src of sources) {
-      const row = document.createElement('div');
-      row.className = 'stt-source-row';
-
-      const labelEl = document.createElement('div');
-      labelEl.className = 'stt-source-label ' + src.cssClass;
-      labelEl.textContent = src.label + ` (${src.words.length})`;
-      row.appendChild(labelEl);
-
-      const wordsRow = document.createElement('div');
-      wordsRow.className = 'stt-source-words';
-
-      if (src.words.length === 0) {
-        const emptySpan = document.createElement('span');
-        emptySpan.className = 'stt-no-data';
-        emptySpan.textContent = 'No data (service unavailable)';
-        wordsRow.appendChild(emptySpan);
-      } else {
-        for (let wi = 0; wi < src.words.length; wi++) {
-          const w = src.words[wi];
-          const span = document.createElement('span');
-          span.className = 'conf-word ' + src.cssClass;
-          const isUnkToken = isSpecialASTToken(w.word);
-          span.textContent = isUnkToken ? '?' : w.word;
-
-          // Color coding from alignment verdict
-          if (src.verdicts) {
-            const verdict = src.verdicts.get(wi);
-            if (verdict === 'correct') span.classList.add('stt-verdict-correct');
-            else if (verdict === 'substitution' || verdict === 'struggle') span.classList.add('stt-verdict-error');
-          }
-          // For Reverb V1: highlight disfluencies
-          if (src.cssClass === 'stt-reverb-v1' && w.isDisfluency) {
-            span.classList.add('stt-verdict-disfluency');
-          }
-
-          const start = parseSttTime(w.startTime);
-          const end = parseSttTime(w.endTime);
-          const dur = ((end - start) * 1000).toFixed(0);
-          const verdictLabel = src.verdicts ? (src.verdicts.get(wi) || 'insertion') : '';
-          span.dataset.tooltip = isUnkToken
-            ? `? — speech detected but not recognized as a word\nDuration: ${dur}ms\n${start.toFixed(2)}s – ${end.toFixed(2)}s`
-            : `"${w.word}"${verdictLabel ? ' [' + verdictLabel + ']' : ''}\nDuration: ${dur}ms\n${start.toFixed(2)}s – ${end.toFixed(2)}s`;
-
-          // Click-to-play word audio
-          if (wordAudioEl && start > 0) {
-            span.classList.add('word-clickable');
-            const playFn = () => {
+      // Helper: build audio play function for a raw STT word array entry
+      const makePlayFn = (sttWords, hypIndex) => {
+        if (!wordAudioEl || hypIndex == null || hypIndex < 0 || !sttWords) return null;
+        const w = sttWords[hypIndex];
+        if (!w) return null;
+        const start = parseSttTime(w.startTime);
+        const end = parseSttTime(w.endTime);
+        if (start <= 0) return null;
+        return () => {
+          wordAudioEl.pause();
+          wordAudioEl.currentTime = start;
+          const onTime = () => {
+            if (wordAudioEl.currentTime >= end) {
               wordAudioEl.pause();
-              wordAudioEl.currentTime = start;
-              const onTime = () => {
-                if (wordAudioEl.currentTime >= end) {
-                  wordAudioEl.pause();
-                  wordAudioEl.removeEventListener('timeupdate', onTime);
-                }
-              };
-              wordAudioEl.addEventListener('timeupdate', onTime);
-              wordAudioEl.play().catch(() => {});
-            };
-            span.addEventListener('click', (e) => { e.stopPropagation(); showWordTooltip(span, playFn); });
-          } else {
-            span.addEventListener('click', (e) => { e.stopPropagation(); showWordTooltip(span, null); });
-          }
+              wordAudioEl.removeEventListener('timeupdate', onTime);
+            }
+          };
+          wordAudioEl.addEventListener('timeupdate', onTime);
+          wordAudioEl.play().catch(() => {});
+        };
+      };
 
-          wordsRow.appendChild(span);
-          wordsRow.appendChild(document.createTextNode(' '));
+      const reverbVerbatim = rawSttSources?.reverbVerbatim || [];
+      const xvalRaw = rawSttSources?.xvalRaw || [];
+
+      // --- Reverb row ---
+      const rRow = document.createElement('div');
+      rRow.className = 'ref-align-row';
+      const rLabel = document.createElement('span');
+      rLabel.className = 'ref-align-label ref-align-label-reverb';
+      rLabel.textContent = 'Reverb';
+      rRow.appendChild(rLabel);
+      const rWords = document.createElement('div');
+      rWords.className = 'ref-align-words';
+      for (const col of cols) {
+        const cell = document.createElement('span');
+        cell.className = 'ref-align-cell';
+        if (col.rType === 'omission') {
+          cell.classList.add('ref-align-omission');
+          cell.textContent = '\u2014'; // em-dash
+          cell.dataset.tooltip = `Reverb: omitted "${col.refWord}"`;
+        } else if (col.rType === 'correct') {
+          cell.classList.add('ref-align-correct');
+          cell.textContent = col.rHyp;
+          cell.dataset.tooltip = `Reverb: correct "${col.rHyp}"`;
+        } else {
+          cell.classList.add('ref-align-sub');
+          cell.textContent = col.rHyp || '?';
+          cell.dataset.tooltip = `Reverb: heard "${col.rHyp}" (expected "${col.refWord}") [${col.rType}]`;
         }
+        // Click-to-play from Reverb verbatim timestamps
+        const rPlayFn = makePlayFn(reverbVerbatim, col.rEntry.hypIndex);
+        if (rPlayFn) {
+          cell.classList.add('word-clickable');
+          cell.addEventListener('click', (e) => { e.stopPropagation(); showWordTooltip(cell, rPlayFn); });
+        } else {
+          cell.addEventListener('click', (e) => { e.stopPropagation(); showWordTooltip(cell, null); });
+        }
+        rWords.appendChild(cell);
+      }
+      rRow.appendChild(rWords);
+      table.appendChild(rRow);
+
+      // --- Parakeet row ---
+      const pRow = document.createElement('div');
+      pRow.className = 'ref-align-row';
+      const pLabel = document.createElement('span');
+      pLabel.className = 'ref-align-label ref-align-label-parakeet';
+      pLabel.textContent = 'Parakeet';
+      pRow.appendChild(pLabel);
+      const pWords = document.createElement('div');
+      pWords.className = 'ref-align-words';
+      for (const col of cols) {
+        const cell = document.createElement('span');
+        cell.className = 'ref-align-cell';
+        if (col.pType === 'omission') {
+          cell.classList.add('ref-align-omission');
+          cell.textContent = '\u2014';
+          cell.dataset.tooltip = `Parakeet: omitted "${col.refWord}"`;
+        } else if (col.pType === 'correct') {
+          cell.classList.add('ref-align-correct');
+          cell.textContent = col.pHyp;
+          cell.dataset.tooltip = `Parakeet: correct "${col.pHyp}"`;
+        } else {
+          cell.classList.add('ref-align-sub');
+          cell.textContent = col.pHyp || '?';
+          cell.dataset.tooltip = `Parakeet: heard "${col.pHyp}" (expected "${col.refWord}") [${col.pType}]`;
+        }
+        // Click-to-play from Parakeet/xval timestamps
+        const pPlayFn = makePlayFn(xvalRaw, col.pEntry.hypIndex);
+        if (pPlayFn) {
+          cell.classList.add('word-clickable');
+          cell.addEventListener('click', (e) => { e.stopPropagation(); showWordTooltip(cell, pPlayFn); });
+        } else {
+          cell.addEventListener('click', (e) => { e.stopPropagation(); showWordTooltip(cell, null); });
+        }
+        pWords.appendChild(cell);
+      }
+      pRow.appendChild(pWords);
+      table.appendChild(pRow);
+
+      // --- Verdict row ---
+      const vRow = document.createElement('div');
+      vRow.className = 'ref-align-row ref-align-verdict-row';
+      const vLabel = document.createElement('span');
+      vLabel.className = 'ref-align-label ref-align-label-verdict';
+      vLabel.textContent = 'Verdict';
+      vRow.appendChild(vLabel);
+      const vWords = document.createElement('div');
+      vWords.className = 'ref-align-words';
+      for (const col of cols) {
+        const cell = document.createElement('span');
+        cell.className = 'ref-align-cell ref-align-verdict';
+        const v = col.xval;
+        if (v === 'confirmed') {
+          cell.classList.add('ref-align-verdict-confirmed');
+          cell.textContent = '\u2713'; // checkmark
+          cell.dataset.tooltip = 'Confirmed — both engines agree';
+        } else if (v === 'disagreed') {
+          cell.classList.add('ref-align-verdict-disagreed');
+          cell.textContent = '\u2717'; // X mark
+          cell.dataset.tooltip = 'Disagreed — engines heard different words';
+        } else if (v === 'recovered') {
+          cell.classList.add('ref-align-verdict-recovered');
+          cell.textContent = '\u21bb'; // clockwise arrow
+          cell.dataset.tooltip = 'Recovered — Parakeet heard it, Reverb missed it';
+        } else if (v === 'unconfirmed') {
+          cell.classList.add('ref-align-verdict-unconfirmed');
+          cell.textContent = '?';
+          cell.dataset.tooltip = 'Unconfirmed — Reverb only, Parakeet missed it';
+        } else {
+          cell.textContent = '\u00b7'; // middle dot
+          cell.dataset.tooltip = v || 'No verdict';
+        }
+        cell.addEventListener('click', (e) => { e.stopPropagation(); showWordTooltip(cell, null); });
+        vWords.appendChild(cell);
+      }
+      vRow.appendChild(vWords);
+      table.appendChild(vRow);
+
+      confWordsDiv.appendChild(table);
+
+      // --- Insertions summary ---
+      if (reverbIns.length > 0 || parakeetIns.length > 0) {
+        const insDiv = document.createElement('div');
+        insDiv.className = 'ref-align-insertions';
+        if (reverbIns.length > 0) {
+          const rLabel = document.createElement('strong');
+          rLabel.textContent = 'Reverb insertions: ';
+          insDiv.appendChild(rLabel);
+          insDiv.appendChild(document.createTextNode(reverbIns.map(e => e.hyp).join(', ')));
+        }
+        if (parakeetIns.length > 0) {
+          if (reverbIns.length > 0) insDiv.appendChild(document.createTextNode('  \u00b7  '));
+          const pLabel = document.createElement('strong');
+          pLabel.textContent = 'Parakeet insertions: ';
+          insDiv.appendChild(pLabel);
+          insDiv.appendChild(document.createTextNode(parakeetIns.map(e => e.hyp).join(', ')));
+        }
+        confWordsDiv.appendChild(insDiv);
       }
 
-      row.appendChild(wordsRow);
-      confWordsDiv.appendChild(row);
-    }
-
-    // Agreement metric
-    if (pAlignment.length > 0) {
-      const pRef = pAlignment.filter(e => e.type !== 'insertion');
-      const rRef = alignment.filter(e => e.type !== 'insertion');
-      if (pRef.length === rRef.length && pRef.length > 0) {
-        let agree = 0;
-        for (let ai = 0; ai < pRef.length; ai++) {
-          if (pRef[ai].type === rRef[ai].type) agree++;
-        }
-        const agreePct = (100 * agree / pRef.length).toFixed(0);
-        const metricDiv = document.createElement('div');
-        metricDiv.style.cssText = 'font-size:0.75rem;color:#aaa;padding:2px 8px;';
-        metricDiv.textContent = `Agreement: ${agree}/${pRef.length} (${agreePct}%) — Parakeet vs Reverb on reference words`;
-        confWordsDiv.appendChild(metricDiv);
+      // --- Agreement metric ---
+      let agree = 0;
+      for (let ai = 0; ai < reverbRef.length; ai++) {
+        if (parakeetRef[ai].type === reverbRef[ai].type) agree++;
       }
+      const agreePct = (100 * agree / reverbRef.length).toFixed(0);
+      const metricDiv = document.createElement('div');
+      metricDiv.style.cssText = 'font-size:0.75rem;color:#aaa;padding:2px 8px;';
+      metricDiv.textContent = `Agreement: ${agree}/${reverbRef.length} (${agreePct}%) — Parakeet vs Reverb on reference words`;
+      confWordsDiv.appendChild(metricDiv);
+
+    } else {
+      // Fallback: no Parakeet alignment or length mismatch — show simple message
+      const fallback = document.createElement('div');
+      fallback.className = 'stt-no-data';
+      fallback.textContent = parakeetRef.length === 0
+        ? 'Reference-aligned comparison unavailable (no Parakeet alignment data)'
+        : `Reference-aligned comparison unavailable (length mismatch: Reverb ${reverbRef.length} vs Parakeet ${parakeetRef.length})`;
+      confWordsDiv.appendChild(fallback);
     }
   }
 
