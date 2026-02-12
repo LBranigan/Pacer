@@ -675,32 +675,21 @@ function renderNewAnalyzedWords(container, alignment, sttLookup, diagnostics, tr
     return fmtTs(tw.startTime, tw.endTime);
   }
 
-  // Helper: append a timestamp annotation span
-  function appendTs(parent, tsText) {
-    if (!tsText) return;
-    const ts = document.createElement('span');
-    ts.className = 'word-ts';
-    ts.textContent = tsText;
-    parent.appendChild(ts);
-  }
-
   // Helper: render a small insertion fragment span
   function renderFragment(parent, ins, extraClass) {
-    const wrap = document.createElement('span');
-    wrap.className = 'word-fragment-wrap';
     const frag = document.createElement('span');
     frag.className = 'word-fragment' + (extraClass ? ' ' + extraClass : '');
     frag.textContent = ins.hyp;
+    const fragTs = getWordTs(ins.hypIndex);
     frag.dataset.tooltip = `Insertion: "${ins.hyp}"` +
       (ins._partOfStruggle ? ' (part of struggle)' : '') +
-      (ins._isSelfCorrection ? ' (self-correction)' : '');
+      (ins._isSelfCorrection ? ' (self-correction)' : '') +
+      (fragTs ? '\n' + fragTs : '');
     frag.style.cursor = 'pointer';
     const playFn = makePlayFn(ins.hypIndex);
     if (playFn) frag.classList.add('word-clickable');
     frag.addEventListener('click', (e) => { e.stopPropagation(); showWordTooltip(frag, playFn); });
-    wrap.appendChild(frag);
-    appendTs(wrap, getWordTs(ins.hypIndex));
-    parent.appendChild(wrap);
+    parent.appendChild(frag);
   }
 
   let refIdx = 0;
@@ -794,6 +783,13 @@ function renderNewAnalyzedWords(container, alignment, sttLookup, diagnostics, tr
         tip.push(`VAD during pause: ${p._vadAnalysis.speechPercent}% speech (${p._vadAnalysis.label})`);
       }
     }
+    // Timestamps in tooltip
+    const v1Ts = getWordTs(entry.hypIndex);
+    const tw = (entry.hypIndex >= 0 && transcriptWords?.[entry.hypIndex]) ? transcriptWords[entry.hypIndex] : null;
+    const xvalTs = (tw && tw._xvalStartTime) ? fmtTs(tw._xvalStartTime, tw._xvalEndTime) : '';
+    if (v1Ts) tip.push(`V1 time: ${v1Ts}`);
+    if (xvalTs && xvalTs !== v1Ts) tip.push(`Pk time: ${xvalTs}`);
+
     span.dataset.tooltip = tip.join('\n');
     span.style.cursor = 'pointer';
 
@@ -814,28 +810,7 @@ function renderNewAnalyzedWords(container, alignment, sttLookup, diagnostics, tr
     if (playFn) span.classList.add('word-clickable');
     span.addEventListener('click', (e) => { e.stopPropagation(); showWordTooltip(span, playFn); });
 
-    // Wrap word + timestamp in inline-block container
-    const wordWrap = document.createElement('span');
-    wordWrap.className = 'word-wrap';
-    wordWrap.appendChild(span);
-
-    // V1 (Reverb) timestamp
-    const v1Ts = getWordTs(entry.hypIndex);
-    // Xval (Parakeet) timestamp
-    const tw = (entry.hypIndex >= 0 && transcriptWords?.[entry.hypIndex]) ? transcriptWords[entry.hypIndex] : null;
-    const xvalTs = (tw && tw._xvalStartTime) ? fmtTs(tw._xvalStartTime, tw._xvalEndTime) : '';
-
-    if (v1Ts || xvalTs) {
-      const tsDiv = document.createElement('span');
-      tsDiv.className = 'word-ts';
-      const parts = [];
-      if (v1Ts) parts.push(v1Ts);
-      if (xvalTs && xvalTs !== v1Ts) parts.push('pk:' + xvalTs);
-      tsDiv.textContent = parts.join(' ');
-      wordWrap.appendChild(tsDiv);
-    }
-
-    wordsDiv.appendChild(wordWrap);
+    wordsDiv.appendChild(span);
 
     // ── Insertion fragments after (trailing fragments) ──
     for (const ins of insertionsAfter) renderFragment(wordsDiv, ins, 'word-fragment-after');
