@@ -508,7 +508,9 @@ function renderNewAnalyzedWords(container, alignment, sttLookup, diagnostics, tr
     for (const ins of groups[i].insertionsBefore) {
       const insN = norm(ins.hyp);
       const prevN = norm(ins._prevRef);
-      if (insN.length >= 2 && thisRefN.startsWith(insN)) {
+      if (ins._partOfStruggle) {
+        keep.push(ins);                                  // struggle evidence — stays with target
+      } else if (insN.length >= 2 && thisRefN.startsWith(insN)) {
         keep.push(ins);                                  // false start for this word
       } else if (prevN === prevRefN) {
         groups[i - 1].insertionsAfter.push(ins);         // trailing fragment of prev word
