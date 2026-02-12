@@ -78,8 +78,8 @@ const REVERB_DISFLUENCY_MISCUES = {
       spoken: 'the um cat sat',
       result: '"um" detected as filler — V1 insertion or pre-filtered word matched FILLER_WORDS set'
     },
-    uiClass: 'word-disfluency',
-    note: 'Two detection paths: (1) V1 alignment insertion matching FILLER_WORDS → isDisfluency=true. (2) Pre-filtered fillers stripped by alignment.js DISFLUENCIES before NW alignment, then re-injected as insertion entries with _preFilteredDisfluency flag after merge pipeline. Both paths tag transcriptWords[idx].isDisfluency=true. UI renders disfluency fragments with .word-disfluency class (purple). False starts (partial words) are handled separately by the near-miss/self-correction system in diagnostics.js.'
+    uiClass: 'word-fragment',
+    note: 'Two detection paths: (1) V1 alignment insertion matching FILLER_WORDS → isDisfluency=true. (2) Pre-filtered fillers stripped by alignment.js DISFLUENCIES before NW alignment, then re-injected as insertion entries with _preFilteredDisfluency flag after merge pipeline. Both paths tag transcriptWords[idx].isDisfluency=true. UI renders all fragments (fillers and non-fillers) with same .word-fragment styling. isDisfluency flag still used internally for insertion count exclusion in diagnostics.js.'
   }
 };
 
