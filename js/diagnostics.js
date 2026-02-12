@@ -250,13 +250,17 @@ export function resolveNearMissClusters(alignment) {
   // For insertions not claimed by the individual pass above, try concatenating
   // runs of consecutive insertions around a substitution/struggle and check
   // isNearMiss on the combined form (e.g., "var"+"all" vs "overall").
+  // Also handles self-correction: fragments before a correct word where the
+  // combined insertion form is near-miss of the ref (student fragmented then got it right).
   for (let i = 0; i < alignment.length; i++) {
     const entry = alignment[i];
-    if (entry.type !== 'substitution' && entry.type !== 'struggle') continue;
+    const isSub = entry.type === 'substitution' || entry.type === 'struggle';
+    const isCorrect = entry.type === 'correct';
+    if (!isSub && !isCorrect) continue;
     const refClean = clean(entry.ref);
     if (refClean.length < 3) continue;
 
-    // Collect unclaimed consecutive insertions immediately before this sub
+    // Collect unclaimed consecutive insertions immediately before this entry
     const beforeIns = [];
     for (let j = i - 1; j >= 0; j--) {
       const e = alignment[j];
@@ -268,32 +272,47 @@ export function resolveNearMissClusters(alignment) {
       if (beforeIns.length >= 3) break;
     }
 
-    // Collect unclaimed consecutive insertions immediately after this sub
+    // Collect unclaimed consecutive insertions immediately after this entry
+    // (only for substitution/struggle — self-corrections are about fragments *before* the correct word)
     const afterIns = [];
-    for (let j = i + 1; j < alignment.length; j++) {
-      const e = alignment[j];
-      if (e.type !== 'insertion') break;
-      if (e._partOfStruggle || e._isSelfCorrection) break;
-      const ch = clean(e.hyp);
-      if (ch.length < 2) break;
-      afterIns.push(e);
-      if (afterIns.length >= 3) break;
+    if (isSub) {
+      for (let j = i + 1; j < alignment.length; j++) {
+        const e = alignment[j];
+        if (e.type !== 'insertion') break;
+        if (e._partOfStruggle || e._isSelfCorrection) break;
+        const ch = clean(e.hyp);
+        if (ch.length < 2) break;
+        afterIns.push(e);
+        if (afterIns.length >= 3) break;
+      }
     }
 
     if (beforeIns.length === 0 && afterIns.length === 0) continue;
 
-    const combined = [...beforeIns.map(e => clean(e.hyp)), clean(entry.hyp), ...afterIns.map(e => clean(e.hyp))].join('');
-    // Reject if combined is much longer than reference (prevents spurious matches)
-    if (combined.length > refClean.length * 2) continue;
-
-    if (isNearMiss(combined, entry.ref)) {
-      for (const ins of [...beforeIns, ...afterIns]) {
-        ins._partOfStruggle = true;
-        ins._nearMissTarget = entry.ref;
-        if (!entry._nearMissEvidence) entry._nearMissEvidence = [];
-        entry._nearMissEvidence.push(ins.hyp);
+    if (isSub) {
+      // Struggle/substitution: combine insertions + sub hyp vs ref
+      const combined = [...beforeIns.map(e => clean(e.hyp)), clean(entry.hyp), ...afterIns.map(e => clean(e.hyp))].join('');
+      if (combined.length > refClean.length * 2) continue;
+      if (isNearMiss(combined, entry.ref)) {
+        for (const ins of [...beforeIns, ...afterIns]) {
+          ins._partOfStruggle = true;
+          ins._nearMissTarget = entry.ref;
+          if (!entry._nearMissEvidence) entry._nearMissEvidence = [];
+          entry._nearMissEvidence.push(ins.hyp);
+        }
+        entry._concatAttempt = combined;
       }
-      entry._concatAttempt = combined;
+    } else {
+      // Self-correction: combine insertions only (correct word already matches ref)
+      const combined = beforeIns.map(e => clean(e.hyp)).join('');
+      if (combined.length > refClean.length * 2) continue;
+      if (isNearMiss(combined, entry.ref)) {
+        for (const ins of beforeIns) {
+          ins._isSelfCorrection = true;
+          ins._nearMissTarget = entry.ref;
+          ins._concatSelfCorrection = combined;
+        }
+      }
     }
   }
 
