@@ -759,10 +759,17 @@ function renderNewAnalyzedWords(container, alignment, sttLookup, diagnostics, tr
     }
 
     // ── Insertion fragments before (false starts) ──
-    for (const ins of insertionsBefore) {
-      if (ins.hypIndex >= 0 && transcriptWords?.[ins.hypIndex]?._preWordArtifact) continue;
-      if (ins.hypIndex >= 0 && transcriptWords?.[ins.hypIndex]?._postWordArtifact) continue;
-      renderFragment(wordsDiv, ins);
+    // Filter to visible fragments first
+    const visibleInsBefore = insertionsBefore.filter(ins => {
+      if (ins.hypIndex >= 0 && transcriptWords?.[ins.hypIndex]?._preWordArtifact) return false;
+      if (ins.hypIndex >= 0 && transcriptWords?.[ins.hypIndex]?._postWordArtifact) return false;
+      return true;
+    });
+    if (visibleInsBefore.length > 0) {
+      // Add extra gap before fragments to separate from previous word
+      wordsDiv.appendChild(document.createTextNode('\u2004'));  // three-per-em space
+      for (const ins of visibleInsBefore) renderFragment(wordsDiv, ins);
+      // No space between last fragment and main word — they belong together
     }
 
     // ── Main word span ──
@@ -873,9 +880,14 @@ function renderNewAnalyzedWords(container, alignment, sttLookup, diagnostics, tr
     wordsDiv.appendChild(span);
 
     // ── Insertion fragments after (trailing fragments) ──
-    for (const ins of insertionsAfter) {
-      if (ins.hypIndex >= 0 && transcriptWords?.[ins.hypIndex]?._postWordArtifact) continue;
-      renderFragment(wordsDiv, ins, 'word-fragment-after');
+    const visibleInsAfter = insertionsAfter.filter(ins => {
+      if (ins.hypIndex >= 0 && transcriptWords?.[ins.hypIndex]?._postWordArtifact) return false;
+      return true;
+    });
+    for (const ins of visibleInsAfter) renderFragment(wordsDiv, ins, 'word-fragment-after');
+    // Add extra gap after trailing fragments to separate from next word
+    if (visibleInsAfter.length > 0) {
+      wordsDiv.appendChild(document.createTextNode('\u2004'));  // three-per-em space
     }
 
     wordsDiv.appendChild(document.createTextNode(' '));

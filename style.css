@@ -1263,15 +1263,13 @@ body.dev-mode .dev-mode-toggle {
   color: #7b1fa2;
   font-style: italic;
   vertical-align: super;
-  margin-left: 4px;
-  margin-right: -2px;
+  margin: 0 0 0 1px;
   padding: 1px 3px;
   background: #f3e5f5;
   border-radius: 3px;
   cursor: pointer;
 }
 .word-fragment-after {
-  margin-left: -2px;
-  margin-right: 4px;
+  margin: 0 1px 0 0;
 }
 
