@@ -1,4 +1,4 @@
-import { recomputeWordSpeedWithPauses } from './diagnostics.js';
+import { recomputeWordSpeedWithPauses, isNearMiss } from './diagnostics.js';
 
 export function setStatus(msg) {
   document.getElementById('status').textContent = msg;
@@ -452,12 +452,310 @@ function parseSttTime(t) {
   return parseFloat(String(t).replace('s', '')) || 0;
 }
 
+/**
+ * Render new analyzed words section with bucketed classification.
+ *
+ * Buckets (in display order):
+ *   correct              — green:  all engines agree
+ *   struggle-correct     — light green:  student got it but showed difficulty (false start, compound fragments)
+ *   omitted              — gray:   no engine heard the word
+ *   attempted-struggled  — orange: at least one engine heard the correct word, but V1 failed
+ *   definite-struggle    — red:    no engine produced the correct word, V1 hyp is near-miss
+ *   confirmed-substitution — blue: all engines agree on same unrelated wrong word
+ */
+function renderNewAnalyzedWords(container, alignment, sttLookup, diagnostics, transcriptWords, referenceText, wordAudioEl, rawSttSources) {
+  container.innerHTML = '';
+  const norm = (s) => (s || '').toLowerCase().replace(/[^a-z]/g, '');
+
+  // ── 1. Group ref entries with their V1 insertions ──────────────────────
+  const groups = [];
+  let pendingInsertions = [];
+  for (const entry of alignment) {
+    if (entry.type === 'insertion') {
+      pendingInsertions.push(entry);
+    } else {
+      groups.push({ entry, insertionsBefore: pendingInsertions, insertionsAfter: [] });
+      pendingInsertions = [];
+    }
+  }
+  if (groups.length > 0 && pendingInsertions.length > 0) {
+    groups[groups.length - 1].insertionsAfter = pendingInsertions;
+  }
+
+  // Reassign trailing insertions to their semantic parent via _prevRef.
+  // Rule: if an insertion is a prefix of the NEXT ref word, keep it (false start).
+  //        Otherwise if _prevRef matches the PREVIOUS ref, move it (trailing fragment).
+  for (let i = 1; i < groups.length; i++) {
+    const prevRefN = norm(groups[i - 1].entry.ref);
+    const thisRefN = norm(groups[i].entry.ref);
+    const keep = [];
+    for (const ins of groups[i].insertionsBefore) {
+      const insN = norm(ins.hyp);
+      const prevN = norm(ins._prevRef);
+      if (insN.length >= 2 && thisRefN.startsWith(insN)) {
+        keep.push(ins);                                  // false start for this word
+      } else if (prevN === prevRefN) {
+        groups[i - 1].insertionsAfter.push(ins);         // trailing fragment of prev word
+      } else {
+        keep.push(ins);
+      }
+    }
+    groups[i].insertionsBefore = keep;
+  }
+
+  // ── 2. Diagnostic maps ─────────────────────────────────────────────────
+  const onsetMap = new Map();
+  if (diagnostics?.onsetDelays) {
+    for (const d of diagnostics.onsetDelays) onsetMap.set(d.wordIndex, d);
+  }
+  const pauseBeforeMap = new Map();
+  if (diagnostics?.longPauses) {
+    for (const p of diagnostics.longPauses) {
+      for (const g of groups) {
+        if (g.entry.hypIndex > p.afterWordIndex && g.entry.type !== 'omission') {
+          pauseBeforeMap.set(g.entry.hypIndex, p);
+          break;
+        }
+      }
+    }
+  }
+
+  // Cosmetic punctuation map (mirrors normalizeText's trailing-hyphen merge + hyphen split)
+  const punctMap = new Map();
+  if (referenceText) {
+    const rawTokens = referenceText.trim().split(/\s+/);
+    const merged = [];
+    for (let i = 0; i < rawTokens.length; i++) {
+      const s = rawTokens[i].replace(/^[^\w'-]+|[^\w'-]+$/g, '');
+      if (!s.length) continue;
+      if (s.endsWith('-') && i + 1 < rawTokens.length) { merged.push(rawTokens[i + 1]); i++; }
+      else merged.push(rawTokens[i]);
+    }
+    const split = [];
+    for (const token of merged) {
+      const s = token.replace(/^[^\w'-]+|[^\w'-]+$/g, '');
+      if (s.includes('-')) {
+        const parts = s.split('-').filter(p => p.length > 0);
+        for (let j = 0; j < parts.length - 1; j++) split.push(parts[j]);
+        split.push(token);
+      } else split.push(token);
+    }
+    for (let i = 0; i < split.length; i++) {
+      const m = split[i].match(/([.!?,;:\u2014\u2013\u2012\u2015]+["'\u201C\u201D\u2018\u2019)}\]]*|["'\u201C\u201D\u2018\u2019)}\]]+)$/);
+      if (m) punctMap.set(i, m[0]);
+    }
+  }
+
+  // ── 3. Classification ──────────────────────────────────────────────────
+  function classifyWord(entry, group, nextGroup) {
+    if (entry.forgiven) return 'correct';
+    if (entry.type === 'omission') return 'omitted';
+
+    // Correct or compound-struggle (which resolved to correct word)
+    if (entry.type === 'correct' || (entry.type === 'struggle' && entry.compound)) {
+      if (entry.compound && entry.parts?.length >= 2) return 'struggle-correct';
+      const refN = norm(entry.ref);
+      const hasRelatedIns = group.insertionsBefore.some(ins => {
+        const h = norm(ins.hyp);
+        return (h.length >= 2 && refN.startsWith(h)) || isNearMiss(ins.hyp, entry.ref);
+      });
+      if (hasRelatedIns) return 'struggle-correct';
+      return 'correct';
+    }
+
+    // Substitution
+    if (entry.type === 'substitution') {
+      const refN = norm(entry.ref);
+      // Did any engine hear the correct word?
+      if (norm(entry._xvalWord) === refN || norm(entry._v0Word) === refN) return 'attempted-struggled';
+      // Is V1 hyp a near-miss (morphological/phonetic)?
+      if (entry.hyp && entry.ref && isNearMiss(entry.hyp, entry.ref)) return 'definite-struggle';
+      // Check trailing insertions (e.g., "oreo" after "editorial")
+      if (group.insertionsAfter.some(ins => ins.hyp && isNearMiss(ins.hyp, entry.ref))) return 'definite-struggle';
+      const postIns = nextGroup ? nextGroup.insertionsBefore : [];
+      if (postIns.some(ins => norm(ins._prevRef) === refN && ins.hyp && isNearMiss(ins.hyp, entry.ref))) return 'definite-struggle';
+      return 'confirmed-substitution';
+    }
+
+    return 'correct';
+  }
+
+  const BUCKET = {
+    'correct':                 { label: 'Correct',                   color: '#2e7d32' },
+    'struggle-correct':        { label: 'Struggle but Correct',      color: '#558b2f' },
+    'omitted':                 { label: 'Omitted',                   color: '#757575' },
+    'attempted-struggled':     { label: 'Attempted but Struggled',   color: '#e65100' },
+    'definite-struggle':       { label: 'Definite Struggle',         color: '#c62828' },
+    'confirmed-substitution':  { label: 'Confirmed Substitution',    color: '#1565c0' }
+  };
+
+  const counts = {};
+  for (const k in BUCKET) counts[k] = 0;
+  const classified = groups.map((g, i) => {
+    const bucket = classifyWord(g.entry, g, i < groups.length - 1 ? groups[i + 1] : null);
+    counts[bucket]++;
+    return { ...g, bucket };
+  });
+
+  // ── 4. Summary line ────────────────────────────────────────────────────
+  const summary = document.createElement('div');
+  summary.className = 'new-analyzed-summary';
+  const summaryParts = [];
+  for (const [k, { label, color }] of Object.entries(BUCKET)) {
+    if (counts[k] > 0) summaryParts.push(`<span style="color:${color};font-weight:600;">${counts[k]} ${label}</span>`);
+  }
+  summary.innerHTML = `<strong>${groups.length} words:</strong> ${summaryParts.join(' \u00b7 ')}`;
+  container.appendChild(summary);
+
+  // ── 5. Legend ───────────────────────────────────────────────────────────
+  const legend = document.createElement('div');
+  legend.className = 'new-analyzed-legend';
+  legend.innerHTML = Object.entries(BUCKET).map(([k, { label }]) =>
+    `<span class="word word-bucket-${k}">${label}</span>`
+  ).join(' ');
+  container.appendChild(legend);
+
+  // ── 6. Word flow ───────────────────────────────────────────────────────
+  const wordsDiv = document.createElement('div');
+  wordsDiv.className = 'new-analyzed-flow';
+
+  // Helper: create click-to-play function for a transcriptWords index
+  function makePlayFn(hypIdx) {
+    if (!wordAudioEl || hypIdx < 0 || !transcriptWords?.[hypIdx]) return null;
+    const tw = transcriptWords[hypIdx];
+    const start = parseSttTime(tw.startTime);
+    const end = parseSttTime(tw.endTime);
+    return () => {
+      wordAudioEl.pause();
+      wordAudioEl.currentTime = start;
+      const onTime = () => {
+        if (wordAudioEl.currentTime >= end) { wordAudioEl.pause(); wordAudioEl.removeEventListener('timeupdate', onTime); }
+      };
+      wordAudioEl.addEventListener('timeupdate', onTime);
+      wordAudioEl.play().catch(() => {});
+    };
+  }
+
+  // Helper: render a small insertion fragment span
+  function renderFragment(parent, ins, extraClass) {
+    const frag = document.createElement('span');
+    frag.className = 'word-fragment' + (extraClass ? ' ' + extraClass : '');
+    frag.textContent = ins.hyp;
+    frag.dataset.tooltip = `Insertion: "${ins.hyp}"` +
+      (ins._partOfStruggle ? ' (part of struggle)' : '') +
+      (ins._isSelfCorrection ? ' (self-correction)' : '');
+    frag.style.cursor = 'pointer';
+    const playFn = makePlayFn(ins.hypIndex);
+    if (playFn) frag.classList.add('word-clickable');
+    frag.addEventListener('click', (e) => { e.stopPropagation(); showWordTooltip(frag, playFn); });
+    parent.appendChild(frag);
+  }
+
+  let refIdx = 0;
+  for (const { entry, bucket, insertionsBefore, insertionsAfter } of classified) {
+    // ── Long pause indicator ──
+    if (pauseBeforeMap.has(entry.hypIndex)) {
+      const pause = pauseBeforeMap.get(entry.hypIndex);
+      const ps = document.createElement('span');
+      ps.className = 'pause-indicator';
+      if (pause._vadAnalysis?.speechPercent >= 30) ps.classList.add('pause-indicator-vad');
+      ps.textContent = '[' + pause.gap.toFixed(1) + 's]';
+      ps.dataset.tooltip = 'Long pause: ' + Math.round(pause.gap * 1000) + 'ms (error: \u2265 3000ms)';
+      ps.style.cursor = 'pointer';
+      ps.addEventListener('click', (e) => { e.stopPropagation(); showWordTooltip(ps, null); });
+      wordsDiv.appendChild(ps);
+      wordsDiv.appendChild(document.createTextNode(' '));
+    }
+
+    // ── Insertion fragments before (false starts) ──
+    for (const ins of insertionsBefore) renderFragment(wordsDiv, ins);
+
+    // ── Main word span ──
+    const span = document.createElement('span');
+    span.className = `word word-bucket-${bucket}`;
+    const displayText = entry._displayRef || entry.ref || '';
+    span.textContent = displayText;
+
+    // Cosmetic punctuation
+    const punct = punctMap.get(refIdx);
+    if (punct) span.textContent += punct;
+
+    // Hesitation left border (same as legacy)
+    const hesitation = (entry.hypIndex >= 0) ? onsetMap.get(entry.hypIndex) : null;
+    if (hesitation) {
+      span.classList.add('word-hesitation');
+      if (hesitation._vadAnalysis?.speechPercent >= 30) span.classList.add('word-hesitation-vad');
+    }
+
+    // Morphological root squiggle: word is not correct + V1 or V0 produced a root of the ref
+    if (bucket !== 'correct' && bucket !== 'struggle-correct' && bucket !== 'omitted') {
+      const refN = norm(entry.ref);
+      const hypN = norm(entry.hyp);
+      const v0N = norm(entry._v0Word);
+      const hasRoot = (w) => w.length >= 3 && refN.startsWith(w);
+      if (hasRoot(hypN) || hasRoot(v0N)) span.classList.add('word-morph-root');
+    }
+
+    // Build V1 evidence string (insertionsBefore + hyp/parts + insertionsAfter)
+    const v1Parts = [];
+    for (const ins of insertionsBefore) v1Parts.push(ins.hyp);
+    if (entry.compound && entry.parts) v1Parts.push(...entry.parts);
+    else if (entry.hyp) v1Parts.push(entry.hyp);
+    for (const ins of insertionsAfter) v1Parts.push(ins.hyp);
+    const v1Ev = v1Parts.join(' + ') || '\u2014';
+    const v0Ev = entry._v0Word || (entry._v0Type === 'omission' ? '(omitted)' : '\u2014');
+    const pkEv = entry._xvalWord || '\u2014';
+
+    // Tooltip
+    const tip = [];
+    tip.push(`"${displayText}" \u2014 ${BUCKET[bucket]?.label || bucket}`);
+    tip.push(`V1: ${v1Ev} | V0: ${v0Ev} | Pk: ${pkEv}`);
+    if (bucket === 'struggle-correct' && entry.compound) {
+      tip.push(`V1 produced fragments: [${entry.parts?.join(', ')}]`);
+    }
+    if (bucket === 'struggle-correct' && insertionsBefore.length > 0) {
+      tip.push(`False start: ${insertionsBefore.map(i => '"' + i.hyp + '"').join(', ')}`);
+    }
+    if (bucket === 'attempted-struggled') {
+      tip.push('Root detected, but full word not produced');
+    }
+    if (bucket === 'definite-struggle') {
+      tip.push('No engine produced the correct word');
+    }
+    if (bucket === 'confirmed-substitution') {
+      tip.push(`Student said "${entry.hyp}" \u2014 all engines agree`);
+    }
+    if (hesitation) {
+      tip.push(`Hesitation: ${Math.round(hesitation.gap * 1000)}ms before this word`);
+    }
+    span.dataset.tooltip = tip.join('\n');
+    span.style.cursor = 'pointer';
+
+    const playFn = makePlayFn(entry.hypIndex);
+    if (playFn) span.classList.add('word-clickable');
+    span.addEventListener('click', (e) => { e.stopPropagation(); showWordTooltip(span, playFn); });
+
+    wordsDiv.appendChild(span);
+
+    // ── Insertion fragments after (trailing fragments) ──
+    for (const ins of insertionsAfter) renderFragment(wordsDiv, ins, 'word-fragment-after');
+
+    wordsDiv.appendChild(document.createTextNode(' '));
+    refIdx++;
+  }
+
+  container.appendChild(wordsDiv);
+}
+
 export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, diagnostics, transcriptWords, tierBreakdown, disfluencySummary, referenceText, audioBlob, rawSttSources) {
   const wordsDiv = document.getElementById('resultWords');
+  const newWordsDiv = document.getElementById('newAnalyzedWords');
+  const legacySection = document.getElementById('legacyAnalyzedSection');
   const plainDiv = document.getElementById('resultPlain');
   const jsonDiv = document.getElementById('resultJson');
   const prosodyContainer = document.getElementById('prosodyContainer');
   wordsDiv.innerHTML = ''; plainDiv.textContent = ''; jsonDiv.textContent = '';
+  if (newWordsDiv) newWordsDiv.innerHTML = '';
   if (prosodyContainer) { prosodyContainer.innerHTML = ''; prosodyContainer.style.display = 'none'; }
 
   // Click-to-play word audio setup
@@ -1310,6 +1608,19 @@ export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, di
 
 
   // ─────────────────────────────────────────────────────────────────────────
+  // New Analyzed Words (experimental bucketing)
+  // ─────────────────────────────────────────────────────────────────────────
+  if (newWordsDiv) {
+    renderNewAnalyzedWords(newWordsDiv, alignment, sttLookup, diagnostics, transcriptWords, referenceText, wordAudioEl, rawSttSources);
+    newWordsDiv.style.display = '';
+  }
+
+  // Show legacy section (collapsed by default)
+  if (legacySection) {
+    legacySection.style.display = '';
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
   // STT Transcript View — Pipeline Trace (step-by-step processing)
   // ─────────────────────────────────────────────────────────────────────────
   const confWordsDiv = document.getElementById('sttTranscriptWords');
@@ -1388,14 +1699,38 @@ export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, di
       return span;
     };
 
-    // ── STEP 1: Three-Engine Consensus ──
+    // ── STEP 1: Three-Engine Consensus (with insertion context) ──
     {
       const v0Align = rawSttSources?.v0Alignment || [];
+      const pkAlign = rawSttSources?.parakeetAlignment || [];
       const twTable = rawSttSources?.threeWayTable || [];
       const v0Ref = v0Align.filter(e => e.type !== 'insertion');
+      const fullV1 = alignment; // includes insertions in NW position
+
+      // Group insertions by ref-word boundary for each engine
+      // groups[i] = insertions that appear before ref word i in the NW alignment
+      // groups[N] = trailing insertions after the last ref word
+      const groupInsertions = (fullAlign) => {
+        const groups = [];
+        let current = [];
+        for (const entry of fullAlign) {
+          if (entry.type === 'insertion') {
+            current.push(entry);
+          } else {
+            groups.push(current);
+            current = [];
+          }
+        }
+        groups.push(current); // trailing
+        return groups;
+      };
+
+      const v1InsGroups = groupInsertions(fullV1);
+      const v0InsGroups = groupInsertions(v0Align);
+      const pkInsGroups = groupInsertions(pkAlign);
 
       const { step, body } = makeStep(1, 'Three-Engine Consensus',
-        'per-reference-word comparison of V1 (verbatim), V0 (clean), and Parakeet');
+        'per-reference-word comparison of V1 (verbatim), V0 (clean), and Parakeet — with insertion fragments');
 
       if (twTable.length === 0) {
         const msg = document.createElement('div');
@@ -1419,6 +1754,112 @@ export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, di
         const tbody = document.createElement('tbody');
         let confirmedN = 0, disagreedN = 0, recoveredN = 0, unconfirmedN = 0, omittedN = 0;
 
+        // Engine cell helper for ref-word rows
+        const makeEngineCell = (entry, twSymbol) => {
+          const td = document.createElement('td');
+          if (!entry || twSymbol === 'n/a') {
+            td.className = 'engine-unavailable';
+            td.textContent = 'n/a';
+          } else if (entry.type === 'omission') {
+            td.className = 'engine-omit';
+            td.textContent = '\u2014';
+          } else if (entry.compound && entry.parts) {
+            td.className = 'engine-compound';
+            td.textContent = entry.parts.join(' + ');
+          } else if (entry.type === 'correct' || entry.type === 'struggle') {
+            td.className = 'engine-correct';
+            td.textContent = entry.hyp;
+          } else {
+            td.className = 'engine-sub';
+            td.textContent = entry.hyp || '?';
+          }
+          return td;
+        };
+
+        // Render insertion sub-rows for a given ref-word position
+        const renderInsertionRows = (refIdx) => {
+          const v1Ins = v1InsGroups[refIdx] || [];
+          if (v1Ins.length === 0) return;
+
+          const v0Ins = v0InsGroups[refIdx] || [];
+          const pkIns = pkInsGroups[refIdx] || [];
+
+          // Build sets of V0/Pk insertion words at this position for cross-reference
+          const v0InsNorms = v0Ins.map(e => (e.hyp || '').toLowerCase().replace(/[^a-z'-]/g, ''));
+          const pkInsNorms = pkIns.map(e => (e.hyp || '').toLowerCase().replace(/[^a-z'-]/g, ''));
+
+          for (const ins of v1Ins) {
+            const tr = document.createElement('tr');
+            tr.className = 'pipeline-insertion-row';
+
+            // # column — arrow to show it's a sub-row
+            const tdIdx = document.createElement('td');
+            tdIdx.className = 'pipeline-td-idx pipeline-ins-idx';
+            tdIdx.textContent = '\u21b3'; // ↳
+            tr.appendChild(tdIdx);
+
+            // Reference column — no ref word
+            const tdRef = document.createElement('td');
+            tdRef.className = 'pipeline-td-ref pipeline-ins-ref';
+            tdRef.textContent = '\u2014';
+            tr.appendChild(tdRef);
+
+            // V1 column — the insertion word
+            const tdV1 = document.createElement('td');
+            tdV1.className = 'engine-ins';
+            tdV1.textContent = ins.hyp || '?';
+            tr.appendChild(tdV1);
+
+            // V0 column — check if V0 also heard this word at this position
+            const insNorm = (ins.hyp || '').toLowerCase().replace(/[^a-z'-]/g, '');
+            const tdV0 = document.createElement('td');
+            const v0Match = v0InsNorms.findIndex(n => n === insNorm);
+            if (v0Match >= 0) {
+              tdV0.className = 'engine-ins';
+              tdV0.textContent = v0Ins[v0Match].hyp;
+              v0InsNorms[v0Match] = ''; // consume to avoid double-match
+            } else if (v0Ins.length > 0) {
+              // V0 has insertions here but different words
+              tdV0.className = 'engine-ins-different';
+              tdV0.textContent = v0Ins.map(e => e.hyp).join(', ');
+            } else {
+              tdV0.className = 'engine-ins-suppressed';
+              tdV0.textContent = 'suppressed';
+            }
+            tr.appendChild(tdV0);
+
+            // Pk column — check if Parakeet also heard this word
+            const tdPk = document.createElement('td');
+            const pkMatch = pkInsNorms.findIndex(n => n === insNorm);
+            if (pkMatch >= 0) {
+              tdPk.className = 'engine-ins';
+              tdPk.textContent = pkIns[pkMatch].hyp;
+              pkInsNorms[pkMatch] = ''; // consume
+            } else if (pkIns.length > 0) {
+              tdPk.className = 'engine-ins-different';
+              tdPk.textContent = pkIns.map(e => e.hyp).join(', ');
+            } else {
+              tdPk.className = 'engine-ins-suppressed';
+              tdPk.textContent = '\u2014';
+            }
+            tr.appendChild(tdPk);
+
+            // Verdict column — insertion classification
+            const tdV = document.createElement('td');
+            tdV.className = 'pipeline-verdict pipeline-verdict-insertion';
+            const tw = ins.hypIndex >= 0 ? transcriptWords[ins.hypIndex] : null;
+            let label = 'insertion';
+            if (ins._partOfStruggle) label = 'struggle fragment';
+            else if (ins._isSelfCorrection) label = 'self-correction';
+            else if (tw?.isDisfluency) label = tw.disfluencyType || 'disfluency';
+            else if (v0Match < 0 && v0Align.length > 0) label = 'insertion (V0 suppressed)';
+            tdV.textContent = label;
+            tr.appendChild(tdV);
+
+            tbody.appendChild(tr);
+          }
+        };
+
         for (let i = 0; i < twTable.length; i++) {
           const tw = twTable[i];
           const v1E = reverbRef[i];
@@ -1431,49 +1872,27 @@ export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, di
           else if (tw.status === 'unconfirmed') unconfirmedN++;
           else if (tw.status === 'confirmed_omission') omittedN++;
 
+          // Render V1 insertions that appear before this ref word
+          renderInsertionRows(i);
+
+          // Render the ref-word row
           const tr = document.createElement('tr');
           tr.className = 'pipeline-xval-' + (tw.status === 'confirmed_omission' ? 'confirmed' : tw.status);
 
-          // # column
           const tdIdx = document.createElement('td');
           tdIdx.className = 'pipeline-td-idx';
           tdIdx.textContent = i + 1;
           tr.appendChild(tdIdx);
 
-          // Reference column
           const tdRef = document.createElement('td');
           tdRef.className = 'pipeline-td-ref';
           tdRef.textContent = tw.ref || '?';
           tr.appendChild(tdRef);
 
-          // Engine cell helper
-          const makeEngineCell = (entry, twSymbol) => {
-            const td = document.createElement('td');
-            if (!entry || twSymbol === 'n/a') {
-              td.className = 'engine-unavailable';
-              td.textContent = 'n/a';
-            } else if (entry.type === 'omission') {
-              td.className = 'engine-omit';
-              td.textContent = '\u2014';
-            } else if (entry.compound && entry.parts) {
-              // Compound merge — show fragments (applies to both correct and struggle)
-              td.className = entry.type === 'correct' || entry.type === 'struggle' ? 'engine-correct' : 'engine-sub';
-              td.textContent = entry.parts.join(' + ');
-            } else if (entry.type === 'correct' || entry.type === 'struggle') {
-              td.className = 'engine-correct';
-              td.textContent = entry.hyp;
-            } else {
-              td.className = 'engine-sub';
-              td.textContent = entry.hyp || '?';
-            }
-            return td;
-          };
-
           tr.appendChild(makeEngineCell(v1E, tw.v1));
           tr.appendChild(makeEngineCell(v0E, tw.v0));
           tr.appendChild(makeEngineCell(pkE, tw.pk));
 
-          // Verdict column
           const tdV = document.createElement('td');
           const verdictSymbols = {
             confirmed: '\u2713', disagreed: '\u2717', recovered: '\u21bb',
@@ -1491,14 +1910,19 @@ export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, di
           tbody.appendChild(tr);
         }
 
+        // Trailing insertions after last ref word
+        renderInsertionRows(twTable.length);
+
         table.appendChild(tbody);
         body.appendChild(table);
 
+        const insertionCount = v1InsGroups.reduce((sum, g) => sum + g.length, 0);
         const summary = document.createElement('div');
         summary.className = 'pipeline-step-summary';
         summary.textContent = 'Confirmed: ' + confirmedN + ' | Disagreed: ' + disagreedN
           + ' | Recovered: ' + recoveredN + ' | Unconfirmed: ' + unconfirmedN
-          + ' | Omitted: ' + omittedN;
+          + ' | Omitted: ' + omittedN
+          + ' | Insertions: ' + insertionCount;
         const agreePct = twTable.length > 0 ? (100 * confirmedN / twTable.length).toFixed(0) : '0';
         summary.textContent += ' | Agreement: ' + agreePct + '%';
         body.appendChild(summary);

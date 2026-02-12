@@ -15,7 +15,7 @@
 </head>
 <body>
 
-<div id="version" style="text-align:right;font-size:0.75rem;color:#999;">v 2026-02-12 00:05</div>
+<div id="version" style="text-align:right;font-size:0.75rem;color:#999;">v 2026-02-12 02:30</div>
 <h1>Pacer — Fluency and Comprehension Training</h1>
 <p class="subtitle">Reverb + Parakeet &mdash; 3-Engine Consensus Pipeline</p>
 
@@ -149,7 +149,19 @@
     <span class="word-morphological" title="Student said a morphological variant of the reference word (wrong ending or wrong beginning).&#10;&#10;Logic: Both conditions must be true:&#10;1. Word is already classified as a substitution&#10;2. Reference and spoken word share a 3+ character prefix OR suffix&#10;&#10;Examples:&#10;• Suffix error: Reference 'running' → Student says 'runned' → shared prefix 'run' (3 chars)&#10;• Prefix error: Reference 'unhappy' → Student says 'happy' → shared suffix 'happy' (5 chars)&#10;• Tense error: Reference 'jumped' → Student says 'jumping' → shared prefix 'jump' (4 chars)">Morph.</span>
     <span class="word-forgiven" title="Error on a proper name that is phonetically close to the expected word.&#10;&#10;Logic: Word is a proper noun (via NL API) AND Levenshtein similarity ≥ 40%.&#10;&#10;This is a vocabulary/knowledge gap, not a decoding failure. Student used phonics rules correctly but doesn't know the accepted pronunciation.&#10;&#10;Example: Reference 'Hermione' → Student says 'Her-my-oh-nee' → phonetically decoded → forgiven (not counted as error)">Forgiven ✓</span>
   </div>
-  <div class="result-box" id="resultWords">Awaiting audio...</div>
+  <!-- New Analyzed Words (experimental bucketing) -->
+  <div class="result-box" id="newAnalyzedWords" style="display:none;"></div>
+
+  <!-- Legacy Analyzed Words (collapsible) -->
+  <div class="legacy-analyzed-section" id="legacyAnalyzedSection" style="display:none;">
+    <div class="legacy-analyzed-header" onclick="document.getElementById('legacyAnalyzedSection').classList.toggle('expanded')">
+      <h4>Legacy Analyzed Words</h4>
+      <span class="legacy-analyzed-toggle">&#9660;</span>
+    </div>
+    <div class="legacy-analyzed-body">
+      <div class="result-box" id="resultWords">Awaiting audio...</div>
+    </div>
+  </div>
 
   <!-- STT Transcript View (collapsed by default) -->
   <div class="stt-transcript-section" id="sttTranscriptSection">

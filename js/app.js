@@ -661,6 +661,29 @@ async function runAnalysis() {
     });
   }
 
+  // ── Compound struggle reclassification (BEFORE 3-way) ──────────────
+  // V1 compound merges = student produced fragments, not a fluent read.
+  // Reclassify before 3-way so the verdict sees V1 as non-correct.
+  {
+    const compoundStruggles = [];
+    for (const entry of alignment) {
+      if (entry.type === 'correct' && entry.compound && entry.parts && entry.parts.length >= 2) {
+        entry.type = 'struggle';
+        entry._strugglePath = 'compound_fragments';
+        entry._nearMissEvidence = entry.parts;
+        compoundStruggles.push({ ref: entry.ref, hyp: entry.hyp, parts: entry.parts });
+      }
+    }
+    if (compoundStruggles.length > 0) {
+      addStage('compound_struggle', {
+        count: compoundStruggles.length,
+        entries: compoundStruggles
+      });
+      console.log(`[Struggle] Reclassified ${compoundStruggles.length} compound merge(s) as struggle:`,
+        compoundStruggles.map(s => `"${s.ref}" ← [${s.parts.join(', ')}]`));
+    }
+  }
+
   // Create synthetic sttLookup entries for compound words
   for (const item of alignment) {
     if (item.compound && item.parts) {
@@ -766,7 +789,9 @@ async function runAnalysis() {
     }
 
     // Count how many engines got this word correct
-    const v1Correct = v1Entry.type === 'correct';
+    // V1 compound = student fragmented the word — don't count as clean correct
+    const v1Compound = v1Entry.type === 'struggle' && v1Entry.compound;
+    const v1Correct = v1Entry.type === 'correct' && !v1Entry.compound;
     const v0Correct = v0Type === 'correct';
     const pkCorrect = pkType === 'correct';
     const correctCount = (v1Correct ? 1 : 0) + (v0Correct ? 1 : 0) + (pkCorrect ? 1 : 0);
@@ -790,6 +815,12 @@ async function runAnalysis() {
     } else if (correctCount >= 2) {
       // Majority correct → confirmed
       status = 'confirmed';
+    } else if (v1Compound && (v0Correct || pkCorrect)) {
+      // V1 fragmented but matched + another engine confirms → confirmed (struggle preserved on entry)
+      status = 'confirmed';
+    } else if (v1Compound) {
+      // V1 fragmented match but no other engine confirms
+      status = hasPk || hasV0 ? 'unconfirmed' : 'unavailable';
     } else if (v1Correct && !v0Correct && !pkCorrect) {
       // Only V1 heard it correctly
       status = hasPk || hasV0 ? 'unconfirmed' : 'unavailable';
@@ -826,7 +857,7 @@ async function runAnalysis() {
 
     threeWayTable.push({
       ref: v1Entry.ref,
-      v1: v1Entry.type === 'correct' ? '✓' : v1Entry.type === 'omission' ? '—' : `✗(${v1Entry.hyp})`,
+      v1: v1Compound ? `⚠(${v1Entry.parts.join('+')})` : v1Entry.type === 'correct' ? '✓' : v1Entry.type === 'omission' ? '—' : `✗(${v1Entry.hyp})`,
       v0: v0Entry ? (v0Type === 'correct' ? '✓' : v0Type === 'omission' ? '—' : `✗(${v0Entry.hyp})`) : 'n/a',
       pk: pkEntry ? (pkType === 'correct' ? '✓' : pkType === 'omission' ? '—' : `✗(${pkEntry.hyp})`) : 'n/a',
       status
@@ -848,31 +879,6 @@ async function runAnalysis() {
     confirmedOmissions: threeWayTable.filter(t => t.status === 'confirmed_omission').length,
     hasV0, hasPk
   });
-
-  // ── Struggle detection (replaces Path 4) ───────────────────────────
-  // A word is struggle if ultimately correct BUT V1 shows difficulty:
-  //   - V1 used compound merge (fragments combined to correct)
-  //   - V1 had substitution but V0 or Pk had correct (disagreed → corrected)
-  {
-    const compoundStruggles = [];
-    for (const entry of alignment) {
-      // Compound-merged correct words: V1 needed multiple fragments
-      if (entry.type === 'correct' && entry.compound && entry.parts && entry.parts.length >= 2) {
-        entry.type = 'struggle';
-        entry._strugglePath = 'compound_fragments';
-        entry._nearMissEvidence = entry.parts;
-        compoundStruggles.push({ ref: entry.ref, hyp: entry.hyp, parts: entry.parts });
-      }
-    }
-    if (compoundStruggles.length > 0) {
-      addStage('compound_struggle', {
-        count: compoundStruggles.length,
-        entries: compoundStruggles
-      });
-      console.log(`[Struggle] Reclassified ${compoundStruggles.length} compound merge(s) as struggle:`,
-        compoundStruggles.map(s => `"${s.ref}" ← [${s.parts.join(', ')}]`));
-    }
-  }
 
   // ── Disfluency classification (V1 insertions vs V0) ────────────────
   // V1 insertion present + V0 insertion absent → filler/false-start
@@ -1584,7 +1590,7 @@ async function runAnalysis() {
     let hypIdx = 0;
     for (const entry of alignment) {
       if (entry.type === 'omission') continue; // no hyp word consumed
-      if (entry.type === 'correct' || entry.forgiven) {
+      if (entry.type === 'correct' || entry.forgiven || (entry.type === 'struggle' && entry.compound)) {
         // Walk transcriptWords to find the matching entry by word text
         // The sttLookup queue approach consumed entries in order, so we
         // advance hypIdx through transcriptWords matching hyp values

@@ -286,6 +286,44 @@ body.dev-mode .dev-mode-toggle {
   to { transform: rotate(360deg); }
 }
 
+/* Legacy Analyzed Words section (collapsible, collapsed by default) */
+.legacy-analyzed-section {
+  margin-top: 1rem;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  overflow: hidden;
+}
+.legacy-analyzed-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.5rem 0.75rem;
+  background: #f5f5f5;
+  cursor: pointer;
+  user-select: none;
+}
+.legacy-analyzed-header h4 {
+  margin: 0;
+  font-size: 0.9rem;
+  color: #666;
+}
+.legacy-analyzed-toggle {
+  font-size: 0.75rem;
+  color: #999;
+  transition: transform 0.2s;
+}
+.legacy-analyzed-section.expanded .legacy-analyzed-toggle {
+  transform: rotate(180deg);
+}
+.legacy-analyzed-body {
+  display: none;
+  padding: 0.75rem;
+  background: #fafafa;
+}
+.legacy-analyzed-section.expanded .legacy-analyzed-body {
+  display: block;
+}
+
 /* STT Transcript section (collapsible) */
 .stt-transcript-section {
   margin-top: 1rem;
@@ -510,11 +548,22 @@ body.dev-mode .dev-mode-toggle {
 
 /* Step 1: Three-Engine Consensus table */
 .engine-correct    { color: #2e7d32; background: #e8f5e9; font-weight: 600; }
+.engine-compound   { color: #e65100; background: #fff3e0; font-weight: 600; }
 .engine-sub        { color: #c62828; background: #ffebee; font-weight: 600; }
 .engine-omit       { color: #999; font-style: italic; background: #fafafa; }
 .engine-unavailable { color: #bbb; font-style: italic; }
 .engine-compound-frags { font-size: 0.7rem; color: #6a1b9a; margin-top: 2px; }
 .pipeline-verdict-omission { color: #999; font-style: italic; }
+
+/* Insertion sub-rows in Step 1 consensus table */
+.pipeline-insertion-row { background: #f9f6ff; }
+.pipeline-insertion-row td { font-size: 0.8rem; padding-top: 2px; padding-bottom: 2px; }
+.pipeline-ins-idx { color: #9e9e9e; }
+.pipeline-ins-ref { color: #bbb; }
+.engine-ins { color: #6a1b9a; font-style: italic; }
+.engine-ins-suppressed { color: #bbb; font-size: 0.75rem; font-style: italic; }
+.engine-ins-different { color: #e65100; font-size: 0.75rem; font-style: italic; }
+.pipeline-verdict-insertion { color: #6a1b9a; font-size: 0.8rem; }
 
 /* Engine section headings in Step 2 */
 .pipeline-engine-section {
@@ -1146,4 +1195,34 @@ body.dev-mode .dev-mode-toggle {
 .word[data-start-time] {
   transition: box-shadow 0.2s ease, outline 0.2s ease;
 }
+
+/* ── New Analyzed Words — Bucket Classification ────────────────────────── */
+.new-analyzed-summary { margin-bottom: 0.5rem; font-size: 0.85rem; color: #333; }
+.new-analyzed-legend { margin-bottom: 0.75rem; line-height: 2; }
+.new-analyzed-legend .word { font-size: 0.75rem; margin-right: 4px; }
+.new-analyzed-flow { line-height: 2.4; }
+
+.word-bucket-correct { background: #c8e6c9; color: #2e7d32; }
+.word-bucket-struggle-correct { background: #dcedc8; color: #558b2f; border-bottom: 2px solid #8bc34a; }
+.word-bucket-omitted { background: #e0e0e0; color: #757575; text-decoration: line-through; }
+.word-bucket-attempted-struggled { background: #ffe0b2; color: #e65100; }
+.word-bucket-definite-struggle { background: #ffcdd2; color: #c62828; }
+.word-bucket-confirmed-substitution { background: #bbdefb; color: #1565c0; }
+
+/* Morphological root squiggle — V1 or V0 produced a root of the ref word */
+.word-morph-root { text-decoration: underline wavy #e65100; text-underline-offset: 3px; }
+
+/* Insertion fragment spans (small purple text for false starts / trailing fragments) */
+.word-fragment {
+  font-size: 0.7rem;
+  color: #7b1fa2;
+  font-style: italic;
+  vertical-align: super;
+  margin: 0 1px;
+  padding: 1px 3px;
+  background: #f3e5f5;
+  border-radius: 3px;
+  cursor: pointer;
+}
+.word-fragment-after { margin-left: 1px; }
 
