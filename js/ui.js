@@ -589,33 +589,12 @@ function renderNewAnalyzedWords(container, alignment, sttLookup, diagnostics, tr
     'confirmed-substitution':  { label: 'Confirmed Substitution',    color: '#1565c0' }
   };
 
-  const counts = {};
-  for (const k in BUCKET) counts[k] = 0;
   const classified = groups.map((g, i) => {
     const bucket = classifyWord(g.entry, g, i < groups.length - 1 ? groups[i + 1] : null);
-    counts[bucket]++;
     return { ...g, bucket };
   });
 
-  // ── 4. Summary line ────────────────────────────────────────────────────
-  const summary = document.createElement('div');
-  summary.className = 'new-analyzed-summary';
-  const summaryParts = [];
-  for (const [k, { label, color }] of Object.entries(BUCKET)) {
-    if (counts[k] > 0) summaryParts.push(`<span style="color:${color};font-weight:600;">${counts[k]} ${label}</span>`);
-  }
-  summary.innerHTML = `<strong>${groups.length} words:</strong> ${summaryParts.join(' \u00b7 ')}`;
-  container.appendChild(summary);
-
-  // ── 5. Legend ───────────────────────────────────────────────────────────
-  const legend = document.createElement('div');
-  legend.className = 'new-analyzed-legend';
-  legend.innerHTML = Object.entries(BUCKET).map(([k, { label }]) =>
-    `<span class="word word-bucket-${k}">${label}</span>`
-  ).join(' ');
-  container.appendChild(legend);
-
-  // ── 6. Word flow ───────────────────────────────────────────────────────
+  // ── 4. Word flow ─────────────────────────────────────────────────────
   const wordsDiv = document.createElement('div');
   wordsDiv.className = 'new-analyzed-flow';
 

@@ -1197,9 +1197,6 @@ body.dev-mode .dev-mode-toggle {
 }
 
 /* ── New Analyzed Words — Bucket Classification ────────────────────────── */
-.new-analyzed-summary { margin-bottom: 0.5rem; font-size: 0.85rem; color: #333; }
-.new-analyzed-legend { margin-bottom: 0.75rem; line-height: 2; }
-.new-analyzed-legend .word { font-size: 0.75rem; margin-right: 4px; }
 .new-analyzed-flow { line-height: 2.4; }
 
 .word-bucket-correct { background: #c8e6c9; color: #2e7d32; }
