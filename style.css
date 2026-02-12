@@ -1229,10 +1229,11 @@ body.dev-mode .dev-mode-toggle {
 .new-analyzed-legend .word-fragment { font-size: 0.7rem; }
 
 .new-analyzed-flow {
-  line-height: 2.6;
+  line-height: 2.8;
   padding: 0.5rem 0.25rem;
+  word-spacing: 6px;
 }
-.new-analyzed-flow .word { padding: 4px 8px; margin: 2px 1px; font-size: 0.95rem; }
+.new-analyzed-flow .word { padding: 4px 8px; margin: 3px 3px; font-size: 0.95rem; }
 
 .word-bucket-correct { background: #c8e6c9; color: #2e7d32; }
 .word-bucket-struggle-correct { background: #dcedc8; color: #558b2f; border-bottom: 2px solid #8bc34a; }
