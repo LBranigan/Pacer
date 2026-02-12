@@ -1493,6 +1493,22 @@ async function runAnalysis() {
     });
   }
 
+  // Flag correct words preceded by a ≥3s pause as errors (ORF: hesitation = error)
+  if (diagnostics.longPauses) {
+    for (const pause of diagnostics.longPauses) {
+      for (const entry of alignment) {
+        if (entry.type === 'insertion') continue;
+        if (entry.hypIndex > pause.afterWordIndex && entry.type !== 'omission') {
+          if (entry.type === 'correct') {
+            entry._longPauseError = true;
+            entry._longPauseGap = pause.gap;
+          }
+          break;
+        }
+      }
+    }
+  }
+
   const wcpm = (effectiveElapsedSeconds != null && effectiveElapsedSeconds > 0)
     ? computeWCPMRange(alignment, effectiveElapsedSeconds)
     : null;
@@ -1506,6 +1522,7 @@ async function runAnalysis() {
     substitutions: accuracy.substitutions,
     omissions: accuracy.omissions,
     struggles: accuracy.struggles,
+    longPauseErrors: accuracy.longPauseErrors,
     insertions: accuracy.insertions,
     forgiven: accuracy.forgiven,
     forgivenessEnabled: accuracy.forgivenessEnabled,

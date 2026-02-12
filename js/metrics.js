@@ -24,11 +24,16 @@ export function computeWCPM(alignmentResult, elapsedSeconds) {
  * @returns {{ accuracy: number, correctCount: number, totalRefWords: number, substitutions: number, omissions: number, insertions: number }}
  */
 export function computeAccuracy(alignmentResult, options = {}) {
-  let correctCount = 0, substitutions = 0, omissions = 0, insertions = 0, struggles = 0, forgiven = 0;
+  let correctCount = 0, substitutions = 0, omissions = 0, insertions = 0, struggles = 0, forgiven = 0, longPauseErrors = 0;
   for (const w of alignmentResult) {
     switch (w.type) {
       case 'correct':
-        correctCount++;
+        // Long pause (≥3s) before a correct word = hesitation error in ORF
+        if (w._longPauseError) {
+          longPauseErrors++;
+        } else {
+          correctCount++;
+        }
         break;
       case 'substitution':
         // Proper noun forgiveness: count as correct if flagged as forgiven
@@ -60,11 +65,11 @@ export function computeAccuracy(alignmentResult, options = {}) {
         break;
     }
   }
-  const totalRefWords = correctCount + substitutions + omissions + struggles;
+  const totalRefWords = correctCount + substitutions + omissions + struggles + longPauseErrors;
   const accuracy = totalRefWords === 0
     ? 0
     : Math.round((correctCount / totalRefWords) * 1000) / 10;
-  return { accuracy, correctCount, totalRefWords, substitutions, omissions, insertions, struggles, forgiven };
+  return { accuracy, correctCount, totalRefWords, substitutions, omissions, insertions, struggles, forgiven, longPauseErrors };
 }
 
 /**
@@ -84,8 +89,8 @@ export function computeWCPMRange(alignmentResult, elapsedSeconds) {
     return { wcpmMin: 0, wcpmMax: 0, correctCount: 0, elapsedSeconds: elapsedSeconds || 0 };
   }
 
-  // Count correct words
-  const correctWords = alignmentResult.filter(w => w.type === 'correct');
+  // Count correct words (exclude long-pause errors — ≥3s hesitation before correct word = ORF error)
+  const correctWords = alignmentResult.filter(w => w.type === 'correct' && !w._longPauseError);
   const correctCount = correctWords.length;
 
   // Standard WCPM (max) - all correct words

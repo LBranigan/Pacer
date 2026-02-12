@@ -187,15 +187,15 @@ const DIAGNOSTIC_MISCUES = {
   },
 
   longPause: {
-    description: 'Extended silence (3+ seconds) indicating student got stuck',
-    detector: 'diagnostics.js → detectLongPauses()',
-    countsAsError: true, // Long pauses are considered errors
+    description: 'Extended silence (3+ seconds) indicating student got stuck. When the word after the pause is otherwise correct, it is reclassified as an error (_longPauseError) and shown as orange (attempted-struggled).',
+    detector: 'diagnostics.js → detectLongPauses() + app.js flags _longPauseError on correct words after ≥3s pause',
+    countsAsError: true, // Long pauses are counted in accuracy via _longPauseError flag on alignment entries
     config: {
       LONG_PAUSE_THRESHOLD_SEC: 3.0
     },
     example: {
-      context: '"the" ends at 1.0s, "dog" starts at 5.5s',
-      result: '4.5s gap flagged as long pause (error)'
+      context: '"the" ends at 1.0s, "dog" starts at 5.5s — student read "dog" correctly but hesitated 4.5s',
+      result: '4.5s gap flagged as long pause error — "dog" shown orange, counted as error in accuracy'
     },
     uiClass: 'pause-indicator'
   },

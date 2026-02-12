@@ -569,6 +569,8 @@ function renderNewAnalyzedWords(container, alignment, sttLookup, diagnostics, tr
 
     // Correct or compound-struggle (which resolved to correct word)
     if (entry.type === 'correct' || (entry.type === 'struggle' && entry.compound)) {
+      // Long pause (≥3s) before correct word = hesitation error → orange
+      if (entry._longPauseError) return 'attempted-struggled';
       // Recovered = only cross-validator heard it (V1/V0 both missed) — not confidently correct
       if (entry._recovered) return 'struggle-correct';
       // Compound fragments (e.g., "own"+"ed" for "owned") = clear mid-word pause → orange
@@ -762,7 +764,13 @@ function renderNewAnalyzedWords(container, alignment, sttLookup, diagnostics, tr
       tip.push(`False start: ${insertionsBefore.map(i => '"' + i.hyp + '"').join(', ')}`);
     }
     if (bucket === 'attempted-struggled') {
-      tip.push('Root detected, but full word not produced');
+      if (entry._longPauseError) {
+        tip.push(`Long pause (${entry._longPauseGap}s) before this word — scored as error`);
+      } else if (entry.compound && entry.parts) {
+        tip.push(`V1 produced fragments: [${entry.parts.join(', ')}] — scored as error`);
+      } else {
+        tip.push('Root detected, but full word not produced');
+      }
     }
     if (bucket === 'definite-struggle') {
       tip.push('No engine produced the correct word');
@@ -965,6 +973,9 @@ export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, di
   ];
   if (accuracy.struggles > 0) {
     errParts.push(accuracy.struggles + ' struggle' + (accuracy.struggles !== 1 ? 's' : ''));
+  }
+  if (accuracy.longPauseErrors > 0) {
+    errParts.push(accuracy.longPauseErrors + ' long pause' + (accuracy.longPauseErrors !== 1 ? 's' : ''));
   }
   errParts.push(accuracy.insertions + ' insertion' + (accuracy.insertions !== 1 ? 's' : ''));
   errBox.innerHTML = '<span class="metric-label">' + errParts.join(', ') + '</span>';
