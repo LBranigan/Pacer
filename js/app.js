@@ -1511,6 +1511,17 @@ async function runAnalysis() {
     });
   }
 
+  // Flag true insertions: extra words not explained by disfluency, self-correction, or artifact
+  for (const entry of alignment) {
+    if (entry.type !== 'insertion') continue;
+    if (entry._partOfStruggle || entry._isSelfCorrection) continue;
+    if (entry.hypIndex >= 0) {
+      const tw = transcriptWords[entry.hypIndex];
+      if (tw?.isDisfluency || tw?._ctcArtifact || tw?._preWordArtifact) continue;
+    }
+    entry._trueInsertion = true;
+  }
+
   const wcpm = (effectiveElapsedSeconds != null && effectiveElapsedSeconds > 0)
     ? computeWCPMRange(alignment, effectiveElapsedSeconds)
     : null;
@@ -1522,13 +1533,12 @@ async function runAnalysis() {
     wcpm: wcpm?.wcpm || null,
     accuracy: accuracy.accuracy,
     totalRefWords: accuracy.totalRefWords,
-    substitutions: accuracy.substitutions,
+    totalErrors: accuracy.totalErrors,
+    wordErrors: accuracy.wordErrors,
     omissions: accuracy.omissions,
-    struggles: accuracy.struggles,
     longPauseErrors: accuracy.longPauseErrors,
-    insertions: accuracy.insertions,
+    insertionErrors: accuracy.insertionErrors,
     forgiven: accuracy.forgiven,
-    forgivenessEnabled: accuracy.forgivenessEnabled,
     alignmentSummary: alignment.map(a => ({
       ref: a.ref,
       hyp: a.hyp,
@@ -1678,9 +1688,10 @@ async function runAnalysis() {
 
   if (appState.selectedStudentId) {
     const errorBreakdown = {
-      substitutions: accuracy.substitutions,
+      wordErrors: accuracy.wordErrors,
       omissions: accuracy.omissions,
-      insertions: accuracy.insertions,
+      longPauseErrors: accuracy.longPauseErrors,
+      insertionErrors: accuracy.insertionErrors,
       details: alignment.filter(w => w.type !== 'correct')
     };
     const assessmentId = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
@@ -1743,7 +1754,7 @@ async function runAnalysis() {
       wcpm: wcpm ? wcpm.wcpm : null,
       accuracy: accuracy.accuracy,
       totalWords: accuracy.totalRefWords,
-      errors: accuracy.substitutions + accuracy.omissions,
+      errors: accuracy.totalErrors,
       duration: effectiveElapsedSeconds,
       passagePreview: referenceText.slice(0, 60),
       passageText: referenceText,
@@ -1771,7 +1782,7 @@ async function runAnalysis() {
       wcpm: wcpm?.wcpm || null,
       accuracy: accuracy.accuracy,
       totalWords: accuracy.totalRefWords,
-      errors: accuracy.substitutions + accuracy.omissions,
+      errors: accuracy.totalErrors,
       forgiven: accuracy.forgiven,
       ghostCount: data._vad?.ghostCount || 0
     });

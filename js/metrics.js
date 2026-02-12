@@ -24,7 +24,7 @@ export function computeWCPM(alignmentResult, elapsedSeconds) {
  * @returns {{ accuracy: number, correctCount: number, totalRefWords: number, substitutions: number, omissions: number, insertions: number }}
  */
 export function computeAccuracy(alignmentResult, options = {}) {
-  let correctCount = 0, substitutions = 0, omissions = 0, insertions = 0, struggles = 0, forgiven = 0;
+  let correctCount = 0, wordErrors = 0, omissions = 0, insertionErrors = 0, forgiven = 0;
   const longPauseErrors = options.longPauseCount || 0;
   for (const w of alignmentResult) {
     switch (w.type) {
@@ -32,20 +32,18 @@ export function computeAccuracy(alignmentResult, options = {}) {
         correctCount++;
         break;
       case 'substitution':
-        // Proper noun forgiveness: count as correct if flagged as forgiven
         if (w.forgiven) {
           correctCount++;
           forgiven++;
         } else {
-          substitutions++;
+          wordErrors++;
         }
         break;
       case 'struggle':
-        // Substitution+ — student failed with additional evidence of decoding difficulty
-        struggles++;
+        // Compound fragments — orange bucket
+        wordErrors++;
         break;
       case 'omission':
-        // Proper noun forgiveness for omissions too
         if (w.forgiven) {
           correctCount++;
           forgiven++;
@@ -54,21 +52,21 @@ export function computeAccuracy(alignmentResult, options = {}) {
         }
         break;
       case 'insertion':
-        // Exclude claimed insertions — they're accounted for under struggle/self-correction
-        if (!w._partOfStruggle && !w._isSelfCorrection) {
-          insertions++;
+        // Only true insertions count (flagged in app.js, excludes disfluencies/artifacts/self-corrections)
+        if (w._trueInsertion) {
+          insertionErrors++;
         }
         break;
     }
   }
-  // ORF formula: WCPM = Total Words Attempted − Errors
-  // totalRefWords = passage length (fixed), pauses add to errors not to word count
-  const totalRefWords = correctCount + substitutions + omissions + struggles;
-  const totalErrors = substitutions + omissions + struggles + longPauseErrors;
+  // ORF formula: accuracy = (Total Words Attempted − Errors) / Total Words Attempted
+  // totalRefWords = passage length (fixed), errors don't inflate word count
+  const totalRefWords = correctCount + wordErrors + omissions;
+  const totalErrors = wordErrors + omissions + longPauseErrors + insertionErrors;
   const accuracy = totalRefWords === 0
     ? 0
     : Math.round(((totalRefWords - totalErrors) / totalRefWords) * 1000) / 10;
-  return { accuracy, correctCount, totalRefWords, totalErrors, substitutions, omissions, insertions, struggles, forgiven, longPauseErrors };
+  return { accuracy, correctCount, totalRefWords, totalErrors, wordErrors, omissions, insertionErrors, forgiven, longPauseErrors };
 }
 
 /**

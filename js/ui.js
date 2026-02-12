@@ -969,18 +969,20 @@ export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, di
 
   const errBox = document.createElement('div');
   errBox.className = 'metric-box metric-box-errors';
-  const errParts = [
-    accuracy.substitutions + ' substitution' + (accuracy.substitutions !== 1 ? 's' : ''),
-    accuracy.omissions + ' omission' + (accuracy.omissions !== 1 ? 's' : '')
-  ];
-  if (accuracy.struggles > 0) {
-    errParts.push(accuracy.struggles + ' struggle' + (accuracy.struggles !== 1 ? 's' : ''));
+  const errParts = [];
+  if (accuracy.wordErrors > 0) {
+    errParts.push(accuracy.wordErrors + ' word error' + (accuracy.wordErrors !== 1 ? 's' : ''));
+  }
+  if (accuracy.omissions > 0) {
+    errParts.push(accuracy.omissions + ' omission' + (accuracy.omissions !== 1 ? 's' : ''));
   }
   if (accuracy.longPauseErrors > 0) {
     errParts.push(accuracy.longPauseErrors + ' long pause' + (accuracy.longPauseErrors !== 1 ? 's' : ''));
   }
-  errParts.push(accuracy.insertions + ' insertion' + (accuracy.insertions !== 1 ? 's' : ''));
-  errBox.innerHTML = '<span class="metric-label">' + errParts.join(', ') + '</span>';
+  if (accuracy.insertionErrors > 0) {
+    errParts.push(accuracy.insertionErrors + ' insertion' + (accuracy.insertionErrors !== 1 ? 's' : ''));
+  }
+  errBox.innerHTML = '<span class="metric-label">' + (errParts.length > 0 ? errParts.join(', ') : 'No errors') + '</span>';
   metricsBar.appendChild(errBox);
 
   // Tier breakdown row
