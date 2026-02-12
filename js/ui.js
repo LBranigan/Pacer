@@ -582,6 +582,15 @@ function renderNewAnalyzedWords(container, alignment, sttLookup, diagnostics, tr
       return 'correct';
     }
 
+    // Non-compound struggle (decoding near-miss, hesitation, abandoned attempt)
+    // These were substitutions upgraded by resolveNearMissClusters or detectStruggleWords
+    if (entry.type === 'struggle' && !entry.compound) {
+      const refN = norm(entry.ref);
+      // Did any engine hear the correct word?
+      if (norm(entry._xvalWord) === refN || norm(entry._v0Word) === refN) return 'attempted-struggled';
+      return 'definite-struggle';
+    }
+
     // Substitution
     if (entry.type === 'substitution') {
       // <unknown> CTC token = ASR detected speech but couldn't decode → definite struggle
@@ -778,16 +787,12 @@ function renderNewAnalyzedWords(container, alignment, sttLookup, diagnostics, tr
       const hasRoot = (w) => w.length >= 3 && w !== refN && refN.startsWith(w);
       if (hasRoot(hypN) || hasRoot(v0N)) span.classList.add('word-morph-root');
     }
-    // Build V1 evidence string (insertionsBefore + hyp/parts + insertionsAfter)
-    // Recovered words were V1 omissions — V1 never produced them
-    const v1Parts = [];
-    if (!entry._recovered) {
-      for (const ins of insertionsBefore) v1Parts.push(ins.hyp);
-      if (entry.compound && entry.parts) v1Parts.push(...entry.parts);
-      else if (entry.hyp) v1Parts.push(entry.hyp);
-      for (const ins of insertionsAfter) v1Parts.push(ins.hyp);
-    }
-    const v1Ev = entry._recovered ? '(omitted)' : (v1Parts.join(' + ') || '\u2014');
+    // Build per-engine evidence strings from raw attempt snapshots
+    // _v1RawAttempt/_v0Attempt/_xvalAttempt capture full attempt (insertions + hyp)
+    // before any downstream mutations. Fall back to single-word fields when no fragments.
+    const v1Ev = entry._recovered ? '(omitted)'
+      : entry._v1RawAttempt?.length > 0 ? entry._v1RawAttempt.join(' + ')
+      : (entry.hyp || '\u2014');
     const v0Ev = entry._v0Attempt?.length > 0
       ? entry._v0Attempt.join(' + ')
       : (entry._v0Word || (entry._v0Type === 'omission' ? '(omitted)' : '\u2014'));

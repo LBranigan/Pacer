@@ -748,7 +748,8 @@ async function runAnalysis() {
     }
   }
 
-  // Group insertions per ref-word slot for V0 and Parakeet (for _v0Attempt/_xvalAttempt)
+  // Group insertions per ref-word slot for all three engines
+  // groups[i] = insertions before the i-th ref entry; groups[N] = trailing insertions
   const _groupInsertions = (fullAlign) => {
     const groups = [];
     let current = [];
@@ -759,6 +760,7 @@ async function runAnalysis() {
     groups.push(current);
     return groups;
   };
+  const v1InsGroups = _groupInsertions(alignment);
   const v0InsGroups = v0Alignment ? _groupInsertions(v0Alignment) : [];
   const pkInsGroups = parakeetAlignment ? _groupInsertions(parakeetAlignment) : [];
 
@@ -805,18 +807,29 @@ async function runAnalysis() {
       v1Entry._xvalWord = pkEntry.hyp;
     }
 
-    // Store per-engine attempt arrays (insertions before this ref word + the ref-matched hyp)
+    // Store per-engine raw attempt arrays (insertions before this ref word + the ref-matched hyp)
+    // Captures the FULL attempt each engine heard, before any downstream mutations.
+    // For compound-merged entries, include the parts (compound merge already ran inside alignWords).
+    {
+      const v1Ins = v1InsGroups[ri] || [];
+      const v1Parts = [...v1Ins.map(e => e.hyp)];
+      if (v1Entry.compound && v1Entry.parts) v1Parts.push(...v1Entry.parts);
+      else if (v1Entry.hyp) v1Parts.push(v1Entry.hyp);
+      if (v1Parts.length > 1) v1Entry._v1RawAttempt = v1Parts;
+    }
     if (hasV0 && v0Entry) {
       const v0Ins = v0InsGroups[ri] || [];
-      if (v0Ins.length > 0) {
-        v1Entry._v0Attempt = [...v0Ins.map(e => e.hyp), v0Entry.hyp].filter(Boolean);
-      }
+      const v0Parts = [...v0Ins.map(e => e.hyp)];
+      if (v0Entry.compound && v0Entry.parts) v0Parts.push(...v0Entry.parts);
+      else if (v0Entry.hyp) v0Parts.push(v0Entry.hyp);
+      if (v0Parts.length > 1) v1Entry._v0Attempt = v0Parts;
     }
     if (hasPk && pkEntry) {
       const pkIns = pkInsGroups[ri] || [];
-      if (pkIns.length > 0) {
-        v1Entry._xvalAttempt = [...pkIns.map(e => e.hyp), pkEntry.hyp].filter(Boolean);
-      }
+      const pkParts = [...pkIns.map(e => e.hyp)];
+      if (pkEntry.compound && pkEntry.parts) pkParts.push(...pkEntry.parts);
+      else if (pkEntry.hyp) pkParts.push(pkEntry.hyp);
+      if (pkParts.length > 1) v1Entry._xvalAttempt = pkParts;
     }
 
     // Count how many engines got this word correct
