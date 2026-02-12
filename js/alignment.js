@@ -709,7 +709,7 @@ export function alignWords(referenceText, transcriptWords) {
   // Re-inject pre-filtered disfluencies as insertion entries.
   // These were stripped before NW alignment to prevent "uh" matching short ref words like "a",
   // but they need to appear in the alignment result so the UI can render them and the
-  // V1/V0 disfluency classifier in app.js can process them.
+  // filler classifier in app.js can tag them on transcriptWords.
   const disfluencyWords = rawNormed.filter(p => DISFLUENCIES.has(p.norm));
   for (const disf of disfluencyWords) {
     let insertPos = final.length;

@@ -2295,8 +2295,7 @@ export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, di
             let label = 'insertion';
             if (ins._partOfStruggle) label = 'struggle fragment';
             else if (ins._isSelfCorrection) label = 'self-correction';
-            else if (tw?.isDisfluency) label = tw.disfluencyType || 'disfluency';
-            else if (v0Match < 0 && v0Align.length > 0) label = 'insertion (V0 suppressed)';
+            else if (tw?.isDisfluency) label = tw.disfluencyType || 'filler';
             tdV.textContent = label;
             tr.appendChild(tdV);
 

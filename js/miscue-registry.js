@@ -69,31 +69,17 @@ const ALIGNMENT_MISCUES = {
 
 const REVERB_DISFLUENCY_MISCUES = {
   reverb_filler: {
-    description: 'Filler word detected by Reverb verbatim/clean diff (um, uh, er, ah, mm, hmm)',
-    detector: 'app.js → disfluency classification block (FILLER_WORDS check + pre-filtered tagging)',
+    description: 'Filler word detected via FILLER_WORDS set (um, uh, er, ah, mm, hmm)',
+    detector: 'app.js → filler classification block (FILLER_WORDS check on V1 insertions + transcriptWords)',
     countsAsError: false,
     config: null,
     example: {
       reference: 'the cat sat',
       spoken: 'the um cat sat',
-      result: '"um" detected as filler — V1 insertion matched FILLER_WORDS set, or pre-filtered before alignment and retroactively tagged'
+      result: '"um" detected as filler — V1 insertion or pre-filtered word matched FILLER_WORDS set'
     },
     uiClass: 'word-disfluency',
-    note: 'Two detection paths: (1) V1 insertion matching FILLER_WORDS → isDisfluency=true. (2) Pre-filtered fillers stripped by alignment.js DISFLUENCIES before NW alignment, then re-injected as insertion entries with _preFilteredDisfluency flag after merge pipeline. Both paths tag transcriptWords[idx].isDisfluency=true. UI renders disfluency fragments with .word-disfluency class (purple).'
-  },
-
-  reverb_false_start: {
-    description: 'False start (partial word) detected by V1/V0 insertion diff',
-    detector: 'app.js → disfluency classification block (V1 insertion present, V0 insertion absent)',
-    countsAsError: false,
-    config: null,
-    example: {
-      reference: 'the cat sat',
-      spoken: 'the ca- cat sat',
-      result: '"ca-" is a V1 insertion absent from V0 → tagged as false_start'
-    },
-    uiClass: 'word-disfluency',
-    note: 'V0 (clean) language model suppresses partial words and repetitions. If a V1 insertion is not in V0 insertions, V0 deemed it a disfluency.'
+    note: 'Two detection paths: (1) V1 alignment insertion matching FILLER_WORDS → isDisfluency=true. (2) Pre-filtered fillers stripped by alignment.js DISFLUENCIES before NW alignment, then re-injected as insertion entries with _preFilteredDisfluency flag after merge pipeline. Both paths tag transcriptWords[idx].isDisfluency=true. UI renders disfluency fragments with .word-disfluency class (purple). False starts (partial words) are handled separately by the near-miss/self-correction system in diagnostics.js.'
   }
 };
 
@@ -535,8 +521,7 @@ export function getDetectorLocation(type) {
  * - hesitation: Brief pause (< 3s)
  * - selfCorrection: Repeated word/phrase or near-miss attempt before correct word
  * - properNounForgiveness: Close attempt at name
- * - reverb_filler: Filler word (um, uh) via V1/V0 diff or pre-filter tagging
- * - reverb_false_start: False start via V1/V0 insertion diff
+ * - reverb_filler: Filler word (um, uh) via FILLER_WORDS set
  * - abbreviationCompoundMerge: i.e./e.g./U.S. read letter-by-letter → compound merged
  * - abbreviationExpansionMerge: i.e. read as "that is" → expansion merged
  * - numberExpansionMerge: "2014" read as "twenty fourteen" → expansion merged

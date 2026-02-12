@@ -924,43 +924,26 @@ async function runAnalysis() {
     hasV0, hasPk
   });
 
-  // ── Disfluency classification (V1 insertions vs V0) ────────────────
-  // V1 insertion present + V0 insertion absent → filler/false-start
-  // V1 insertion present + V0 insertion present → genuine extra word
+  // ── Filler classification ────────────────────────────────────────────
+  // Tag known filler words (um, uh, etc.) on transcriptWords so they're
+  // excluded from insertion counts and rendered with disfluency styling.
+  // Two paths: (1) V1 alignment insertions, (2) pre-filtered words that
+  // were stripped before NW alignment and re-injected after.
   const FILLER_WORDS = new Set(['um', 'uh', 'uh-huh', 'mm', 'hmm', 'er', 'ah']);
   {
-    const v1Insertions = alignment.filter(e => e.type === 'insertion');
-    const v0InsertionNorms = new Set();
-    if (v0Alignment) {
-      for (const e of v0Alignment) {
-        if (e.type === 'insertion' && e.hyp) {
-          v0InsertionNorms.add(e.hyp.toLowerCase().replace(/[^a-z'-]/g, ''));
-        }
-      }
-    }
-    for (const ins of v1Insertions) {
+    for (const ins of alignment.filter(e => e.type === 'insertion')) {
       if (!ins.hyp) continue;
       const norm = ins.hyp.toLowerCase().replace(/[^a-z'-]/g, '');
-      const tw = ins.hypIndex >= 0 ? transcriptWords[ins.hypIndex] : null;
-
       if (FILLER_WORDS.has(norm)) {
+        const tw = ins.hypIndex >= 0 ? transcriptWords[ins.hypIndex] : null;
         if (tw) { tw.isDisfluency = true; tw.disfluencyType = 'filler'; }
-      } else if (v0Alignment && !v0InsertionNorms.has(norm)) {
-        // V0 suppressed this word — likely a false start or repetition
-        if (tw) { tw.isDisfluency = true; tw.disfluencyType = 'false_start'; }
       }
     }
-  }
-
-  // ── Tag pre-filtered disfluencies on transcriptWords ───────────────
-  // alignment.js strips known fillers ("uh", "um", etc.) BEFORE NW alignment
-  // so they never appear as insertions. But they still exist in transcriptWords
-  // and need isDisfluency tagging so the UI and downstream AI can see them.
-  // The V0 clean pass independently confirms these are fillers (V0 omits them).
-  {
+    // Safety net: tag any transcriptWords fillers missed above (e.g., pre-filtered
+    // words that alignment.js re-injected but didn't become V1 insertions)
     for (let ti = 0; ti < transcriptWords.length; ti++) {
       const tw = transcriptWords[ti];
-      if (tw.isDisfluency) continue; // already tagged by the insertion classifier above
+      if (tw.isDisfluency) continue;
       const norm = (tw.word || '').toLowerCase().replace(/[^a-z'-]/g, '');
       if (FILLER_WORDS.has(norm)) {
         tw.isDisfluency = true;
