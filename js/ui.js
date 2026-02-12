@@ -571,7 +571,8 @@ function renderNewAnalyzedWords(container, alignment, sttLookup, diagnostics, tr
     if (entry.type === 'correct' || (entry.type === 'struggle' && entry.compound)) {
       // Recovered = only cross-validator heard it (V1/V0 both missed) — not confidently correct
       if (entry._recovered) return 'struggle-correct';
-      if (entry.compound && entry.parts?.length >= 2) return 'struggle-correct';
+      // Compound fragments (e.g., "own"+"ed" for "owned") = clear mid-word pause → orange
+      if (entry.type === 'struggle' && entry.compound && entry.parts?.length >= 2) return 'attempted-struggled';
       const refN = norm(entry.ref);
       const hasRelatedIns = group.insertionsBefore.some(ins => {
         const h = norm(ins.hyp);
@@ -632,11 +633,11 @@ function renderNewAnalyzedWords(container, alignment, sttLookup, diagnostics, tr
     '<div class="legend-row">' +
       '<span class="legend-label">Scoring</span>' +
       Object.entries(BUCKET).map(([k, { label }]) => `<span class="word word-bucket-${k}">${label}</span>`).join('') +
+      '<span class="pause-indicator">[pause]</span>' +
     '</div>' +
     '<div class="legend-row">' +
       '<span class="legend-label">Indicators</span>' +
       '<span class="word word-morph-root" style="background:#ffe0b2;color:#e65100;">Morph. Root</span>' +
-      '<span class="pause-indicator">[pause]</span>' +
       '<span class="word word-hesitation">Hesit.</span>' +
       '<span class="word-fragment">fragment</span>' +
     '</div>';
@@ -740,7 +741,6 @@ function renderNewAnalyzedWords(container, alignment, sttLookup, diagnostics, tr
       const hasRoot = (w) => w.length >= 3 && refN.startsWith(w);
       if (hasRoot(hypN) || hasRoot(v0N)) span.classList.add('word-morph-root');
     }
-
     // Build V1 evidence string (insertionsBefore + hyp/parts + insertionsAfter)
     const v1Parts = [];
     for (const ins of insertionsBefore) v1Parts.push(ins.hyp);
