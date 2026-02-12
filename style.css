@@ -652,6 +652,18 @@ body.dev-mode .dev-mode-toggle {
 .pipeline-final-struggle { background: #fff5f0; }
 .pipeline-final-self-correction { background: #faf5ff; }
 
+/* Step 0: Raw Engine Output — anchor-aligned table */
+.pipeline-raw-table td { font-family: 'SF Mono', 'Consolas', 'Monaco', monospace; font-size: 0.76rem; }
+.pipeline-raw-anchor-row { background: #f0f7f0; }
+.pipeline-raw-anchor-row .pipeline-td-idx { color: #2e7d32; font-weight: 700; }
+.pipeline-raw-gap-row { background: #fffbf0; }
+.pipeline-raw-gap-row .pipeline-td-idx { color: transparent; }
+.pipeline-raw-anchor { font-weight: 600; }
+.pipeline-raw-nonanchor { color: #c62828; }
+.pipeline-raw-empty { background: #fafafa; }
+.pipeline-raw-word { margin-right: 6px; }
+.pipeline-raw-ts { color: #aaa; font-size: 0.68rem; white-space: nowrap; }
+
 /* Step 3: Post-processing lists */
 .pipeline-insertions {
   font-size: 0.8rem;

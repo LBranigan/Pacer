@@ -787,12 +787,12 @@ function renderNewAnalyzedWords(container, alignment, sttLookup, diagnostics, tr
         tip.push(`VAD during pause: ${p._vadAnalysis.speechPercent}% speech (${p._vadAnalysis.label})`);
       }
     }
-    // Timestamps in tooltip
-    const v1Ts = getWordTs(entry.hypIndex);
+    // Timestamps in tooltip — use preserved per-engine fields, NOT tw.startTime (overwritten by Parakeet)
     const tw = (entry.hypIndex >= 0 && transcriptWords?.[entry.hypIndex]) ? transcriptWords[entry.hypIndex] : null;
-    const xvalTs = (tw && tw._xvalStartTime) ? fmtTs(tw._xvalStartTime, tw._xvalEndTime) : '';
+    const v1Ts = tw ? fmtTs(tw._reverbStartTime, tw._reverbEndTime) : '';
+    const xvalTs = tw ? fmtTs(tw._xvalStartTime, tw._xvalEndTime) : '';
     if (v1Ts) tip.push(`V1 time: ${v1Ts}`);
-    if (xvalTs && xvalTs !== v1Ts) tip.push(`Pk time: ${xvalTs}`);
+    if (xvalTs) tip.push(`Pk time: ${xvalTs}`);
 
     span.dataset.tooltip = tip.join('\n');
     span.style.cursor = 'pointer';
@@ -1783,6 +1783,164 @@ export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, di
       }
       return span;
     };
+
+    // ── STEP 0: Raw Engine Output (before any alignment) ──
+    {
+      const v1Raw = reverbVerbatim;
+      const v0Raw = reverbClean;
+      const pkRaw = xvalRaw;
+
+      const { step, body } = makeStep(0, 'Raw Engine Output',
+        'unprocessed word lists from each ASR engine \u2014 anchor words aligned across columns');
+
+      if (v1Raw.length === 0 && v0Raw.length === 0 && pkRaw.length === 0) {
+        const msg = document.createElement('div');
+        msg.className = 'pipeline-step-summary';
+        msg.textContent = 'No raw engine data available';
+        body.appendChild(msg);
+      } else {
+        // Normalize word for anchor matching only (display stays raw)
+        const normW = w => (w.word || '').toLowerCase().replace(/[^a-z]/g, '');
+
+        // Standard LCS with position tracking (DP)
+        const lcsPos = (a, b) => {
+          const m = a.length, n = b.length;
+          const dp = [];
+          for (let i = 0; i <= m; i++) { dp[i] = new Uint16Array(n + 1); }
+          for (let i = 1; i <= m; i++)
+            for (let j = 1; j <= n; j++)
+              dp[i][j] = a[i - 1] === b[j - 1] ? dp[i - 1][j - 1] + 1 : Math.max(dp[i - 1][j], dp[i][j - 1]);
+          const result = [];
+          let i = m, j = n;
+          while (i > 0 && j > 0) {
+            if (a[i - 1] === b[j - 1]) { result.unshift({ word: a[i - 1], posA: i - 1, posB: j - 1 }); i--; j--; }
+            else if (dp[i - 1][j] >= dp[i][j - 1]) i--;
+            else j--;
+          }
+          return result;
+        };
+
+        // Find 3-way anchors via pairwise LCS: LCS(V1,Pk) → LCS(result,V0)
+        const v1n = v1Raw.map(normW), v0n = v0Raw.map(normW), pkn = pkRaw.map(normW);
+        let anchors = [];
+        if (v1n.length > 0 && pkn.length > 0 && v0n.length > 0) {
+          const lcs_v1pk = lcsPos(v1n, pkn);
+          const lcs_all = lcsPos(lcs_v1pk.map(a => a.word), v0n);
+          anchors = lcs_all.map(a => ({
+            v1: lcs_v1pk[a.posA].posA, v0: a.posB, pk: lcs_v1pk[a.posA].posB
+          }));
+        } else if (v1n.length > 0 && pkn.length > 0) {
+          anchors = lcsPos(v1n, pkn).map(a => ({ v1: a.posA, v0: -1, pk: a.posB }));
+        } else if (v1n.length > 0 && v0n.length > 0) {
+          anchors = lcsPos(v1n, v0n).map(a => ({ v1: a.posA, v0: a.posB, pk: -1 }));
+        }
+
+        // Build table
+        const table = document.createElement('table');
+        table.className = 'pipeline-table pipeline-raw-table';
+        const thead = document.createElement('thead');
+        const hRow = document.createElement('tr');
+        for (const h of ['#', 'V1 (Verbatim)', 'V0 (Clean)', 'Parakeet']) {
+          const th = document.createElement('th'); th.textContent = h; hRow.appendChild(th);
+        }
+        thead.appendChild(hRow);
+        table.appendChild(thead);
+        const tbody = document.createElement('tbody');
+
+        // Format timestamp from raw word object
+        const fmtTs = w => {
+          const s = w.start || w.startTime || '';
+          const e = w.end || w.endTime || '';
+          const strip = t => String(t).replace(/s$/i, '');
+          return s ? strip(s) + '\u2013' + strip(e) + 's' : '';
+        };
+
+        // Create cell for a raw word with optional click-to-play
+        const rawCell = (w, isAnchor) => {
+          const td = document.createElement('td');
+          if (!w) { td.className = 'pipeline-raw-empty'; return td; }
+          td.className = isAnchor ? 'pipeline-raw-anchor' : 'pipeline-raw-nonanchor';
+          const wordEl = document.createElement('span');
+          wordEl.className = 'pipeline-raw-word';
+          wordEl.textContent = w.word;
+          td.appendChild(wordEl);
+          const tsEl = document.createElement('span');
+          tsEl.className = 'pipeline-raw-ts';
+          tsEl.textContent = fmtTs(w);
+          td.appendChild(tsEl);
+          if (wordAudioEl) {
+            const start = parseSttTime(w.start || w.startTime);
+            const end = parseSttTime(w.end || w.endTime);
+            if (start > 0) {
+              td.classList.add('word-clickable');
+              td.addEventListener('click', (ev) => {
+                ev.stopPropagation();
+                wordAudioEl.pause();
+                wordAudioEl.currentTime = start;
+                const onTime = () => { if (wordAudioEl.currentTime >= end) { wordAudioEl.pause(); wordAudioEl.removeEventListener('timeupdate', onTime); } };
+                wordAudioEl.addEventListener('timeupdate', onTime);
+                wordAudioEl.play().catch(() => {});
+              });
+            }
+          }
+          return td;
+        };
+
+        let prevV1 = -1, prevV0 = -1, prevPk = -1, anchorNum = 0;
+
+        // Render gap rows (non-anchor words between two anchors)
+        const addGapRows = (v1End, v0End, pkEnd) => {
+          const v1Gap = v1End > prevV1 + 1 ? v1Raw.slice(prevV1 + 1, v1End) : [];
+          const v0Gap = v0End > prevV0 + 1 ? v0Raw.slice(prevV0 + 1, v0End) : [];
+          const pkGap = pkEnd > prevPk + 1 ? pkRaw.slice(prevPk + 1, pkEnd) : [];
+          const maxGap = Math.max(v1Gap.length, v0Gap.length, pkGap.length);
+          for (let g = 0; g < maxGap; g++) {
+            const tr = document.createElement('tr');
+            tr.className = 'pipeline-raw-gap-row';
+            const tdIdx = document.createElement('td');
+            tdIdx.className = 'pipeline-td-idx';
+            tr.appendChild(tdIdx);
+            tr.appendChild(rawCell(v1Gap[g] || null, false));
+            tr.appendChild(rawCell(v0Gap[g] || null, false));
+            tr.appendChild(rawCell(pkGap[g] || null, false));
+            tbody.appendChild(tr);
+          }
+        };
+
+        for (const anchor of anchors) {
+          const v0End = anchor.v0 >= 0 ? anchor.v0 : prevV0 + 1;
+          const pkEnd = anchor.pk >= 0 ? anchor.pk : prevPk + 1;
+          addGapRows(anchor.v1, v0End, pkEnd);
+          anchorNum++;
+          const tr = document.createElement('tr');
+          tr.className = 'pipeline-raw-anchor-row';
+          const tdIdx = document.createElement('td');
+          tdIdx.className = 'pipeline-td-idx';
+          tdIdx.textContent = anchorNum;
+          tr.appendChild(tdIdx);
+          tr.appendChild(rawCell(v1Raw[anchor.v1], true));
+          tr.appendChild(rawCell(anchor.v0 >= 0 ? v0Raw[anchor.v0] : null, true));
+          tr.appendChild(rawCell(anchor.pk >= 0 ? pkRaw[anchor.pk] : null, true));
+          tbody.appendChild(tr);
+          prevV1 = anchor.v1;
+          if (anchor.v0 >= 0) prevV0 = anchor.v0;
+          if (anchor.pk >= 0) prevPk = anchor.pk;
+        }
+
+        // Trailing words after last anchor
+        addGapRows(v1Raw.length, v0Raw.length, pkRaw.length);
+
+        table.appendChild(tbody);
+        body.appendChild(table);
+
+        const summary = document.createElement('div');
+        summary.className = 'pipeline-step-summary';
+        summary.textContent = 'V1: ' + v1Raw.length + ' words | V0: ' + v0Raw.length + ' words | Pk: ' + pkRaw.length + ' words | Anchors: ' + anchors.length;
+        body.appendChild(summary);
+      }
+
+      confWordsDiv.appendChild(step);
+    }
 
     // ── STEP 1: Three-Engine Consensus (with insertion context) ──
     {
