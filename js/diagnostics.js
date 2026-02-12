@@ -246,6 +246,57 @@ export function resolveNearMissClusters(alignment) {
     }
   }
 
+  // ── Second pass: concatenation-based near-miss ──────────────────────
+  // For insertions not claimed by the individual pass above, try concatenating
+  // runs of consecutive insertions around a substitution/struggle and check
+  // isNearMiss on the combined form (e.g., "var"+"all" vs "overall").
+  for (let i = 0; i < alignment.length; i++) {
+    const entry = alignment[i];
+    if (entry.type !== 'substitution' && entry.type !== 'struggle') continue;
+    const refClean = clean(entry.ref);
+    if (refClean.length < 3) continue;
+
+    // Collect unclaimed consecutive insertions immediately before this sub
+    const beforeIns = [];
+    for (let j = i - 1; j >= 0; j--) {
+      const e = alignment[j];
+      if (e.type !== 'insertion') break;
+      if (e._partOfStruggle || e._isSelfCorrection) break;
+      const ch = clean(e.hyp);
+      if (ch.length < 2) break;
+      beforeIns.unshift(e);
+      if (beforeIns.length >= 3) break;
+    }
+
+    // Collect unclaimed consecutive insertions immediately after this sub
+    const afterIns = [];
+    for (let j = i + 1; j < alignment.length; j++) {
+      const e = alignment[j];
+      if (e.type !== 'insertion') break;
+      if (e._partOfStruggle || e._isSelfCorrection) break;
+      const ch = clean(e.hyp);
+      if (ch.length < 2) break;
+      afterIns.push(e);
+      if (afterIns.length >= 3) break;
+    }
+
+    if (beforeIns.length === 0 && afterIns.length === 0) continue;
+
+    const combined = [...beforeIns.map(e => clean(e.hyp)), clean(entry.hyp), ...afterIns.map(e => clean(e.hyp))].join('');
+    // Reject if combined is much longer than reference (prevents spurious matches)
+    if (combined.length > refClean.length * 2) continue;
+
+    if (isNearMiss(combined, entry.ref)) {
+      for (const ins of [...beforeIns, ...afterIns]) {
+        ins._partOfStruggle = true;
+        ins._nearMissTarget = entry.ref;
+        if (!entry._nearMissEvidence) entry._nearMissEvidence = [];
+        entry._nearMissEvidence.push(ins.hyp);
+      }
+      entry._concatAttempt = combined;
+    }
+  }
+
   // After the pass — upgrade substitutions with near-miss evidence
   // Skip entries already classified as struggle (e.g. Path 4 divergence)
   for (const entry of alignment) {

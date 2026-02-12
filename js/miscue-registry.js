@@ -279,7 +279,13 @@ const DIAGNOSTIC_MISCUES = {
       detector: 'diagnostics.js → absorbMispronunciationFragments()',
       mechanism: 'If an insertion\'s hypIndex falls within ±1 of a nearby substitution/struggle entry and its Reverb timestamp is within the substitution\'s xval time window (±150ms), it is flagged _partOfStruggle and excluded from insertion count.',
       tolerance: '150ms on xval timestamp window edges',
-      guards: ['Insertion must not already be _isSelfCorrection', 'Uses hypIndex for direct timestamp lookup from transcriptWords', 'Absorbs orphan BPE fragments into parent mispronunciation']
+      guards: ['Insertion must not already be _isSelfCorrection', 'Uses hypIndex for direct timestamp lookup from transcriptWords', 'Absorbs orphan BPE fragments into parent mispronunciation'],
+      concatenatedFragments: {
+        description: 'When individual insertions fail isNearMiss (e.g., "var" vs "overall" = 0.286 < 0.4), concatenation of consecutive unclaimed insertions + the substitution hyp is tried (e.g., "var"+"all" = "varall" vs "overall" passes shared suffix "all" >= 3 chars). Runs as second pass in resolveNearMissClusters after individual checks.',
+        detector: 'diagnostics.js → resolveNearMissClusters() (concatenation pass)',
+        guards: ['Max 3 insertions concatenated', 'Each insertion >= 2 chars', 'Combined length <= 2× ref length', 'Skips already-claimed insertions (_partOfStruggle, _isSelfCorrection)'],
+        fields: '_concatAttempt on the substitution entry stores the combined form for tooltip enrichment'
+      }
     },
     note: 'A word can match multiple pathways simultaneously. Paths 1-3 require a substitution base (student said wrong word). Compound fragments pathway reclassifies correct words where V1 compound merge combined 2+ fragments — detected via independent 3-way reference alignment (V1, V0, Parakeet each aligned to reference separately).'
   },

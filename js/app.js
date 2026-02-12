@@ -748,6 +748,20 @@ async function runAnalysis() {
     }
   }
 
+  // Group insertions per ref-word slot for V0 and Parakeet (for _v0Attempt/_xvalAttempt)
+  const _groupInsertions = (fullAlign) => {
+    const groups = [];
+    let current = [];
+    for (const entry of fullAlign) {
+      if (entry.type === 'insertion') current.push(entry);
+      else { groups.push(current); current = []; }
+    }
+    groups.push(current);
+    return groups;
+  };
+  const v0InsGroups = v0Alignment ? _groupInsertions(v0Alignment) : [];
+  const pkInsGroups = parakeetAlignment ? _groupInsertions(parakeetAlignment) : [];
+
   // Filter insertions to get ref-entry arrays (same length = ref word count)
   const v1Ref = alignment.filter(e => e.type !== 'insertion');
   const v0Ref = v0Alignment ? v0Alignment.filter(e => e.type !== 'insertion') : [];
@@ -789,6 +803,20 @@ async function runAnalysis() {
     }
     if (pkEntry?.hyp) {
       v1Entry._xvalWord = pkEntry.hyp;
+    }
+
+    // Store per-engine attempt arrays (insertions before this ref word + the ref-matched hyp)
+    if (hasV0 && v0Entry) {
+      const v0Ins = v0InsGroups[ri] || [];
+      if (v0Ins.length > 0) {
+        v1Entry._v0Attempt = [...v0Ins.map(e => e.hyp), v0Entry.hyp].filter(Boolean);
+      }
+    }
+    if (hasPk && pkEntry) {
+      const pkIns = pkInsGroups[ri] || [];
+      if (pkIns.length > 0) {
+        v1Entry._xvalAttempt = [...pkIns.map(e => e.hyp), pkEntry.hyp].filter(Boolean);
+      }
     }
 
     // Count how many engines got this word correct

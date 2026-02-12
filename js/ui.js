@@ -754,8 +754,12 @@ function renderNewAnalyzedWords(container, alignment, sttLookup, diagnostics, tr
       for (const ins of insertionsAfter) v1Parts.push(ins.hyp);
     }
     const v1Ev = entry._recovered ? '(omitted)' : (v1Parts.join(' + ') || '\u2014');
-    const v0Ev = entry._v0Word || (entry._v0Type === 'omission' ? '(omitted)' : '\u2014');
-    const pkEv = entry._xvalWord || '\u2014';
+    const v0Ev = entry._v0Attempt?.length > 0
+      ? entry._v0Attempt.join(' + ')
+      : (entry._v0Word || (entry._v0Type === 'omission' ? '(omitted)' : '\u2014'));
+    const pkEv = entry._xvalAttempt?.length > 0
+      ? entry._xvalAttempt.join(' + ')
+      : (entry._xvalWord || '\u2014');
 
     // Tooltip
     const tip = [];
