@@ -354,11 +354,19 @@ export function detectOnsetDelays(transcriptWords, referenceText, alignment) {
     const prevEnd = parseTime(transcriptWords[prevIdx].endTime);
     gap = start - prevEnd;
 
+    // Cross-check with Reverb timestamps: Parakeet may have a decoding blackout
+    // where its NW alignment shifts timestamps, creating phantom gaps.
+    const rEnd = parseTime(transcriptWords[prevIdx]._reverbEndTime);
+    const rStart = parseTime(w._reverbStartTime);
+    if (rEnd != null && rStart != null && rStart > rEnd) {
+      gap = Math.min(gap, rStart - rEnd);
+    }
+
     // If unconfirmed words were skipped, their Reverb-timestamped speech
     // may fill the gap — use the actual longest silence instead
     if (i - prevIdx > 1) {
       const skipped = transcriptWords.slice(prevIdx + 1, i);
-      gap = longestSilenceInGap(prevEnd, start, skipped);
+      gap = Math.min(gap, longestSilenceInGap(prevEnd, start, skipped));
     }
 
     // Determine threshold based on punctuation after previous word
@@ -414,12 +422,22 @@ export function detectLongPauses(transcriptWords) {
     const rawGap = nextStart - end;
 
     if (rawGap >= 3) {
+      let effectiveGap = rawGap;
+
+      // Cross-check with Reverb timestamps: Parakeet may have a decoding blackout
+      // where its NW alignment shifts timestamps, creating phantom gaps.
+      // If Reverb timestamps show a much shorter gap, use those instead.
+      const rEnd = parseTime(transcriptWords[i]._reverbEndTime);
+      const rStart = parseTime(transcriptWords[nextIdx]._reverbStartTime);
+      if (rEnd != null && rStart != null && rStart > rEnd) {
+        effectiveGap = Math.min(effectiveGap, rStart - rEnd);
+      }
+
       // If unconfirmed words were skipped, their Reverb-timestamped speech
       // may fill the gap — use the actual longest silence instead
-      let effectiveGap = rawGap;
       if (nextIdx > i + 1) {
         const skipped = transcriptWords.slice(i + 1, nextIdx);
-        effectiveGap = longestSilenceInGap(end, nextStart, skipped);
+        effectiveGap = Math.min(effectiveGap, longestSilenceInGap(end, nextStart, skipped));
       }
 
       if (effectiveGap >= 3) {

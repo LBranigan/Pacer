@@ -569,6 +569,8 @@ function renderNewAnalyzedWords(container, alignment, sttLookup, diagnostics, tr
 
     // Correct or compound-struggle (which resolved to correct word)
     if (entry.type === 'correct' || (entry.type === 'struggle' && entry.compound)) {
+      // Recovered = only cross-validator heard it (V1/V0 both missed) — not confidently correct
+      if (entry._recovered) return 'struggle-correct';
       if (entry.compound && entry.parts?.length >= 2) return 'struggle-correct';
       const refN = norm(entry.ref);
       const hasRelatedIns = group.insertionsBefore.some(ins => {
@@ -581,6 +583,8 @@ function renderNewAnalyzedWords(container, alignment, sttLookup, diagnostics, tr
 
     // Substitution
     if (entry.type === 'substitution') {
+      // <unknown> CTC token = ASR detected speech but couldn't decode → definite struggle
+      if (entry.hyp === 'unknown' && norm(entry.ref) !== 'unknown') return 'definite-struggle';
       const refN = norm(entry.ref);
       // Did any engine hear the correct word?
       if (norm(entry._xvalWord) === refN || norm(entry._v0Word) === refN) return 'attempted-struggled';
@@ -1835,6 +1839,11 @@ export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, di
           if (!entry || twSymbol === 'n/a') {
             td.className = 'engine-unavailable';
             td.textContent = 'n/a';
+          } else if (entry._recovered) {
+            // Recovery overwrites V1 alignment entry with Parakeet's word —
+            // show that V1 actually heard nothing (only Parakeet recovered it)
+            td.className = 'engine-omit';
+            td.textContent = '\u2014 (recovered)';
           } else if (entry.type === 'omission') {
             td.className = 'engine-omit';
             td.textContent = '\u2014';

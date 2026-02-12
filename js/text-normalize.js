@@ -9,8 +9,8 @@ export const DISFLUENCIES = new Set([
 
 /**
  * Normalize text into an array of lowercase words.
- * Strips leading/trailing punctuation from each word and preserves
- * apostrophes within words. Hyphens at line breaks are rejoined;
+ * Strips leading/trailing punctuation, apostrophes (straight and curly),
+ * and internal periods from each word. Hyphens at line breaks are rejoined;
  * all other hyphens split the word into separate tokens.
  * @param {string} text
  * @returns {string[]}
@@ -23,6 +23,7 @@ export function normalizeText(text) {
     .split(/\s+/)
     .map(w => w.replace(/^[^\w'-]+|[^\w'-]+$/g, ''))
     .map(w => w.replace(/\./g, ''))   // Strip internal periods (abbreviations: i.e. → ie, U.S.A. → usa)
+    .map(w => w.replace(/['\u2018\u2019\u201B`]/g, ''))  // Strip apostrophes/smart quotes (content's → contents, don't → dont)
     .filter(w => w.length > 0);
 
   // Merge trailing-hyphen tokens with next token (line-break artifacts from OCR).

@@ -455,7 +455,7 @@ async function runAnalysis() {
           let concat = '';
           for (let k = 0; k < group.length; k++) {
             concat += transcriptWords[group[k]].word;
-            const concatNorm = concat.toLowerCase().replace(/[^a-z'-]/g, '');
+            const concatNorm = concat.toLowerCase().replace(/[^a-z'-]/g, '').replace(/['\u2018\u2019\u201B`]/g, '');
             if (k > 0 && refNormSet.has(concatNorm)) {
               const parts = group.slice(0, k + 1).map(idx => transcriptWords[idx].word);
               const first = transcriptWords[group[0]];
@@ -607,7 +607,7 @@ async function runAnalysis() {
   // misses: "volume"→"vol", "and"→"&", etc.
   const sttLookup = new Map();
   for (const w of transcriptWords) {
-    const norm = w.word.toLowerCase().replace(/^[^\w'-]+|[^\w'-]+$/g, '').replace(/\./g, '').replace(/-+$/, '');
+    const norm = w.word.toLowerCase().replace(/^[^\w'-]+|[^\w'-]+$/g, '').replace(/\./g, '').replace(/['\u2018\u2019\u201B`]/g, '').replace(/-+$/, '');
     if (!sttLookup.has(norm)) sttLookup.set(norm, []);
     sttLookup.get(norm).push(w);
   }
@@ -1011,7 +1011,7 @@ async function runAnalysis() {
     entry.hypIndex = insertIdx;
     entry._recovered = true;
 
-    const lookupKey = ts.word.toLowerCase().replace(/[^a-z'-]/g, '').replace(/\./g, '');
+    const lookupKey = ts.word.toLowerCase().replace(/[^a-z'-]/g, '').replace(/\./g, '').replace(/['\u2018\u2019\u201B`]/g, '');
     if (!sttLookup.has(lookupKey)) sttLookup.set(lookupKey, []);
     sttLookup.get(lookupKey).push(recoveredWord);
 
@@ -1060,7 +1060,7 @@ async function runAnalysis() {
     const xvalConfirmedSet = new Set();
     for (const xw of xvalRawWords) {
       if (xw.word) {
-        const stripped = xw.word.toLowerCase().replace(/\./g, '').replace(/[^a-z'-]/g, '');
+        const stripped = xw.word.toLowerCase().replace(/\./g, '').replace(/[^a-z'-]/g, '').replace(/['\u2018\u2019\u201B`]/g, '');
         if (stripped) xvalConfirmedSet.add(stripped);
       }
     }
