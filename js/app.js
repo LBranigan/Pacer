@@ -1714,6 +1714,16 @@ async function runAnalysis() {
     }
   );
 
+  // Log UI bucket classification (runs after displayAlignmentResults stamps _uiBucket)
+  addStage('ui_buckets', {
+    words: alignment.filter(e => e.type !== 'insertion').map(a => ({
+      ref: a.ref, hyp: a.hyp, type: a.type, bucket: a._uiBucket || null,
+      compound: a.compound || false, _recovered: a._recovered || false,
+      _strugglePath: a._strugglePath || null, _concatAttempt: a._concatAttempt || null,
+      crossValidation: a.crossValidation || null
+    }))
+  });
+
   if (appState.selectedStudentId) {
     const errorBreakdown = {
       wordErrors: accuracy.wordErrors,

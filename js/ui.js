@@ -612,6 +612,7 @@ function renderNewAnalyzedWords(container, alignment, sttLookup, diagnostics, tr
 
   const classified = groups.map((g, i) => {
     const bucket = classifyWord(g.entry, g, i < groups.length - 1 ? groups[i + 1] : null);
+    g.entry._uiBucket = bucket; // Stamp for debug log visibility
     return { ...g, bucket };
   });
 
