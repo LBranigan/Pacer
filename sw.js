@@ -1,4 +1,4 @@
-const CACHE_NAME = 'orf-v59';
+const CACHE_NAME = 'orf-v60';
 
 const SHELL = [
   // --- HTML pages ---
@@ -49,7 +49,6 @@ const SHELL = [
   // --- Pipeline modules (imported by app.js/diagnostics.js) ---
   './js/text-normalize.js',
   './js/vad-processor.js',
-  './js/disfluency-detector.js',
   './js/kitchen-sink-merger.js',
   './js/cross-validator.js',
   './js/audio-padding.js',
@@ -57,15 +56,11 @@ const SHELL = [
   './js/maze-generator.js',
   './js/phoneme-counter.js',
 
-  // --- Config modules ---
-  './js/disfluency-config.js',
-
   // --- API + support modules ---
+  './js/number-words.js',
   './js/syllable-counter.js',
   './js/deepgram-api.js',
   './js/parakeet-api.js',
-  './js/sequence-aligner.js',
-  './js/disfluency-tagger.js',
   './js/reverb-api.js',
   './js/miscue-registry.js',
   './js/maze-game.js',

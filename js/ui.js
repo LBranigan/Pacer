@@ -1027,7 +1027,7 @@ function renderNewAnalyzedWords(container, alignment, sttLookup, diagnostics, tr
   container.appendChild(wordsDiv);
 }
 
-export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, diagnostics, transcriptWords, tierBreakdown, disfluencySummary, referenceText, audioBlob, rawSttSources) {
+export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, diagnostics, transcriptWords, tierBreakdown, referenceText, audioBlob, rawSttSources) {
   const wordsDiv = document.getElementById('resultWords');
   const newWordsDiv = document.getElementById('newAnalyzedWords');
   const legacySection = document.getElementById('legacyAnalyzedSection');
@@ -1127,26 +1127,6 @@ export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, di
 
     wcpmBox.appendChild(container);
     metricsBar.appendChild(wcpmBox);
-
-    // Fluency concerns summary - directly below WCPM per CONTEXT.md
-    if (disfluencySummary && disfluencySummary.totalWordsWithDisfluency > 0) {
-      const summary = document.createElement('div');
-      summary.className = 'fluency-summary';
-
-      const parts = [];
-      if (disfluencySummary.significant > 0) {
-        parts.push(`<span class="significant">${disfluencySummary.significant} significant</span>`);
-      }
-      if (disfluencySummary.moderate > 0) {
-        parts.push(`<span class="moderate">${disfluencySummary.moderate} moderate</span>`);
-      }
-      if (disfluencySummary.minor > 0) {
-        parts.push(`<span class="minor">${disfluencySummary.minor} minor</span>`);
-      }
-
-      summary.innerHTML = parts.join(', ');
-      wcpmBox.appendChild(summary);
-    }
   } else {
     wcpmBox.innerHTML = '<span class="metric-value">N/A</span><span class="metric-label">WCPM</span>';
     metricsBar.appendChild(wcpmBox);
@@ -2742,11 +2722,6 @@ export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, di
     return entry;
   });
 
-  // Disfluency diagnostics section (Phase 24)
-  // disfluencySummary carries Kitchen Sink disfluencyStats when available
-  if (disfluencySummary && disfluencySummary.total !== undefined) {
-    renderDisfluencySection(disfluencySummary, transcriptWords, enrichedAlignment, wordAudioEl);
-  }
 
   jsonDiv.textContent = JSON.stringify({
     alignment: enrichedAlignment,
@@ -2756,234 +2731,6 @@ export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, di
     accuracy,
     diagnostics: diagnostics || null
   }, null, 2);
-}
-
-/**
- * Render the disfluency diagnostics section (Phase 24).
- * Shows each disfluent word with context, classification, and play button.
- *
- * @param {object|null} disfluencyStats - Aggregate stats from Kitchen Sink:
- *   { total, contentWords, rate, byType: { filler, repetition, false_start, unknown } }
- * @param {Array|null} transcriptWords - Full transcript word list with isDisfluency flags
- * @param {Array|null} alignment - Ref-vs-STT alignment entries for context enrichment
- * @param {HTMLAudioElement|null} audioEl - Shared audio element for click-to-play
- */
-function renderDisfluencySection(disfluencyStats, transcriptWords, alignment, audioEl) {
-  const section = document.getElementById('disfluencySection');
-  const summaryEl = document.getElementById('disfluencySummaryText');
-  const detailsEl = document.getElementById('disfluencyDetails');
-
-  if (!section || !summaryEl || !detailsEl) return;
-
-  // Hide section if no disfluency data at all
-  if (!disfluencyStats) {
-    section.style.display = 'none';
-    return;
-  }
-
-  // Show section (even with 0 disfluencies to confirm pipeline is active)
-  section.style.display = '';
-
-  // Zero disfluencies — show confirmation message
-  if (disfluencyStats.total === 0) {
-    summaryEl.textContent = 'No disfluencies detected';
-    detailsEl.innerHTML = '';
-    return;
-  }
-
-  // ── Build word-level disfluency list from transcriptWords ──
-  const CONTEXT_RADIUS = 4;
-  const disfluencies = [];
-  if (transcriptWords && transcriptWords.length > 0) {
-    for (let i = 0; i < transcriptWords.length; i++) {
-      const w = transcriptWords[i];
-      if (!w.isDisfluency) continue;
-
-      // Gather expanded context: up to CONTEXT_RADIUS words before and after
-      // Also capture timestamps of outermost context words for audio clip
-      const prevWords = [];
-      let clipStart = parseSttTime(w.startTime);
-      for (let j = i - 1; j >= 0 && prevWords.length < CONTEXT_RADIUS; j--) {
-        prevWords.unshift(transcriptWords[j].word);
-        const t = parseSttTime(transcriptWords[j].startTime);
-        if (t > 0) clipStart = t;
-      }
-      const nextWords = [];
-      let clipEnd = parseSttTime(w.endTime);
-      for (let j = i + 1; j < transcriptWords.length && nextWords.length < CONTEXT_RADIUS; j++) {
-        nextWords.push(transcriptWords[j].word);
-        const t = parseSttTime(transcriptWords[j].endTime);
-        if (t > 0) clipEnd = t;
-      }
-
-      disfluencies.push({
-        word: w.word,
-        type: w.disfluencyType || 'unknown',
-        crossValidation: w.crossValidation,
-        transcriptIndex: i,
-        startTime: parseSttTime(w.startTime),
-        endTime: parseSttTime(w.endTime),
-        clipStart,  // startTime of first context word
-        clipEnd,    // endTime of last context word
-        prevWords,
-        nextWords,
-        nextWord: nextWords[0] || null  // kept for enrichment strategy 3
-      });
-    }
-  }
-
-  // ── Enrich disfluencies with alignment context ──
-  for (const d of disfluencies) {
-    // Self-correction: check if alignment insertion is flagged
-    if (!d.selfCorrection && alignment && alignment.length > 0) {
-      const dNorm = d.word.toLowerCase().replace(/[^a-z']/g, '');
-      for (const entry of alignment) {
-        if (entry.type !== 'insertion') continue;
-        if (!entry._isSelfCorrection) continue;
-        const hypNorm = (entry.hyp || '').toLowerCase().replace(/[^a-z']/g, '');
-        if (hypNorm === dNorm) {
-          d.selfCorrection = true;
-          break;
-        }
-      }
-    }
-  }
-
-  // ── Collapsed summary line ──
-  const typeLabels = {
-    struggle: 'struggle',
-    mismatch: 'mismatch',
-    extra: 'extra word'
-  };
-
-  // Count by resolved type for summary
-  const typeCounts = {};
-  for (const d of disfluencies) {
-    let label;
-    if (d.selfCorrection) label = 'self-correction';
-    else label = typeLabels[d.type] || 'extra word';
-    typeCounts[label] = (typeCounts[label] || 0) + 1;
-  }
-
-  const summaryParts = [];
-  for (const [label, count] of Object.entries(typeCounts)) {
-    summaryParts.push(`${count} ${label}${count > 1 ? 's' : ''}`);
-  }
-  summaryEl.textContent = `Disfluencies: ${disfluencyStats.total}` +
-    (summaryParts.length > 0 ? ` (${summaryParts.join(', ')})` : '');
-
-  // ── Expanded detail: word-level rows ──
-  detailsEl.innerHTML = '';
-
-  if (disfluencies.length === 0) {
-    // Fallback: no transcriptWords available, show old-style aggregate
-    detailsEl.textContent = `${disfluencyStats.total} disfluencies detected`;
-    return;
-  }
-
-  for (const d of disfluencies) {
-    const row = document.createElement('div');
-    row.className = 'disfluency-word-row';
-
-    // Layout: play | ...context with highlighted word... | type · note
-
-    // Play button — plays audio covering all visible context words
-    const playBtn = document.createElement('button');
-    playBtn.className = 'disfluency-play-btn';
-    playBtn.textContent = '\u25B6';
-    playBtn.title = 'Play audio';
-    if (audioEl && d.clipStart > 0) {
-      const clipStart = Math.max(0, d.clipStart - 0.15);
-      const clipEnd = d.clipEnd + 0.15;
-      playBtn.addEventListener('click', () => {
-        audioEl.pause();
-        if (audioEl._disfluencyOnTime) {
-          audioEl.removeEventListener('timeupdate', audioEl._disfluencyOnTime);
-        }
-        // Clear any previous playing highlight
-        detailsEl.querySelectorAll('.disfluency-word-row.playing').forEach(r => r.classList.remove('playing'));
-        row.classList.add('playing');
-        audioEl.currentTime = clipStart;
-        const onTime = () => {
-          if (audioEl.currentTime >= clipEnd) {
-            audioEl.pause();
-            audioEl.removeEventListener('timeupdate', onTime);
-            audioEl._disfluencyOnTime = null;
-            row.classList.remove('playing');
-          }
-        };
-        audioEl._disfluencyOnTime = onTime;
-        audioEl.addEventListener('timeupdate', onTime);
-        audioEl.play().catch(() => {});
-      });
-    } else {
-      playBtn.disabled = true;
-      playBtn.style.opacity = '0.3';
-    }
-    row.appendChild(playBtn);
-
-    // Context snippet: ...grey words RED_WORD grey words...
-    const ctx = document.createElement('span');
-    ctx.className = 'disfluency-word-context';
-
-    if (d.prevWords.length > 0 && d.transcriptIndex > d.prevWords.length) {
-      ctx.appendChild(document.createTextNode('\u2026 '));
-    }
-    for (const pw of d.prevWords) {
-      ctx.appendChild(document.createTextNode(pw + ' '));
-    }
-    const hl = document.createElement('span');
-    hl.className = 'disfluency-ctx-highlight';
-    hl.textContent = d.word;
-    ctx.appendChild(hl);
-    for (const nw of d.nextWords) {
-      ctx.appendChild(document.createTextNode(' ' + nw));
-    }
-    if (d.nextWords.length > 0 &&
-        d.transcriptIndex + d.nextWords.length < transcriptWords.length - 1) {
-      ctx.appendChild(document.createTextNode(' \u2026'));
-    }
-    row.appendChild(ctx);
-
-    // Metadata: type · note  (right-aligned, single span)
-    const meta = document.createElement('span');
-    meta.className = 'disfluency-word-meta';
-
-    const typeSpan = document.createElement('span');
-    typeSpan.className = 'disfluency-meta-type';
-    if (d.selfCorrection) {
-      typeSpan.textContent = 'self-correction';
-      typeSpan.classList.add('disfluency-meta-selfcorrection');
-    } else {
-      const label = typeLabels[d.type] || 'extra word';
-      typeSpan.textContent = label;
-      typeSpan.classList.add(`disfluency-meta-${d.type}`);
-    }
-    meta.appendChild(typeSpan);
-
-    // Enrichment note
-    let noteText = '';
-    if (!d.selfCorrection && d.refTarget) {
-      noteText = `\u2192 ${d.refTarget}`;
-    }
-    if (noteText) {
-      meta.appendChild(document.createTextNode(' \u00B7 '));
-      const noteSpan = document.createElement('span');
-      noteSpan.textContent = noteText;
-      meta.appendChild(noteSpan);
-    }
-    row.appendChild(meta);
-
-    detailsEl.appendChild(row);
-  }
-
-  // Rate line at bottom
-  if (disfluencyStats.rate) {
-    const rateLine = document.createElement('div');
-    rateLine.className = 'disfluency-rate-line';
-    rateLine.textContent = `Rate: ${disfluencyStats.rate} of words`;
-    detailsEl.appendChild(rateLine);
-  }
 }
 
 // ── Word Speed Map rendering ────────────────────────────────────────

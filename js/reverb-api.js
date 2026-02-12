@@ -7,7 +7,7 @@
  * Requirements covered:
  * - INTG-01: reverb-api.js client calls local Reverb service
  *
- * Pipeline: reverb-api.js -> sequence-aligner.js -> disfluency-tagger.js
+ * Pipeline: reverb-api.js -> app.js (kitchen-sink merger + alignment)
  */
 
 import { BACKEND_URL, backendHeaders } from './backend-config.js';

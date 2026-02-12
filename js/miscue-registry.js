@@ -63,97 +63,37 @@ const ALIGNMENT_MISCUES = {
 };
 
 // ============================================================================
-// DISFLUENCY MISCUES (detected in disfluency-detector.js)
-// These detect stutters, false starts, and repetitions
-// ============================================================================
-
-const DISFLUENCY_MISCUES = {
-  fragment: {
-    description: 'Incomplete word attempt (false start) before the full word',
-    detector: 'disfluency-detector.js → checkForFragment()',
-    countsAsError: false, // Merged into target word, doesn't affect accuracy
-    config: {
-      FRAGMENT_MAX_LOOKAHEAD: 1,        // Only check next word (i+1)
-      FRAGMENT_MAX_TIME_GAP_SEC: 0.5,   // Must resolve within 500ms
-      SHORT_FRAGMENT_MAX_CHARS: 3,      // Short fragments use prefix matching
-      LONG_PREFIX_MIN_CHARS: 4          // Long fragments need exact/long prefix
-    },
-    example: {
-      reference: 'please',
-      spoken: 'p- p- please',
-      result: '"p" and "p" are fragments merged into "please"'
-    },
-    uiClass: null, // Fragments are merged, not displayed separately
-    filters: [
-      'Filter 1: Reference Text Protection (phonetic N-gram matching)',
-      'Filter 2: Phonological Horizons (i+1 only, 500ms)',
-      'Filter 3: Confidence Protection (>= 0.93 blocks merge)'
-    ]
-  },
-
-  repetition: {
-    description: 'Same word repeated consecutively (self-correction attempt)',
-    detector: 'disfluency-detector.js → checkForRepetition()',
-    countsAsError: false, // Shows struggle but not counted as error
-    config: {
-      REPETITION_MAX_LOOKAHEAD: 2,      // Check i+1 and i+2
-      REPETITION_MAX_TIME_GAP_SEC: 1.0  // Can have fillers between (loose)
-    },
-    example: {
-      reference: 'the dog',
-      spoken: 'the the the dog',
-      result: 'Two repetitions of "the" detected'
-    },
-    uiClass: 'word-self-correction'
-  }
-};
-
-// ============================================================================
-// REVERB DISFLUENCY MISCUES (detected in disfluency-tagger.js via Kitchen Sink pipeline)
-// Model-level disfluencies from Reverb verbatim vs clean diff (Phase 23/24)
+// REVERB DISFLUENCY MISCUES (detected in app.js via V1/V0 insertion diff)
+// Model-level disfluencies from Reverb verbatim vs clean comparison
 // ============================================================================
 
 const REVERB_DISFLUENCY_MISCUES = {
   reverb_filler: {
     description: 'Filler word detected by Reverb verbatim/clean diff (um, uh, er, ah, mm, hmm)',
-    detector: 'disfluency-tagger.js -> tagDisfluencies() via kitchen-sink-merger.js',
+    detector: 'app.js → disfluency classification block (FILLER_WORDS check + pre-filtered tagging)',
     countsAsError: false,
     config: null,
     example: {
       reference: 'the cat sat',
       spoken: 'the um cat sat',
-      result: '"um" detected as filler via Reverb v=1.0 vs v=0.0 alignment'
+      result: '"um" detected as filler — V1 insertion matched FILLER_WORDS set, or pre-filtered before alignment and retroactively tagged'
     },
     uiClass: 'word-disfluency',
-    note: 'Model-level detection: Reverb includes fillers in verbatim (v=1.0) but removes them in clean (v=0.0). Needleman-Wunsch alignment identifies the insertion.'
-  },
-
-  reverb_repetition: {
-    description: 'Word repetition detected by Reverb verbatim/clean diff',
-    detector: 'disfluency-tagger.js -> tagDisfluencies() via kitchen-sink-merger.js',
-    countsAsError: false,
-    config: null,
-    example: {
-      reference: 'the cat sat',
-      spoken: 'the the cat sat',
-      result: '"the" (first) detected as repetition via Reverb v=1.0 vs v=0.0 alignment'
-    },
-    uiClass: 'word-disfluency',
-    note: 'Model-level detection: Reverb preserves repetitions in verbatim but normalizes them in clean output.'
+    note: 'Two detection paths: (1) V1 insertion matching FILLER_WORDS → isDisfluency=true. (2) Pre-filtered fillers stripped by alignment.js DISFLUENCIES set → retroactively tagged on transcriptWords after alignment.'
   },
 
   reverb_false_start: {
-    description: 'False start (partial word) detected by Reverb verbatim/clean diff',
-    detector: 'disfluency-tagger.js -> tagDisfluencies() via kitchen-sink-merger.js',
+    description: 'False start (partial word) detected by V1/V0 insertion diff',
+    detector: 'app.js → disfluency classification block (V1 insertion present, V0 insertion absent)',
     countsAsError: false,
     config: null,
     example: {
       reference: 'the cat sat',
       spoken: 'the ca- cat sat',
-      result: '"ca-" detected as false start via Reverb v=1.0 vs v=0.0 alignment'
+      result: '"ca-" is a V1 insertion absent from V0 → tagged as false_start'
     },
     uiClass: 'word-disfluency',
-    note: 'Model-level detection: Reverb captures partial word attempts in verbatim that are absent from clean output.'
+    note: 'V0 (clean) language model suppresses partial words and repetitions. If a V1 insertion is not in V0 insertions, V0 deemed it a disfluency.'
   }
 };
 
@@ -483,7 +423,7 @@ const FORGIVENESS_RULES = {
 };
 
 // ============================================================================
-// SEVERITY LEVELS (used by disfluency-detector.js)
+// SEVERITY LEVELS
 // ============================================================================
 
 export const SEVERITY_LEVELS = {
@@ -513,10 +453,7 @@ export const MISCUE_REGISTRY = {
   // Alignment-based (core errors)
   ...ALIGNMENT_MISCUES,
 
-  // Disfluencies (stutters, repetitions)
-  ...DISFLUENCY_MISCUES,
-
-  // Reverb disfluencies (model-level detection via verbatim/clean diff)
+  // Reverb disfluencies (V1/V0 insertion diff in app.js)
   ...REVERB_DISFLUENCY_MISCUES,
 
   // Diagnostics (fluency indicators)
@@ -594,15 +531,12 @@ export function getDetectorLocation(type) {
  *
  * NOT ERRORS (diagnostic only):
  * - insertion: Extra word (per ORF standards)
- * - fragment: False start (merged into target)
- * - repetition: Self-correction attempt
  * - longPause: 3+ second gap (visual indicator only)
  * - hesitation: Brief pause (< 3s)
  * - selfCorrection: Repeated word/phrase or near-miss attempt before correct word
  * - properNounForgiveness: Close attempt at name
- * - reverb_filler: Filler word (um, uh) via Reverb model diff
- * - reverb_repetition: Word repetition via Reverb model diff
- * - reverb_false_start: False start via Reverb model diff
+ * - reverb_filler: Filler word (um, uh) via V1/V0 diff or pre-filter tagging
+ * - reverb_false_start: False start via V1/V0 insertion diff
  * - abbreviationCompoundMerge: i.e./e.g./U.S. read letter-by-letter → compound merged
  * - abbreviationExpansionMerge: i.e. read as "that is" → expansion merged
  * - numberExpansionMerge: "2014" read as "twenty fourteen" → expansion merged

@@ -15,7 +15,6 @@ import { saveAudioBlob } from './audio-store.js';
 import { initDashboard } from './dashboard.js';
 import { initDebugLog, addStage, addWarning, addError, finalizeDebugLog, saveDebugLog } from './debug-logger.js';
 import { vadProcessor } from './vad-processor.js';
-import { detectDisfluencies } from './disfluency-detector.js';
 import { runKitchenSinkPipeline, isKitchenSinkEnabled, computeKitchenSinkStats } from './kitchen-sink-merger.js';
 import { getCrossValidatorEngine, setCrossValidatorEngine, getCrossValidatorName } from './cross-validator.js';
 import { padAudioWithSilence } from './audio-padding.js';
@@ -1749,7 +1748,6 @@ async function runAnalysis() {
     diagnostics,
     transcriptWords,
     tierBreakdown,
-    null,                                   // disfluencySummary (computed from alignment now)
     referenceText,                         // Raw reference text for cosmetic punctuation
     appState.audioBlob || null,            // Audio blob for click-to-play word audio
     {                                       // Raw STT word lists + 3-way alignment data
