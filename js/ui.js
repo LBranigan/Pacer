@@ -608,13 +608,18 @@ function renderNewAnalyzedWords(container, alignment, sttLookup, diagnostics, tr
   // ── 5. Legend ─────────────────────────────────────────────────────────
   const legend = document.createElement('div');
   legend.className = 'new-analyzed-legend';
-  legend.innerHTML = [
-    ...Object.entries(BUCKET).map(([k, { label }]) => `<span class="word word-bucket-${k}">${label}</span>`),
-    '<span class="word word-morph-root" style="background:#ffe0b2;color:#e65100;">Morph. Root</span>',
-    '<span class="pause-indicator">[pause]</span>',
-    '<span class="word word-hesitation">Hesit.</span>',
-    '<span class="word-fragment">fragment</span>'
-  ].join(' ');
+  legend.innerHTML =
+    '<div class="legend-row">' +
+      '<span class="legend-label">Scoring</span>' +
+      Object.entries(BUCKET).map(([k, { label }]) => `<span class="word word-bucket-${k}">${label}</span>`).join('') +
+    '</div>' +
+    '<div class="legend-row">' +
+      '<span class="legend-label">Indicators</span>' +
+      '<span class="word word-morph-root" style="background:#ffe0b2;color:#e65100;">Morph. Root</span>' +
+      '<span class="pause-indicator">[pause]</span>' +
+      '<span class="word word-hesitation">Hesit.</span>' +
+      '<span class="word-fragment">fragment</span>' +
+    '</div>';
   container.appendChild(legend);
 
   // ── 6. Word flow ─────────────────────────────────────────────────────

@@ -1197,13 +1197,28 @@ body.dev-mode .dev-mode-toggle {
 }
 
 /* ── New Analyzed Words — Bucket Classification ────────────────────────── */
-.new-analyzed-player { margin-bottom: 0.5rem; }
-.new-analyzed-player audio { width: 100%; max-width: 400px; height: 32px; }
-.new-analyzed-legend { margin-bottom: 0.5rem; line-height: 2.2; }
-.new-analyzed-legend .word { font-size: 0.75rem; margin-right: 3px; }
-.new-analyzed-legend .pause-indicator { font-size: 0.75rem; margin-right: 3px; }
-.new-analyzed-legend .word-fragment { margin-right: 3px; }
-.new-analyzed-flow { line-height: 2.4; }
+.new-analyzed-player { margin-bottom: 0.75rem; }
+.new-analyzed-player audio { width: 100%; max-width: 400px; height: 36px; }
+
+.new-analyzed-legend {
+  background: #f8f8f8;
+  border: 1px solid #e0e0e0;
+  border-radius: 6px;
+  padding: 0.6rem 0.75rem;
+  margin-bottom: 1rem;
+}
+.legend-row { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }
+.legend-row + .legend-row { margin-top: 0.4rem; padding-top: 0.4rem; border-top: 1px solid #eee; }
+.legend-label { font-size: 0.7rem; font-weight: 700; color: #888; text-transform: uppercase; letter-spacing: 0.5px; min-width: 68px; flex-shrink: 0; }
+.new-analyzed-legend .word { font-size: 0.75rem; margin: 0; padding: 2px 6px; }
+.new-analyzed-legend .pause-indicator { font-size: 0.75rem; }
+.new-analyzed-legend .word-fragment { font-size: 0.7rem; }
+
+.new-analyzed-flow {
+  line-height: 2.6;
+  padding: 0.5rem 0.25rem;
+}
+.new-analyzed-flow .word { padding: 3px 6px; margin: 2px 1px; }
 
 .word-bucket-correct { background: #c8e6c9; color: #2e7d32; }
 .word-bucket-struggle-correct { background: #dcedc8; color: #558b2f; border-bottom: 2px solid #8bc34a; }
