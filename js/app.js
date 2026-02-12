@@ -1038,6 +1038,24 @@ async function runAnalysis() {
     }
   }
 
+  // ── Flag post-word artifacts: special tokens after last real word ──
+  {
+    let lastRealEnd = -Infinity;
+    for (let i = transcriptWords.length - 1; i >= 0; i--) {
+      const w = transcriptWords[i];
+      if (typeof w.word === 'string' && w.word.startsWith('<') && w.word.endsWith('>')) continue;
+      const e = parseT(w.endTime);
+      if (e != null) { lastRealEnd = e; break; }
+    }
+    for (const w of transcriptWords) {
+      if (!(typeof w.word === 'string' && w.word.startsWith('<') && w.word.endsWith('>'))) continue;
+      const wStart = parseT(w.startTime);
+      if (wStart != null && wStart >= lastRealEnd) {
+        w._postWordArtifact = true;
+      }
+    }
+  }
+
   // ── Omission recovery ─────────────────────────────────────────────
   const splicePositions = [];
   for (const recovery of xvalRecoveredOmissions) {
@@ -1558,7 +1576,7 @@ async function runAnalysis() {
     if (entry._partOfStruggle || entry._isSelfCorrection) continue;
     if (entry.hypIndex >= 0) {
       const tw = transcriptWords[entry.hypIndex];
-      if (tw?.isDisfluency || tw?._ctcArtifact || tw?._preWordArtifact) continue;
+      if (tw?.isDisfluency || tw?._ctcArtifact || tw?._preWordArtifact || tw?._postWordArtifact) continue;
     }
     entry._trueInsertion = true;
   }

@@ -579,6 +579,8 @@ function renderNewAnalyzedWords(container, alignment, sttLookup, diagnostics, tr
         return (h.length >= 2 && refN.startsWith(h)) || isNearMiss(ins.hyp, entry.ref);
       });
       if (hasRelatedIns) return 'struggle-correct';
+      // V0 (clean model) disagreed — pronunciation was messy enough to confuse one engine
+      if (entry._v0Type === 'substitution') return 'struggle-correct';
       return 'correct';
     }
 
@@ -759,6 +761,7 @@ function renderNewAnalyzedWords(container, alignment, sttLookup, diagnostics, tr
     // ── Insertion fragments before (false starts) ──
     for (const ins of insertionsBefore) {
       if (ins.hypIndex >= 0 && transcriptWords?.[ins.hypIndex]?._preWordArtifact) continue;
+      if (ins.hypIndex >= 0 && transcriptWords?.[ins.hypIndex]?._postWordArtifact) continue;
       renderFragment(wordsDiv, ins);
     }
 
@@ -870,7 +873,10 @@ function renderNewAnalyzedWords(container, alignment, sttLookup, diagnostics, tr
     wordsDiv.appendChild(span);
 
     // ── Insertion fragments after (trailing fragments) ──
-    for (const ins of insertionsAfter) renderFragment(wordsDiv, ins, 'word-fragment-after');
+    for (const ins of insertionsAfter) {
+      if (ins.hypIndex >= 0 && transcriptWords?.[ins.hypIndex]?._postWordArtifact) continue;
+      renderFragment(wordsDiv, ins, 'word-fragment-after');
+    }
 
     wordsDiv.appendChild(document.createTextNode(' '));
     refIdx++;
