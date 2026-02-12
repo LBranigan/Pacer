@@ -1847,12 +1847,12 @@ export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, di
         table.appendChild(thead);
         const tbody = document.createElement('tbody');
 
-        // Format timestamp from raw word object
+        // Format timestamp from raw word object (3 decimal places)
         const fmtTs = w => {
-          const s = w.start || w.startTime || '';
-          const e = w.end || w.endTime || '';
-          const strip = t => String(t).replace(/s$/i, '');
-          return s ? strip(s) + '\u2013' + strip(e) + 's' : '';
+          const s = parseSttTime(w.start || w.startTime);
+          const e = parseSttTime(w.end || w.endTime);
+          if (s <= 0 && e <= 0) return '';
+          return s.toFixed(3) + '\u2013' + e.toFixed(3) + 's';
         };
 
         // Create cell for a raw word with optional click-to-play
