@@ -1261,9 +1261,9 @@ body.dev-mode .dev-mode-toggle {
 .word-group {
   display: inline-flex;
   align-items: baseline;
-  gap: 1px;
+  gap: 0;
 }
-.word-group .word { margin: 0; }
+.word-group .word { margin: 0; padding-left: 2px; }
 
 /* Insertion fragment spans (small purple text for false starts / trailing fragments) */
 .word-fragment {
