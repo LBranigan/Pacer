@@ -738,12 +738,12 @@ function renderNewAnalyzedWords(container, alignment, sttLookup, diagnostics, tr
       if (hesitation._vadAnalysis?.speechPercent >= 30) span.classList.add('word-hesitation-vad');
     }
 
-    // Morphological root squiggle: word is not correct + V1 or V0 produced a root of the ref
-    if (bucket !== 'correct' && bucket !== 'struggle-correct' && bucket !== 'omitted') {
+    // Morphological root squiggle: word is not correct + V1 or V0 produced a proper prefix of the ref
+    if (bucket !== 'correct' && bucket !== 'struggle-correct' && bucket !== 'omitted' && !entry._longPauseError) {
       const refN = norm(entry.ref);
       const hypN = norm(entry.hyp);
       const v0N = norm(entry._v0Word);
-      const hasRoot = (w) => w.length >= 3 && refN.startsWith(w);
+      const hasRoot = (w) => w.length >= 3 && w !== refN && refN.startsWith(w);
       if (hasRoot(hypN) || hasRoot(v0N)) span.classList.add('word-morph-root');
     }
     // Build V1 evidence string (insertionsBefore + hyp/parts + insertionsAfter)
