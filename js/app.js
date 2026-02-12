@@ -928,6 +928,7 @@ async function runAnalysis() {
   // ── Disfluency classification (V1 insertions vs V0) ────────────────
   // V1 insertion present + V0 insertion absent → filler/false-start
   // V1 insertion present + V0 insertion present → genuine extra word
+  const FILLER_WORDS = new Set(['um', 'uh', 'uh-huh', 'mm', 'hmm', 'er', 'ah']);
   {
     const v1Insertions = alignment.filter(e => e.type === 'insertion');
     const v0InsertionNorms = new Set();
@@ -938,8 +939,6 @@ async function runAnalysis() {
         }
       }
     }
-
-    const FILLER_WORDS = new Set(['um', 'uh', 'uh-huh', 'mm', 'hmm', 'er', 'ah']);
     for (const ins of v1Insertions) {
       if (!ins.hyp) continue;
       const norm = ins.hyp.toLowerCase().replace(/[^a-z'-]/g, '');
