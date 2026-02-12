@@ -716,7 +716,10 @@ function renderNewAnalyzedWords(container, alignment, sttLookup, diagnostics, tr
     }
 
     // ── Insertion fragments before (false starts) ──
-    for (const ins of insertionsBefore) renderFragment(wordsDiv, ins);
+    for (const ins of insertionsBefore) {
+      if (ins.hypIndex >= 0 && transcriptWords?.[ins.hypIndex]?._preWordArtifact) continue;
+      renderFragment(wordsDiv, ins);
+    }
 
     // ── Main word span ──
     const span = document.createElement('span');
@@ -1438,6 +1441,7 @@ export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, di
       if (queue && queue.length > 0) {
         if (queue[0]?.isDisfluency) return false;
         if (queue[0]?._ctcArtifact) return false;
+        if (queue[0]?._preWordArtifact) return false;
       }
     }
     return true;
@@ -2378,6 +2382,15 @@ export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, di
           label: 'CTC Artifacts Filtered (' + artifacts.length + ')',
           cls: 'pipeline-pp-artifact',
           items: artifacts.map(w => '"' + w.word + '" (' + Math.round((parseSttTime(w.endTime) - parseSttTime(w.startTime)) * 1000) + 'ms, overlaps confirmed word)')
+        });
+      }
+
+      const preWordArtifacts = (transcriptWords || []).filter(w => w._preWordArtifact);
+      if (preWordArtifacts.length > 0) {
+        lists.push({
+          label: 'Pre-Word Artifacts (' + preWordArtifacts.length + ')',
+          cls: 'pipeline-pp-artifact',
+          items: preWordArtifacts.map(w => '"' + w.word + '" (' + Math.round((parseSttTime(w.endTime) - parseSttTime(w.startTime)) * 1000) + 'ms, before first word)')
         });
       }
 

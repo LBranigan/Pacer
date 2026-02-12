@@ -979,6 +979,24 @@ async function runAnalysis() {
     }
   }
 
+  // ── Flag pre-word artifacts: special tokens before first real word ──
+  {
+    // Find the start time of the first non-special word
+    let firstRealStart = Infinity;
+    for (const w of transcriptWords) {
+      if (typeof w.word === 'string' && w.word.startsWith('<') && w.word.endsWith('>')) continue;
+      const s = parseT(w.startTime);
+      if (s != null) { firstRealStart = s; break; }
+    }
+    for (const w of transcriptWords) {
+      if (!(typeof w.word === 'string' && w.word.startsWith('<') && w.word.endsWith('>'))) continue;
+      const wEnd = parseT(w.endTime);
+      if (wEnd != null && wEnd <= firstRealStart) {
+        w._preWordArtifact = true;
+      }
+    }
+  }
+
   // ── Omission recovery ─────────────────────────────────────────────
   const splicePositions = [];
   for (const recovery of xvalRecoveredOmissions) {
