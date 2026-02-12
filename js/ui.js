@@ -759,18 +759,20 @@ function renderNewAnalyzedWords(container, alignment, sttLookup, diagnostics, tr
     }
 
     // ── Insertion fragments before (false starts) ──
-    // Filter to visible fragments first
     const visibleInsBefore = insertionsBefore.filter(ins => {
       if (ins.hypIndex >= 0 && transcriptWords?.[ins.hypIndex]?._preWordArtifact) return false;
       if (ins.hypIndex >= 0 && transcriptWords?.[ins.hypIndex]?._postWordArtifact) return false;
       return true;
     });
-    if (visibleInsBefore.length > 0) {
-      // Add extra gap before fragments to separate from previous word
-      wordsDiv.appendChild(document.createTextNode('\u2004'));  // three-per-em space
-      for (const ins of visibleInsBefore) renderFragment(wordsDiv, ins);
-      // No space between last fragment and main word — they belong together
-    }
+    // When fragments exist, wrap them + main word in a flex container
+    // so they visually hug each other with no whitespace gap
+    const wordTarget = visibleInsBefore.length > 0 ? (() => {
+      const wrap = document.createElement('span');
+      wrap.className = 'word-group';
+      wordsDiv.appendChild(wrap);
+      for (const ins of visibleInsBefore) renderFragment(wrap, ins);
+      return wrap;
+    })() : wordsDiv;
 
     // ── Main word span ──
     const span = document.createElement('span');
@@ -877,17 +879,25 @@ function renderNewAnalyzedWords(container, alignment, sttLookup, diagnostics, tr
     if (playFn) span.classList.add('word-clickable');
     span.addEventListener('click', (e) => { e.stopPropagation(); showWordTooltip(span, playFn); });
 
-    wordsDiv.appendChild(span);
+    wordTarget.appendChild(span);
 
     // ── Insertion fragments after (trailing fragments) ──
     const visibleInsAfter = insertionsAfter.filter(ins => {
       if (ins.hypIndex >= 0 && transcriptWords?.[ins.hypIndex]?._postWordArtifact) return false;
       return true;
     });
-    for (const ins of visibleInsAfter) renderFragment(wordsDiv, ins, 'word-fragment-after');
-    // Add extra gap after trailing fragments to separate from next word
     if (visibleInsAfter.length > 0) {
-      wordsDiv.appendChild(document.createTextNode('\u2004'));  // three-per-em space
+      // Wrap main word + trailing fragments in a flex container
+      const afterWrap = wordTarget === wordsDiv ? (() => {
+        // Main word wasn't already wrapped — need to move it into a wrapper
+        const wrap = document.createElement('span');
+        wrap.className = 'word-group';
+        wordsDiv.removeChild(span);
+        wrap.appendChild(span);
+        wordsDiv.appendChild(wrap);
+        return wrap;
+      })() : wordTarget;  // Already wrapped from insertionsBefore
+      for (const ins of visibleInsAfter) renderFragment(afterWrap, ins, 'word-fragment-after');
     }
 
     wordsDiv.appendChild(document.createTextNode(' '));

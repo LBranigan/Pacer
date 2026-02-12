@@ -1257,6 +1257,14 @@ body.dev-mode .dev-mode-toggle {
 /* Morphological root squiggle — V1 or V0 produced a root of the ref word */
 .word-morph-root { text-decoration: underline wavy #e65100; text-underline-offset: 3px; }
 
+/* Word group: wraps fragments + their associated word so they stay visually together */
+.word-group {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 1px;
+}
+.word-group .word { margin: 0; }
+
 /* Insertion fragment spans (small purple text for false starts / trailing fragments) */
 .word-fragment {
   font-size: 0.7rem;
