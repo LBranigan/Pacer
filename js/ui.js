@@ -463,7 +463,7 @@ function parseSttTime(t) {
  *   definite-struggle    — red:    no engine produced the correct word, V1 hyp is near-miss
  *   confirmed-substitution — blue: all engines agree on same unrelated wrong word
  */
-function renderNewAnalyzedWords(container, alignment, sttLookup, diagnostics, transcriptWords, referenceText, wordAudioEl, rawSttSources) {
+function renderNewAnalyzedWords(container, alignment, sttLookup, diagnostics, transcriptWords, referenceText, wordAudioEl, rawSttSources, audioBlob) {
   container.innerHTML = '';
   const norm = (s) => (s || '').toLowerCase().replace(/[^a-z]/g, '');
 
@@ -594,7 +594,30 @@ function renderNewAnalyzedWords(container, alignment, sttLookup, diagnostics, tr
     return { ...g, bucket };
   });
 
-  // ── 4. Word flow ─────────────────────────────────────────────────────
+  // ── 4. Audio player ───────────────────────────────────────────────────
+  if (audioBlob) {
+    const playerWrap = document.createElement('div');
+    playerWrap.className = 'new-analyzed-player';
+    const audio = document.createElement('audio');
+    audio.controls = true;
+    audio.src = URL.createObjectURL(audioBlob);
+    playerWrap.appendChild(audio);
+    container.appendChild(playerWrap);
+  }
+
+  // ── 5. Legend ─────────────────────────────────────────────────────────
+  const legend = document.createElement('div');
+  legend.className = 'new-analyzed-legend';
+  legend.innerHTML = [
+    ...Object.entries(BUCKET).map(([k, { label }]) => `<span class="word word-bucket-${k}">${label}</span>`),
+    '<span class="word word-morph-root" style="background:#ffe0b2;color:#e65100;">Morph. Root</span>',
+    '<span class="pause-indicator">[pause]</span>',
+    '<span class="word word-hesitation">Hesit.</span>',
+    '<span class="word-fragment">fragment</span>'
+  ].join(' ');
+  container.appendChild(legend);
+
+  // ── 6. Word flow ─────────────────────────────────────────────────────
   const wordsDiv = document.createElement('div');
   wordsDiv.className = 'new-analyzed-flow';
 
@@ -1590,7 +1613,7 @@ export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, di
   // New Analyzed Words (experimental bucketing)
   // ─────────────────────────────────────────────────────────────────────────
   if (newWordsDiv) {
-    renderNewAnalyzedWords(newWordsDiv, alignment, sttLookup, diagnostics, transcriptWords, referenceText, wordAudioEl, rawSttSources);
+    renderNewAnalyzedWords(newWordsDiv, alignment, sttLookup, diagnostics, transcriptWords, referenceText, wordAudioEl, rawSttSources, audioBlob);
     newWordsDiv.style.display = '';
   }
 

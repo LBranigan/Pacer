@@ -1197,6 +1197,12 @@ body.dev-mode .dev-mode-toggle {
 }
 
 /* ── New Analyzed Words — Bucket Classification ────────────────────────── */
+.new-analyzed-player { margin-bottom: 0.5rem; }
+.new-analyzed-player audio { width: 100%; max-width: 400px; height: 32px; }
+.new-analyzed-legend { margin-bottom: 0.5rem; line-height: 2.2; }
+.new-analyzed-legend .word { font-size: 0.75rem; margin-right: 3px; }
+.new-analyzed-legend .pause-indicator { font-size: 0.75rem; margin-right: 3px; }
+.new-analyzed-legend .word-fragment { margin-right: 3px; }
 .new-analyzed-flow { line-height: 2.4; }
 
 .word-bucket-correct { background: #c8e6c9; color: #2e7d32; }
