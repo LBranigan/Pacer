@@ -676,17 +676,116 @@ function renderNewAnalyzedWords(container, alignment, sttLookup, diagnostics, tr
   // ── 5. Legend ─────────────────────────────────────────────────────────
   const legend = document.createElement('div');
   legend.className = 'new-analyzed-legend';
+  // Tooltip descriptions for each scoring bucket and indicator
+  const LEGEND_TIPS = {
+    'correct': 'CORRECT\n' +
+      'Student read the word correctly.\n\n' +
+      'Rules:\n' +
+      '\u2022 All 3 engines (V1, V0, Parakeet) agree on the word\n' +
+      '\u2022 OR: word was forgiven (proper noun with dictionary guard)\n' +
+      '\u2022 Does NOT count as an error',
+
+    'struggle-correct': 'STRUGGLE BUT CORRECT\n' +
+      'Student ultimately produced the correct word, but showed signs of difficulty.\n\n' +
+      'Triggers (any one):\n' +
+      '\u2022 False start: near-miss insertion before the correct word (e.g., "st-" before "stop")\n' +
+      '\u2022 V0 disagreed: clean model heard a different word (pronunciation was messy)\n' +
+      '\u2022 Recovered: only cross-validator (Parakeet) heard it \u2014 V1 and V0 both missed\n' +
+      '\u2022 Does NOT count as an error',
+
+    'omitted': 'OMITTED\n' +
+      'Student skipped this word entirely.\n\n' +
+      'Rules:\n' +
+      '\u2022 No engine produced any word for this reference position\n' +
+      '\u2022 Needleman-Wunsch alignment left a gap (ref word with no hyp match)\n' +
+      '\u2022 Counts as an ERROR',
+
+    'attempted-struggled': 'ATTEMPTED BUT STRUGGLED\n' +
+      'Student tried to read the word but did not fully produce it.\n\n' +
+      'Triggers (any one):\n' +
+      '\u2022 Compound fragments: V1 split word into 2+ parts (e.g., "every"+"one" for "everyone")\n' +
+      '\u2022 Partial match: V1 got it wrong, but V0 or Parakeet heard the correct word\n' +
+      '\u2022 Substitution where another engine heard correct (student was close)\n' +
+      '\u2022 Counts as an ERROR',
+
+    'definite-struggle': 'DEFINITE STRUGGLE\n' +
+      'Student clearly failed to produce the word, with no engine hearing correct.\n\n' +
+      'Triggers (any one):\n' +
+      '\u2022 Struggle/substitution where NO engine heard the correct word\n' +
+      '\u2022 Near-miss substitution (phonetically similar but wrong: "horse" for "house")\n' +
+      '\u2022 CTC failure: Reverb output <unknown> (speech detected but not decoded)\n' +
+      '\u2022 Near-miss trailing insertions (failed attempts after the word)\n' +
+      '\u2022 Counts as an ERROR',
+
+    'confirmed-substitution': 'CONFIRMED SUBSTITUTION\n' +
+      'Student said a completely different word. All engines agree.\n\n' +
+      'Rules:\n' +
+      '\u2022 No engine heard the correct word\n' +
+      '\u2022 The spoken word is NOT a near-miss (not phonetically similar)\n' +
+      '\u2022 Example: "house" for "horse" would be definite-struggle (near-miss),\n' +
+      '  but "table" for "horse" is a confirmed substitution (unrelated word)\n' +
+      '\u2022 Counts as an ERROR',
+
+    'pause': '[PAUSE] \u2014 LONG PAUSE\n' +
+      'Student stopped reading for 3+ seconds.\n\n' +
+      'Rules:\n' +
+      '\u2022 Gap between previous word\'s end and next word\'s start \u2265 3000ms\n' +
+      '\u2022 Skips unconfirmed words (unreliable timestamps)\n' +
+      '\u2022 If the word after the pause is otherwise correct, it is\n' +
+      '  reclassified as an error (long-pause penalty)\n' +
+      '\u2022 Counts as an ERROR',
+
+    'morph-root': 'MORPHOLOGICAL ROOT (orange squiggle underline)\n' +
+      'Student produced the root/beginning of the word but not the full form.\n\n' +
+      'Rules:\n' +
+      '\u2022 V1 or V0 produced a proper prefix of the reference word\n' +
+      '\u2022 Prefix must be \u2265 3 characters\n' +
+      '\u2022 Prefix must not equal the full reference word\n' +
+      '\u2022 Only shown on error words (not correct or omitted)\n' +
+      '\u2022 Example: "run" heard for "running" \u2014 root detected',
+
+    'hesitation': 'HESITATION (dashed left border)\n' +
+      'Student hesitated before saying a word.\n\n' +
+      'Logic: gap between previous word\'s endTime and this word\'s startTime\n' +
+      'falls within the hesitation range:\n\n' +
+      'Thresholds (flagged but NOT counted as error):\n' +
+      '\u2022 Default: 500ms \u2013 3000ms\n' +
+      '\u2022 After comma: 800ms \u2013 3000ms (more time expected)\n' +
+      '\u2022 After period/!/?.: 1200ms \u2013 3000ms (sentence boundary)\n\n' +
+      'Gaps \u2265 3000ms are flagged separately as [pause] (errors).\n\n' +
+      'Timestamp source: Parakeet (primary), Reverb (fallback).\n' +
+      'Unconfirmed words are skipped (unreliable timestamps).\n' +
+      'Does NOT count as an error.',
+
+    'fragment': 'FRAGMENT (purple text before word)\n' +
+      'Partial word attempt or BPE artifact displayed before the main word.\n\n' +
+      'Sources:\n' +
+      '\u2022 False starts: student said beginning of word then restarted\n' +
+      '  (e.g., "p-" before "please")\n' +
+      '\u2022 Near-miss insertions absorbed into a struggle word\n' +
+      '\u2022 BPE fragments: Reverb split one utterance into tokens\n' +
+      '  (e.g., "pla"+"forms" for "platforms")\n\n' +
+      'Rules:\n' +
+      '\u2022 Fragments with _partOfStruggle or _isSelfCorrection are\n' +
+      '  grouped with their target word\n' +
+      '\u2022 Does NOT count as a separate error'
+  };
+
+  const scoringItems = Object.entries(BUCKET).map(([k, { label }]) =>
+    `<span class="word word-bucket-${k}" title="${LEGEND_TIPS[k].replace(/"/g, '&quot;')}">${label}</span>`
+  ).join('');
+
   legend.innerHTML =
     '<div class="legend-row">' +
       '<span class="legend-label">Scoring</span>' +
-      Object.entries(BUCKET).map(([k, { label }]) => `<span class="word word-bucket-${k}">${label}</span>`).join('') +
-      '<span class="pause-indicator">[pause]</span>' +
+      scoringItems +
+      `<span class="pause-indicator" title="${LEGEND_TIPS['pause'].replace(/"/g, '&quot;')}">[pause]</span>` +
     '</div>' +
     '<div class="legend-row">' +
       '<span class="legend-label">Indicators</span>' +
-      '<span class="word word-morph-root" style="background:#ffe0b2;color:#e65100;">Morph. Root</span>' +
-      '<span class="word word-hesitation">Hesit.</span>' +
-      '<span class="word-fragment">fragment</span>' +
+      `<span class="word word-morph-root" style="background:#ffe0b2;color:#e65100;" title="${LEGEND_TIPS['morph-root'].replace(/"/g, '&quot;')}">Morph. Root</span>` +
+      `<span class="word word-hesitation" title="${LEGEND_TIPS['hesitation'].replace(/"/g, '&quot;')}">Hesit.</span>` +
+      `<span class="word-fragment" title="${LEGEND_TIPS['fragment'].replace(/"/g, '&quot;')}">fragment</span>` +
     '</div>';
   container.appendChild(legend);
 
