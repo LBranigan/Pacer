@@ -524,7 +524,13 @@ function renderNewAnalyzedWords(container, alignment, sttLookup, diagnostics, tr
       } else if (insN.length >= 2 && thisRefN.startsWith(insN)) {
         keep.push(ins);                                  // false start for this word
       } else if (prevN === prevRefN) {
-        groups[i - 1].insertionsAfter.push(ins);         // trailing fragment of prev word
+        // Fillers (uh, um) stay before the next word — they're not trailing fragments
+        const isFiller = ins._preFilteredDisfluency || transcriptWords?.[ins.hypIndex]?.isDisfluency;
+        if (isFiller) {
+          keep.push(ins);
+        } else {
+          groups[i - 1].insertionsAfter.push(ins);       // trailing fragment of prev word
+        }
       } else {
         keep.push(ins);
       }
