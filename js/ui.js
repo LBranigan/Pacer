@@ -700,9 +700,10 @@ function renderNewAnalyzedWords(container, alignment, sttLookup, diagnostics, tr
     'correct': 'CORRECT\n' +
       'Student read the word correctly.\n\n' +
       'Rules:\n' +
-      '\u2022 V1 matched the reference word (or Parakeet overrode V1 to correct)\n' +
+      '\u2022 At least 2 of 3 engines matched the reference word\n' +
       '\u2022 V0 (clean model) did not hear a different word\n' +
-      '\u2022 No false-start insertions before the word\n' +
+      '\u2022 No near-miss fragments before the word\n' +
+      '\u2022 Parakeet did not omit it\n' +
       '\u2022 Not a recovered word (at least V1 or V0 heard it)\n' +
       '\u2022 OR: word was forgiven (proper noun with dictionary guard)\n' +
       '\u2022 Does NOT count as an error',
@@ -710,7 +711,7 @@ function renderNewAnalyzedWords(container, alignment, sttLookup, diagnostics, tr
     'struggle-correct': 'STRUGGLE BUT CORRECT\n' +
       'Student ultimately produced the correct word, but showed signs of difficulty.\n\n' +
       'Triggers (any one):\n' +
-      '\u2022 False start: near-miss insertion before the correct word (e.g., "st-" before "stop")\n' +
+      '\u2022 Near-miss fragment before the word (e.g., "st-" before "stop")\n' +
       '\u2022 V0 disagreed: clean model heard a different word (pronunciation was messy)\n' +
       '\u2022 Parakeet omitted: cross-validator missed the word entirely (audio unclear)\n' +
       '\u2022 Recovered: only cross-validator (Parakeet) heard it \u2014 V1 and V0 both missed\n' +
@@ -779,17 +780,18 @@ function renderNewAnalyzedWords(container, alignment, sttLookup, diagnostics, tr
       'Unconfirmed words are skipped (unreliable timestamps).\n' +
       'Does NOT count as an error.',
 
-    'fragment': 'FRAGMENT (purple text before word)\n' +
-      'Partial word attempt or BPE artifact displayed before the main word.\n\n' +
+    'fragment': 'FRAGMENT (purple text near word)\n' +
+      'Extra word or partial attempt displayed next to the main word.\n\n' +
       'Sources:\n' +
+      '\u2022 Fillers: "uh", "um", etc. \u2014 hesitation sounds before a word\n' +
       '\u2022 False starts: student said beginning of word then restarted\n' +
-      '  (e.g., "p-" before "please")\n' +
+      '  (e.g., "co-" before "communicate")\n' +
+      '\u2022 Repetitions: student repeated a word (e.g., "a a")\n' +
       '\u2022 Near-miss insertions absorbed into a struggle word\n' +
       '\u2022 BPE fragments: Reverb split one utterance into tokens\n' +
       '  (e.g., "pla"+"forms" for "platforms")\n\n' +
       'Rules:\n' +
-      '\u2022 Fragments with _partOfStruggle or _isSelfCorrection are\n' +
-      '  grouped with their target word\n' +
+      '\u2022 Fragments are grouped with their target word\n' +
       '\u2022 Does NOT count as a separate error'
   };
 
