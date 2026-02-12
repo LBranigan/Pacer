@@ -561,7 +561,7 @@ body.dev-mode .dev-mode-toggle {
 .pipeline-ins-idx { color: #9e9e9e; }
 .pipeline-ins-ref { color: #bbb; }
 .engine-ins { color: #6a1b9a; font-style: italic; }
-.engine-ins-suppressed { color: #bbb; font-size: 0.75rem; font-style: italic; }
+.engine-ins-absent { color: #bbb; font-size: 0.75rem; font-style: italic; }
 .engine-ins-different { color: #e65100; font-size: 0.75rem; font-style: italic; }
 .pipeline-verdict-insertion { color: #6a1b9a; font-size: 0.8rem; }
 
@@ -691,6 +691,7 @@ body.dev-mode .dev-mode-toggle {
 .pipeline-pp-absorbed .pipeline-pp-label { color: #e65100; }
 .pipeline-pp-artifact .pipeline-pp-label { color: #999; }
 .pipeline-pp-forgiven .pipeline-pp-label { color: #00695c; }
+.pipeline-pp-confinsertion .pipeline-pp-label { color: #6a1b9a; font-weight: 600; }
 
 .pipeline-pp-list {
   margin: 2px 0 0 18px;
@@ -1091,6 +1092,7 @@ body.dev-mode .dev-mode-toggle {
 .word-bucket-attempted-struggled { background: #ffe0b2; color: #e65100; }
 .word-bucket-definite-struggle { background: #ffcdd2; color: #c62828; }
 .word-bucket-confirmed-substitution { background: #bbdefb; color: #1565c0; }
+.word-bucket-confirmed-insertion { background: #e1bee7; color: #6a1b9a; font-weight: 600; }
 
 /* Morphological root squiggle — V1 or V0 produced a root of the ref word */
 .word-morph-root { text-decoration: underline wavy #e65100; text-underline-offset: 3px; }

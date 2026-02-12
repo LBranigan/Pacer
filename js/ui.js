@@ -484,11 +484,19 @@ function renderNewAnalyzedWords(container, alignment, sttLookup, diagnostics, tr
   const norm = (s) => (s || '').toLowerCase().replace(/[^a-z]/g, '');
 
   // ── 1. Group ref entries with their V1 insertions ──────────────────────
+  // Confirmed insertions (all engines agreed) get promoted to their own group
+  // so they render inline with their own bucket color, not as fragments.
   const groups = [];
   let pendingInsertions = [];
   for (const entry of alignment) {
     if (entry.type === 'insertion') {
-      pendingInsertions.push(entry);
+      if (entry._confirmedInsertion) {
+        // Flush pending fragments before this promoted entry
+        groups.push({ entry, insertionsBefore: pendingInsertions, insertionsAfter: [], _isConfirmedInsertion: true });
+        pendingInsertions = [];
+      } else {
+        pendingInsertions.push(entry);
+      }
     } else {
       groups.push({ entry, insertionsBefore: pendingInsertions, insertionsAfter: [] });
       pendingInsertions = [];
@@ -501,7 +509,9 @@ function renderNewAnalyzedWords(container, alignment, sttLookup, diagnostics, tr
   // Reassign trailing insertions to their semantic parent via _prevRef.
   // Rule: if an insertion is a prefix of the NEXT ref word, keep it (false start).
   //        Otherwise if _prevRef matches the PREVIOUS ref, move it (trailing fragment).
+  // Skip confirmed insertion groups (they have no ref word and no insertionsBefore to reassign).
   for (let i = 1; i < groups.length; i++) {
+    if (groups[i]._isConfirmedInsertion || groups[i - 1]._isConfirmedInsertion) continue;
     const prevRefN = norm(groups[i - 1].entry.ref);
     const thisRefN = norm(groups[i].entry.ref);
     const keep = [];
@@ -583,6 +593,7 @@ function renderNewAnalyzedWords(container, alignment, sttLookup, diagnostics, tr
 
   // ── 3. Classification ──────────────────────────────────────────────────
   function classifyWord(entry, group, nextGroup) {
+    if (group._isConfirmedInsertion) return 'confirmed-insertion';
     if (entry.forgiven) return 'correct';
     if (entry.type === 'omission') return 'omitted';
 
@@ -639,7 +650,8 @@ function renderNewAnalyzedWords(container, alignment, sttLookup, diagnostics, tr
     'omitted':                 { label: 'Omitted',                   color: '#757575' },
     'attempted-struggled':     { label: 'Attempted but Struggled',   color: '#e65100' },
     'definite-struggle':       { label: 'Definite Struggle',         color: '#c62828' },
-    'confirmed-substitution':  { label: 'Confirmed Substitution',    color: '#1565c0' }
+    'confirmed-substitution':  { label: 'Confirmed Substitution',    color: '#1565c0' },
+    'confirmed-insertion':     { label: 'Confirmed Insertion',       color: '#6a1b9a' }
   };
 
   const classified = groups.map((g, i) => {
@@ -748,6 +760,16 @@ function renderNewAnalyzedWords(container, alignment, sttLookup, diagnostics, tr
       '\u2022 The spoken word is NOT a near-miss (not phonetically similar)\n' +
       '\u2022 Example: "house" for "horse" would be definite-struggle (near-miss),\n' +
       '  but "table" for "horse" is a confirmed substitution (unrelated word)\n' +
+      '\u2022 Counts as an ERROR',
+
+    'confirmed-insertion': 'CONFIRMED INSERTION\n' +
+      'Student added a word not in the reference passage, confirmed by all engines.\n\n' +
+      'Rules:\n' +
+      '\u2022 All available engines (V1 + V0 + Parakeet) independently heard the same\n' +
+      '  extra word at the same position in the passage\n' +
+      '\u2022 Not a filler (um, uh), self-correction, or struggle fragment\n' +
+      '\u2022 Example: Reference "the dog" \u2192 Student says "the big dog" \u2192\n' +
+      '  all 3 engines hear "big" \u2192 confirmed insertion\n' +
       '\u2022 Counts as an ERROR',
 
     'pause': '[PAUSE] \u2014 LONG PAUSE\n' +
@@ -902,12 +924,15 @@ function renderNewAnalyzedWords(container, alignment, sttLookup, diagnostics, tr
     // ── Main word span ──
     const span = document.createElement('span');
     span.className = `word word-bucket-${bucket}`;
-    const displayText = entry._displayRef || entry.ref || '';
+    const isConfIns = bucket === 'confirmed-insertion';
+    const displayText = isConfIns ? ('+' + (entry.hyp || '?')) : (entry._displayRef || entry.ref || '');
     span.textContent = displayText;
 
-    // Cosmetic punctuation
-    const punct = punctMap.get(refIdx);
-    if (punct) span.textContent += punct;
+    // Cosmetic punctuation (not applicable to confirmed insertions)
+    if (!isConfIns) {
+      const punct = punctMap.get(refIdx);
+      if (punct) span.textContent += punct;
+    }
 
     // Hesitation left border (same as legacy)
     const hesitation = (entry.hypIndex >= 0) ? onsetMap.get(entry.hypIndex) : null;
@@ -917,7 +942,7 @@ function renderNewAnalyzedWords(container, alignment, sttLookup, diagnostics, tr
     }
 
     // Morphological root squiggle: word is not correct + V1 or V0 produced a proper prefix of the ref
-    if (bucket !== 'correct' && bucket !== 'struggle-correct' && bucket !== 'omitted') {
+    if (bucket !== 'correct' && bucket !== 'struggle-correct' && bucket !== 'omitted' && !isConfIns) {
       const refN = norm(entry.ref);
       const hypN = norm(entry.hyp);
       const v0N = norm(entry._v0Word);
@@ -940,7 +965,11 @@ function renderNewAnalyzedWords(container, alignment, sttLookup, diagnostics, tr
     // Tooltip
     const tip = [];
     tip.push(`"${displayText}" \u2014 ${BUCKET[bucket]?.label || bucket}`);
-    tip.push(`V1: ${v1Ev} | V0: ${v0Ev} | Pk: ${pkEv}`);
+    if (isConfIns) {
+      tip.push(`All engines heard: "${entry.hyp}"`);
+    } else {
+      tip.push(`V1: ${v1Ev} | V0: ${v0Ev} | Pk: ${pkEv}`);
+    }
     if (bucket === 'struggle-correct' && entry.compound) {
       tip.push(`V1 produced fragments: [${entry.parts?.join(', ')}]`);
     }
@@ -962,6 +991,9 @@ function renderNewAnalyzedWords(container, alignment, sttLookup, diagnostics, tr
     }
     if (bucket === 'confirmed-substitution') {
       tip.push(`Student said "${entry.hyp}" \u2014 all engines agree`);
+    }
+    if (bucket === 'confirmed-insertion') {
+      tip.push(`All ${entry._insertionEngines || 'available'} engines heard "${entry.hyp}" \u2014 not in passage`);
     }
     if (hesitation) {
       tip.push(`Hesitation: ${Math.round(hesitation.gap * 1000)}ms before this word`);
@@ -1032,7 +1064,7 @@ function renderNewAnalyzedWords(container, alignment, sttLookup, diagnostics, tr
     }
 
     wordsDiv.appendChild(document.createTextNode(' '));
-    refIdx++;
+    if (!isConfIns) refIdx++;  // Confirmed insertions have no ref word — don't advance ref index
   }
 
   container.appendChild(wordsDiv);
@@ -1162,7 +1194,7 @@ export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, di
     errParts.push(accuracy.longPauseErrors + ' long pause' + (accuracy.longPauseErrors !== 1 ? 's' : ''));
   }
   if (accuracy.insertionErrors > 0) {
-    errParts.push(accuracy.insertionErrors + ' insertion' + (accuracy.insertionErrors !== 1 ? 's' : ''));
+    errParts.push(accuracy.insertionErrors + ' confirmed insertion' + (accuracy.insertionErrors !== 1 ? 's' : ''));
   }
   errBox.innerHTML = '<span class="metric-label">' + (errParts.length > 0 ? errParts.join(', ') : 'No errors') + '</span>';
   metricsBar.appendChild(errBox);
@@ -1613,6 +1645,7 @@ export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, di
     if (ins.partOfForgiven) return false;
     if (ins._isSelfCorrection) return false;
     if (ins._partOfStruggle) return false;
+    if (ins._confirmedInsertion) return false; // Already shown inline as its own bucket
     // Check if the corresponding STT word is a disfluency or CTC artifact
     if (ins.hyp && sttLookup) {
       const queue = sttLookup.get(ins.hyp);
@@ -2265,8 +2298,8 @@ export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, di
               tdV0.className = 'engine-ins-different';
               tdV0.textContent = v0Ins.map(e => e.hyp).join(', ');
             } else {
-              tdV0.className = 'engine-ins-suppressed';
-              tdV0.textContent = 'suppressed';
+              tdV0.className = 'engine-ins-absent';
+              tdV0.textContent = '\u2014';
             }
             tr.appendChild(tdV0);
 
@@ -2281,7 +2314,7 @@ export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, di
               tdPk.className = 'engine-ins-different';
               tdPk.textContent = pkIns.map(e => e.hyp).join(', ');
             } else {
-              tdPk.className = 'engine-ins-suppressed';
+              tdPk.className = 'engine-ins-absent';
               tdPk.textContent = '\u2014';
             }
             tr.appendChild(tdPk);
@@ -2291,9 +2324,10 @@ export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, di
             tdV.className = 'pipeline-verdict pipeline-verdict-insertion';
             const tw = ins.hypIndex >= 0 ? transcriptWords[ins.hypIndex] : null;
             let label = 'insertion';
-            if (ins._partOfStruggle) label = 'struggle fragment';
+            if (ins._confirmedInsertion) label = 'confirmed insertion \u2717';
+            else if (ins._partOfStruggle) label = 'struggle fragment';
             else if (ins._isSelfCorrection) label = 'self-correction';
-            else if (tw?.isDisfluency) label = tw.disfluencyType || 'filler';
+            else if (tw?.isDisfluency) label = 'filler';
             tdV.textContent = label;
             tr.appendChild(tdV);
 
@@ -2521,6 +2555,15 @@ export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, di
         });
       }
 
+      const confIns = alignment.filter(e => e._confirmedInsertion);
+      if (confIns.length > 0) {
+        lists.push({
+          label: 'Confirmed Insertions (' + confIns.length + ')',
+          cls: 'pipeline-pp-confinsertion',
+          items: confIns.map(e => '"' + e.hyp + '" \u2014 all ' + (e._insertionEngines || 'available') + ' engines heard this extra word (counts as error)')
+        });
+      }
+
       const selfCorrs = alignment.filter(e => e.type === 'self-correction' || e._isSelfCorrection);
       if (selfCorrs.length > 0) {
         lists.push({
@@ -2672,6 +2715,7 @@ export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, di
         if (item._isSelfCorrection) notes.push('self-correction');
         if (item._partOfStruggle) notes.push('part of struggle');
         if (item._nearMissEvidence && item._nearMissEvidence.length > 0) notes.push('near-miss: ' + item._nearMissEvidence.join(', '));
+        if (item._confirmedInsertion) notes.push('confirmed insertion (error)');
         if (item._hasHesitation) notes.push('hesitation');
         if (item._abandonedAttempt) notes.push('abandoned attempt');
         if (item._healed) notes.push('healed');

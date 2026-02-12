@@ -19,7 +19,8 @@ export function computeWCPM(alignmentResult, elapsedSeconds) {
 
 /**
  * Compute reading accuracy and error breakdown.
- * Insertions are NOT counted as errors per ORF standard.
+ * Regular insertions are NOT counted as errors per ORF standard.
+ * Confirmed insertions (all engines agreed) ARE counted as errors.
  * @param {Array<{type: string}>} alignmentResult - From alignWords()
  * @returns {{ accuracy: number, correctCount: number, totalRefWords: number, substitutions: number, omissions: number, insertions: number }}
  */
@@ -52,8 +53,8 @@ export function computeAccuracy(alignmentResult, options = {}) {
         }
         break;
       case 'insertion':
-        // Only true insertions count (flagged in app.js, excludes disfluencies/artifacts/self-corrections)
-        if (w._trueInsertion) {
+        // Only confirmed insertions count (all available engines agreed on same extra word)
+        if (w._confirmedInsertion) {
           insertionErrors++;
         }
         break;

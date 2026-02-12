@@ -952,50 +952,91 @@ async function runAnalysis() {
     }
   }
 
-  // ── Cross-validate insertions ──────────────────────────────────────
-  if (parakeetAlignment) {
-    const parakeetInsertions = parakeetAlignment.filter(e => e.type === 'insertion');
+  // ── Cross-validate insertions (3-way) ─────────────────────────────
+  // Check each V1 insertion against V0 and Parakeet at the same ref-word boundary.
+  // When all available engines agree, flag as _confirmedInsertion (counts as error).
+  {
+    const _insNorm = s => (s || '').toLowerCase().replace(/[^a-z'-]/g, '');
+
+    // Build per-position norm lists for V0 and Pk insertions
+    const _buildInsNormGroups = (groups) =>
+      groups.map(g => g.map(e => _insNorm(e.hyp)));
+
+    const v0InsNormGroups = _buildInsNormGroups(v0InsGroups);
+    const pkInsNormGroups = _buildInsNormGroups(pkInsGroups);
+
+    // Also build a flat Parakeet insertion map for the existing confirmed/unconfirmed tagging
     const pInsNorms = new Map();
-    for (const ins of parakeetInsertions) {
-      const norm = (ins.hyp || '').toLowerCase().replace(/[^a-z'-]/g, '');
-      if (!pInsNorms.has(norm)) pInsNorms.set(norm, []);
-      pInsNorms.get(norm).push(ins);
+    if (parakeetAlignment) {
+      for (const ins of parakeetAlignment.filter(e => e.type === 'insertion')) {
+        const n = _insNorm(ins.hyp);
+        if (!pInsNorms.has(n)) pInsNorms.set(n, []);
+        pInsNorms.get(n).push(ins);
+      }
     }
 
-    for (const entry of alignment) {
-      if (entry.type !== 'insertion') continue;
-      if (entry.crossValidation && entry.crossValidation !== 'pending') continue;
-      const norm = (entry.hyp || '').toLowerCase().replace(/[^a-z'-]/g, '');
-      const matches = pInsNorms.get(norm);
-      if (matches && matches.length > 0) {
-        const match = matches.shift();
-        const ts = _getEngineTimestamp(match, parakeetWords);
-        _setCrossValidation(entry, transcriptWords, 'confirmed', ts);
-        if (ts) {
-          entry._xvalWord = ts.word;
-          if (entry.hypIndex != null && entry.hypIndex >= 0) {
-            const tw = transcriptWords[entry.hypIndex];
-            if (tw) tw._xvalWord = ts.word;
+    // Walk through V1 insertions grouped by ref-word boundary
+    for (let pos = 0; pos < v1InsGroups.length; pos++) {
+      const v1Ins = v1InsGroups[pos];
+      const v0Norms = v0InsNormGroups[pos] || [];
+      const pkNorms = pkInsNormGroups[pos] || [];
+
+      for (const entry of v1Ins) {
+        if (entry.crossValidation && entry.crossValidation !== 'pending') continue;
+        const norm = _insNorm(entry.hyp);
+
+        // Check Parakeet (same as before — sets crossValidation confirmed/unconfirmed)
+        const pkMatches = pInsNorms.get(norm);
+        const pkHeard = pkMatches && pkMatches.length > 0;
+        if (pkHeard) {
+          const match = pkMatches.shift();
+          const ts = _getEngineTimestamp(match, parakeetWords);
+          _setCrossValidation(entry, transcriptWords, 'confirmed', ts);
+          if (ts) {
+            entry._xvalWord = ts.word;
+            if (entry.hypIndex != null && entry.hypIndex >= 0) {
+              const tw = transcriptWords[entry.hypIndex];
+              if (tw) tw._xvalWord = ts.word;
+            }
           }
+        }
+
+        // Check V0 at same ref-word position
+        const v0Idx = v0Norms.indexOf(norm);
+        const v0Heard = v0Idx >= 0;
+        if (v0Heard) v0Norms[v0Idx] = ''; // consume to avoid double-match
+
+        // Check Pk at same ref-word position (stricter positional check)
+        const pkPosIdx = pkNorms.indexOf(norm);
+        const pkPosHeard = pkPosIdx >= 0;
+        if (pkPosHeard) pkNorms[pkPosIdx] = ''; // consume
+
+        // 3-way confirmed insertion: all available engines heard it at this position
+        // Require at least V1 + one other engine; if both available, both must agree
+        const enginesAvailable = 1 + (hasV0 ? 1 : 0) + (hasPk ? 1 : 0);
+        const enginesHeard = 1 + (v0Heard ? 1 : 0) + (pkPosHeard ? 1 : 0);
+        if (enginesAvailable >= 2 && enginesHeard === enginesAvailable) {
+          entry._confirmedInsertion = true;
+          entry._insertionEngines = enginesHeard;
         }
       }
     }
-  }
 
-  // Sweep remaining pending entries as unconfirmed
-  for (const entry of alignment) {
-    if (entry.type !== 'insertion') continue;
-    if (!entry.crossValidation || entry.crossValidation === 'pending') {
-      entry.crossValidation = 'unconfirmed';
-      if (entry.hypIndex != null && entry.hypIndex >= 0) {
-        const tw = transcriptWords[entry.hypIndex];
-        if (tw) tw.crossValidation = 'unconfirmed';
+    // Sweep remaining pending entries as unconfirmed
+    for (const entry of alignment) {
+      if (entry.type !== 'insertion') continue;
+      if (!entry.crossValidation || entry.crossValidation === 'pending') {
+        entry.crossValidation = 'unconfirmed';
+        if (entry.hypIndex != null && entry.hypIndex >= 0) {
+          const tw = transcriptWords[entry.hypIndex];
+          if (tw) tw.crossValidation = 'unconfirmed';
+        }
       }
     }
-  }
-  for (const w of transcriptWords) {
-    if (w.crossValidation === 'pending') {
-      w.crossValidation = 'unconfirmed';
+    for (const w of transcriptWords) {
+      if (w.crossValidation === 'pending') {
+        w.crossValidation = 'unconfirmed';
+      }
     }
   }
 
@@ -1569,15 +1610,20 @@ async function runAnalysis() {
     });
   }
 
-  // Flag true insertions: extra words not explained by disfluency, self-correction, or artifact
+  // Clear _confirmedInsertion on excluded insertions (fillers, self-corrections, etc.)
+  // These are already classified — they shouldn't count as confirmed insertion errors.
   for (const entry of alignment) {
-    if (entry.type !== 'insertion') continue;
-    if (entry._partOfStruggle || entry._isSelfCorrection) continue;
+    if (entry.type !== 'insertion' || !entry._confirmedInsertion) continue;
+    if (entry._partOfStruggle || entry._isSelfCorrection) {
+      delete entry._confirmedInsertion;
+      continue;
+    }
     if (entry.hypIndex >= 0) {
       const tw = transcriptWords[entry.hypIndex];
-      if (tw?.isDisfluency || tw?._ctcArtifact || tw?._preWordArtifact || tw?._postWordArtifact) continue;
+      if (tw?.isDisfluency || tw?._ctcArtifact || tw?._preWordArtifact || tw?._postWordArtifact) {
+        delete entry._confirmedInsertion;
+      }
     }
-    entry._trueInsertion = true;
   }
 
   const wcpm = (effectiveElapsedSeconds != null && effectiveElapsedSeconds > 0)
@@ -1612,7 +1658,8 @@ async function runAnalysis() {
       _nearMissEvidence: a._nearMissEvidence || null,
       _abandonedAttempt: a._abandonedAttempt || false,
       _isSelfCorrection: a._isSelfCorrection || false,
-      _partOfStruggle: a._partOfStruggle || false
+      _partOfStruggle: a._partOfStruggle || false,
+      _confirmedInsertion: a._confirmedInsertion || false
     }))
   });
 

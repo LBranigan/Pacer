@@ -51,7 +51,7 @@ const ALIGNMENT_MISCUES = {
   insertion: {
     description: 'Student added a word not in the reference text',
     detector: 'alignment.js → alignWords()',
-    countsAsError: false, // Per ORF standards, insertions don't count against accuracy
+    countsAsError: false, // Regular insertions don't count; confirmed insertions do (see below)
     config: null,
     example: {
       reference: 'the dog',
@@ -59,6 +59,23 @@ const ALIGNMENT_MISCUES = {
       result: '"big" is an insertion'
     },
     uiClass: 'word-insertion'
+  },
+
+  confirmed_insertion: {
+    description: 'Student added a word not in the reference passage, confirmed by all available ASR engines (V1 + V0 + Parakeet). Strong evidence the student actually said an extra word.',
+    detector: 'app.js → 3-way insertion cross-validation (after alignment, grouped by ref-word boundary)',
+    countsAsError: true, // All engines agree — this is a real reading error
+    config: {
+      requirement: 'All available engines must hear the same normalized word at the same ref-word boundary position',
+      exclusions: 'Fillers (isDisfluency), self-corrections (_isSelfCorrection), struggle fragments (_partOfStruggle), CTC artifacts (_ctcArtifact) are excluded'
+    },
+    example: {
+      reference: 'the dog',
+      spoken: 'the big dog',
+      result: 'V1 hears "big", V0 hears "big", Parakeet hears "big" → _confirmedInsertion: true → counts as error'
+    },
+    uiClass: 'word-bucket-confirmed-insertion',
+    note: 'Rendered inline in word flow (not as fragment) with its own bucket color. The "+" prefix in display text indicates an added word. Regular insertions (single-engine or 2-engine) remain non-errors and show in the "Inserted words" section.'
   }
 };
 
@@ -511,12 +528,13 @@ export function getDetectorLocation(type) {
  * ERRORS (affect accuracy):
  * - omission: Skipped a word
  * - substitution: Wrong word
+ * - confirmed_insertion: Extra word confirmed by all engines (V1 + V0 + Parakeet all heard it)
  * - struggle: Substitution+ with decoding difficulty evidence (hesitation / near-miss fragments / abandoned attempt)
  * - morphological: Wrong word ending
  * - reverbCtcFailure: Reverb CTC failure (<unknown>) — substitution with (!) weak-evidence badge
  *
  * NOT ERRORS (diagnostic only):
- * - insertion: Extra word (per ORF standards)
+ * - insertion: Extra word (single/dual-engine — per ORF standards)
  * - longPause: 3+ second gap (visual indicator only)
  * - hesitation: Brief pause (< 3s)
  * - selfCorrection: Repeated word/phrase or near-miss attempt before correct word
