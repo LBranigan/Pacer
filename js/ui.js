@@ -681,7 +681,10 @@ function renderNewAnalyzedWords(container, alignment, sttLookup, diagnostics, tr
     'correct': 'CORRECT\n' +
       'Student read the word correctly.\n\n' +
       'Rules:\n' +
-      '\u2022 All 3 engines (V1, V0, Parakeet) agree on the word\n' +
+      '\u2022 V1 matched the reference word (or Parakeet overrode V1 to correct)\n' +
+      '\u2022 V0 (clean model) did not hear a different word\n' +
+      '\u2022 No false-start insertions before the word\n' +
+      '\u2022 Not a recovered word (at least V1 or V0 heard it)\n' +
       '\u2022 OR: word was forgiven (proper noun with dictionary guard)\n' +
       '\u2022 Does NOT count as an error',
 
@@ -731,9 +734,8 @@ function renderNewAnalyzedWords(container, alignment, sttLookup, diagnostics, tr
       'Rules:\n' +
       '\u2022 Gap between previous word\'s end and next word\'s start \u2265 3000ms\n' +
       '\u2022 Skips unconfirmed words (unreliable timestamps)\n' +
-      '\u2022 If the word after the pause is otherwise correct, it is\n' +
-      '  reclassified as an error (long-pause penalty)\n' +
-      '\u2022 Counts as an ERROR',
+      '\u2022 Displayed as a visual marker between words\n' +
+      '\u2022 Does NOT count as an error (indicator only)',
 
     'morph-root': 'MORPHOLOGICAL ROOT (orange squiggle underline)\n' +
       'Student produced the root/beginning of the word but not the full form.\n\n' +
@@ -741,7 +743,7 @@ function renderNewAnalyzedWords(container, alignment, sttLookup, diagnostics, tr
       '\u2022 V1 or V0 produced a proper prefix of the reference word\n' +
       '\u2022 Prefix must be \u2265 3 characters\n' +
       '\u2022 Prefix must not equal the full reference word\n' +
-      '\u2022 Only shown on error words (not correct or omitted)\n' +
+      '\u2022 Only shown on error words (not correct, struggle-correct, or omitted)\n' +
       '\u2022 Example: "run" heard for "running" \u2014 root detected',
 
     'hesitation': 'HESITATION (dashed left border)\n' +
@@ -752,7 +754,7 @@ function renderNewAnalyzedWords(container, alignment, sttLookup, diagnostics, tr
       '\u2022 Default: 500ms \u2013 3000ms\n' +
       '\u2022 After comma: 800ms \u2013 3000ms (more time expected)\n' +
       '\u2022 After period/!/?.: 1200ms \u2013 3000ms (sentence boundary)\n\n' +
-      'Gaps \u2265 3000ms are flagged separately as [pause] (errors).\n\n' +
+      'Gaps \u2265 3000ms are flagged separately as [pause].\n\n' +
       'Timestamp source: Parakeet (primary), Reverb (fallback).\n' +
       'Unconfirmed words are skipped (unreliable timestamps).\n' +
       'Does NOT count as an error.',
@@ -852,7 +854,7 @@ function renderNewAnalyzedWords(container, alignment, sttLookup, diagnostics, tr
       ps.className = 'pause-indicator';
       if (pause._vadAnalysis?.speechPercent >= 30) ps.classList.add('pause-indicator-vad');
       ps.textContent = '[' + pause.gap.toFixed(1) + 's]';
-      ps.dataset.tooltip = 'Long pause: ' + Math.round(pause.gap * 1000) + 'ms (error: \u2265 3000ms)';
+      ps.dataset.tooltip = 'Long pause: ' + Math.round(pause.gap * 1000) + 'ms (\u2265 3000ms)';
       ps.style.cursor = 'pointer';
       ps.addEventListener('click', (e) => { e.stopPropagation(); showWordTooltip(ps, null); });
       wordsDiv.appendChild(ps);
@@ -1547,7 +1549,7 @@ export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, di
         }
 
         const pauseMs = Math.round(pause.gap * 1000);
-        let pauseTooltip = 'Long pause: ' + pauseMs + 'ms (error: >= 3000ms)';
+        let pauseTooltip = 'Long pause: ' + pauseMs + 'ms (>= 3000ms)';
         pauseTooltip += buildVADTooltipInfo(pause._vadAnalysis);
         pauseSpan.dataset.tooltip = pauseTooltip;
         pauseSpan.textContent = '[' + pause.gap + 's]';

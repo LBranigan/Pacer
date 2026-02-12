@@ -187,15 +187,15 @@ const DIAGNOSTIC_MISCUES = {
   },
 
   longPause: {
-    description: 'Extended silence (3+ seconds) indicating student got stuck. When the word after the pause is otherwise correct, it is reclassified as an error (_longPauseError) and shown as orange (attempted-struggled).',
-    detector: 'diagnostics.js → detectLongPauses() + app.js flags _longPauseError on correct words after ≥3s pause',
-    countsAsError: true, // Long pauses are counted in accuracy via _longPauseError flag on alignment entries
+    description: 'Extended silence (3+ seconds) indicating student got stuck. Displayed as a visual [pause] marker between words.',
+    detector: 'diagnostics.js → detectLongPauses()',
+    countsAsError: false, // Indicator only — does not affect accuracy
     config: {
       LONG_PAUSE_THRESHOLD_SEC: 3.0
     },
     example: {
-      context: '"the" ends at 1.0s, "dog" starts at 5.5s — student read "dog" correctly but hesitated 4.5s',
-      result: '4.5s gap flagged as long pause error — "dog" shown orange, counted as error in accuracy'
+      context: '"the" ends at 1.0s, "dog" starts at 5.5s',
+      result: '4.5s gap flagged as long pause — [pause] marker shown between words'
     },
     uiClass: 'pause-indicator'
   },
@@ -562,7 +562,6 @@ export function getDetectorLocation(type) {
  * - omission: Skipped a word
  * - substitution: Wrong word
  * - struggle: Substitution+ with decoding difficulty evidence (hesitation / near-miss fragments / abandoned attempt)
- * - longPause: Stuck for 3+ seconds
  * - morphological: Wrong word ending
  * - reverbCtcFailure: Reverb CTC failure (<unknown>) — substitution with (!) weak-evidence badge
  *
@@ -570,6 +569,7 @@ export function getDetectorLocation(type) {
  * - insertion: Extra word (per ORF standards)
  * - fragment: False start (merged into target)
  * - repetition: Self-correction attempt
+ * - longPause: 3+ second gap (visual indicator only)
  * - hesitation: Brief pause (< 3s)
  * - selfCorrection: Repeated word/phrase or near-miss attempt before correct word
  * - properNounForgiveness: Close attempt at name
