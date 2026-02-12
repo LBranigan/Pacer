@@ -1511,26 +1511,11 @@ async function runAnalysis() {
     });
   }
 
-  // Flag correct words preceded by a ≥3s pause as errors (ORF: hesitation = error)
-  if (diagnostics.longPauses) {
-    for (const pause of diagnostics.longPauses) {
-      for (const entry of alignment) {
-        if (entry.type === 'insertion') continue;
-        if (entry.hypIndex > pause.afterWordIndex && entry.type !== 'omission') {
-          if (entry.type === 'correct') {
-            entry._longPauseError = true;
-            entry._longPauseGap = pause.gap;
-          }
-          break;
-        }
-      }
-    }
-  }
-
   const wcpm = (effectiveElapsedSeconds != null && effectiveElapsedSeconds > 0)
     ? computeWCPMRange(alignment, effectiveElapsedSeconds)
     : null;
-  const accuracy = computeAccuracy(alignment, { forgivenessEnabled: !!nlAnnotations });
+  const longPauseCount = diagnostics.longPauses?.length || 0;
+  const accuracy = computeAccuracy(alignment, { forgivenessEnabled: !!nlAnnotations, longPauseCount });
   const tierBreakdown = nlAnnotations ? computeTierBreakdown(alignment) : null;
 
   addStage('metrics_computed', {

@@ -569,8 +569,6 @@ function renderNewAnalyzedWords(container, alignment, sttLookup, diagnostics, tr
 
     // Correct or compound-struggle (which resolved to correct word)
     if (entry.type === 'correct' || (entry.type === 'struggle' && entry.compound)) {
-      // Long pause (≥3s) before correct word = hesitation error → orange
-      if (entry._longPauseError) return 'attempted-struggled';
       // Recovered = only cross-validator heard it (V1/V0 both missed) — not confidently correct
       if (entry._recovered) return 'struggle-correct';
       // Compound fragments (e.g., "own"+"ed" for "owned") = clear mid-word pause → orange
@@ -739,7 +737,7 @@ function renderNewAnalyzedWords(container, alignment, sttLookup, diagnostics, tr
     }
 
     // Morphological root squiggle: word is not correct + V1 or V0 produced a proper prefix of the ref
-    if (bucket !== 'correct' && bucket !== 'struggle-correct' && bucket !== 'omitted' && !entry._longPauseError) {
+    if (bucket !== 'correct' && bucket !== 'struggle-correct' && bucket !== 'omitted') {
       const refN = norm(entry.ref);
       const hypN = norm(entry.hyp);
       const v0N = norm(entry._v0Word);
@@ -770,9 +768,7 @@ function renderNewAnalyzedWords(container, alignment, sttLookup, diagnostics, tr
       tip.push(`False start: ${insertionsBefore.map(i => '"' + i.hyp + '"').join(', ')}`);
     }
     if (bucket === 'attempted-struggled') {
-      if (entry._longPauseError) {
-        tip.push(`Long pause (${entry._longPauseGap}s) before this word — scored as error`);
-      } else if (entry.compound && entry.parts) {
+      if (entry.compound && entry.parts) {
         tip.push(`V1 produced fragments: [${entry.parts.join(', ')}] — scored as error`);
       } else {
         tip.push('Root detected, but full word not produced');

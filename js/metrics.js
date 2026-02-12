@@ -24,16 +24,12 @@ export function computeWCPM(alignmentResult, elapsedSeconds) {
  * @returns {{ accuracy: number, correctCount: number, totalRefWords: number, substitutions: number, omissions: number, insertions: number }}
  */
 export function computeAccuracy(alignmentResult, options = {}) {
-  let correctCount = 0, substitutions = 0, omissions = 0, insertions = 0, struggles = 0, forgiven = 0, longPauseErrors = 0;
+  let correctCount = 0, substitutions = 0, omissions = 0, insertions = 0, struggles = 0, forgiven = 0;
+  const longPauseErrors = options.longPauseCount || 0;
   for (const w of alignmentResult) {
     switch (w.type) {
       case 'correct':
-        // Long pause (≥3s) before a correct word = hesitation error in ORF
-        if (w._longPauseError) {
-          longPauseErrors++;
-        } else {
-          correctCount++;
-        }
+        correctCount++;
         break;
       case 'substitution':
         // Proper noun forgiveness: count as correct if flagged as forgiven
@@ -89,8 +85,8 @@ export function computeWCPMRange(alignmentResult, elapsedSeconds) {
     return { wcpmMin: 0, wcpmMax: 0, correctCount: 0, elapsedSeconds: elapsedSeconds || 0 };
   }
 
-  // Count correct words (exclude long-pause errors — ≥3s hesitation before correct word = ORF error)
-  const correctWords = alignmentResult.filter(w => w.type === 'correct' && !w._longPauseError);
+  // Count correct words
+  const correctWords = alignmentResult.filter(w => w.type === 'correct');
   const correctCount = correctWords.length;
 
   // Standard WCPM (max) - all correct words
