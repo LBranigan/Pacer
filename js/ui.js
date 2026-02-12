@@ -615,14 +615,47 @@ function renderNewAnalyzedWords(container, alignment, sttLookup, diagnostics, tr
     return { ...g, bucket };
   });
 
-  // ── 4. Audio player ───────────────────────────────────────────────────
+  // ── 4. Audio player + download WAV ──────────────────────────────────
   if (audioBlob) {
     const playerWrap = document.createElement('div');
     playerWrap.className = 'new-analyzed-player';
+    playerWrap.style.display = 'flex';
+    playerWrap.style.alignItems = 'center';
+    playerWrap.style.gap = '0.5rem';
     const audio = document.createElement('audio');
     audio.controls = true;
     audio.src = URL.createObjectURL(audioBlob);
     playerWrap.appendChild(audio);
+
+    const dlBtn = document.createElement('button');
+    dlBtn.textContent = '\u2B07 WAV';
+    dlBtn.title = 'Download as WAV file';
+    dlBtn.style.padding = '0.4rem 0.8rem';
+    dlBtn.style.cursor = 'pointer';
+    dlBtn.addEventListener('click', async () => {
+      dlBtn.disabled = true;
+      dlBtn.textContent = '...';
+      try {
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        const arrayBuf = await audioBlob.arrayBuffer();
+        const audioBuf = await audioCtx.decodeAudioData(arrayBuf);
+        const wavBlob = audioBufferToWav(audioBuf);
+        const url = URL.createObjectURL(wavBlob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'recording-' + new Date().toISOString().slice(0, 19).replace(/[:.]/g, '-') + '.wav';
+        a.click();
+        URL.revokeObjectURL(url);
+        audioCtx.close();
+      } catch (err) {
+        console.error('WAV conversion failed:', err);
+        alert('Failed to convert to WAV: ' + err.message);
+      } finally {
+        dlBtn.disabled = false;
+        dlBtn.textContent = '\u2B07 WAV';
+      }
+    });
+    playerWrap.appendChild(dlBtn);
     container.appendChild(playerWrap);
   }
 
