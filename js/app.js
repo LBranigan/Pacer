@@ -1231,12 +1231,12 @@ async function runAnalysis() {
       label: d._vadAnalysis.label
     })) || [];
 
-    // VAD Overhang Adjustment: correct gap values where STT under-timed word endpoints.
-    // If a VAD speech segment overlaps with the previous word AND extends past its STT end,
-    // the extension is speech overhang (e.g. "soak-ed" where "-ed" continues past STT endpoint).
-    // We use the VAD segment end as the "real" word end for gap calculation.
-    // Hesitations whose corrected gap falls below threshold are removed.
-    const overhangResult = adjustGapsWithVADOverhang(diagnostics, transcriptWords, vadResult.segments);
+    // VAD Overhang Adjustment: DISABLED — overhang logic has no cap, so large VAD segments
+    // (e.g. 3.7s continuous speech) can produce 1000ms+ overhang that eliminates real hesitations.
+    // A 1.28s gap between "need" and "all" was reduced to 144ms and dismissed.
+    // TODO: Re-enable with a cap (e.g. 300-500ms max overhang) once tuned.
+    // const overhangResult = adjustGapsWithVADOverhang(diagnostics, transcriptWords, vadResult.segments);
+    const overhangResult = { adjustments: [], removedCount: 0 };
 
     addStage('vad_gap_analysis', {
       longPausesAnalyzed: vadGapSummary.longPausesAnalyzed,
