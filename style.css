@@ -1215,10 +1215,36 @@ body.dev-mode .dev-mode-toggle {
 .new-analyzed-legend .word-fragment { font-size: 0.7rem; }
 
 .new-analyzed-flow {
-  line-height: 2.6;
+  line-height: 1.2;
   padding: 0.5rem 0.25rem;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 3px 4px;
 }
-.new-analyzed-flow .word { padding: 3px 6px; margin: 2px 1px; }
+.new-analyzed-flow .word { padding: 3px 6px; margin: 0; }
+
+/* Word wrapper: inline-flex column for word + timestamp */
+.word-wrap {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+}
+.word-fragment-wrap {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+/* Timestamp annotation below words and fragments */
+.word-ts {
+  font-size: 0.55rem;
+  color: #999;
+  font-family: 'Consolas', monospace;
+  line-height: 1;
+  margin-top: 1px;
+  white-space: nowrap;
+}
 
 .word-bucket-correct { background: #c8e6c9; color: #2e7d32; }
 .word-bucket-struggle-correct { background: #dcedc8; color: #558b2f; border-bottom: 2px solid #8bc34a; }
