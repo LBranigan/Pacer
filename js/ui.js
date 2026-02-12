@@ -509,7 +509,18 @@ function renderNewAnalyzedWords(container, alignment, sttLookup, diagnostics, tr
       const insN = norm(ins.hyp);
       const prevN = norm(ins._prevRef);
       if (ins._partOfStruggle) {
-        keep.push(ins);                                  // struggle evidence — stays with target
+        // Struggle fragment — attach to the struggle word it belongs to.
+        // _nearMissTarget tells us which ref word this fragment is evidence for.
+        // When _nearMissTarget is unset (temporal absorption), fall back to
+        // adjacency: if the previous entry is a sub/struggle, attach there.
+        const targetN = norm(ins._nearMissTarget);
+        const prevEntry = groups[i - 1].entry;
+        const prevIsSub = prevEntry.type === 'substitution' || prevEntry.type === 'struggle';
+        if (prevIsSub && (targetN === prevRefN || !ins._nearMissTarget)) {
+          groups[i - 1].insertionsAfter.push(ins);       // trailing fragment of struggle word
+        } else {
+          keep.push(ins);                                // pre-struggle or belongs to current word
+        }
       } else if (insN.length >= 2 && thisRefN.startsWith(insN)) {
         keep.push(ins);                                  // false start for this word
       } else if (prevN === prevRefN) {
