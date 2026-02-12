@@ -76,13 +76,19 @@ export function getPunctuationPositions(referenceText) {
   }
   // Split internal-hyphen tokens: "smooth-on-skin." → ["smooth", "on", "smooth-on-skin."]
   // Last part keeps original token so trailing punctuation is preserved for the regex.
+  // Exception: single-letter parts join instead (e-mail → email).
   const words = [];
   for (const token of merged) {
     const stripped = token.replace(/^[^\w'-]+|[^\w'-]+$/g, '');
     if (stripped.includes('-')) {
       const parts = stripped.split('-').filter(p => p.length > 0);
-      for (let j = 0; j < parts.length - 1; j++) words.push(parts[j]);
-      words.push(token); // last part: original token preserves trailing punct
+      if (parts.some(p => p.length === 1)) {
+        // Single-letter part (e-mail) → keep as one token (use original for punct)
+        words.push(token);
+      } else {
+        for (let j = 0; j < parts.length - 1; j++) words.push(parts[j]);
+        words.push(token); // last part: original token preserves trailing punct
+      }
     } else {
       words.push(token);
     }
@@ -978,13 +984,19 @@ export function computePauseAtPunctuation(transcriptWords, referenceText, alignm
     }
   }
   // Split internal hyphens to mirror normalizeText (5th location)
+  // Exception: single-letter parts join instead (e-mail → email).
   const refWords = [];
   for (const token of mergedRef) {
     const stripped = token.replace(/^[^\w'-]+|[^\w'-]+$/g, '');
     if (stripped.includes('-')) {
       const parts = stripped.split('-').filter(p => p.length > 0);
-      for (let j = 0; j < parts.length - 1; j++) refWords.push(parts[j]);
-      refWords.push(token); // last part keeps original for display
+      if (parts.some(p => p.length === 1)) {
+        // Single-letter part (e-mail) → keep as one token
+        refWords.push(token);
+      } else {
+        for (let j = 0; j < parts.length - 1; j++) refWords.push(parts[j]);
+        refWords.push(token); // last part keeps original for display
+      }
     } else {
       refWords.push(token);
     }

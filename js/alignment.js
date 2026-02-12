@@ -48,13 +48,17 @@ function mergeCompoundWords(alignment) {
         // Check if combined matches reference
         if (getCanonical(combined) === refCanon) {
           // Found compound word match
+          // If match is via canonical equivalence (e.g., "etcetera" → "etc"), flag as
+          // abbreviation expansion so compound struggle reclassification skips it.
+          const isAbbrExpansion = combined.toLowerCase() !== current.ref.toLowerCase();
           result.push({
             ref: current.ref,
             hyp: combined,
             type: 'correct',
             compound: true,
             hypIndex: current.hypIndex,
-            parts: [current.hyp, ...alignment.slice(i + 1, i + 1 + insertionsConsumed).map(a => a.hyp)]
+            parts: [current.hyp, ...alignment.slice(i + 1, i + 1 + insertionsConsumed).map(a => a.hyp)],
+            ...(isAbbrExpansion && { _abbreviationExpansion: true })
           });
           i += 1 + insertionsConsumed;
           break;
@@ -90,6 +94,7 @@ function mergeCompoundWords(alignment) {
           const withSub = combined + alignment[subIdx].hyp;
           if (getCanonical(withSub) === refCanon) {
             // Found reversed compound word match
+            const isAbbrExpansion = withSub.toLowerCase() !== alignment[subIdx].ref.toLowerCase();
             const parts = [];
             for (let p = 0; p <= k; p++) parts.push(alignment[i + p].hyp);
             parts.push(alignment[subIdx].hyp);
@@ -99,7 +104,8 @@ function mergeCompoundWords(alignment) {
               type: 'correct',
               compound: true,
               hypIndex: alignment[subIdx].hypIndex,
-              parts
+              parts,
+              ...(isAbbrExpansion && { _abbreviationExpansion: true })
             });
             i = subIdx + 1;
             matched = true;

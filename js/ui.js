@@ -871,13 +871,19 @@ export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, di
     // Split internal-hyphen tokens to mirror normalizeText's hyphen split.
     // e.g., "soft-on-skin." → ["soft", "on", "soft-on-skin."] so only the last
     // part (original token) feeds the punct regex and gets the trailing period.
+    // Exception: single-letter parts join instead (e-mail → email).
     const splitForPunct = [];
     for (const token of mergedForPunct) {
       const stripped = token.replace(/^[^\w'-]+|[^\w'-]+$/g, '');
       if (stripped.includes('-')) {
         const parts = stripped.split('-').filter(p => p.length > 0);
-        for (let j = 0; j < parts.length - 1; j++) splitForPunct.push(parts[j]);
-        splitForPunct.push(token); // last part: use original token so punct regex works
+        if (parts.some(p => p.length === 1)) {
+          // Single-letter part (e-mail) → keep as one token (use original for punct)
+          splitForPunct.push(token);
+        } else {
+          for (let j = 0; j < parts.length - 1; j++) splitForPunct.push(parts[j]);
+          splitForPunct.push(token); // last part: use original token so punct regex works
+        }
       } else {
         splitForPunct.push(token);
       }

@@ -11,7 +11,8 @@ export const DISFLUENCIES = new Set([
  * Normalize text into an array of lowercase words.
  * Strips leading/trailing punctuation, apostrophes (straight and curly),
  * and internal periods from each word. Hyphens at line breaks are rejoined;
- * all other hyphens split the word into separate tokens.
+ * all other hyphens split the word into separate tokens, except when any
+ * resulting part is a single character (e.g., "e-mail" → "email").
  * @param {string} text
  * @returns {string[]}
  */
@@ -40,13 +41,20 @@ export function normalizeText(text) {
 
   // Split internal-hyphen words into separate words so they match STT output.
   // e.g., "soft-on-skin" → ["soft", "on", "skin"]
+  // Exception: single-letter prefix/suffix hyphens join instead of splitting,
+  // because ASR engines output the merged form (e.g., "e-mail" → "email").
   // Line-break hyphens were already rejoined above, so remaining hyphens are
   // real compound-word hyphens that STT engines output as separate words.
   const result = [];
   for (const token of merged) {
     if (token.includes('-')) {
       const parts = token.split('-').filter(p => p.length > 0);
-      result.push(...parts);
+      if (parts.some(p => p.length === 1)) {
+        // Single-letter part (e-mail, e-book, x-ray) → join as one token
+        result.push(parts.join(''));
+      } else {
+        result.push(...parts);
+      }
     } else {
       result.push(token);
     }

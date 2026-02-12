@@ -664,10 +664,13 @@ async function runAnalysis() {
   // ── Compound struggle reclassification (BEFORE 3-way) ──────────────
   // V1 compound merges = student produced fragments, not a fluent read.
   // Reclassify before 3-way so the verdict sees V1 as non-correct.
+  // Exception: abbreviation expansions (e.g., "et cetera" for "etc.") are correct reads,
+  // not struggles — the student read the full form of an abbreviated reference word.
   {
     const compoundStruggles = [];
     for (const entry of alignment) {
-      if (entry.type === 'correct' && entry.compound && entry.parts && entry.parts.length >= 2) {
+      if (entry.type === 'correct' && entry.compound && entry.parts && entry.parts.length >= 2
+          && !entry._abbreviationExpansion) {
         entry.type = 'struggle';
         entry._strugglePath = 'compound_fragments';
         entry._nearMissEvidence = entry.parts;
@@ -1255,23 +1258,31 @@ async function runAnalysis() {
       }
       // Split internal-hyphen tokens to mirror normalizeText's hyphen split.
       // e.g., "smooth-on-skin" → [{word:"smooth",...}, {word:"on",...}, {word:"skin",...}]
+      // Exception: single-letter parts join instead (e-mail → email).
       // Without this, refPositions has fewer entries than alignment and _displayRef/NL drift.
       const positions = [];
       for (const pos of merged) {
         const stripped = pos.word.replace(/^[^\w'-]+|[^\w'-]+$/g, '');
         if (stripped.includes('-')) {
           const parts = stripped.split('-').filter(p => p.length > 0);
-          const leadingLen = pos.word.match(/^[^\w'-]*/)[0].length;
-          const trailingPunct = pos.word.match(/[^\w'-]*$/)[0];
-          let cursor = pos.start + leadingLen;
-          for (let j = 0; j < parts.length; j++) {
-            if (j === parts.length - 1) {
-              // Last part keeps trailing punctuation for sentence-end detection
-              positions.push({ word: parts[j] + trailingPunct, start: cursor, end: pos.end });
-            } else {
-              positions.push({ word: parts[j], start: cursor, end: cursor + parts[j].length });
+          if (parts.some(p => p.length === 1)) {
+            // Single-letter part (e-mail, e-book) → keep as one token
+            const joinedWord = parts.join('');
+            const trailingPunct = pos.word.match(/[^\w'-]*$/)[0];
+            positions.push({ word: joinedWord + trailingPunct, start: pos.start, end: pos.end });
+          } else {
+            const leadingLen = pos.word.match(/^[^\w'-]*/)[0].length;
+            const trailingPunct = pos.word.match(/[^\w'-]*$/)[0];
+            let cursor = pos.start + leadingLen;
+            for (let j = 0; j < parts.length; j++) {
+              if (j === parts.length - 1) {
+                // Last part keeps trailing punctuation for sentence-end detection
+                positions.push({ word: parts[j] + trailingPunct, start: cursor, end: pos.end });
+              } else {
+                positions.push({ word: parts[j], start: cursor, end: cursor + parts[j].length });
+              }
+              cursor += parts[j].length + 1; // +1 for the hyphen
             }
-            cursor += parts[j].length + 1; // +1 for the hyphen
           }
         } else {
           positions.push(pos);
