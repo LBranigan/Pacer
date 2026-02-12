@@ -79,7 +79,7 @@ const REVERB_DISFLUENCY_MISCUES = {
       result: '"um" detected as filler — V1 insertion matched FILLER_WORDS set, or pre-filtered before alignment and retroactively tagged'
     },
     uiClass: 'word-disfluency',
-    note: 'Two detection paths: (1) V1 insertion matching FILLER_WORDS → isDisfluency=true. (2) Pre-filtered fillers stripped by alignment.js DISFLUENCIES set → retroactively tagged on transcriptWords after alignment.'
+    note: 'Two detection paths: (1) V1 insertion matching FILLER_WORDS → isDisfluency=true. (2) Pre-filtered fillers stripped by alignment.js DISFLUENCIES before NW alignment, then re-injected as insertion entries with _preFilteredDisfluency flag after merge pipeline. Both paths tag transcriptWords[idx].isDisfluency=true. UI renders disfluency fragments with .word-disfluency class (purple).'
   },
 
   reverb_false_start: {

@@ -1280,4 +1280,8 @@ body.dev-mode .dev-mode-toggle {
 .word-fragment-after {
   margin: 0 1px 0 0;
 }
+.word-disfluency {
+  color: #6a1b9a;
+  background: #e1bee7;
+}
 

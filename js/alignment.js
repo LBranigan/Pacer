@@ -704,5 +704,29 @@ export function alignWords(referenceText, transcriptWords) {
   const merged = mergeCompoundWords(result);
   const abbrMerged = mergeAbbreviationExpansions(merged);
   const numMerged = mergeNumberExpansions(abbrMerged);
-  return mergeContractions(numMerged);
+  const final = mergeContractions(numMerged);
+
+  // Re-inject pre-filtered disfluencies as insertion entries.
+  // These were stripped before NW alignment to prevent "uh" matching short ref words like "a",
+  // but they need to appear in the alignment result so the UI can render them and the
+  // V1/V0 disfluency classifier in app.js can process them.
+  const disfluencyWords = rawNormed.filter(p => DISFLUENCIES.has(p.norm));
+  for (const disf of disfluencyWords) {
+    let insertPos = final.length;
+    for (let k = 0; k < final.length; k++) {
+      if (final[k].hypIndex >= 0 && final[k].hypIndex > disf.origIdx) {
+        insertPos = k;
+        break;
+      }
+    }
+    final.splice(insertPos, 0, {
+      ref: null,
+      hyp: disf.norm,
+      type: 'insertion',
+      hypIndex: disf.origIdx,
+      _preFilteredDisfluency: true
+    });
+  }
+
+  return final;
 }

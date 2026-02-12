@@ -845,10 +845,13 @@ function renderNewAnalyzedWords(container, alignment, sttLookup, diagnostics, tr
   // Helper: render a small insertion fragment span
   function renderFragment(parent, ins, extraClass) {
     const frag = document.createElement('span');
-    frag.className = 'word-fragment' + (extraClass ? ' ' + extraClass : '');
+    const tw = ins.hypIndex >= 0 ? transcriptWords?.[ins.hypIndex] : null;
+    const isDis = tw?.isDisfluency || ins._preFilteredDisfluency;
+    frag.className = 'word-fragment' + (extraClass ? ' ' + extraClass : '') + (isDis ? ' word-disfluency' : '');
     frag.textContent = ins.hyp;
     const fragTs = getWordTs(ins.hypIndex);
-    frag.dataset.tooltip = `Insertion: "${ins.hyp}"` +
+    const label = isDis ? `Filler: "${ins.hyp}"` : `Insertion: "${ins.hyp}"`;
+    frag.dataset.tooltip = label +
       (ins._partOfStruggle ? ' (part of struggle)' : '') +
       (ins._isSelfCorrection ? ' (self-correction)' : '') +
       (fragTs ? '\n' + fragTs : '');
@@ -937,7 +940,10 @@ function renderNewAnalyzedWords(container, alignment, sttLookup, diagnostics, tr
       tip.push(`V1 produced fragments: [${entry.parts?.join(', ')}]`);
     }
     if (bucket === 'struggle-correct' && insertionsBefore.length > 0) {
-      tip.push(`False start: ${insertionsBefore.map(i => '"' + i.hyp + '"').join(', ')}`);
+      const fillers = insertionsBefore.filter(i => i._preFilteredDisfluency || transcriptWords?.[i.hypIndex]?.isDisfluency);
+      const nonFillers = insertionsBefore.filter(i => !i._preFilteredDisfluency && !transcriptWords?.[i.hypIndex]?.isDisfluency);
+      if (fillers.length > 0) tip.push(`Filler: ${fillers.map(i => '"' + i.hyp + '"').join(', ')}`);
+      if (nonFillers.length > 0) tip.push(`False start: ${nonFillers.map(i => '"' + i.hyp + '"').join(', ')}`);
     }
     if (bucket === 'struggle-correct' && entry._pkType === 'omission') {
       tip.push('Parakeet did not hear this word (audio unclear in this region)');
@@ -972,12 +978,15 @@ function renderNewAnalyzedWords(container, alignment, sttLookup, diagnostics, tr
         tip.push(`VAD during pause: ${p._vadAnalysis.speechPercent}% speech (${p._vadAnalysis.label})`);
       }
     }
-    // Timestamps in tooltip — use preserved per-engine fields, NOT tw.startTime (overwritten by Parakeet)
+    // Timestamps: Parakeet is primary timekeeper; fall back to Reverb only when Pk unavailable
     const tw = (entry.hypIndex >= 0 && transcriptWords?.[entry.hypIndex]) ? transcriptWords[entry.hypIndex] : null;
-    const v1Ts = tw ? fmtTs(tw._reverbStartTime, tw._reverbEndTime) : '';
     const xvalTs = tw ? fmtTs(tw._xvalStartTime, tw._xvalEndTime) : '';
-    if (v1Ts) tip.push(`V1 time: ${v1Ts}`);
-    if (xvalTs) tip.push(`Pk time: ${xvalTs}`);
+    if (xvalTs) {
+      tip.push(xvalTs);
+    } else {
+      const v1Ts = tw ? fmtTs(tw._reverbStartTime, tw._reverbEndTime) : '';
+      if (v1Ts) tip.push(`${v1Ts} (Reverb)`);
+    }
 
     span.dataset.tooltip = tip.join('\n');
     span.style.cursor = 'pointer';
