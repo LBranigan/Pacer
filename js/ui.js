@@ -747,12 +747,15 @@ function renderNewAnalyzedWords(container, alignment, sttLookup, diagnostics, tr
       if (hasRoot(hypN) || hasRoot(v0N)) span.classList.add('word-morph-root');
     }
     // Build V1 evidence string (insertionsBefore + hyp/parts + insertionsAfter)
+    // Recovered words were V1 omissions — V1 never produced them
     const v1Parts = [];
-    for (const ins of insertionsBefore) v1Parts.push(ins.hyp);
-    if (entry.compound && entry.parts) v1Parts.push(...entry.parts);
-    else if (entry.hyp) v1Parts.push(entry.hyp);
-    for (const ins of insertionsAfter) v1Parts.push(ins.hyp);
-    const v1Ev = v1Parts.join(' + ') || '\u2014';
+    if (!entry._recovered) {
+      for (const ins of insertionsBefore) v1Parts.push(ins.hyp);
+      if (entry.compound && entry.parts) v1Parts.push(...entry.parts);
+      else if (entry.hyp) v1Parts.push(entry.hyp);
+      for (const ins of insertionsAfter) v1Parts.push(ins.hyp);
+    }
+    const v1Ev = entry._recovered ? '(omitted)' : (v1Parts.join(' + ') || '\u2014');
     const v0Ev = entry._v0Word || (entry._v0Type === 'omission' ? '(omitted)' : '\u2014');
     const pkEv = entry._xvalWord || '\u2014';
 
