@@ -1087,6 +1087,20 @@ body.dev-mode .dev-mode-toggle {
   font-size: 0.8rem;
 }
 .word-tooltip .tooltip-play:active { background: #1565c0; }
+.word-tooltip .tooltip-footer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+  padding-top: 5px;
+  border-top: 1px solid rgba(255,255,255,0.15);
+}
+.word-tooltip .tooltip-footer .tooltip-play { margin-top: 0; }
+.word-tooltip .tooltip-nl {
+  font-size: 0.75rem;
+  color: #b0bec5;
+  white-space: nowrap;
+}
 .word-active-tooltip { outline: 2px solid #1976d2; outline-offset: 1px; border-radius: 2px; }
 
 /* ───────────────────────────────────────────────────────────────────────────

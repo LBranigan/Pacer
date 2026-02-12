@@ -20,12 +20,28 @@ function showWordTooltip(span, playFn) {
   tip.className = 'word-tooltip';
   tip.textContent = text;
 
-  if (playFn) {
-    const btn = document.createElement('button');
-    btn.className = 'tooltip-play';
-    btn.textContent = '\u25B6 Play';
-    btn.addEventListener('click', (e) => { e.stopPropagation(); playFn(); });
-    tip.appendChild(btn);
+  // Footer row: play button + NL info on same line
+  const nlData = span.dataset.nl;
+  if (playFn || nlData) {
+    const footer = document.createElement('div');
+    footer.className = 'tooltip-footer';
+
+    if (playFn) {
+      const btn = document.createElement('button');
+      btn.className = 'tooltip-play';
+      btn.textContent = '\u25B6 Play';
+      btn.addEventListener('click', (e) => { e.stopPropagation(); playFn(); });
+      footer.appendChild(btn);
+    }
+
+    if (nlData) {
+      const nlSpan = document.createElement('span');
+      nlSpan.className = 'tooltip-nl';
+      nlSpan.innerHTML = nlData;
+      footer.appendChild(nlSpan);
+    }
+
+    tip.appendChild(footer);
   }
 
   document.body.appendChild(tip);
@@ -763,9 +779,36 @@ function renderNewAnalyzedWords(container, alignment, sttLookup, diagnostics, tr
     }
     if (hesitation) {
       tip.push(`Hesitation: ${Math.round(hesitation.gap * 1000)}ms before this word`);
+      if (hesitation._vadOverhang) {
+        const vh = hesitation._vadOverhang;
+        tip.push(`VAD overhang: ${vh.overhangMs}ms (adjusted gap ${vh.adjustedGapMs}ms)`);
+      }
+      if (hesitation._vadAnalysis) {
+        const va = hesitation._vadAnalysis;
+        tip.push(`VAD: ${va.speechPercent}% speech (${va.label})`);
+      }
+    }
+    if (pauseBeforeMap.has(entry.hypIndex)) {
+      const p = pauseBeforeMap.get(entry.hypIndex);
+      if (p._vadAnalysis) {
+        tip.push(`VAD during pause: ${p._vadAnalysis.speechPercent}% speech (${p._vadAnalysis.label})`);
+      }
     }
     span.dataset.tooltip = tip.join('\n');
     span.style.cursor = 'pointer';
+
+    // NL data for tooltip footer
+    if (entry.nl) {
+      const nlParts = [];
+      const posLabel = POS_LABELS[entry.nl.pos] || entry.nl.pos;
+      nlParts.push(posLabel);
+      if (entry.nl.entityType && entry.nl.entityType !== 'OTHER') {
+        nlParts.push('\ud83d\udccd ' + (ENTITY_LABELS[entry.nl.entityType] || entry.nl.entityType));
+      }
+      const tierLabel = TIER_LABELS[entry.nl.tier];
+      if (tierLabel) nlParts.push('\ud83d\udcda ' + tierLabel);
+      span.dataset.nl = '\ud83c\udf10 ' + nlParts.join(' \u00b7 ');
+    }
 
     const playFn = makePlayFn(entry.hypIndex);
     if (playFn) span.classList.add('word-clickable');
