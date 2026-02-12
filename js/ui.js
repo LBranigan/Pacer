@@ -594,6 +594,8 @@ function renderNewAnalyzedWords(container, alignment, sttLookup, diagnostics, tr
       if (hasRelatedIns) return 'struggle-correct';
       // V0 (clean model) disagreed — pronunciation was messy enough to confuse one engine
       if (entry._v0Type === 'substitution') return 'struggle-correct';
+      // Parakeet omitted this word — audio was unclear enough that the cross-validator missed it entirely
+      if (entry._pkType === 'omission') return 'struggle-correct';
       return 'correct';
     }
 
@@ -704,6 +706,7 @@ function renderNewAnalyzedWords(container, alignment, sttLookup, diagnostics, tr
       'Triggers (any one):\n' +
       '\u2022 False start: near-miss insertion before the correct word (e.g., "st-" before "stop")\n' +
       '\u2022 V0 disagreed: clean model heard a different word (pronunciation was messy)\n' +
+      '\u2022 Parakeet omitted: cross-validator missed the word entirely (audio unclear)\n' +
       '\u2022 Recovered: only cross-validator (Parakeet) heard it \u2014 V1 and V0 both missed\n' +
       '\u2022 Does NOT count as an error',
 
@@ -935,6 +938,9 @@ function renderNewAnalyzedWords(container, alignment, sttLookup, diagnostics, tr
     }
     if (bucket === 'struggle-correct' && insertionsBefore.length > 0) {
       tip.push(`False start: ${insertionsBefore.map(i => '"' + i.hyp + '"').join(', ')}`);
+    }
+    if (bucket === 'struggle-correct' && entry._pkType === 'omission') {
+      tip.push('Parakeet did not hear this word (audio unclear in this region)');
     }
     if (bucket === 'attempted-struggled') {
       if (entry.compound && entry.parts) {

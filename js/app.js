@@ -670,7 +670,7 @@ async function runAnalysis() {
     const compoundStruggles = [];
     for (const entry of alignment) {
       if (entry.type === 'correct' && entry.compound && entry.parts && entry.parts.length >= 2
-          && !entry._abbreviationExpansion) {
+          && !entry._abbreviationExpansion && !entry._numberExpansion) {
         entry.type = 'struggle';
         entry._strugglePath = 'compound_fragments';
         entry._nearMissEvidence = entry.parts;
@@ -803,8 +803,9 @@ async function runAnalysis() {
         v1Entry._v0EndTime = v0Ts.endTime;
       }
     }
-    if (pkEntry?.hyp) {
-      v1Entry._xvalWord = pkEntry.hyp;
+    if (pkEntry) {
+      if (pkEntry.hyp) v1Entry._xvalWord = pkEntry.hyp;
+      v1Entry._pkType = pkType;
     }
 
     // Store per-engine raw attempt arrays (insertions before this ref word + the ref-matched hyp)
@@ -949,6 +950,23 @@ async function runAnalysis() {
       } else if (v0Alignment && !v0InsertionNorms.has(norm)) {
         // V0 suppressed this word — likely a false start or repetition
         if (tw) { tw.isDisfluency = true; tw.disfluencyType = 'false_start'; }
+      }
+    }
+  }
+
+  // ── Tag pre-filtered disfluencies on transcriptWords ───────────────
+  // alignment.js strips known fillers ("uh", "um", etc.) BEFORE NW alignment
+  // so they never appear as insertions. But they still exist in transcriptWords
+  // and need isDisfluency tagging so the UI and downstream AI can see them.
+  // The V0 clean pass independently confirms these are fillers (V0 omits them).
+  {
+    for (let ti = 0; ti < transcriptWords.length; ti++) {
+      const tw = transcriptWords[ti];
+      if (tw.isDisfluency) continue; // already tagged by the insertion classifier above
+      const norm = (tw.word || '').toLowerCase().replace(/[^a-z'-]/g, '');
+      if (FILLER_WORDS.has(norm)) {
+        tw.isDisfluency = true;
+        tw.disfluencyType = 'filler';
       }
     }
   }

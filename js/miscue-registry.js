@@ -426,6 +426,30 @@ const ABBREVIATION_RULES = {
 };
 
 // ============================================================================
+// NUMBER EXPANSION HANDLING (alignment.js)
+// Prevents false errors when reference text contains digits read as words
+// ============================================================================
+
+const NUMBER_EXPANSION_RULES = {
+  numberExpansionMerge: {
+    description: 'Multi-word number expansion where student reads digits as spoken words (e.g., "2014" → "twenty fourteen")',
+    detector: 'alignment.js → mergeNumberExpansions() + number-words.js → numberToWordForms()',
+    countsAsError: false,
+    config: {
+      range: 'Integers 0–9999',
+      forms: 'Year-style (twenty fourteen), formal (two thousand fourteen), British (two thousand and fourteen), oh-style (twenty oh four)',
+      position: 'Runs after mergeAbbreviationExpansions, before mergeContractions'
+    },
+    example: {
+      reference: '2014',
+      spoken: '"twenty fourteen"',
+      result: 'sub(ref="2014", hyp="twenty") + ins(hyp="fourteen") → matches year-style expansion → correct'
+    },
+    note: 'Single-word numbers (1–100) are already handled by word-equivalences.js. This covers multi-word forms for larger numbers. Flagged _numberExpansion: true to skip compound struggle reclassification.'
+  }
+};
+
+// ============================================================================
 // FORGIVENESS RULES (detected in metrics.js / alignment post-processing)
 // These identify errors that should NOT count against the student
 // ============================================================================
@@ -504,6 +528,9 @@ export const MISCUE_REGISTRY = {
   // Abbreviation handling
   ...ABBREVIATION_RULES,
 
+  // Number expansion handling
+  ...NUMBER_EXPANSION_RULES,
+
   // Forgiveness rules
   ...FORGIVENESS_RULES
 };
@@ -578,6 +605,7 @@ export function getDetectorLocation(type) {
  * - reverb_false_start: False start via Reverb model diff
  * - abbreviationCompoundMerge: i.e./e.g./U.S. read letter-by-letter → compound merged
  * - abbreviationExpansionMerge: i.e. read as "that is" → expansion merged
+ * - numberExpansionMerge: "2014" read as "twenty fourteen" → expansion merged
  * - xvalAbbreviationConfirmation: Cross-validator confirms abbreviation reading
  * - preAlignmentFragmentMerge: Reverb BPE fragments merged before alignment ("i"+"d" → "id")
  * - tier1NearMatchOverride: Tier 1 fuzzy match uses xval word for 1-char diffs ("format"→"formats")

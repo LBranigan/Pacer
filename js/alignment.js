@@ -312,6 +312,159 @@ function mergeAbbreviationExpansions(alignment) {
 }
 
 /**
+ * Post-process alignment to detect numbers read as multi-word spoken forms.
+ * When reference contains "2014" and student says "twenty fourteen", NW alignment
+ * produces sub(ref="2014", hyp="twenty") + ins(hyp="fourteen"). This function
+ * detects that pattern and reclassifies it as correct.
+ *
+ * Uses numberToWordForms() from number-words.js to dynamically generate all
+ * valid spoken forms for the digit string.
+ *
+ * Position in pipeline: after mergeAbbreviationExpansions, before mergeContractions.
+ */
+function mergeNumberExpansions(alignment) {
+  // numberToWordForms is loaded globally from number-words.js
+  if (typeof window === 'undefined' || typeof window.numberToWordForms !== 'function') {
+    return alignment;
+  }
+
+  const result = [];
+  let i = 0;
+
+  while (i < alignment.length) {
+    const current = alignment[i];
+
+    // Pattern A: substitution(ref=DIGITS) followed by insertions matching a spoken form
+    if (current.type === 'substitution' && current.ref && current.hyp && /^\d+$/.test(current.ref)) {
+      const expansions = window.numberToWordForms(current.ref);
+
+      if (expansions.length > 0) {
+        let matched = false;
+
+        for (const expansion of expansions) {
+          // First word of expansion must match the substitution's hyp
+          if (current.hyp.toLowerCase() !== expansion[0]) continue;
+
+          // Remaining expansion words must match following insertions
+          const remaining = expansion.slice(1);
+          let allMatch = true;
+
+          for (let k = 0; k < remaining.length; k++) {
+            const nextIdx = i + 1 + k;
+            if (nextIdx >= alignment.length ||
+                alignment[nextIdx].type !== 'insertion' ||
+                alignment[nextIdx].hyp?.toLowerCase() !== remaining[k]) {
+              allMatch = false;
+              break;
+            }
+          }
+
+          if (allMatch) {
+            const parts = [current.hyp, ...remaining.map((_, k) => alignment[i + 1 + k].hyp)];
+            result.push({
+              ref: current.ref,
+              hyp: parts.join(' '),
+              type: 'correct',
+              compound: true,
+              hypIndex: current.hypIndex,
+              _numberExpansion: true,
+              parts
+            });
+            i += 1 + remaining.length;
+            matched = true;
+            break;
+          }
+        }
+
+        if (!matched) {
+          result.push(current);
+          i++;
+        }
+        continue;
+      }
+    }
+
+    // Pattern B: insertions followed by substitution(ref=DIGITS) matching a spoken form
+    if (current.type === 'insertion' && current.hyp) {
+      // Collect consecutive insertions
+      let insertionCount = 0;
+      while (i + insertionCount < alignment.length && alignment[i + insertionCount].type === 'insertion') {
+        insertionCount++;
+      }
+
+      const subIdx = i + insertionCount;
+      if (subIdx < alignment.length && alignment[subIdx].type === 'substitution' &&
+          alignment[subIdx].ref && /^\d+$/.test(alignment[subIdx].ref)) {
+        const expansions = window.numberToWordForms(alignment[subIdx].ref);
+
+        if (expansions.length > 0) {
+          let matched = false;
+
+          for (const expansion of expansions) {
+            // Last word of expansion must match the substitution's hyp
+            if (alignment[subIdx].hyp?.toLowerCase() !== expansion[expansion.length - 1]) continue;
+
+            // Preceding insertion words must match the expansion prefix
+            const prefix = expansion.slice(0, -1);
+            if (prefix.length > insertionCount) continue;
+
+            let allMatch = true;
+            const startIns = insertionCount - prefix.length;
+            for (let k = 0; k < prefix.length; k++) {
+              if (alignment[i + startIns + k].hyp?.toLowerCase() !== prefix[k]) {
+                allMatch = false;
+                break;
+              }
+            }
+
+            if (allMatch) {
+              // Push non-matching insertions before the expansion
+              for (let k = 0; k < startIns; k++) {
+                result.push(alignment[i + k]);
+              }
+
+              const parts = [...prefix.map((_, k) => alignment[i + startIns + k].hyp), alignment[subIdx].hyp];
+              result.push({
+                ref: alignment[subIdx].ref,
+                hyp: parts.join(' '),
+                type: 'correct',
+                compound: true,
+                hypIndex: alignment[subIdx].hypIndex,
+                _numberExpansion: true,
+                parts
+              });
+              i = subIdx + 1;
+              matched = true;
+              break;
+            }
+          }
+
+          if (!matched) {
+            for (let k = 0; k < insertionCount; k++) {
+              result.push(alignment[i + k]);
+            }
+            i += insertionCount;
+          }
+          continue;
+        }
+      }
+
+      // No number match — push insertions normally
+      for (let k = 0; k < insertionCount; k++) {
+        result.push(alignment[i + k]);
+      }
+      i += insertionCount;
+      continue;
+    }
+
+    result.push(current);
+    i++;
+  }
+
+  return result;
+}
+
+/**
  * Post-process alignment to detect ASR merging two reference words into one.
  * Mirror of mergeCompoundWords — handles the reverse direction.
  *
@@ -546,8 +699,10 @@ export function alignWords(referenceText, transcriptWords) {
   // Post-process pipeline:
   // 1. Merge compound words split by ASR (e.g., "hotdog" → "hot" + "dog", "ie" → "i" + "e")
   // 2. Merge abbreviation expansions (e.g., ref "ie" → hyp "that is")
-  // 3. Merge contractions spanning two ref words (e.g., "you will" → "you'll")
+  // 3. Merge number expansions (e.g., ref "2014" → hyp "twenty fourteen")
+  // 4. Merge contractions spanning two ref words (e.g., "you will" → "you'll")
   const merged = mergeCompoundWords(result);
   const abbrMerged = mergeAbbreviationExpansions(merged);
-  return mergeContractions(abbrMerged);
+  const numMerged = mergeNumberExpansions(abbrMerged);
+  return mergeContractions(numMerged);
 }
