@@ -61,11 +61,14 @@ export function computeAccuracy(alignmentResult, options = {}) {
         break;
     }
   }
-  const totalRefWords = correctCount + substitutions + omissions + struggles + longPauseErrors;
+  // ORF formula: WCPM = Total Words Attempted − Errors
+  // totalRefWords = passage length (fixed), pauses add to errors not to word count
+  const totalRefWords = correctCount + substitutions + omissions + struggles;
+  const totalErrors = substitutions + omissions + struggles + longPauseErrors;
   const accuracy = totalRefWords === 0
     ? 0
-    : Math.round((correctCount / totalRefWords) * 1000) / 10;
-  return { accuracy, correctCount, totalRefWords, substitutions, omissions, insertions, struggles, forgiven, longPauseErrors };
+    : Math.round(((totalRefWords - totalErrors) / totalRefWords) * 1000) / 10;
+  return { accuracy, correctCount, totalRefWords, totalErrors, substitutions, omissions, insertions, struggles, forgiven, longPauseErrors };
 }
 
 /**
