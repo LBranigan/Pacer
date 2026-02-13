@@ -60,7 +60,8 @@ function extractNounEvents(assessment) {
 
     let timestampSec = null;
     if (!wasOmitted && sttWords && entry.hypIndex != null && sttWords[entry.hypIndex]) {
-      timestampSec = sttWords[entry.hypIndex].startTime ?? null;
+      const raw = sttWords[entry.hypIndex].startTime;
+      timestampSec = raw != null ? parseFloat(String(raw).replace('s', '')) || 0 : null;
     }
 
     events.push({
@@ -124,7 +125,6 @@ function buildScene(container, events, positions) {
     div.className = 'sticker';
     div.style.left = pos.left + '%';
     div.style.top = pos.top + '%';
-    div.style.transform = 'translate(-50%, -50%) scale(0)';
 
     const emojiSpan = document.createElement('span');
     emojiSpan.className = 'sticker-emoji' + (ev.emoji === '\u2753' ? ' unknown' : '');
@@ -265,8 +265,6 @@ class ReplayEngine {
     this.currentIndex = 0;
     for (const s of this.stickers) {
       s.classList.remove('pop-in', 'omitted', 'visible');
-      s.style.transform = 'translate(-50%, -50%) scale(0)';
-      s.style.opacity = '0';
       s.querySelector('.sticker-label').classList.remove('show');
     }
   }

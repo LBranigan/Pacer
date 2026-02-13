@@ -115,8 +115,7 @@ body {
   flex-direction: column;
   align-items: center;
   opacity: 0;
-  transform: scale(0);
-  transition: none;
+  transform: translate(-50%, -50%) scale(0);
   pointer-events: none;
 }
 
@@ -127,12 +126,12 @@ body {
 .sticker.omitted {
   opacity: 0.25;
   filter: grayscale(1);
-  transform: scale(1);
+  transform: translate(-50%, -50%) scale(1);
 }
 
 .sticker.visible {
   opacity: 1;
-  transform: scale(1);
+  transform: translate(-50%, -50%) scale(1);
 }
 
 .sticker-emoji {
@@ -261,15 +260,15 @@ body {
 @keyframes stickerPop {
   0% {
     opacity: 0;
-    transform: scale(0);
+    transform: translate(-50%, -50%) scale(0);
   }
   60% {
     opacity: 1;
-    transform: scale(1.3);
+    transform: translate(-50%, -50%) scale(1.3);
   }
   100% {
     opacity: 1;
-    transform: scale(1);
+    transform: translate(-50%, -50%) scale(1);
   }
 }
 
