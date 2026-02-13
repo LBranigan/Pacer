@@ -64,7 +64,7 @@ const NOUN_EMOJI = {
   nut: '\uD83E\uDD5C', carrot: '\uD83E\uDD55', potato: '\uD83E\uDD54', tomato: '\uD83C\uDF45',
   meal: '\uD83C\uDF7D\uFE0F', dinner: '\uD83C\uDF7D\uFE0F', lunch: '\uD83C\uDF71', breakfast: '\uD83E\uDD5E',
   honey: '\uD83C\uDF6F', butter: '\uD83E\uDDC8', salt: '\uD83E\uDDC2', pepper: '\uD83C\uDF36\uFE0F',
-  ice cream: '\uD83C\uDF68',
+  'ice cream': '\uD83C\uDF68',
 
   // Objects & Things
   book: '\uD83D\uDCDA', pen: '\uD83D\uDD8A\uFE0F', pencil: '\u270F\uFE0F', paper: '\uD83D\uDCC4',
