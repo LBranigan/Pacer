@@ -514,6 +514,7 @@ body.dev-mode .dev-mode-toggle {
 .engine-omit       { color: #999; font-style: italic; background: #fafafa; }
 .engine-unavailable { color: #bbb; font-style: italic; }
 .engine-compound-frags { font-size: 0.7rem; color: #6a1b9a; margin-top: 2px; }
+.engine-fused-tag { font-size: 0.7rem; color: #6a1b9a; font-weight: 400; font-style: italic; }
 .pipeline-verdict-omission { color: #999; font-style: italic; }
 
 /* Insertion sub-rows in Step 1 consensus table */

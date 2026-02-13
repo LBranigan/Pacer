@@ -480,7 +480,7 @@ function parseSttTime(t) {
  *   definite-struggle    — red:    no engine produced the correct word, V1 hyp is near-miss
  *   confirmed-substitution — blue: all engines agree on same unrelated wrong word
  */
-function renderNewAnalyzedWords(container, alignment, sttLookup, diagnostics, transcriptWords, referenceText, wordAudioEl, rawSttSources, audioBlob) {
+function renderNewAnalyzedWords(container, alignment, sttLookup, diagnostics, transcriptWords, referenceText, wordAudioEl, rawSttSources) {
   container.innerHTML = '';
   const norm = (s) => (s || '').toLowerCase().replace(/[^a-z]/g, '');
 
@@ -672,51 +672,7 @@ function renderNewAnalyzedWords(container, alignment, sttLookup, diagnostics, tr
     return { ...g, bucket };
   });
 
-  // ── 4. Audio player + download WAV ──────────────────────────────────
-  if (audioBlob) {
-    const playerWrap = document.createElement('div');
-    playerWrap.className = 'new-analyzed-player';
-    playerWrap.style.display = 'flex';
-    playerWrap.style.alignItems = 'center';
-    playerWrap.style.gap = '0.5rem';
-    const audio = document.createElement('audio');
-    audio.controls = true;
-    audio.src = URL.createObjectURL(audioBlob);
-    playerWrap.appendChild(audio);
-
-    const dlBtn = document.createElement('button');
-    dlBtn.textContent = '\u2B07 WAV';
-    dlBtn.title = 'Download as WAV file';
-    dlBtn.style.padding = '0.4rem 0.8rem';
-    dlBtn.style.cursor = 'pointer';
-    dlBtn.addEventListener('click', async () => {
-      dlBtn.disabled = true;
-      dlBtn.textContent = '...';
-      try {
-        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-        const arrayBuf = await audioBlob.arrayBuffer();
-        const audioBuf = await audioCtx.decodeAudioData(arrayBuf);
-        const wavBlob = audioBufferToWav(audioBuf);
-        const url = URL.createObjectURL(wavBlob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = 'recording-' + new Date().toISOString().slice(0, 19).replace(/[:.]/g, '-') + '.wav';
-        a.click();
-        URL.revokeObjectURL(url);
-        audioCtx.close();
-      } catch (err) {
-        console.error('WAV conversion failed:', err);
-        alert('Failed to convert to WAV: ' + err.message);
-      } finally {
-        dlBtn.disabled = false;
-        dlBtn.textContent = '\u2B07 WAV';
-      }
-    });
-    playerWrap.appendChild(dlBtn);
-    container.appendChild(playerWrap);
-  }
-
-  // ── 5. Legend ─────────────────────────────────────────────────────────
+  // ── 4. Legend ─────────────────────────────────────────────────────────
   const legend = document.createElement('div');
   legend.className = 'new-analyzed-legend';
   // Tooltip descriptions for each scoring bucket and indicator
@@ -983,6 +939,10 @@ function renderNewAnalyzedWords(container, alignment, sttLookup, diagnostics, tr
       tip.push(`All engines heard: "${entry.hyp}"`);
     } else {
       tip.push(`V1: ${v1Ev} | V0: ${v0Ev} | Pk: ${pkEv}`);
+      // V0 fusion: ASR joined adjacent ref words into one token, resolved by contraction merge
+      if (entry._v0Type === 'correct' && entry._v0Word && norm(entry._v0Word) !== norm(entry.ref)) {
+        tip.push(`V0 fused: "${entry._v0Word}" covers multiple ref words (ASR artifact, resolved)`);
+      }
     }
     if (bucket === 'struggle-correct' && entry.compound) {
       tip.push(`V1 produced fragments: [${entry.parts?.join(', ')}]`);
@@ -1367,7 +1327,7 @@ export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, di
   // Analyzed Words (bucket-based classification)
   // ─────────────────────────────────────────────────────────────────────────
   if (newWordsDiv) {
-    renderNewAnalyzedWords(newWordsDiv, alignment, sttLookup, diagnostics, transcriptWords, referenceText, wordAudioEl, rawSttSources, audioBlob);
+    renderNewAnalyzedWords(newWordsDiv, alignment, sttLookup, diagnostics, transcriptWords, referenceText, wordAudioEl, rawSttSources);
     newWordsDiv.style.display = '';
   }
 
@@ -1680,6 +1640,13 @@ export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, di
           } else if (entry.compound && entry.parts) {
             td.className = 'engine-compound';
             td.textContent = entry.parts.join(' + ');
+          } else if (entry.compound && (entry._mergedFrom || entry._mergedInto)) {
+            td.className = 'engine-correct';
+            td.textContent = entry.hyp;
+            const fTag = document.createElement('span');
+            fTag.className = 'engine-fused-tag';
+            fTag.textContent = ' (fused)';
+            td.appendChild(fTag);
           } else if (entry.type === 'correct' || entry.type === 'struggle') {
             td.className = 'engine-correct';
             td.textContent = entry.hyp;
@@ -1906,11 +1873,19 @@ export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, di
             fragSpan.textContent = '\u2190 ' + e.parts.join(' + ');
             tdHyp.appendChild(fragSpan);
           }
+          // Show contraction/fusion merge annotation
+          if (e.compound && e._mergedFrom) {
+            const fragSpan = document.createElement('div');
+            fragSpan.className = 'pipeline-v2-fragments';
+            fragSpan.textContent = '\u2190 fused: covers "' + e._mergedFrom + '"';
+            tdHyp.appendChild(fragSpan);
+          }
           tr.appendChild(tdHyp);
 
           const tdType = document.createElement('td');
+          const isFused = e.compound && (e._mergedFrom || e._mergedInto);
           tdType.className = 'pipeline-td-type pipeline-td-type-' + e.type;
-          tdType.textContent = e.type;
+          tdType.textContent = isFused ? e.type + ' (fused)' : e.type;
           tr.appendChild(tdType);
 
           tbody.appendChild(tr);
