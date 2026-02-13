@@ -73,17 +73,57 @@ async function getKokoroInstance(onProgress) {
 }
 
 /**
+ * Split text into chunks that fit Kokoro's ~512 token limit.
+ * Splits on sentence boundaries, each chunk ≤ maxChars.
+ */
+function splitTextForKokoro(text, maxChars = 400) {
+  const sentences = text.replace(/([.!?])\s+/g, '$1|').split('|').filter(s => s.trim());
+  const chunks = [];
+  let current = '';
+  for (const sentence of sentences) {
+    if (current && (current.length + sentence.length + 1) > maxChars) {
+      chunks.push(current.trim());
+      current = '';
+    }
+    current += (current ? ' ' : '') + sentence;
+  }
+  if (current.trim()) chunks.push(current.trim());
+  // Safety: if a single sentence exceeds maxChars, it's still one chunk (Kokoro will handle it)
+  return chunks.length ? chunks : [text];
+}
+
+/**
  * Generate voiceover using Kokoro.js (local, free, unlimited).
+ * Splits long text into chunks, generates each, concatenates audio.
  * Returns audio ArrayBuffer (wav).
  */
 async function callKokoro(text, onProgress) {
   const tts = await getKokoroInstance(onProgress);
-  if (onProgress) onProgress('Generating voiceover locally...');
-  const raw = await tts.generate(text, { voice: KOKORO_VOICE });
-  // raw.audio = Float32Array, raw.sampling_rate = 24000
-  const samples = raw.audio;
-  const sampleRate = raw.sampling_rate || 24000;
-  return float32ToWavArrayBuffer(samples, sampleRate);
+  const chunks = splitTextForKokoro(text);
+  const allSamples = [];
+  let sampleRate = 24000;
+
+  for (let i = 0; i < chunks.length; i++) {
+    if (onProgress) onProgress(`Generating voice (${i + 1}/${chunks.length})...`);
+    const raw = await tts.generate(chunks[i], { voice: KOKORO_VOICE });
+    sampleRate = raw.sampling_rate || 24000;
+    allSamples.push(raw.audio);
+    // Small silence gap between chunks (0.3s)
+    if (i < chunks.length - 1) {
+      allSamples.push(new Float32Array(Math.floor(sampleRate * 0.3)));
+    }
+  }
+
+  // Concatenate all chunks
+  const totalLength = allSamples.reduce((sum, a) => sum + a.length, 0);
+  const combined = new Float32Array(totalLength);
+  let offset = 0;
+  for (const arr of allSamples) {
+    combined.set(arr, offset);
+    offset += arr.length;
+  }
+
+  return float32ToWavArrayBuffer(combined, sampleRate);
 }
 
 /**
