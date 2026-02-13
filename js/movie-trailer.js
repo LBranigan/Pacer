@@ -2,14 +2,22 @@
  * Movie Trailer Generator
  *
  * Generates an epic movie-trailer-style voiceover of the student's reading passage
- * using ElevenLabs TTS + synthesized dramatic background music via Web Audio API.
+ * using either ElevenLabs TTS (cloud) or Kokoro.js (local, free, unlimited)
+ * layered over synthesized dramatic background music via Web Audio API.
  */
 
 // ── ElevenLabs Config ──
 const VOICE_ID = 'pNInz6obpgDQGcFmaJgB'; // "Adam" — deep, cinematic narrator
 const ELEVENLABS_MODEL = 'eleven_multilingual_v2';
 
-// ── Trailer Script Templates ──
+// ── Kokoro Config ──
+const KOKORO_CDN = 'https://cdn.jsdelivr.net/npm/kokoro-js@1.1.0/+esm';
+const KOKORO_MODEL = 'onnx-community/Kokoro-82M-ONNX';
+const KOKORO_VOICE = 'am_adam'; // American male — deepest available
+const KOKORO_DTYPE = 'q8';     // good quality/size balance (~80MB)
+
+let kokoroInstance = null; // cached after first load
+
 /**
  * Build a trailer script from the reference passage.
  * Speaks EVERY word from the passage with minimal dramatic framing.
@@ -35,9 +43,9 @@ async function callElevenLabs(text, apiKey) {
       text,
       model_id: ELEVENLABS_MODEL,
       voice_settings: {
-        stability: 0.30,       // lower = more dramatic variation
+        stability: 0.30,
         similarity_boost: 0.85,
-        style: 0.7,            // high style for dramatic delivery
+        style: 0.7,
         use_speaker_boost: true,
       },
     }),
@@ -52,6 +60,32 @@ async function callElevenLabs(text, apiKey) {
 }
 
 /**
+ * Load Kokoro TTS (downloads ~80MB model on first use, cached after).
+ * Returns the KokoroTTS instance.
+ */
+async function getKokoroInstance(onProgress) {
+  if (kokoroInstance) return kokoroInstance;
+
+  if (onProgress) onProgress('Loading Kokoro model (~80MB first time)...');
+  const { KokoroTTS } = await import(KOKORO_CDN);
+  kokoroInstance = await KokoroTTS.from_pretrained(KOKORO_MODEL, { dtype: KOKORO_DTYPE });
+  return kokoroInstance;
+}
+
+/**
+ * Generate voiceover using Kokoro.js (local, free, unlimited).
+ * Returns audio ArrayBuffer (wav).
+ */
+async function callKokoro(text, onProgress) {
+  const tts = await getKokoroInstance(onProgress);
+  if (onProgress) onProgress('Generating voiceover locally...');
+  const audio = await tts.generate(text, { voice: KOKORO_VOICE });
+  // audio.toBlob() or audio.data — get raw WAV bytes
+  const wavBlob = audio.toBlob();
+  return await wavBlob.arrayBuffer();
+}
+
+/**
  * Generate dramatic background music using Web Audio API.
  * Returns an AudioBuffer with a cinematic drone + percussion hits.
  */
@@ -62,73 +96,58 @@ function generateTrailerMusic(audioCtx, durationSec) {
   const left = buffer.getChannelData(0);
   const right = buffer.getChannelData(1);
 
-  // Parameters
-  const bassFreq = 55;       // A1 — deep sub bass
-  const droneFreq = 110;     // A2 — octave above
-  const padFreq = 165;       // E3 — fifth
-  const buildStart = 0.6;    // fraction of duration where intensity builds
-  const climaxStart = 0.85;  // fraction where we hit peak
+  const bassFreq = 55;
+  const droneFreq = 110;
+  const padFreq = 165;
+  const buildStart = 0.6;
+  const climaxStart = 0.85;
 
   for (let i = 0; i < length; i++) {
     const t = i / sampleRate;
     const progress = i / length;
 
-    // Envelope — starts quiet, builds, peaks, fades
     let envelope;
     if (progress < 0.05) {
-      envelope = progress / 0.05; // fade in
+      envelope = progress / 0.05;
     } else if (progress < buildStart) {
-      envelope = 0.3 + 0.1 * Math.sin(progress * Math.PI * 0.5); // gentle swell
+      envelope = 0.3 + 0.1 * Math.sin(progress * Math.PI * 0.5);
     } else if (progress < climaxStart) {
       const buildProgress = (progress - buildStart) / (climaxStart - buildStart);
-      envelope = 0.4 + 0.5 * buildProgress; // rising intensity
+      envelope = 0.4 + 0.5 * buildProgress;
     } else if (progress < 0.95) {
-      envelope = 0.9; // peak
+      envelope = 0.9;
     } else {
-      envelope = 0.9 * (1 - (progress - 0.95) / 0.05); // fade out
+      envelope = 0.9 * (1 - (progress - 0.95) / 0.05);
     }
 
-    // Sub bass drone (sine + slight distortion)
     const bass = Math.sin(2 * Math.PI * bassFreq * t) * 0.25;
-
-    // Octave drone with slow vibrato
     const vibrato = 1 + 0.003 * Math.sin(2 * Math.PI * 0.3 * t);
     const drone = Math.sin(2 * Math.PI * droneFreq * vibrato * t) * 0.15;
-
-    // Pad — fifth interval, gentle
     const pad = Math.sin(2 * Math.PI * padFreq * t) * 0.08 *
-      (0.5 + 0.5 * Math.sin(2 * Math.PI * 0.1 * t)); // tremolo
-
-    // Filtered noise for texture (breathiness)
+      (0.5 + 0.5 * Math.sin(2 * Math.PI * 0.1 * t));
     const noise = (Math.random() * 2 - 1) * 0.02 * envelope;
 
-    // Percussion hits — "boom" at key moments
     let boom = 0;
     const hitTimes = [0.0, 0.25, 0.5, 0.65, 0.75, 0.85, 0.9, 0.95];
     for (const hitFrac of hitTimes) {
       const hitT = hitFrac * durationSec;
       const dt = t - hitT;
       if (dt > 0 && dt < 0.8) {
-        // Exponential decay sine burst (deep impact)
         boom += Math.sin(2 * Math.PI * 40 * dt) * Math.exp(-dt * 5) * 0.4;
-        // Higher click transient
         if (dt < 0.05) {
           boom += Math.sin(2 * Math.PI * 200 * dt) * Math.exp(-dt * 60) * 0.2;
         }
       }
     }
 
-    // String-like riser in build section
     let riser = 0;
     if (progress > buildStart) {
       const riserProgress = (progress - buildStart) / (1 - buildStart);
-      const riserFreq = 200 + 600 * riserProgress; // sweep up
+      const riserFreq = 200 + 600 * riserProgress;
       riser = Math.sin(2 * Math.PI * riserFreq * t) * 0.06 * riserProgress;
     }
 
     const sample = (bass + drone + pad + noise + boom + riser) * envelope;
-
-    // Slight stereo spread
     left[i] = sample + noise * 0.5;
     right[i] = sample - noise * 0.5;
   }
@@ -137,70 +156,59 @@ function generateTrailerMusic(audioCtx, durationSec) {
 }
 
 /**
- * Mix voiceover (ArrayBuffer mp3) with generated music.
+ * Mix voiceover (ArrayBuffer) with generated music.
  * Returns a Blob (wav) ready for playback/download.
  */
 async function mixTrailer(voiceoverArrayBuffer) {
   const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
 
-  // Decode voiceover
   const voiceBuffer = await audioCtx.decodeAudioData(voiceoverArrayBuffer.slice(0));
-
-  // Generate music slightly longer than voice (1s padding each side)
   const musicDuration = voiceBuffer.duration + 2;
   const musicBuffer = generateTrailerMusic(audioCtx, musicDuration);
 
-  // Offline context for mixing
   const sampleRate = audioCtx.sampleRate;
   const totalLength = Math.ceil(musicDuration * sampleRate);
   const offline = new OfflineAudioContext(2, totalLength, sampleRate);
 
-  // Music track — full duration, moderate volume
   const musicSource = offline.createBufferSource();
   musicSource.buffer = musicBuffer;
   const musicGain = offline.createGain();
-  musicGain.gain.value = 0.35; // music sits behind voice
+  musicGain.gain.value = 0.35;
   musicSource.connect(musicGain);
   musicGain.connect(offline.destination);
   musicSource.start(0);
 
-  // Voice track — starts 1s in, with reverb-like effect
   const voiceSource = offline.createBufferSource();
   voiceSource.buffer = voiceBuffer;
   const voiceGain = offline.createGain();
   voiceGain.gain.value = 1.0;
 
-  // Bass boost on voice for that deep trailer feel
   const bassBoost = offline.createBiquadFilter();
   bassBoost.type = 'lowshelf';
   bassBoost.frequency.value = 200;
-  bassBoost.gain.value = 6; // +6dB bass
+  bassBoost.gain.value = 6;
 
-  // Slight compression feel via high-shelf cut
   const presenceCut = offline.createBiquadFilter();
   presenceCut.type = 'peaking';
   presenceCut.frequency.value = 3000;
-  presenceCut.gain.value = 3; // presence boost
+  presenceCut.gain.value = 3;
 
   voiceSource.connect(bassBoost);
   bassBoost.connect(presenceCut);
   presenceCut.connect(voiceGain);
   voiceGain.connect(offline.destination);
-  voiceSource.start(1.0); // 1s after music starts
+  voiceSource.start(1.0);
 
-  // Duck music during voice
   const voiceStart = 1.0;
   const voiceEnd = voiceStart + voiceBuffer.duration;
   musicGain.gain.setValueAtTime(0.35, 0);
-  musicGain.gain.linearRampToValueAtTime(0.12, voiceStart + 0.5); // duck when voice starts
+  musicGain.gain.linearRampToValueAtTime(0.12, voiceStart + 0.5);
   musicGain.gain.setValueAtTime(0.12, voiceEnd - 0.5);
-  musicGain.gain.linearRampToValueAtTime(0.5, voiceEnd + 0.5); // swell after voice ends
+  musicGain.gain.linearRampToValueAtTime(0.5, voiceEnd + 0.5);
 
-  // Render
   const renderedBuffer = await offline.startRendering();
   audioCtx.close();
 
-  // Convert to WAV blob
   return audioBufferToWavBlob(renderedBuffer);
 }
 
@@ -210,7 +218,7 @@ async function mixTrailer(voiceoverArrayBuffer) {
 function audioBufferToWavBlob(buffer) {
   const numChannels = buffer.numberOfChannels;
   const sampleRate = buffer.sampleRate;
-  const format = 1; // PCM
+  const format = 1;
   const bitDepth = 16;
   const bytesPerSample = bitDepth / 8;
   const blockAlign = numChannels * bytesPerSample;
@@ -220,7 +228,6 @@ function audioBufferToWavBlob(buffer) {
   const arrayBuffer = new ArrayBuffer(headerSize + dataSize);
   const view = new DataView(arrayBuffer);
 
-  // WAV header
   const writeString = (offset, str) => {
     for (let i = 0; i < str.length; i++) view.setUint8(offset + i, str.charCodeAt(i));
   };
@@ -238,7 +245,6 @@ function audioBufferToWavBlob(buffer) {
   writeString(36, 'data');
   view.setUint32(40, dataSize, true);
 
-  // Interleave channels
   const channels = [];
   for (let c = 0; c < numChannels; c++) channels.push(buffer.getChannelData(c));
 
@@ -256,11 +262,7 @@ function audioBufferToWavBlob(buffer) {
 
 // ── UI ──
 
-/**
- * Show the trailer player modal/section.
- */
 function showTrailerPlayer(trailerBlob, studentName) {
-  // Remove existing player
   const existing = document.getElementById('trailerPlayerSection');
   if (existing) existing.remove();
 
@@ -310,7 +312,6 @@ function showTrailerPlayer(trailerBlob, studentName) {
   section.appendChild(downloadBtn);
   section.appendChild(closeBtn);
 
-  // Insert after the alignment results section
   const resultsSection = document.getElementById('newAnalyzedWords');
   if (resultsSection && resultsSection.parentNode) {
     resultsSection.parentNode.insertBefore(section, resultsSection);
@@ -318,19 +319,30 @@ function showTrailerPlayer(trailerBlob, studentName) {
     document.querySelector('.section')?.appendChild(section);
   }
 
-  // Auto-play
-  audio.play().catch(() => {}); // may be blocked by autoplay policy
+  audio.play().catch(() => {});
+}
+
+/**
+ * Get selected voice engine from the trailer dropdown.
+ */
+function getSelectedEngine() {
+  const sel = document.getElementById('trailerVoiceEngine');
+  return sel?.value || 'kokoro';
 }
 
 /**
  * Main entry point — called from the Movie Trailer button.
  */
 export async function generateMovieTrailer(referenceText, studentName) {
-  const apiKey = localStorage.getItem('orf_elevenlabs_key') || '';
-  if (!apiKey) {
-    alert('Please enter your ElevenLabs API key in the settings above.');
-    document.getElementById('elevenLabsKey')?.focus();
-    return;
+  const engine = getSelectedEngine();
+
+  if (engine === 'elevenlabs') {
+    const apiKey = localStorage.getItem('orf_elevenlabs_key') || '';
+    if (!apiKey) {
+      alert('Please enter your ElevenLabs API key in the settings above.');
+      document.getElementById('elevenLabsKey')?.focus();
+      return;
+    }
   }
 
   if (!referenceText || referenceText.trim().length < 20) {
@@ -338,7 +350,6 @@ export async function generateMovieTrailer(referenceText, studentName) {
     return;
   }
 
-  // Show progress
   const btn = document.getElementById('movieTrailerBtn');
   const originalText = btn?.textContent;
   if (btn) {
@@ -347,18 +358,21 @@ export async function generateMovieTrailer(referenceText, studentName) {
   }
 
   try {
-    // 1. Build dramatic script
     const script = buildTrailerScript(referenceText, studentName);
-    if (btn) btn.textContent = 'Calling ElevenLabs...';
+    let voiceoverData;
 
-    // 2. Get voiceover from ElevenLabs
-    const voiceoverData = await callElevenLabs(script, apiKey);
+    if (engine === 'elevenlabs') {
+      if (btn) btn.textContent = 'Calling ElevenLabs...';
+      const apiKey = localStorage.getItem('orf_elevenlabs_key');
+      voiceoverData = await callElevenLabs(script, apiKey);
+    } else {
+      voiceoverData = await callKokoro(script, (msg) => {
+        if (btn) btn.textContent = msg;
+      });
+    }
+
     if (btn) btn.textContent = 'Mixing trailer...';
-
-    // 3. Mix with background music
     const trailerBlob = await mixTrailer(voiceoverData);
-
-    // 4. Show player
     showTrailerPlayer(trailerBlob, studentName);
   } catch (err) {
     console.error('[MovieTrailer] Error:', err);
