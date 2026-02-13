@@ -57,20 +57,21 @@ async function callGeminiTTS(text, apiKey, maxRetries = 3) {
       return parseGeminiAudio(data);
     }
 
-    // Retry on transient errors (preview model has known 500 instability)
-    if ((resp.status === 429 || resp.status === 500 || resp.status === 503) && attempt < maxRetries) {
-      const errBody = await resp.text().catch(() => '');
-      // Parse Google's suggested retry delay if present
-      let waitSec = 3 * attempt; // default backoff
-      const retryMatch = errBody.match(/retry\s*in\s*([\d.]+)s/i);
-      if (retryMatch) waitSec = Math.ceil(parseFloat(retryMatch[1])) + 1;
-      console.warn(`[MovieTrailer] Gemini ${resp.status} (attempt ${attempt}/${maxRetries}), waiting ${waitSec}s: ${errBody.slice(0, 200)}`);
-      await new Promise(r => setTimeout(r, waitSec * 1000));
+    const errBody = await resp.text();
+
+    // Don't retry on 429 — each retry burns quota (only 10/day free tier)
+    if (resp.status === 429) {
+      throw new Error('Daily quota reached (10 requests/day on free tier). Try again tomorrow or use a new API key.');
+    }
+
+    // Retry on 500/503 only (preview model has known instability)
+    if ((resp.status === 500 || resp.status === 503) && attempt < maxRetries) {
+      console.warn(`[MovieTrailer] Gemini ${resp.status} (attempt ${attempt}/${maxRetries}): ${errBody.slice(0, 200)}`);
+      await new Promise(r => setTimeout(r, 3000 * attempt));
       continue;
     }
 
-    const errText = await resp.text();
-    throw new Error(`Gemini TTS error (${resp.status}): ${errText}`);
+    throw new Error(`Gemini TTS error (${resp.status}): ${errBody}`);
   }
 
 }

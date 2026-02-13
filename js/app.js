@@ -2153,7 +2153,7 @@ document.getElementById('apiKey').value = 'AIzaSyCTx4rS7zxwRZqNseWcFJAaAgEH5HA50
 
 // Gemini API key — persist in localStorage (free from aistudio.google.com)
 const geminiKeyInput = document.getElementById('geminiKey');
-const savedGeminiKey = localStorage.getItem('orf_gemini_key') || 'AIzaSyAWiU75q2mcjM0xHvfrIxXD1hQFb55DMvs';
+const savedGeminiKey = localStorage.getItem('orf_gemini_key') || 'AIzaSyCygt7nB45xje5j8-VA_kiXToxmA3xe5LM';
 geminiKeyInput.value = savedGeminiKey;
 localStorage.setItem('orf_gemini_key', savedGeminiKey);
 geminiKeyInput.addEventListener('input', () => {
