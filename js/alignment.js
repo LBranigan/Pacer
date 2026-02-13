@@ -615,8 +615,10 @@ export function alignWords(referenceText, transcriptWords) {
   // Build normalized hypothesis words, tracking original indices through disfluency filter.
   // Raw V1 words include fillers ("uh", "um") that filterDisfluencies strips.
   // hypIndex must map back to the original transcriptWords position, not the filtered position.
+  // flatMap: a single hyphenated word like "in-person" normalizes to ["in", "person"],
+  // producing two alignment entries both mapping back to the same original word index.
   const rawNormed = (transcriptWords || [])
-    .map((w, i) => ({ norm: normalizeText(w.word)[0], origIdx: i }))
+    .flatMap((w, i) => normalizeText(w.word).map(norm => ({ norm, origIdx: i })))
     .filter(p => p.norm);
   const filtered = rawNormed.filter(p => !DISFLUENCIES.has(p.norm));
   const hypWords = filtered.map(p => p.norm);
