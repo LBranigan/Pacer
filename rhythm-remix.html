@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Rhythm Remix — Your Reading Beat</title>
+<link rel="stylesheet" href="css/rhythm-remix.css">
+</head>
+<body>
+
+<div class="remix-page">
+  <!-- Header with vinyl visual -->
+  <div class="remix-header">
+    <div class="vinyl-container" id="vinylContainer">
+      <div class="vinyl-record" id="vinylRecord">
+        <div class="vinyl-label">
+          <div class="vinyl-title">Rhythm Remix</div>
+          <div class="vinyl-subtitle" id="vinylSubtitle">Your Reading Beat</div>
+        </div>
+        <div class="vinyl-groove"></div>
+        <div class="vinyl-groove vinyl-groove-2"></div>
+        <div class="vinyl-groove vinyl-groove-3"></div>
+      </div>
+      <div class="vinyl-arm" id="vinylArm"></div>
+    </div>
+  </div>
+
+  <!-- Word display area with canvas overlay for bouncing ball -->
+  <div id="word-area-wrapper">
+    <div id="word-area"></div>
+    <canvas id="ball-canvas"></canvas>
+  </div>
+
+  <!-- Audio visualizer bar -->
+  <div class="visualizer-container">
+    <canvas id="visualizer-canvas" height="40"></canvas>
+  </div>
+
+  <!-- Controls -->
+  <div class="remix-controls">
+    <div class="control-row main-controls">
+      <button class="remix-play-btn" id="playBtn" aria-label="Play">
+        <svg class="play-icon" id="playIcon" viewBox="0 0 24 24" width="28" height="28">
+          <polygon points="6,3 20,12 6,21" fill="currentColor"/>
+        </svg>
+        <svg class="pause-icon" id="pauseIcon" viewBox="0 0 24 24" width="28" height="28" style="display:none">
+          <rect x="5" y="3" width="4" height="18" fill="currentColor"/>
+          <rect x="15" y="3" width="4" height="18" fill="currentColor"/>
+        </svg>
+      </button>
+    </div>
+
+    <div class="control-row sliders">
+      <div class="slider-group">
+        <label for="voiceVolume">Voice</label>
+        <input type="range" id="voiceVolume" min="0" max="100" value="80" class="remix-slider voice-slider">
+      </div>
+      <div class="slider-group">
+        <label for="beatVolume">Beat</label>
+        <input type="range" id="beatVolume" min="0" max="100" value="50" class="remix-slider beat-slider">
+      </div>
+    </div>
+
+    <div class="control-row options">
+      <select id="styleSelect" class="remix-select">
+        <option value="lofi">Lo-Fi Chill</option>
+        <option value="jazzhop">Jazz Hop</option>
+        <option value="ambient">Ambient</option>
+      </select>
+      <select id="speedSelect" class="remix-select">
+        <option value="0.75">0.75x</option>
+        <option value="1" selected>1x</option>
+        <option value="1.25">1.25x</option>
+      </select>
+    </div>
+  </div>
+
+  <!-- Status / feedback area -->
+  <div id="remix-status"></div>
+</div>
+
+<script type="module" src="js/rhythm-remix.js"></script>
+</body>
+</html>

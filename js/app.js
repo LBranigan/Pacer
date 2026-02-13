@@ -21,6 +21,7 @@ import { padAudioWithSilence } from './audio-padding.js';
 import { enrichDiagnosticsWithVAD, computeVADGapSummary, adjustGapsWithVADOverhang } from './vad-gap-analyzer.js';
 import { canRunMaze } from './maze-generator.js';
 import { loadPhonemeData, getPhonemeCountWithFallback } from './phoneme-counter.js';
+import { generateMovieTrailer } from './movie-trailer.js';
 
 // Code version for cache verification
 const CODE_VERSION = 'v39-2026-02-07';
@@ -134,6 +135,51 @@ function showMazeButton(studentId, assessmentId, referenceText) {
     || analyzeBtn;
   anchor.insertAdjacentElement('afterend', sel);
   sel.insertAdjacentElement('afterend', btn);
+}
+
+function showRhythmRemixButton(studentId, assessmentId) {
+  // Remove existing button if present
+  const existing = document.getElementById('rhythmRemixBtn');
+  if (existing) existing.remove();
+
+  const btn = document.createElement('button');
+  btn.id = 'rhythmRemixBtn';
+  btn.textContent = 'Rhythm Remix';
+  btn.style.cssText = 'margin:0.5rem 0 0.5rem 0.5rem;padding:0.6rem 1.2rem;background:linear-gradient(135deg, #e8a87c, #d4a5c7);color:#1a1520;border:none;border-radius:8px;font-size:1rem;font-weight:600;cursor:pointer;';
+  btn.addEventListener('click', () => {
+    localStorage.setItem('orf_playback_student', studentId);
+    localStorage.setItem('orf_playback_assessment', assessmentId);
+    const base = window.location.href.replace(/[^/]*$/, '');
+    window.open(base + 'rhythm-remix.html', 'orf_remix', 'width=800,height=700');
+  });
+
+  // Insert after the maze button, or after playback button, or after analyze button
+  const anchor = document.getElementById('mazeGameBtn')
+    || document.getElementById('mazeDifficulty')
+    || document.getElementById('playbackAdventureBtn')
+    || analyzeBtn;
+  anchor.insertAdjacentElement('afterend', btn);
+}
+
+function showMovieTrailerButton(referenceText, studentName) {
+  const existing = document.getElementById('movieTrailerBtn');
+  if (existing) existing.remove();
+
+  if (!referenceText || referenceText.trim().length < 20) return;
+
+  const btn = document.createElement('button');
+  btn.id = 'movieTrailerBtn';
+  btn.textContent = 'Movie Trailer';
+  btn.style.cssText = 'margin:0.5rem 0 0.5rem 0.5rem;padding:0.6rem 1.2rem;background:linear-gradient(135deg,#e94560,#0f3460);color:#fff;border:none;border-radius:8px;font-size:1rem;font-weight:600;cursor:pointer;';
+  btn.addEventListener('click', () => {
+    generateMovieTrailer(referenceText, studentName);
+  });
+
+  const anchor = document.getElementById('rhythmRemixBtn')
+    || document.getElementById('mazeGameBtn')
+    || document.getElementById('playbackAdventureBtn')
+    || analyzeBtn;
+  anchor.insertAdjacentElement('afterend', btn);
 }
 
 function refreshStudentUI() {
@@ -1989,6 +2035,12 @@ async function runAnalysis() {
       showPlaybackButton(appState.selectedStudentId, assessmentId);
     }
     showMazeButton(appState.selectedStudentId, assessmentId, referenceText);
+    if (appState.audioBlob) {
+      showRhythmRemixButton(appState.selectedStudentId, assessmentId);
+    }
+    // Movie Trailer button — needs reference text + student name
+    const selectedStudent = getStudents().find(s => s.id === appState.selectedStudentId);
+    showMovieTrailerButton(referenceText, selectedStudent?.name);
 
     // Finalize and auto-save debug log
     finalizeDebugLog({
@@ -2016,6 +2068,15 @@ async function runAnalysis() {
 
 // Auto-fill API key for dev/testing
 document.getElementById('apiKey').value = 'AIzaSyCTx4rS7zxwRZqNseWcFJAaAgEH5HA50xA';
+
+// ElevenLabs API key — persist in localStorage
+const elevenLabsInput = document.getElementById('elevenLabsKey');
+const savedElevenKey = localStorage.getItem('orf_elevenlabs_key') || 'sk_c182a71af4500c874381721e3b21dd40dc850992a0da65f3';
+elevenLabsInput.value = savedElevenKey;
+localStorage.setItem('orf_elevenlabs_key', savedElevenKey);
+elevenLabsInput.addEventListener('input', () => {
+  localStorage.setItem('orf_elevenlabs_key', elevenLabsInput.value.trim());
+});
 
 initRecorder();
 initFileHandler();

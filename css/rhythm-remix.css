@@ -1,0 +1,766 @@
+/* ============================================================
+   Rhythm Remix — Lo-Fi Reading Beat
+   A warm, cozy vinyl-cafe aesthetic for reading playback
+   ============================================================ */
+
+/* --- Palette --- */
+:root {
+  --rm-bg:          #1a1520;
+  --rm-bg-warm:     #1e1728;
+  --rm-surface:     #241e2e;
+  --rm-surface-alt: #2c2538;
+  --rm-accent:      #e8a87c;
+  --rm-accent-glow: rgba(232, 168, 124, 0.35);
+  --rm-mauve:       #d4a5c7;
+  --rm-mauve-glow:  rgba(212, 165, 199, 0.25);
+  --rm-correct:     #a8d8a8;
+  --rm-error:       #e8a87c;
+  --rm-text:        #d4cfe0;
+  --rm-muted:       #7a7486;
+  --rm-deep:        #120e18;
+  --rm-border:      rgba(212, 165, 199, 0.12);
+  --rm-radius:      16px;
+  --rm-radius-sm:   8px;
+  --rm-font:        'Nunito', system-ui, -apple-system, 'Segoe UI', sans-serif;
+}
+
+/* --- Reset & Base --- */
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background: var(--rm-bg);
+  background-image:
+    radial-gradient(ellipse 120% 80% at 50% 0%, rgba(60, 40, 80, 0.4) 0%, transparent 60%),
+    radial-gradient(ellipse 80% 60% at 80% 100%, rgba(100, 60, 50, 0.15) 0%, transparent 50%);
+  color: var(--rm-text);
+  font-family: var(--rm-font);
+  min-height: 100vh;
+  overflow-x: hidden;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Subtle noise texture overlay */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  opacity: 0.03;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  background-size: 256px 256px;
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* --- Page Container --- */
+.remix-page {
+  position: relative;
+  z-index: 1;
+  max-width: 780px;
+  margin: 0 auto;
+  padding: 2rem 1.5rem 3rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1.5rem;
+}
+
+/* ============================================================
+   VINYL RECORD HEADER
+   ============================================================ */
+
+.remix-header {
+  display: flex;
+  justify-content: center;
+  padding: 1rem 0 0.5rem;
+}
+
+.vinyl-container {
+  position: relative;
+  width: 140px;
+  height: 140px;
+}
+
+.vinyl-record {
+  width: 120px;
+  height: 120px;
+  border-radius: 50%;
+  background: radial-gradient(circle,
+    #2a2235 0%,
+    #1a1422 30%,
+    #222 32%,
+    #1a1422 34%,
+    #222 60%,
+    #1a1422 62%,
+    #222 80%,
+    #1e1828 100%
+  );
+  position: relative;
+  box-shadow:
+    0 0 0 3px #333,
+    0 4px 20px rgba(0, 0, 0, 0.5),
+    inset 0 0 30px rgba(0, 0, 0, 0.3);
+  transition: transform 0.3s ease;
+}
+
+.vinyl-record.spinning {
+  animation: vinylSpin 2s linear infinite;
+}
+
+.vinyl-label {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--rm-accent), #c08060);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 0 8px rgba(232, 168, 124, 0.3);
+  overflow: hidden;
+}
+
+.vinyl-label::after {
+  content: '';
+  position: absolute;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--rm-deep);
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+}
+
+.vinyl-title {
+  font-size: 5px;
+  font-weight: 700;
+  color: var(--rm-deep);
+  letter-spacing: 0.3px;
+  text-transform: uppercase;
+  line-height: 1;
+  margin-bottom: 1px;
+  position: relative;
+  z-index: 1;
+}
+
+.vinyl-subtitle {
+  font-size: 3.5px;
+  color: rgba(26, 21, 32, 0.7);
+  line-height: 1;
+  position: relative;
+  z-index: 1;
+}
+
+/* Grooves — concentric rings */
+.vinyl-groove {
+  position: absolute;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.04);
+  pointer-events: none;
+}
+
+.vinyl-groove:first-of-type {
+  width: 80px;
+  height: 80px;
+  top: 20px;
+  left: 20px;
+}
+
+.vinyl-groove-2 {
+  width: 96px;
+  height: 96px;
+  top: 12px;
+  left: 12px;
+}
+
+.vinyl-groove-3 {
+  width: 110px;
+  height: 110px;
+  top: 5px;
+  left: 5px;
+}
+
+/* Tonearm */
+.vinyl-arm {
+  position: absolute;
+  top: 8px;
+  right: 0;
+  width: 40px;
+  height: 6px;
+  background: linear-gradient(90deg, #888 0%, #aaa 40%, #666 100%);
+  border-radius: 3px;
+  transform-origin: right center;
+  transform: rotate(25deg);
+  transition: transform 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
+}
+
+.vinyl-arm::before {
+  content: '';
+  position: absolute;
+  right: -4px;
+  top: -2px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #999;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
+}
+
+.vinyl-arm::after {
+  content: '';
+  position: absolute;
+  left: -2px;
+  top: 1px;
+  width: 8px;
+  height: 4px;
+  background: #555;
+  border-radius: 2px 0 0 2px;
+}
+
+.vinyl-arm.dropped {
+  transform: rotate(5deg);
+}
+
+/* ============================================================
+   WORD DISPLAY AREA
+   ============================================================ */
+
+#word-area-wrapper {
+  position: relative;
+  width: 100%;
+  max-width: 680px;
+}
+
+#word-area {
+  background: var(--rm-surface);
+  background-image:
+    linear-gradient(135deg, rgba(255,255,255,0.015) 0%, transparent 50%);
+  border: 1px solid var(--rm-border);
+  border-radius: var(--rm-radius);
+  padding: 2rem 2.2rem;
+  min-height: 160px;
+  line-height: 2.6;
+  box-shadow:
+    inset 0 2px 8px rgba(0, 0, 0, 0.15),
+    0 4px 24px rgba(0, 0, 0, 0.2);
+  position: relative;
+  z-index: 1;
+}
+
+#ball-canvas {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 2;
+}
+
+/* --- Word Spans --- */
+.word-span {
+  display: inline-block;
+  padding: 4px 6px;
+  margin: 3px;
+  border-radius: 6px;
+  font-size: 1.15rem;
+  font-weight: 500;
+  color: var(--rm-muted);
+  transition: all 0.3s ease;
+  position: relative;
+  cursor: default;
+  user-select: none;
+}
+
+/* Upcoming: barely visible */
+.word-span.upcoming {
+  opacity: 0.3;
+}
+
+/* Active: glowing accent */
+.word-span.active {
+  color: var(--rm-accent);
+  background: rgba(232, 168, 124, 0.1);
+  box-shadow: 0 0 16px var(--rm-accent-glow), 0 0 4px var(--rm-accent-glow);
+  transform: scale(1.08);
+  animation: wordPulse 1.6s ease-in-out infinite;
+}
+
+/* Completed correctly: sage green */
+.word-span.done-correct {
+  color: var(--rm-correct);
+  opacity: 1;
+}
+
+/* Error: warm amber with wavy underline */
+.word-span.done-error {
+  color: var(--rm-error);
+  text-decoration: underline;
+  text-decoration-style: wavy;
+  text-decoration-color: var(--rm-error);
+  text-underline-offset: 4px;
+  text-decoration-thickness: 1.5px;
+  opacity: 1;
+}
+
+/* Struggle: amber with pulse */
+.word-span.done-struggle {
+  color: var(--rm-error);
+  opacity: 1;
+  animation: strugglePulse 2s ease-in-out infinite;
+}
+
+/* Omission: muted dashed underline */
+.word-span.done-omission {
+  color: var(--rm-muted);
+  text-decoration: underline;
+  text-decoration-style: dashed;
+  text-decoration-color: var(--rm-muted);
+  text-underline-offset: 4px;
+  text-decoration-thickness: 1px;
+  opacity: 0.5;
+}
+
+/* Self-corrected: green with return arrow */
+.word-span.self-corrected {
+  color: var(--rm-correct);
+  opacity: 1;
+}
+
+.word-span.self-corrected::after {
+  content: '\21A9';
+  font-size: 0.7em;
+  margin-left: 2px;
+  opacity: 0.6;
+  vertical-align: super;
+}
+
+/* ============================================================
+   AUDIO VISUALIZER
+   ============================================================ */
+
+.visualizer-container {
+  width: 100%;
+  max-width: 680px;
+  height: 40px;
+  background: var(--rm-surface);
+  border: 1px solid var(--rm-border);
+  border-radius: var(--rm-radius-sm);
+  overflow: hidden;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.15);
+}
+
+#visualizer-canvas {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+/* ============================================================
+   CONTROLS
+   ============================================================ */
+
+.remix-controls {
+  width: 100%;
+  max-width: 680px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1.2rem;
+}
+
+.control-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+  width: 100%;
+}
+
+/* --- Play Button --- */
+.remix-play-btn {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  border: none;
+  background: linear-gradient(135deg, var(--rm-accent) 0%, #c08060 100%);
+  color: var(--rm-deep);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow:
+    0 0 20px var(--rm-accent-glow),
+    0 4px 16px rgba(0, 0, 0, 0.3);
+  transition: all 0.2s ease;
+  position: relative;
+}
+
+.remix-play-btn:hover {
+  transform: scale(1.06);
+  box-shadow:
+    0 0 32px var(--rm-accent-glow),
+    0 6px 20px rgba(0, 0, 0, 0.35);
+}
+
+.remix-play-btn:active {
+  transform: scale(0.96);
+  box-shadow:
+    0 0 12px var(--rm-accent-glow),
+    0 2px 8px rgba(0, 0, 0, 0.25);
+}
+
+.remix-play-btn:focus-visible {
+  outline: 2px solid var(--rm-accent);
+  outline-offset: 4px;
+}
+
+.play-icon {
+  margin-left: 3px; /* optical centering for triangle */
+}
+
+/* --- Sliders --- */
+.sliders {
+  gap: 2rem;
+}
+
+.slider-group {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.slider-group label {
+  font-size: 0.8rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  color: var(--rm-muted);
+  min-width: 38px;
+}
+
+.remix-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 120px;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--rm-surface-alt);
+  outline: none;
+  cursor: pointer;
+}
+
+/* Voice slider thumb — amber */
+.voice-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--rm-accent);
+  border: none;
+  box-shadow: 0 0 8px var(--rm-accent-glow);
+  cursor: pointer;
+  transition: box-shadow 0.2s ease;
+}
+
+.voice-slider::-webkit-slider-thumb:hover {
+  box-shadow: 0 0 16px var(--rm-accent-glow);
+}
+
+.voice-slider::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--rm-accent);
+  border: none;
+  box-shadow: 0 0 8px var(--rm-accent-glow);
+  cursor: pointer;
+}
+
+/* Beat slider thumb — mauve */
+.beat-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--rm-mauve);
+  border: none;
+  box-shadow: 0 0 8px var(--rm-mauve-glow);
+  cursor: pointer;
+  transition: box-shadow 0.2s ease;
+}
+
+.beat-slider::-webkit-slider-thumb:hover {
+  box-shadow: 0 0 16px var(--rm-mauve-glow);
+}
+
+.beat-slider::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--rm-mauve);
+  border: none;
+  box-shadow: 0 0 8px var(--rm-mauve-glow);
+  cursor: pointer;
+}
+
+/* Slider track fill (Firefox) */
+.voice-slider::-moz-range-track {
+  height: 4px;
+  border-radius: 2px;
+  background: var(--rm-surface-alt);
+}
+
+.beat-slider::-moz-range-track {
+  height: 4px;
+  border-radius: 2px;
+  background: var(--rm-surface-alt);
+}
+
+/* --- Select Dropdowns --- */
+.options {
+  gap: 0.8rem;
+}
+
+.remix-select {
+  -webkit-appearance: none;
+  appearance: none;
+  background: var(--rm-surface);
+  color: var(--rm-text);
+  border: 1px solid var(--rm-border);
+  border-radius: var(--rm-radius-sm);
+  padding: 0.55rem 2rem 0.55rem 0.9rem;
+  font-family: var(--rm-font);
+  font-size: 0.85rem;
+  font-weight: 500;
+  cursor: pointer;
+  outline: none;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='7' viewBox='0 0 12 7'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%237a7486' stroke-width='1.5' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.7rem center;
+}
+
+.remix-select:focus {
+  border-color: var(--rm-accent);
+  box-shadow: 0 0 0 2px var(--rm-accent-glow);
+}
+
+.remix-select:hover {
+  border-color: rgba(212, 165, 199, 0.25);
+}
+
+.remix-select option {
+  background: var(--rm-surface);
+  color: var(--rm-text);
+}
+
+/* ============================================================
+   STATUS / FEEDBACK
+   ============================================================ */
+
+#remix-status {
+  text-align: center;
+  color: var(--rm-muted);
+  font-size: 0.85rem;
+  min-height: 1.5em;
+  animation: fadeIn 0.4s ease;
+}
+
+#remix-status:empty {
+  display: none;
+}
+
+/* ============================================================
+   ANIMATIONS
+   ============================================================ */
+
+@keyframes vinylSpin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+
+@keyframes wordPulse {
+  0%, 100% {
+    box-shadow: 0 0 16px var(--rm-accent-glow), 0 0 4px var(--rm-accent-glow);
+  }
+  50% {
+    box-shadow: 0 0 24px var(--rm-accent-glow), 0 0 8px var(--rm-accent-glow);
+  }
+}
+
+@keyframes strugglePulse {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.65; }
+}
+
+@keyframes wordBounce {
+  0%, 100% { transform: translateY(0) scale(1.08); }
+  50%      { transform: translateY(-3px) scale(1.08); }
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ============================================================
+   REDUCED MOTION
+   ============================================================ */
+
+@media (prefers-reduced-motion: reduce) {
+  .vinyl-record.spinning {
+    animation: none;
+  }
+
+  .word-span.active {
+    animation: none;
+    transform: none;
+  }
+
+  .word-span.done-struggle {
+    animation: none;
+  }
+
+  .remix-play-btn:hover {
+    transform: none;
+  }
+
+  .remix-play-btn:active {
+    transform: none;
+  }
+
+  /* Keep color changes, just disable motion */
+  .word-span {
+    transition: color 0.15s ease, opacity 0.15s ease, background 0.15s ease;
+  }
+}
+
+/* ============================================================
+   RESPONSIVE
+   ============================================================ */
+
+@media (max-width: 500px) {
+  .remix-page {
+    padding: 1rem 0.8rem 2rem;
+    gap: 1rem;
+  }
+
+  /* Hide vinyl on small screens */
+  .remix-header {
+    display: none;
+  }
+
+  #word-area {
+    padding: 1.2rem 1rem;
+    border-radius: 12px;
+    min-height: 120px;
+    line-height: 2.4;
+  }
+
+  .word-span {
+    font-size: 1rem;
+    padding: 3px 5px;
+    margin: 2px;
+  }
+
+  /* Stack controls vertically */
+  .remix-controls {
+    gap: 1rem;
+  }
+
+  .control-row.sliders {
+    flex-direction: column;
+    gap: 0.8rem;
+  }
+
+  .control-row.options {
+    flex-direction: column;
+    gap: 0.6rem;
+  }
+
+  .remix-select {
+    width: 100%;
+  }
+
+  .slider-group {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .remix-slider {
+    flex: 1;
+    width: auto;
+  }
+
+  .remix-play-btn {
+    width: 56px;
+    height: 56px;
+  }
+
+  .visualizer-container {
+    border-radius: 6px;
+  }
+}
+
+/* Medium screens — slightly smaller vinyl */
+@media (max-width: 680px) and (min-width: 501px) {
+  .vinyl-container {
+    width: 120px;
+    height: 120px;
+  }
+
+  .vinyl-record {
+    width: 100px;
+    height: 100px;
+  }
+
+  .vinyl-label {
+    width: 36px;
+    height: 36px;
+  }
+
+  .vinyl-title {
+    font-size: 4px;
+  }
+
+  .vinyl-subtitle {
+    font-size: 3px;
+  }
+
+  .vinyl-groove:first-of-type {
+    width: 66px;
+    height: 66px;
+    top: 17px;
+    left: 17px;
+  }
+
+  .vinyl-groove-2 {
+    width: 80px;
+    height: 80px;
+    top: 10px;
+    left: 10px;
+  }
+
+  .vinyl-groove-3 {
+    width: 92px;
+    height: 92px;
+    top: 4px;
+    left: 4px;
+  }
+
+  #word-area {
+    padding: 1.5rem;
+  }
+}
