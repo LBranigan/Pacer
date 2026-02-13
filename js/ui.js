@@ -1305,6 +1305,11 @@ export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, di
       if (pros.wordOutliers.outlierCount > 5) oTip.push('... and ' + (pros.wordOutliers.outlierCount - 5) + ' more');
       oTip.push('Timestamps: cross-validator (' + pros.wordOutliers.baseline.totalWordsAnalyzed + ' words analyzed, ' + pros.wordOutliers.baseline.wordsSkippedNoTimestamps + ' skipped)');
       outBox.title = oTip.join('\n');
+      outBox.style.cursor = 'pointer';
+      outBox.addEventListener('click', () => {
+        section.classList.toggle('show-outliers');
+        outBox.classList.toggle('metric-box-active');
+      });
     } else {
       outBox.innerHTML = '<span class="metric-value">N/A</span><span class="metric-label">Duration Outliers</span>';
       outBox.title = pros.wordOutliers.reason || 'Insufficient data';
@@ -2364,6 +2369,7 @@ function renderWordSpeedInto(parent, wordSpeedData, wordAudioEl, transcriptWords
     for (const w of data.words) {
       const span = document.createElement('span');
       span.className = `word ws-${w.tier}`;
+      if (w.isOutlier) span.dataset.outlier = 'true';
       span.textContent = w.refWord || '???';
       span.dataset.tooltip = buildWordSpeedTooltip(w);
 
