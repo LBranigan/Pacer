@@ -1709,10 +1709,18 @@ export function computeWordSpeedTiers(wordOutliers, alignment, xvalRawWords, tra
     // Insertions: not in reference passage — advance hypIndex and xval pointer
     if (entry.type === 'insertion') {
       const partsCount = entry.compound && entry.parts ? entry.parts.length : 1;
-      // Advance xval pointer past this insertion so it doesn't misalign
-      if (hasXval && transcriptWords[hypIndex]) {
-        const reverbS = parseTime(transcriptWords[hypIndex].startTime);
-        consumeXvalAt(reverbS);
+      // Advance xval pointer past this insertion so it doesn't misalign.
+      // Skip disfluencies — Parakeet doesn't produce fillers like "uh"/"um",
+      // so consuming an xval word for them steals the next real word's timestamp.
+      if (hasXval) {
+        const isDisfluency = transcriptWords[hypIndex] && transcriptWords[hypIndex].isDisfluency;
+        if (!isDisfluency) {
+          for (let p = 0; p < partsCount; p++) {
+            if (transcriptWords[hypIndex + p]) {
+              consumeXvalAt(parseTime(transcriptWords[hypIndex + p].startTime));
+            }
+          }
+        }
       }
       hypIndex += partsCount;
       continue;
@@ -1743,7 +1751,19 @@ export function computeWordSpeedTiers(wordOutliers, alignment, xvalRawWords, tra
       const reverbS = parseTime(transcriptWords[hypIndex].startTime);
       const xvalMatch = consumeXvalAt(reverbS);
       if (xvalMatch) {
-        durationMs = Math.round((xvalMatch.endS - xvalMatch.startS) * 1000);
+        // For compounds, use span from first xval match start to last xval match end
+        if (partsCount > 1) {
+          let lastEnd = xvalMatch.endS;
+          for (let extra = 1; extra < partsCount; extra++) {
+            if (transcriptWords[hypIndex + extra]) {
+              const extraMatch = consumeXvalAt(parseTime(transcriptWords[hypIndex + extra].startTime));
+              if (extraMatch) lastEnd = extraMatch.endS;
+            }
+          }
+          durationMs = Math.round((lastEnd - xvalMatch.startS) * 1000);
+        } else {
+          durationMs = Math.round((xvalMatch.endS - xvalMatch.startS) * 1000);
+        }
         tsSource = 'cross-validator';
       }
     }

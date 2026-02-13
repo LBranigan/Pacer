@@ -1917,6 +1917,30 @@ async function runAnalysis() {
     syntacticAlignment: syntacticAlignment ? { score: syntacticAlignment.score, label: syntacticAlignment.label } : null
   });
 
+  // ── Word Speed Tiers (comprehensive per-word data) ──
+  if (wordSpeedTiers && !wordSpeedTiers.insufficient) {
+    addStage('word_speed_tiers', {
+      baseline: wordSpeedTiers.baseline,
+      distribution: wordSpeedTiers.distribution,
+      atPacePercent: wordSpeedTiers.atPacePercent,
+      words: wordSpeedTiers.words.map(w => ({
+        refIndex: w.refIndex,
+        refWord: w.refWord,
+        hyp: w.word,
+        tier: w.tier,
+        alignmentType: w.alignmentType,
+        durationMs: w.durationMs,
+        phonemes: w.phonemes,
+        phonemeSource: w.phonemeSource || null,
+        normalizedMs: w.normalizedMs,
+        ratio: w.ratio,
+        isOutlier: w.isOutlier || false,
+        sentenceFinal: w.sentenceFinal || false,
+        tsSource: w._tsSource || null
+      }))
+    });
+  }
+
   // Mark transcriptWords as "healed" when alignment resolved them as correct
   // despite having disagreed/unconfirmed cross-validation (e.g., compound merge
   // for "i"+"e"→"ie", Tier 1 near-match override for "format"→"formats").
