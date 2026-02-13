@@ -10,65 +10,13 @@ const VOICE_ID = 'pNInz6obpgDQGcFmaJgB'; // "Adam" — deep, cinematic narrator
 const ELEVENLABS_MODEL = 'eleven_multilingual_v2';
 
 // ── Trailer Script Templates ──
-const TRAILER_INTROS = [
-  'In a world... where words come alive...',
-  'From the pages of an extraordinary story...',
-  'Beyond the silence... a voice rises...',
-  'When the story needed a hero... one reader answered the call...',
-  'They said it couldn\'t be read... they were wrong...',
-];
-
-const TRAILER_BRIDGES = [
-  'But the story was only beginning...',
-  'And then... everything changed...',
-  'The words grew darker... the stakes grew higher...',
-  'No one could have predicted what came next...',
-];
-
-const TRAILER_OUTROS = [
-  'This is their story. This is their moment.',
-  'One voice. One story. One unforgettable reading.',
-  'Coming soon... to a classroom near you.',
-  'The greatest story ever read... aloud.',
-];
-
 /**
- * Build a dramatic trailer script from the reference passage.
- * Picks the most vivid sentences and wraps them in trailer clichés.
+ * Build a trailer script from the reference passage.
+ * Speaks EVERY word from the passage with minimal dramatic framing.
  */
 function buildTrailerScript(referenceText, studentName) {
-  // Split into sentences
-  const sentences = referenceText
-    .replace(/([.!?])\s+/g, '$1|')
-    .split('|')
-    .map(s => s.trim())
-    .filter(s => s.length > 10);
-
-  // Pick up to 3 sentences — first, middle, last for narrative arc
-  const picks = [];
-  if (sentences.length >= 3) {
-    picks.push(sentences[0]);
-    picks.push(sentences[Math.floor(sentences.length / 2)]);
-    picks.push(sentences[sentences.length - 1]);
-  } else {
-    picks.push(...sentences.slice(0, 3));
-  }
-
-  const intro = TRAILER_INTROS[Math.floor(Math.random() * TRAILER_INTROS.length)];
-  const bridge = TRAILER_BRIDGES[Math.floor(Math.random() * TRAILER_BRIDGES.length)];
-  const outro = TRAILER_OUTROS[Math.floor(Math.random() * TRAILER_OUTROS.length)];
-
-  let script = intro + '\n\n';
-  if (picks[0]) script += picks[0] + '\n\n';
-  script += bridge + '\n\n';
-  if (picks[1]) script += picks[1] + '\n\n';
-  if (picks[2]) script += picks[2] + '\n\n';
-  if (studentName) {
-    script += `Read by ${studentName}.\n\n`;
-  }
-  script += outro;
-
-  return script;
+  const name = studentName || 'a young reader';
+  return `This is the story of ${name}.\n\n${referenceText.trim()}`;
 }
 
 /**
