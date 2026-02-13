@@ -398,6 +398,28 @@ const NUMBER_EXPANSION_RULES = {
 // ============================================================================
 
 const FORGIVENESS_RULES = {
+  postStruggleLeniency: {
+    description: 'After a confirmed error (substitution, struggle, omission, confirmed insertion), Reverb CTC often fails to recover for the immediately following word. If Parakeet independently heard the next word correctly and V1 produced a disagreed substitution, promote to correct. One word of leniency only.',
+    detector: 'app.js → post-struggle Parakeet leniency block (after confirmed-insertion clearance, before metrics)',
+    countsAsError: false,
+    config: {
+      conditions: [
+        'Previous ref-anchored entry was an error (substitution, struggle, omission) and not forgiven',
+        'OR a confirmed insertion occurred between the two ref words',
+        'Current entry is a substitution with crossValidation === "disagreed"',
+        'Parakeet ref entry at same index has type === "correct"'
+      ],
+      oneWordRule: 'After promotion, entry becomes correct → prevRefWasError resets → next word gets no leniency'
+    },
+    example: {
+      reference: 'publishing stool',
+      spoken: 'Reverb: "pub-lishing" (struggle) then "four" (wrong), Parakeet: "stool" (correct)',
+      result: '"stool" promoted to correct with _postStruggleLeniency flag — Reverb was still off-track from "publishing" struggle'
+    },
+    uiClass: 'word-bucket-struggle-correct',
+    note: 'entry.hyp is NOT changed — keeps V1 original word for evidence. entry._postStruggleLeniency: true flag drives UI bucket classification and tooltip.'
+  },
+
   properNounForgiveness: {
     description: 'Phonetically close attempt at a proper noun (name), with dictionary guard to exclude common English words',
     detector: 'app.js → forgiveness loop (NL API proper noun detection + Free Dictionary API guard)',
@@ -538,6 +560,7 @@ export function getDetectorLocation(type) {
  * - longPause: 3+ second gap (visual indicator only)
  * - hesitation: Brief pause (< 3s)
  * - selfCorrection: Repeated word/phrase or near-miss attempt before correct word
+ * - postStruggleLeniency: Parakeet correct after preceding error — Reverb off-track (one word leniency)
  * - properNounForgiveness: Close attempt at name
  * - reverb_filler: Filler word (um, uh) via FILLER_WORDS set
  * - abbreviationCompoundMerge: i.e./e.g./U.S. read letter-by-letter → compound merged

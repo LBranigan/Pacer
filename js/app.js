@@ -1626,6 +1626,42 @@ async function runAnalysis() {
     }
   }
 
+  // ── Post-struggle Parakeet leniency ─────────────────────────────────
+  // After a confirmed error, Reverb's CTC decoder often can't recover
+  // for the next word. If Parakeet independently heard it correctly,
+  // trust Parakeet and give credit (one word of leniency only).
+  {
+    const pkRefEntries = data._threeWay?.pkRef;
+    if (pkRefEntries) {
+      let prevRefWasError = false;
+      let refIdx = 0;
+      const promoted = [];
+      for (const entry of alignment) {
+        if (entry.type === 'insertion') {
+          if (entry._confirmedInsertion) prevRefWasError = true;
+          continue;
+        }
+        // ref-anchored entry
+        const pkEntry = pkRefEntries[refIdx];
+        if (prevRefWasError
+            && entry.type === 'substitution'
+            && entry.crossValidation === 'disagreed'
+            && pkEntry?.type === 'correct') {
+          entry.type = 'correct';
+          entry._postStruggleLeniency = true;
+          promoted.push({ ref: entry.ref, v1Hyp: entry.hyp, pkWord: pkEntry.hyp });
+        }
+        // Update trigger for next word
+        prevRefWasError = (entry.type === 'substitution' || entry.type === 'struggle'
+                           || entry.type === 'omission') && !entry.forgiven;
+        refIdx++;
+      }
+      if (promoted.length > 0) {
+        addStage('post_struggle_leniency', { promoted });
+      }
+    }
+  }
+
   const wcpm = (effectiveElapsedSeconds != null && effectiveElapsedSeconds > 0)
     ? computeWCPMRange(alignment, effectiveElapsedSeconds)
     : null;

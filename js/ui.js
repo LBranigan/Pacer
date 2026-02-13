@@ -599,6 +599,8 @@ function renderNewAnalyzedWords(container, alignment, sttLookup, diagnostics, tr
 
     // Correct or compound-struggle (which resolved to correct word)
     if (entry.type === 'correct' || (entry.type === 'struggle' && entry.compound)) {
+      // Post-struggle leniency: Reverb off-track after preceding error, Parakeet heard correct
+      if (entry._postStruggleLeniency) return 'struggle-correct';
       // Recovered = only cross-validator heard it (V1/V0 both missed) — not confidently correct
       if (entry._recovered) return 'struggle-correct';
       // Compound fragments (e.g., "own"+"ed" for "owned") = clear mid-word pause → orange
@@ -727,6 +729,7 @@ function renderNewAnalyzedWords(container, alignment, sttLookup, diagnostics, tr
       '\u2022 V0 disagreed: clean model heard a different word (pronunciation was messy)\n' +
       '\u2022 Parakeet omitted: cross-validator missed the word entirely (audio unclear)\n' +
       '\u2022 Recovered: only cross-validator (Parakeet) heard it \u2014 V1 and V0 both missed\n' +
+      '\u2022 Post-struggle leniency: preceding word was an error, Reverb off-track, Parakeet heard correct\n' +
       '\u2022 Does NOT count as an error',
 
     'omitted': 'OMITTED\n' +
@@ -978,6 +981,9 @@ function renderNewAnalyzedWords(container, alignment, sttLookup, diagnostics, tr
     }
     if (bucket === 'struggle-correct' && entry._pkType === 'omission') {
       tip.push('Parakeet did not hear this word (audio unclear in this region)');
+    }
+    if (bucket === 'struggle-correct' && entry._postStruggleLeniency) {
+      tip.push(`Parakeet heard "${entry._xvalWord}" after preceding struggle — Reverb likely off-track`);
     }
     if (bucket === 'attempted-struggled') {
       if (entry.compound && entry.parts) {
