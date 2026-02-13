@@ -815,6 +815,13 @@ body.dev-mode .dev-mode-toggle {
   cursor: pointer;
 }
 
+.word-speed-note {
+  font-size: 0.75rem;
+  color: #888;
+  margin-bottom: 0.4rem;
+  font-style: italic;
+}
+
 /* Legend */
 .word-speed-legend {
   display: flex;

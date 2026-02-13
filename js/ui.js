@@ -1298,6 +1298,7 @@ export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, di
       oTip.push('Words above this student\'s statistical outlier fence');
       oTip.push('(IQR method: Q3 + 1.5*IQR = ' + pros.wordOutliers.baseline.upperFence + 'ms/phoneme).');
       oTip.push('Student baseline: median ' + pros.wordOutliers.baseline.medianDurationPerPhoneme + 'ms/ph, Q1=' + pros.wordOutliers.baseline.Q1 + ', Q3=' + pros.wordOutliers.baseline.Q3);
+      oTip.push('Short words (1-2 phonemes) use floor=3 to avoid bias from fixed articulatory overhead.');
       for (const o of pros.wordOutliers.outliers.slice(0, 5)) {
         oTip.push(o.word + ' (' + (o.phonemes || o.syllables) + ' ph): ' + o.normalizedDurationMs + 'ms/ph — ' + o.aboveFenceBy + 'ms above fence');
       }
@@ -2320,6 +2321,12 @@ function renderWordSpeedInto(parent, wordSpeedData, wordAudioEl, transcriptWords
 
   wrapper.appendChild(headerRow);
 
+  // Normalization note
+  const normNote = document.createElement('div');
+  normNote.className = 'word-speed-note';
+  normNote.textContent = 'Speed = ms per phoneme relative to student median. Short words (1–2 phonemes) use a floor of 3 to correct for fixed articulatory overhead.';
+  wrapper.appendChild(normNote);
+
   // ── Legend ──
   const legendEl = document.createElement('div');
   legendEl.className = 'word-speed-legend';
@@ -2441,7 +2448,9 @@ function buildWordSpeedTooltip(w) {
 
   // Duration line with phoneme count
   if (w.durationMs != null) {
-    const countsStr = w.phonemes != null ? `${w.phonemes} ph` : '';
+    const effPh = w.phonemes != null ? Math.max(w.phonemes, 3) : null;
+    const floorNote = w.phonemes != null && w.phonemes < 3 ? ` (floor=3)` : '';
+    const countsStr = w.phonemes != null ? `${w.phonemes} ph${floorNote}` : '';
     const sourceTag = w.phonemeSource === 'fallback' ? ' (est.)' : '';
     if (w._gapBeforeMs != null && w._gapBeforeMs > 0) {
       lines.push(`Duration: ${w.durationMs}ms (word) + ${w._gapBeforeMs}ms (pause) = ${w._effectiveDurationMs}ms | ${countsStr}${sourceTag} | ${w.normalizedMs} ms/ph`);
