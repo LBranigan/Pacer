@@ -4,6 +4,13 @@ import { levenshteinRatio } from './nl-api.js';
 import { countSyllables } from './syllable-counter.js';
 import { getPhonemeCountWithFallback, PHONEMES_PER_SYLLABLE_RATIO } from './phoneme-counter.js';
 
+// Minimum effective phoneme count for duration normalization.
+// Words with fewer phonemes (e.g., "a"=1, "is"=2) have a fixed articulatory
+// overhead that dominates their duration, making ms/phoneme values artificially
+// high. Floor=3 (the cost of one CVC syllable) eliminates this structural bias
+// while preserving genuine stall detection on short words.
+const PHONEME_FLOOR = 3;
+
 // ── Helpers ──────────────────────────────────────────────────────────
 
 /** Parse STT time string "1.200s" to float seconds. */
@@ -1443,8 +1450,7 @@ export function computePaceConsistency(overallPhrasing, transcriptWords) {
  * Prefers cross-validator timestamps (_xvalStartTime/_xvalEndTime) from
  * Deepgram or Parakeet. Falls back to primary timestamps (startTime/endTime)
  * when the cross-validator is unavailable (e.g., server 500 error).
- * Normalizes by phoneme count. IQR-based outlier detection.
- * Only flags words with > 3 phonemes as outliers.
+ * Normalizes by phoneme count (floored to PHONEME_FLOOR). IQR-based outlier detection.
  */
 export function computeWordDurationOutliers(transcriptWords, alignment) {
   const allWords = [];
@@ -1511,7 +1517,7 @@ export function computeWordDurationOutliers(transcriptWords, alignment) {
     const phonemeInfo = getPhonemeCountWithFallback(wordText);
     const phonemes = phonemeInfo.count;
     const syllables = countSyllables(wordText);
-    const normalizedDurationMs = durationMs / Math.max(phonemes, 1);
+    const normalizedDurationMs = durationMs / Math.max(phonemes, PHONEME_FLOOR);
 
     allWords.push({
       hypIndex,
@@ -1755,7 +1761,7 @@ export function computeWordSpeedTiers(wordOutliers, alignment, xvalRawWords, tra
       const phonemeInfo = getPhonemeCountWithFallback(refText);
       const phonemes = phonemeInfo.count;
       const syllables = countSyllables(refText);
-      const normalizedMs = Math.round(durationMs / Math.max(phonemes, 1));
+      const normalizedMs = Math.round(durationMs / Math.max(phonemes, PHONEME_FLOOR));
 
       xvalDurations.push({ phonemes, syllables, normalizedMs, durationMs });
 
@@ -1910,7 +1916,7 @@ export function recomputeWordSpeedWithPauses(wordSpeedData, transcriptWords, ref
     const effectiveMs = w.durationMs + gapMs;
     w._effectiveDurationMs = effectiveMs;
     const phonemes = w.phonemes || 1;
-    w.normalizedMs = Math.round(effectiveMs / Math.max(phonemes, 1));
+    w.normalizedMs = Math.round(effectiveMs / Math.max(phonemes, PHONEME_FLOOR));
     normDurations.push(w.normalizedMs);
   }
 
