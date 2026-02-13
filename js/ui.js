@@ -2028,7 +2028,7 @@ export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, di
         lists.push({
           label: 'Compound Merges (' + compounds.length + ')',
           cls: 'pipeline-pp-compound',
-          items: compounds.map(e => '"' + e.parts.join('" + "') + '" \u2192 "' + e.hyp + '" (ref: "' + e.ref + '")')
+          items: compounds.map(e => '"' + (e.parts || [e.hyp]).join('" + "') + '" \u2192 "' + e.hyp + '" (ref: "' + e.ref + '")')
         });
       }
 
