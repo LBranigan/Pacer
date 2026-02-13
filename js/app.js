@@ -161,6 +161,29 @@ function showRhythmRemixButton(studentId, assessmentId) {
   anchor.insertAdjacentElement('afterend', btn);
 }
 
+function showIllustratorButton(studentId, assessmentId) {
+  const existing = document.getElementById('illustratorBtn');
+  if (existing) existing.remove();
+
+  const btn = document.createElement('button');
+  btn.id = 'illustratorBtn';
+  btn.textContent = 'Reading Illustrator';
+  btn.style.cssText = 'margin:0.5rem 0 0.5rem 0.5rem;padding:0.6rem 1.2rem;background:#2e7d32;color:#fff;border:none;border-radius:8px;font-size:1rem;font-weight:600;cursor:pointer;';
+  btn.addEventListener('click', () => {
+    localStorage.setItem('orf_playback_student', studentId);
+    localStorage.setItem('orf_playback_assessment', assessmentId);
+    const base = window.location.href.replace(/[^/]*$/, '');
+    window.open(base + 'illustrator.html?student=' + encodeURIComponent(studentId) + '&assessment=' + encodeURIComponent(assessmentId), 'orf_illustrator', 'width=800,height=700');
+  });
+
+  const anchor = document.getElementById('rhythmRemixBtn')
+    || document.getElementById('mazeGameBtn')
+    || document.getElementById('mazeDifficulty')
+    || document.getElementById('playbackAdventureBtn')
+    || analyzeBtn;
+  anchor.insertAdjacentElement('afterend', btn);
+}
+
 function showMovieTrailerButton(referenceText, studentName) {
   const existing = document.getElementById('movieTrailerBtn');
   if (existing) existing.remove();
@@ -177,6 +200,29 @@ function showMovieTrailerButton(referenceText, studentName) {
 
   const anchor = document.getElementById('rhythmRemixBtn')
     || document.getElementById('mazeGameBtn')
+    || document.getElementById('playbackAdventureBtn')
+    || analyzeBtn;
+  anchor.insertAdjacentElement('afterend', btn);
+}
+
+function showFutureYouButton(studentId, assessmentId) {
+  const existing = document.getElementById('futureYouBtn');
+  if (existing) existing.remove();
+
+  const btn = document.createElement('button');
+  btn.id = 'futureYouBtn';
+  btn.textContent = 'Future You';
+  btn.style.cssText = 'margin:0.5rem 0 0.5rem 0.5rem;padding:0.6rem 1.2rem;background:linear-gradient(135deg,#7ec8e3,#3a7bd5);color:#fff;border:none;border-radius:8px;font-size:1rem;font-weight:600;cursor:pointer;';
+  btn.addEventListener('click', () => {
+    localStorage.setItem('orf_playback_student', studentId);
+    localStorage.setItem('orf_playback_assessment', assessmentId);
+    const base = window.location.href.replace(/[^/]*$/, '');
+    window.open(base + 'future-you.html', 'orf_future_you', 'width=800,height=600');
+  });
+
+  const anchor = document.getElementById('movieTrailerBtn')
+    || document.getElementById('illustratorBtn')
+    || document.getElementById('rhythmRemixBtn')
     || document.getElementById('playbackAdventureBtn')
     || analyzeBtn;
   anchor.insertAdjacentElement('afterend', btn);
@@ -2038,9 +2084,17 @@ async function runAnalysis() {
     if (appState.audioBlob) {
       showRhythmRemixButton(appState.selectedStudentId, assessmentId);
     }
+    if (nlAnnotations) {
+      showIllustratorButton(appState.selectedStudentId, assessmentId);
+    }
     // Movie Trailer button — needs reference text + student name
     const selectedStudent = getStudents().find(s => s.id === appState.selectedStudentId);
     showMovieTrailerButton(referenceText, selectedStudent?.name);
+
+    // Future You button — needs audio for stitching
+    if (appState.audioBlob) {
+      showFutureYouButton(appState.selectedStudentId, assessmentId);
+    }
 
     // Finalize and auto-save debug log
     finalizeDebugLog({
