@@ -17,9 +17,7 @@ const GEMINI_VOICE = 'Charon'; // "Informative" — deep and authoritative
 function buildTrailerPrompt(referenceText, studentName) {
   const name = studentName || 'a young reader';
   return (
-    `Read the following in a deep, dramatic movie trailer narrator voice. ` +
-    `Speak with gravitas, intensity, and epic pauses between sentences. ` +
-    `This is a cinematic narration.\n\n` +
+    `Say the following in a dramatic, deep narrator voice with slow pacing:\n\n` +
     `This is the story of ${name}.\n\n${referenceText.trim()}`
   );
 }
@@ -51,15 +49,22 @@ async function callGeminiTTS(text, apiKey, maxRetries = 3) {
     });
 
     if (resp.ok) {
-      // success — fall through to parse below
       const data = await resp.json();
+      console.log('[MovieTrailer] Gemini response keys:', Object.keys(data),
+        'finishReason:', data.candidates?.[0]?.finishReason,
+        'parts:', data.candidates?.[0]?.content?.parts?.length);
       return parseGeminiAudio(data);
     }
 
-    // Retry on 429/500/503 (Google's TTS preview is flaky, rate limits masquerade as 500s)
+    // Retry on transient errors (preview model has known 500 instability)
     if ((resp.status === 429 || resp.status === 500 || resp.status === 503) && attempt < maxRetries) {
-      console.warn(`[MovieTrailer] Gemini returned ${resp.status}, retrying (${attempt}/${maxRetries})...`);
-      await new Promise(r => setTimeout(r, 3000 * attempt)); // 3s, 6s backoff
+      const errBody = await resp.text().catch(() => '');
+      // Parse Google's suggested retry delay if present
+      let waitSec = 3 * attempt; // default backoff
+      const retryMatch = errBody.match(/retry\s*in\s*([\d.]+)s/i);
+      if (retryMatch) waitSec = Math.ceil(parseFloat(retryMatch[1])) + 1;
+      console.warn(`[MovieTrailer] Gemini ${resp.status} (attempt ${attempt}/${maxRetries}), waiting ${waitSec}s: ${errBody.slice(0, 200)}`);
+      await new Promise(r => setTimeout(r, waitSec * 1000));
       continue;
     }
 
@@ -83,9 +88,15 @@ function parseGeminiAudio(data) {
   }
 
   const parts = candidate.content?.parts;
+  console.log('[MovieTrailer] Response parts:', JSON.stringify(parts?.map(p => ({
+    hasInlineData: !!p.inlineData,
+    mimeType: p.inlineData?.mimeType,
+    textPreview: p.text?.slice(0, 100),
+    keys: Object.keys(p),
+  }))));
   const audioPart = parts?.find(p => p.inlineData);
   if (!audioPart) {
-    throw new Error('No audio in response (finishReason: ' + candidate.finishReason + ')');
+    throw new Error('No audio in response (finishReason: ' + candidate.finishReason + '). Parts: ' + JSON.stringify(parts).slice(0, 300));
   }
 
   const { data: b64Audio } = audioPart.inlineData;
@@ -367,6 +378,7 @@ export async function generateMovieTrailer(referenceText, studentName) {
 
   try {
     const prompt = buildTrailerPrompt(referenceText, studentName);
+    console.log('[MovieTrailer] Sending to Gemini:', prompt.slice(0, 200) + '...');
     // Animated countdown on button while waiting
     let elapsed = 0;
     const timer = setInterval(() => {
