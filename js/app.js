@@ -636,7 +636,36 @@ async function runAnalysis() {
   const v0Alignment = v0Words.length > 0 ? alignWords(referenceText, v0Words) : null;
 
   // 4c. Parakeet alignment
-  const parakeetWords = data._kitchenSink?.xvalRawWords || [];
+  // Pre-split hyphenated Parakeet words so each part gets its own index and
+  // proportional timestamps.  Mirrors the hyphen-splitting in normalizeText():
+  //   "in-person" → [{word:"in",…}, {word:"person",…}]
+  // Single-letter parts (e-mail, x-ray) are kept joined, matching normalizeText.
+  const rawPkWords = data._kitchenSink?.xvalRawWords || [];
+  const parakeetWords = [];
+  for (const w of rawPkWords) {
+    const raw = w.word || '';
+    if (!raw.includes('-')) { parakeetWords.push(w); continue; }
+    const core = raw.toLowerCase().replace(/^[^\w'-]+|[^\w'-]+$/g, '').replace(/\./g, '');
+    const parts = core.split('-').filter(p => p.length > 0);
+    if (parts.length <= 1 || parts.some(p => p.length === 1)) {
+      parakeetWords.push(w); continue;
+    }
+    const startS = parseFloat(w.startTime) || 0;
+    const endS = parseFloat(w.endTime) || 0;
+    const dur = endS - startS;
+    const totalChars = parts.reduce((s, p) => s + p.length, 0);
+    let cursor = startS;
+    for (let i = 0; i < parts.length; i++) {
+      const frac = parts[i].length / totalChars;
+      const partEnd = (i === parts.length - 1) ? endS : cursor + dur * frac;
+      parakeetWords.push({
+        word: parts[i],
+        startTime: cursor.toFixed(3) + 's',
+        endTime: partEnd.toFixed(3) + 's'
+      });
+      cursor = partEnd;
+    }
+  }
   const parakeetAlignment = parakeetWords.length > 0
     ? alignWords(referenceText, parakeetWords)
     : null;
