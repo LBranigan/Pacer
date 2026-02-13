@@ -1,4 +1,4 @@
-const CACHE_NAME = 'orf-v61';
+const CACHE_NAME = 'orf-v62';
 
 const SHELL = [
   // --- HTML pages ---
@@ -64,6 +64,13 @@ const SHELL = [
   './js/reverb-api.js',
   './js/miscue-registry.js',
   './js/maze-game.js',
+
+  // --- Post-assessment experiences ---
+  './js/movie-trailer.js',
+  './js/lofi-engine.js',
+  './js/rhythm-remix.js',
+  './rhythm-remix.html',
+  './css/rhythm-remix.css',
 
   // --- Other ---
   './js/student-playback.js',
