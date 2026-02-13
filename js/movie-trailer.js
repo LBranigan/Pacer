@@ -27,63 +27,71 @@ function buildTrailerPrompt(referenceText, studentName) {
 /**
  * Call Gemini 2.5 Flash TTS → returns audio ArrayBuffer (wav).
  */
-async function callGeminiTTS(text, apiKey) {
-  const resp = await fetch(`${GEMINI_TTS_URL}?key=${encodeURIComponent(apiKey)}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      contents: [{ parts: [{ text }] }],
-      generationConfig: {
-        responseModalities: ['AUDIO'],
-        speechConfig: {
-          voiceConfig: {
-            prebuiltVoiceConfig: { voiceName: GEMINI_VOICE }
-          }
+async function callGeminiTTS(text, apiKey, maxRetries = 3) {
+  const body = JSON.stringify({
+    contents: [{ parts: [{ text }] }],
+    generationConfig: {
+      responseModalities: ['AUDIO'],
+      speechConfig: {
+        voiceConfig: {
+          prebuiltVoiceConfig: { voiceName: GEMINI_VOICE }
         }
       }
-    }),
+    }
   });
 
-  if (!resp.ok) {
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    const resp = await fetch(`${GEMINI_TTS_URL}?key=${encodeURIComponent(apiKey)}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body,
+    });
+
+    if (resp.ok) {
+      // success — fall through to parse below
+      const data = await resp.json();
+      return parseGeminiAudio(data);
+    }
+
+    // Retry on 500/503 (Google's TTS preview is flaky)
+    if ((resp.status === 500 || resp.status === 503) && attempt < maxRetries) {
+      console.warn(`[MovieTrailer] Gemini returned ${resp.status}, retrying (${attempt}/${maxRetries})...`);
+      await new Promise(r => setTimeout(r, 2000 * attempt)); // 2s, 4s backoff
+      continue;
+    }
+
     const errText = await resp.text();
     throw new Error(`Gemini TTS error (${resp.status}): ${errText}`);
   }
 
-  const data = await resp.json();
-  console.log('[MovieTrailer] Gemini response keys:', Object.keys(data));
+}
 
-  // Check for blocked/filtered responses
+/**
+ * Parse Gemini TTS JSON response → WAV ArrayBuffer.
+ */
+function parseGeminiAudio(data) {
   if (data.promptFeedback?.blockReason) {
     throw new Error(`Gemini blocked: ${data.promptFeedback.blockReason}`);
   }
 
-  // Extract base64 audio from response
   const candidate = data.candidates?.[0];
   if (!candidate) {
     throw new Error('No candidates in Gemini response: ' + JSON.stringify(data).slice(0, 300));
   }
-  console.log('[MovieTrailer] finishReason:', candidate.finishReason);
 
   const parts = candidate.content?.parts;
-  if (!parts?.length) {
-    throw new Error('No parts in Gemini response: ' + JSON.stringify(candidate).slice(0, 300));
-  }
-
-  // Find the inlineData part (may not be parts[0])
-  const audioPart = parts.find(p => p.inlineData);
+  const audioPart = parts?.find(p => p.inlineData);
   if (!audioPart) {
-    throw new Error('No audio data in Gemini parts: ' + parts.map(p => Object.keys(p)).join(', '));
+    throw new Error('No audio in response (finishReason: ' + candidate.finishReason + ')');
   }
 
-  const { mimeType, data: b64Audio } = audioPart.inlineData;
+  const { data: b64Audio } = audioPart.inlineData;
   const binary = atob(b64Audio);
   const pcmBytes = new Uint8Array(binary.length);
   for (let i = 0; i < binary.length; i++) pcmBytes[i] = binary.charCodeAt(i);
 
-  // Gemini returns raw L16 PCM at 24kHz — wrap in WAV header for decodeAudioData
+  // Wrap raw L16 PCM (24kHz) in WAV header
   const sampleRate = 24000;
-  const numChannels = 1;
-  const bytesPerSample = 2;
   const dataSize = pcmBytes.length;
   const wavBuffer = new ArrayBuffer(44 + dataSize);
   const view = new DataView(wavBuffer);
@@ -94,10 +102,10 @@ async function callGeminiTTS(text, apiKey) {
   w(12, 'fmt ');
   view.setUint32(16, 16, true);
   view.setUint16(20, 1, true);
-  view.setUint16(22, numChannels, true);
+  view.setUint16(22, 1, true);
   view.setUint32(24, sampleRate, true);
-  view.setUint32(28, sampleRate * numChannels * bytesPerSample, true);
-  view.setUint16(32, numChannels * bytesPerSample, true);
+  view.setUint32(28, sampleRate * 2, true);
+  view.setUint16(32, 2, true);
   view.setUint16(34, 16, true);
   w(36, 'data');
   view.setUint32(40, dataSize, true);
