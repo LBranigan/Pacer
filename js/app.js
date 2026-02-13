@@ -1647,6 +1647,7 @@ async function runAnalysis() {
             && entry.type === 'substitution'
             && entry.crossValidation === 'disagreed'
             && pkEntry?.type === 'correct') {
+          entry._originalType = entry.type;  // preserve V1 evidence
           entry.type = 'correct';
           entry._postStruggleLeniency = true;
           promoted.push({ ref: entry.ref, v1Hyp: entry.hyp, pkWord: pkEntry.hyp });
