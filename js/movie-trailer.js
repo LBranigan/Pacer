@@ -79,10 +79,46 @@ async function getKokoroInstance(onProgress) {
 async function callKokoro(text, onProgress) {
   const tts = await getKokoroInstance(onProgress);
   if (onProgress) onProgress('Generating voiceover locally...');
-  const audio = await tts.generate(text, { voice: KOKORO_VOICE });
-  // audio.toBlob() or audio.data — get raw WAV bytes
-  const wavBlob = audio.toBlob();
-  return await wavBlob.arrayBuffer();
+  const raw = await tts.generate(text, { voice: KOKORO_VOICE });
+  // raw.audio = Float32Array, raw.sampling_rate = 24000
+  const samples = raw.audio;
+  const sampleRate = raw.sampling_rate || 24000;
+  return float32ToWavArrayBuffer(samples, sampleRate);
+}
+
+/**
+ * Encode a mono Float32Array as a WAV ArrayBuffer.
+ */
+function float32ToWavArrayBuffer(samples, sampleRate) {
+  const numSamples = samples.length;
+  const bytesPerSample = 2;
+  const dataSize = numSamples * bytesPerSample;
+  const buffer = new ArrayBuffer(44 + dataSize);
+  const view = new DataView(buffer);
+
+  const writeStr = (off, s) => { for (let i = 0; i < s.length; i++) view.setUint8(off + i, s.charCodeAt(i)); };
+  writeStr(0, 'RIFF');
+  view.setUint32(4, 36 + dataSize, true);
+  writeStr(8, 'WAVE');
+  writeStr(12, 'fmt ');
+  view.setUint32(16, 16, true);
+  view.setUint16(20, 1, true);       // PCM
+  view.setUint16(22, 1, true);       // mono
+  view.setUint32(24, sampleRate, true);
+  view.setUint32(28, sampleRate * bytesPerSample, true);
+  view.setUint16(32, bytesPerSample, true);
+  view.setUint16(34, 16, true);      // 16-bit
+  writeStr(36, 'data');
+  view.setUint32(40, dataSize, true);
+
+  let offset = 44;
+  for (let i = 0; i < numSamples; i++) {
+    const s = Math.max(-1, Math.min(1, samples[i]));
+    view.setInt16(offset, s < 0 ? s * 0x8000 : s * 0x7FFF, true);
+    offset += 2;
+  }
+
+  return buffer;
 }
 
 /**
