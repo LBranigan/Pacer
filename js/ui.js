@@ -634,12 +634,21 @@ function renderNewAnalyzedWords(container, alignment, sttLookup, diagnostics, tr
       const refN = norm(entry.ref);
       // Did any engine hear the correct word?
       if (norm(entry._xvalWord) === refN || norm(entry._v0Word) === refN) return 'attempted-struggled';
-      // Is V1 hyp a near-miss (morphological/phonetic)?
-      if (entry.hyp && entry.ref && isNearMiss(entry.hyp, entry.ref)) return 'definite-struggle';
+      // Is any engine's word a near-miss (morphological/phonetic)?
+      if (entry.ref && (
+          (entry.hyp && isNearMiss(entry.hyp, entry.ref)) ||
+          (entry._xvalWord && isNearMiss(entry._xvalWord, entry.ref)) ||
+          (entry._v0Word && isNearMiss(entry._v0Word, entry.ref)))) return 'definite-struggle';
       // Check trailing insertions (e.g., "oreo" after "editorial")
       if (group.insertionsAfter.some(ins => ins.hyp && isNearMiss(ins.hyp, entry.ref))) return 'definite-struggle';
       const postIns = nextGroup ? nextGroup.insertionsBefore : [];
       if (postIns.some(ins => norm(ins._prevRef) === refN && ins.hyp && isNearMiss(ins.hyp, entry.ref))) return 'definite-struggle';
+      // Confirmed substitution: all engines must agree on the SAME wrong word.
+      // Different words/fragments across engines = struggle, not a clean substitution.
+      const v1 = norm(entry.hyp);
+      const v0 = entry._v0Word ? norm(entry._v0Word) : null;
+      const pk = entry._xvalWord ? norm(entry._xvalWord) : null;
+      if ((v0 && v0 !== v1) || (pk && pk !== v1)) return 'definite-struggle';
       return 'confirmed-substitution';
     }
 
@@ -751,18 +760,19 @@ function renderNewAnalyzedWords(container, alignment, sttLookup, diagnostics, tr
       'Student clearly failed to produce the word, with no engine hearing correct.\n\n' +
       'Triggers (any one):\n' +
       '\u2022 Struggle/substitution where NO engine heard the correct word\n' +
-      '\u2022 Near-miss substitution (phonetically similar but wrong: "horse" for "house")\n' +
+      '\u2022 Near-miss from any engine (V1, V0, or Parakeet heard something phonetically close)\n' +
       '\u2022 CTC failure: Reverb output <unknown> (speech detected but not decoded)\n' +
       '\u2022 Near-miss trailing insertions (failed attempts after the word)\n' +
+      '\u2022 Engines disagree on what was said (different fragments = garbled audio = struggle)\n' +
       '\u2022 Counts as an ERROR',
 
     'confirmed-substitution': 'CONFIRMED SUBSTITUTION\n' +
-      'Student said a completely different word. All engines agree.\n\n' +
+      'Student said a completely different, unrelated word. All engines agree on the SAME word.\n\n' +
       'Rules:\n' +
       '\u2022 No engine heard the correct word\n' +
+      '\u2022 All engines heard the SAME wrong word (strong evidence of a real substitution)\n' +
       '\u2022 The spoken word is NOT a near-miss (not phonetically similar)\n' +
-      '\u2022 Example: "house" for "horse" would be definite-struggle (near-miss),\n' +
-      '  but "table" for "horse" is a confirmed substitution (unrelated word)\n' +
+      '\u2022 Example: "table" for "horse" \u2014 all engines hear "table"\n' +
       '\u2022 Counts as an ERROR',
 
     'confirmed-insertion': 'CONFIRMED INSERTION\n' +
