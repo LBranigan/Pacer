@@ -1042,6 +1042,195 @@ export function computePhrasingQuality(diagnostics, transcriptWords, referenceTe
 }
 
 /**
+ * Enrich each break in phrasing.breakClassification.breaks[] with context about
+ * the surrounding words: what reference word precedes/follows, alignment type,
+ * POS tag, phoneme count. Returns summary stats for AI diagnostic narrative.
+ */
+export function annotatePauseContext(phrasing, alignment) {
+  if (phrasing.insufficient || !phrasing.breakClassification.breaks.length) {
+    return null;
+  }
+
+  const hypToRef = buildHypToRefMap(alignment);
+  // Build refIndex → alignment entry map (non-insertions only)
+  const refEntryMap = new Map();
+  let ri = 0;
+  for (const entry of alignment) {
+    if (entry.type !== 'insertion') {
+      refEntryMap.set(ri, entry);
+      ri++;
+    }
+  }
+
+  let pauseBeforeError = 0;
+  let pauseBeforeLongWord = 0;
+  let unexpectedGapSum = 0;
+  let unexpectedGapCount = 0;
+  let punctGapSum = 0;
+  let punctGapCount = 0;
+  let annotated = 0;
+
+  for (const brk of phrasing.breakClassification.breaks) {
+    const pos = brk.position; // hyp index of word BEFORE the pause
+    const precRefIdx = hypToRef.get(pos);
+    const precEntry = precRefIdx != null ? refEntryMap.get(precRefIdx) : null;
+    brk.precedingRefWord = precEntry ? precEntry.ref : null;
+    brk.precedingAlignmentType = precEntry ? precEntry.type : null;
+
+    // Find next non-insertion hyp index after the break
+    let followRefIdx = null;
+    for (let h = pos + 1; h <= pos + 5; h++) {
+      if (hypToRef.has(h)) { followRefIdx = hypToRef.get(h); break; }
+    }
+    const followEntry = followRefIdx != null ? refEntryMap.get(followRefIdx) : null;
+    brk.followingRefWord = followEntry ? followEntry.ref : null;
+    brk.followingAlignmentType = followEntry ? followEntry.type : null;
+    brk.followingWordTier = followEntry?.nl?.tier || null;
+    brk.followingPos = followEntry?.nl?.pos || null;
+
+    if (followEntry) {
+      const ph = getPhonemeCountWithFallback(followEntry.ref || '');
+      brk.followingPhonemeCount = ph.count;
+    } else {
+      brk.followingPhonemeCount = null;
+    }
+
+    // Tally stats
+    if (followEntry && (followEntry.type === 'substitution' || followEntry.type === 'struggle' || followEntry.type === 'omission')) {
+      pauseBeforeError++;
+    }
+    if (brk.followingPhonemeCount != null && brk.followingPhonemeCount >= 7) {
+      pauseBeforeLongWord++;
+    }
+    if (brk.type === 'unexpected' && brk.gapMs != null) {
+      unexpectedGapSum += brk.gapMs;
+      unexpectedGapCount++;
+    }
+    if (brk.type === 'at-punctuation' && brk.gapMs != null) {
+      punctGapSum += brk.gapMs;
+      punctGapCount++;
+    }
+    annotated++;
+  }
+
+  return {
+    pauseBeforeErrorPercent: annotated > 0 ? Math.round((pauseBeforeError / annotated) * 100) : 0,
+    pauseBeforeLongWordPercent: annotated > 0 ? Math.round((pauseBeforeLongWord / annotated) * 100) : 0,
+    meanUnexpectedGapMs: unexpectedGapCount > 0 ? Math.round(unexpectedGapSum / unexpectedGapCount) : null,
+    meanPunctuationGapMs: punctGapCount > 0 ? Math.round(punctGapSum / punctGapCount) : null,
+    totalAnnotated: annotated
+  };
+}
+
+/**
+ * Compute ratio of content word duration/phoneme vs function word duration/phoneme.
+ * Higher ratio = more automatic reading (function words compressed, content words deliberate).
+ * Requires NL API POS tags on alignment entries.
+ */
+export function computeFunctionWordCompression(wordSpeedTiers, alignment) {
+  if (!wordSpeedTiers || wordSpeedTiers.insufficient || !wordSpeedTiers.words) return null;
+
+  const FUNCTION_POS = new Set(['DET', 'ADP', 'CONJ', 'PRON', 'PRT']);
+  const CONTENT_POS = new Set(['NOUN', 'VERB', 'ADJ', 'ADV']);
+
+  // Build refIndex → alignment entry for POS lookup
+  const refEntryMap = new Map();
+  let ri = 0;
+  for (const entry of alignment) {
+    if (entry.type !== 'insertion') { refEntryMap.set(ri, entry); ri++; }
+  }
+
+  let funcSum = 0, funcCount = 0;
+  let contentSum = 0, contentCount = 0;
+
+  for (const w of wordSpeedTiers.words) {
+    if (w.normalizedMs == null || w.tier === 'omitted' || w.tier === 'no-data') continue;
+    const entry = refEntryMap.get(w.refIndex);
+    const pos = entry?.nl?.pos;
+    if (!pos) continue;
+
+    if (FUNCTION_POS.has(pos)) {
+      funcSum += w.normalizedMs;
+      funcCount++;
+    } else if (CONTENT_POS.has(pos)) {
+      contentSum += w.normalizedMs;
+      contentCount++;
+    }
+  }
+
+  if (funcCount < 3 || contentCount < 3) return null;
+
+  const funcMsPerPhoneme = Math.round(funcSum / funcCount);
+  const contentMsPerPhoneme = Math.round(contentSum / contentCount);
+  const ratio = funcMsPerPhoneme > 0 ? Math.round((contentMsPerPhoneme / funcMsPerPhoneme) * 100) / 100 : null;
+  if (ratio == null) return null;
+
+  let label;
+  if (ratio < 1.2) label = 'Uniform pace';
+  else if (ratio < 1.5) label = 'Some compression';
+  else if (ratio < 2.0) label = 'Good compression';
+  else label = 'Strong compression';
+
+  return { ratio, functionMsPerPhoneme: funcMsPerPhoneme, contentMsPerPhoneme: contentMsPerPhoneme, functionCount: funcCount, contentCount: contentCount, label };
+}
+
+/**
+ * Score what % of phrase breaks fall at syntactic boundaries.
+ * Uses POS tags from NL API; falls back to punctuation-only if NL unavailable.
+ */
+export function computeSyntacticAlignment(phrasing, alignment) {
+  if (phrasing.insufficient || !phrasing.breakClassification.breaks.length) return null;
+
+  const hypToRef = buildHypToRefMap(alignment);
+  const refEntryMap = new Map();
+  let ri = 0;
+  for (const entry of alignment) {
+    if (entry.type !== 'insertion') { refEntryMap.set(ri, entry); ri++; }
+  }
+
+  let atSyntactic = 0;
+  let total = 0;
+
+  for (const brk of phrasing.breakClassification.breaks) {
+    total++;
+    // Rule 1: break at punctuation is syntactically appropriate
+    if (brk.type === 'at-punctuation') { atSyntactic++; continue; }
+
+    // Look up following word's POS
+    let followRefIdx = null;
+    for (let h = brk.position + 1; h <= brk.position + 5; h++) {
+      if (hypToRef.has(h)) { followRefIdx = hypToRef.get(h); break; }
+    }
+    const followEntry = followRefIdx != null ? refEntryMap.get(followRefIdx) : null;
+    const followPos = followEntry?.nl?.pos;
+
+    // Rule 2: following word starts new phrase (DET, ADP, CONJ)
+    if (followPos && (followPos === 'DET' || followPos === 'ADP' || followPos === 'CONJ')) {
+      atSyntactic++; continue;
+    }
+
+    // Rule 3: subject-verb boundary
+    const precRefIdx = hypToRef.get(brk.position);
+    const precEntry = precRefIdx != null ? refEntryMap.get(precRefIdx) : null;
+    const precPos = precEntry?.nl?.pos;
+    if (precPos && followPos && (precPos === 'NOUN' || precPos === 'PRON') && followPos === 'VERB') {
+      atSyntactic++; continue;
+    }
+  }
+
+  if (total === 0) return null;
+
+  const score = Math.round((atSyntactic / total) * 100);
+  let label;
+  if (score < 40) label = 'Random pausing';
+  else if (score < 60) label = 'Some phrase awareness';
+  else if (score < 80) label = 'Good phrasing';
+  else label = 'Syntactically aligned';
+
+  return { score, atSyntactic, total, label };
+}
+
+/**
  * Metric 2: Punctuation Awareness
  * Pure consumer of Metric 1's break classification. Computes coverage (punctuation marks
  * with a pause) and precision (pauses at punctuation / total pauses).

@@ -6,7 +6,7 @@ import { alignWords, consolidateSpilloverFragments } from './alignment.js';
 import { getCanonical } from './word-equivalences.js';
 import { computeWCPM, computeAccuracy, computeWCPMRange } from './metrics.js';
 import { setStatus, displayResults, displayAlignmentResults, showAudioPlayback, renderStudentSelector, renderHistory } from './ui.js';
-import { runDiagnostics, computeTierBreakdown, resolveNearMissClusters, absorbMispronunciationFragments, computePhrasingQuality, computePauseAtPunctuation, computePaceConsistency, computeWordDurationOutliers, computeWordSpeedTiers, isNearMiss } from './diagnostics.js';
+import { runDiagnostics, computeTierBreakdown, resolveNearMissClusters, absorbMispronunciationFragments, computePhrasingQuality, computePauseAtPunctuation, computePaceConsistency, computeWordDurationOutliers, computeWordSpeedTiers, isNearMiss, annotatePauseContext, computeFunctionWordCompression, computeSyntacticAlignment } from './diagnostics.js';
 import { extractTextFromImage } from './ocr-api.js';
 import { trimPassageToAttempted } from './passage-trimmer.js';
 import { analyzePassageText, levenshteinRatio } from './nl-api.js';
@@ -1751,7 +1751,26 @@ async function runAnalysis() {
   const wordOutliers = computeWordDurationOutliers(transcriptWords, alignment);
   const wordSpeedTiers = computeWordSpeedTiers(wordOutliers, alignment, xvalRawWords, transcriptWords, referenceText);
 
-  diagnostics.prosody = { phrasing, pauseAtPunctuation, paceConsistency, wordOutliers };
+  // Prosody enrichments (research-aligned)
+  const pauseContext = annotatePauseContext(phrasing, alignment);
+  const ungrammaticalPauseRate = (() => {
+    if (phrasing.insufficient) return null;
+    const count = phrasing.breakClassification.unexpected;
+    const total = accuracy.totalRefWords;
+    if (total === 0) return null;
+    const per100 = Math.round((count / total) * 1000) / 10;
+    let label;
+    if (per100 <= 2) label = 'Minimal';
+    else if (per100 <= 5) label = 'Occasional';
+    else if (per100 <= 10) label = 'Frequent';
+    else label = 'Pervasive';
+    return { count, totalRefWords: total, per100Words: per100, label };
+  })();
+  const functionWordCompression = computeFunctionWordCompression(wordSpeedTiers, alignment);
+  const syntacticAlignment = computeSyntacticAlignment(phrasing, alignment);
+
+  diagnostics.prosody = { phrasing, pauseAtPunctuation, paceConsistency, wordOutliers,
+    ungrammaticalPauseRate, pauseContext, functionWordCompression, syntacticAlignment };
   diagnostics.wordSpeed = wordSpeedTiers;
   console.log('[WordSpeed Debug]', { phInsufficient: phrasing.insufficient, woInsufficient: wordOutliers.insufficient, woCount: wordOutliers.allWords?.length, woBaseline: wordOutliers.baseline ? { xval: wordOutliers.baseline.xvalTimestamps, primary: wordOutliers.baseline.primaryTimestamps, skipped: wordOutliers.baseline.wordsSkippedNoTimestamps } : null, wsInsufficient: wordSpeedTiers.insufficient, wsReason: wordSpeedTiers.reason });
 
@@ -1800,7 +1819,10 @@ async function runAnalysis() {
         msPerSyl: o.normalizedDurationMs,
         aboveFenceBy: o.aboveFenceBy
       }))
-    }
+    },
+    ungrammaticalPauseRate: ungrammaticalPauseRate,
+    functionWordCompression: functionWordCompression ? { ratio: functionWordCompression.ratio, label: functionWordCompression.label } : null,
+    syntacticAlignment: syntacticAlignment ? { score: syntacticAlignment.score, label: syntacticAlignment.label } : null
   });
 
   // Mark transcriptWords as "healed" when alignment resolved them as correct
@@ -1933,6 +1955,10 @@ async function runAnalysis() {
             syllables: o.syllables
           }))
         },
+        ungrammaticalPauseRate: p.ungrammaticalPauseRate,
+        pauseContext: p.pauseContext,
+        functionWordCompression: p.functionWordCompression,
+        syntacticAlignment: p.syntacticAlignment,
         passageSnippet: referenceText.substring(0, 50),
         assessedAt: new Date().toISOString()
       };

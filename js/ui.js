@@ -1222,6 +1222,14 @@ export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, di
     const bs = pros.phrasing.breakSources;
     phTip.push('Breaks: ' + bs.fromHesitations + ' hesitations, ' + bs.fromLongPauses + ' long pauses, ' + bs.fromMediumPauses + ' medium pauses');
     if (bs.vadFiltered > 0) phTip.push('(' + bs.vadFiltered + ' hesitations filtered by VAD)');
+    if (pros.pauseContext) {
+      const pc = pros.pauseContext;
+      phTip.push('---');
+      phTip.push(pc.pauseBeforeErrorPercent + '% of pauses precede an error word');
+      phTip.push(pc.pauseBeforeLongWordPercent + '% of pauses precede a long word (7+ phonemes)');
+      if (pc.meanUnexpectedGapMs != null) phTip.push('Mean unexpected gap: ' + pc.meanUnexpectedGapMs + 'ms');
+      if (pc.meanPunctuationGapMs != null) phTip.push('Mean punctuation gap: ' + pc.meanPunctuationGapMs + 'ms');
+    }
     phrasingBox.title = phTip.join('\n');
     metricsRow.appendChild(phrasingBox);
 
@@ -1304,6 +1312,61 @@ export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, di
 
     body.appendChild(metricsRow);
 
+    // ── Enrichment metrics row (only if at least one has data) ──
+    const hasEnrich = pros.ungrammaticalPauseRate || pros.functionWordCompression || pros.syntacticAlignment;
+    if (hasEnrich) {
+      const enrichRow = document.createElement('div');
+      enrichRow.className = 'prosody-metrics';
+      enrichRow.style.display = 'flex';
+      enrichRow.style.gap = '12px';
+      enrichRow.style.marginTop = '8px';
+
+      // Box 5: Ungrammatical Pause Rate
+      if (pros.ungrammaticalPauseRate) {
+        const upr = pros.ungrammaticalPauseRate;
+        const uprBox = document.createElement('div');
+        uprBox.className = 'metric-box';
+        uprBox.innerHTML = '<span class="metric-value">' + upr.per100Words +
+          '</span><span class="metric-label">ungrammatical pauses / 100w (' + upr.label + ')</span>';
+        uprBox.title = 'Pauses NOT at punctuation, per 100 reference words.\n' +
+          upr.count + ' unexpected pauses in ' + upr.totalRefWords + ' words.\n' +
+          'Thresholds: ≤2 Minimal, ≤5 Occasional, ≤10 Frequent, >10 Pervasive.\n' +
+          'Research: strongest single predictor of ORF (r=-0.78, Kim et al. 2010).';
+        enrichRow.appendChild(uprBox);
+      }
+
+      // Box 6: Function Word Compression
+      if (pros.functionWordCompression) {
+        const fwc = pros.functionWordCompression;
+        const fwcBox = document.createElement('div');
+        fwcBox.className = 'metric-box';
+        fwcBox.innerHTML = '<span class="metric-value">' + fwc.ratio +
+          'x</span><span class="metric-label">function word compression (' + fwc.label + ')</span>';
+        fwcBox.title = 'Content word ms/phoneme ÷ function word ms/phoneme.\n' +
+          'Content: ' + fwc.contentMsPerPhoneme + ' ms/ph (' + fwc.contentCount + ' words)\n' +
+          'Function: ' + fwc.functionMsPerPhoneme + ' ms/ph (' + fwc.functionCount + ' words)\n' +
+          'Thresholds: <1.2 Uniform, 1.2-1.5 Some, 1.5-2.0 Good, >2.0 Strong.\n' +
+          'Higher = more automatic reading (function words compressed).';
+        enrichRow.appendChild(fwcBox);
+      }
+
+      // Box 7: Syntactic Alignment
+      if (pros.syntacticAlignment) {
+        const sa = pros.syntacticAlignment;
+        const saBox = document.createElement('div');
+        saBox.className = 'metric-box';
+        saBox.innerHTML = '<span class="metric-value">' + sa.score +
+          '%</span><span class="metric-label">syntactic alignment (' + sa.label + ')</span>';
+        saBox.title = 'What % of phrase breaks fall at syntactic boundaries.\n' +
+          sa.atSyntactic + ' of ' + sa.total + ' breaks are syntactically appropriate.\n' +
+          'Rules: at punctuation, before DET/ADP/CONJ, or at subject-verb boundary.\n' +
+          'Thresholds: <40% Random, 40-60% Some, 60-80% Good, >80% Aligned.';
+        enrichRow.appendChild(saBox);
+      }
+
+      body.appendChild(enrichRow);
+    }
+
     // ── Word Speed Map (inline within prosody) ──
     if (diagnostics.wordSpeed && !diagnostics.wordSpeed.insufficient) {
       renderWordSpeedInto(body, diagnostics.wordSpeed, wordAudioEl, transcriptWords, referenceText);
@@ -1312,7 +1375,7 @@ export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, di
     // Scope transparency note
     const scopeNote = document.createElement('div');
     scopeNote.className = 'prosody-scope-note';
-    scopeNote.textContent = 'Measures phrasing, timing, and pace from word timestamps. Does not measure expression, intonation, or stress (requires audio pitch analysis).';
+    scopeNote.textContent = 'Measures phrasing, timing, pace, and syntactic awareness from word timestamps. Does not measure expression, intonation, or stress (requires audio pitch analysis).';
     body.appendChild(scopeNote);
 
     section.appendChild(body);
