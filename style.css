@@ -18,10 +18,7 @@ button { padding: 0.6rem 1.4rem; border: none; border-radius: 4px; font-size: 1r
 .word.high { background: none; text-decoration: underline wavy #4caf50; text-underline-offset: 3px; }
 .word.mid { background: none; text-decoration: underline wavy #ff9800; text-underline-offset: 3px; }
 .word.low { background: none; text-decoration: underline wavy #f44336; text-underline-offset: 3px; }
-.word-correct { background: #c8e6c9; color: #2e7d32; }
-.word-substitution { background: #ffe0b2; color: #e65100; }
-.word-omission { background: #ffcdd2; color: #c62828; text-decoration: line-through; }
-.word-insertion { background: #bbdefb; color: #1565c0; }
+/* Legacy .word-correct/.word-substitution/.word-omission/.word-insertion removed — see docs/legacy/ */
 .word-clickable { cursor: pointer; }
 .word-clickable:hover { outline: 2px solid #1976d2; outline-offset: 1px; border-radius: 2px; }
 .legend { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.5rem; font-size: 0.8rem; }
@@ -39,7 +36,7 @@ button { padding: 0.6rem 1.4rem; border: none; border-radius: 4px; font-size: 1r
 /* Diagnostic overlays */
 .word-hesitation { border-left: 3px solid #ff9800; padding-left: 4px; }
 .pause-indicator { color: #999; font-size: 0.75rem; margin: 0 2px; font-style: italic; }
-.word-self-correction { background: #e1bee7; color: #6a1b9a; }
+/* Legacy .word-self-correction removed — see docs/legacy/ */
 .word-morphological { text-decoration: underline wavy #e65100; text-underline-offset: 3px; }
 
 #analyzeBtn { background: #d32f2f; color: #fff; font-size: 1.1rem; padding: 0.7rem 2rem; }
@@ -286,43 +283,7 @@ body.dev-mode .dev-mode-toggle {
   to { transform: rotate(360deg); }
 }
 
-/* Legacy Analyzed Words section (collapsible, collapsed by default) */
-.legacy-analyzed-section {
-  margin-top: 1rem;
-  border: 1px solid #ddd;
-  border-radius: 6px;
-  overflow: hidden;
-}
-.legacy-analyzed-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0.5rem 0.75rem;
-  background: #f5f5f5;
-  cursor: pointer;
-  user-select: none;
-}
-.legacy-analyzed-header h4 {
-  margin: 0;
-  font-size: 0.9rem;
-  color: #666;
-}
-.legacy-analyzed-toggle {
-  font-size: 0.75rem;
-  color: #999;
-  transition: transform 0.2s;
-}
-.legacy-analyzed-section.expanded .legacy-analyzed-toggle {
-  transform: rotate(180deg);
-}
-.legacy-analyzed-body {
-  display: none;
-  padding: 0.75rem;
-  background: #fafafa;
-}
-.legacy-analyzed-section.expanded .legacy-analyzed-body {
-  display: block;
-}
+/* Legacy analyzed section CSS removed — see docs/legacy/ */
 
 /* STT Transcript section (collapsible) */
 .stt-transcript-section {
@@ -711,18 +672,7 @@ body.dev-mode .dev-mode-toggle {
  * 3. Word length > 3 chars (not a sight word)
  * Distinct style: teal/cyan with dotted border - stands out from other indicators
  */
-.word-struggle {
-  background: linear-gradient(135deg, #e0f7fa 0%, #b2ebf2 100%);
-  color: #00695c;
-  border: 1px dotted #00897b;
-  font-weight: 600;
-}
-
-/* When a word is both a hesitation and a struggle word, preserve the orange left border */
-.word-hesitation.word-struggle {
-  border-left: 3px solid #ff9800;
-  padding-left: 4px;
-}
+/* Legacy .word-struggle/.word-hesitation.word-struggle removed — see docs/legacy/ */
 
 /* VAD Gap UI Display (Phase 19)
  * Orange color for pause/hesitation indicators with VAD speech >= 30%

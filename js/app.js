@@ -1709,7 +1709,7 @@ async function runAnalysis() {
   const tierBreakdown = nlAnnotations ? computeTierBreakdown(alignment) : null;
 
   addStage('metrics_computed', {
-    wcpm: wcpm?.wcpm || null,
+    wcpm: wcpm?.wcpmMin ?? null,
     accuracy: accuracy.accuracy,
     totalRefWords: accuracy.totalRefWords,
     totalErrors: accuracy.totalErrors,
@@ -1940,7 +1940,7 @@ async function runAnalysis() {
 
     saveAssessment(appState.selectedStudentId, {
       _id: assessmentId,
-      wcpm: wcpm ? wcpm.wcpm : null,
+      wcpm: wcpm ? wcpm.wcpmMin : null,
       accuracy: accuracy.accuracy,
       totalWords: accuracy.totalRefWords,
       errors: accuracy.totalErrors,
@@ -1968,7 +1968,7 @@ async function runAnalysis() {
     finalizeDebugLog({
       studentId: appState.selectedStudentId,
       assessmentId,
-      wcpm: wcpm?.wcpm || null,
+      wcpm: wcpm?.wcpmMin ?? null,
       accuracy: accuracy.accuracy,
       totalWords: accuracy.totalRefWords,
       errors: accuracy.totalErrors,
@@ -1980,7 +1980,7 @@ async function runAnalysis() {
     // Finalize debug log without assessment save
     finalizeDebugLog({
       noStudent: true,
-      wcpm: wcpm?.wcpm || null,
+      wcpm: wcpm?.wcpmMin ?? null,
       accuracy: accuracy.accuracy
     });
   }
