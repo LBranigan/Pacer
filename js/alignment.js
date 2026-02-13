@@ -730,3 +730,124 @@ export function alignWords(referenceText, transcriptWords) {
 
   return final;
 }
+
+/**
+ * Post-alignment consolidation of spillover fragments.
+ *
+ * When a student struggles with a word, Reverb's CTC decoder often produces
+ * fragments that NW alignment distributes across multiple ref slots. For example,
+ * "informational" → Reverb hears "in" + "four" + "uh". NW greedily aligns "four"
+ * to ref="expert" because sub("four"→"expert") scores better than gap+insertion.
+ * This loses the struggle evidence — "four" is attributed to the wrong ref word.
+ *
+ * This function identifies ref slots where the hyp is NOT a real attempt at that
+ * ref word, but concatenating it with the preceding sub's hyp IS a near-miss for
+ * the preceding ref word. It converts the spillover entry to an omission and emits
+ * the hyp as an insertion after the anchor word.
+ *
+ * Guards:
+ *   - candidate.hyp must NOT be a near-miss for candidate.ref (it's not a real attempt)
+ *   - concat(anchor.hyp, candidate.hyp) must BE a near-miss for anchor.ref
+ *
+ * Uses only the engine's own data — no cross-engine dependency.
+ *
+ * @param {Array} aligned - Alignment array (modified in place)
+ * @param {Function} nearMissFn - isNearMiss(a, b) → boolean
+ * @returns {Array} Log entries for debug stage
+ */
+export function consolidateSpilloverFragments(aligned, nearMissFn) {
+  // Phase 1: Build ref-anchored index and identify targets
+  const refEntries = [];
+  for (let i = 0; i < aligned.length; i++) {
+    if (aligned[i].type !== 'insertion') {
+      refEntries.push({ idx: i, entry: aligned[i] });
+    }
+  }
+
+  const targets = new Set(); // indices into aligned[] to consolidate
+  const log = [];
+
+  for (let r = 1; r < refEntries.length; r++) {
+    const anchor = refEntries[r - 1];
+    if (anchor.entry.type !== 'substitution' && anchor.entry.type !== 'struggle') continue;
+
+    // Try progressive chaining: anchor + candidate, anchor + candidate + next, ...
+    let concat = anchor.entry.hyp;
+    for (let c = r; c < refEntries.length; c++) {
+      const candidate = refEntries[c];
+      if (candidate.entry.type !== 'substitution') break;
+
+      // Guard 1: candidate hyp must NOT be a near-miss for its own ref
+      if (nearMissFn(candidate.entry.hyp, candidate.entry.ref)) break;
+
+      // Build concatenation
+      concat += candidate.entry.hyp;
+
+      // Guard 2: concatenation must BE a near-miss for anchor's ref
+      if (!nearMissFn(concat, anchor.entry.ref)) continue;
+
+      // Mark all candidates from r to c as targets
+      for (let t = r; t <= c; t++) {
+        targets.add(refEntries[t].idx);
+      }
+      log.push({
+        anchorRef: anchor.entry.ref,
+        anchorHyp: anchor.entry.hyp,
+        concat,
+        absorbed: Array.from({ length: c - r + 1 }, (_, k) => ({
+          ref: refEntries[r + k].entry.ref,
+          hyp: refEntries[r + k].entry.hyp
+        }))
+      });
+      break; // found match for this anchor, move on
+    }
+  }
+
+  if (targets.size === 0) return log;
+
+  // Phase 2: Rebuild array
+  const result = [];
+  for (let i = 0; i < aligned.length; i++) {
+    if (!targets.has(i)) {
+      result.push(aligned[i]);
+      continue;
+    }
+
+    const entry = aligned[i];
+
+    // Emit the hyp as an insertion (spillover fragment)
+    result.push({
+      ref: null,
+      type: 'insertion',
+      hyp: entry.hyp,
+      hypIndex: entry.hypIndex,
+      _spillover: true
+    });
+
+    // Sweep trailing insertions between this target and the next ref entry
+    let j = i + 1;
+    while (j < aligned.length && aligned[j].type === 'insertion') {
+      const swept = { ...aligned[j], _spillover: true };
+      result.push(swept);
+      j++;
+    }
+
+    // Emit omission for the ref word that lost its hyp
+    result.push({
+      ref: entry.ref,
+      hyp: null,
+      type: 'omission',
+      hypIndex: -1,
+      _spilloverOmission: true
+    });
+
+    // Skip the trailing insertions we already swept
+    i = j - 1;
+  }
+
+  // Replace in place
+  aligned.length = 0;
+  aligned.push(...result);
+
+  return log;
+}

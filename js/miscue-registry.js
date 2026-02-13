@@ -298,6 +298,27 @@ const PRE_ALIGNMENT_FIXES = {
     note: 'Reverb BPE tokenization sometimes splits a single spoken word into multiple fragments (e.g., "ideation" → "i" + "d"). Without merging, each fragment enters alignment separately, producing an orphan insertion and a meaningless substitution. The reference-aware merge uses normalizeText(referenceText) as anchor instead of cross-validator timestamps.'
   },
 
+  spilloverConsolidation: {
+    description: 'After NW alignment, identifies ref slots where the hyp is not a real attempt at that ref word but is a spillover fragment from a preceding struggle. Converts the spillover entry to an omission and emits the hyp as an insertion after the anchor word, preserving struggle evidence.',
+    detector: 'alignment.js → consolidateSpilloverFragments() (called per-engine in app.js after alignWords)',
+    countsAsError: false, // Corrective — reassigns fragments to correct ref slot
+    config: {
+      guards: [
+        'candidate.hyp must NOT be a near-miss for candidate.ref (not a real attempt)',
+        'concat(anchor.hyp, candidate.hyp) must BE a near-miss for anchor.ref (spillover evidence)',
+        'Progressive chaining: tries anchor + candidate, anchor + candidate + next candidate, etc.'
+      ]
+    },
+    example: {
+      reference: '"true" "informational" "expert" "for"',
+      spoken: 'Reverb: "true" "in" "four" "uh" "for"',
+      before: 'NW: correct("true"), sub("informational"←"in"), sub("expert"←"four"), ins("uh"), correct("for")',
+      after: 'correct("true"), sub("informational"←"in"), ins("four",_spillover), ins("uh",_spillover), omission("expert",_spilloverOmission), correct("for")',
+      result: '"infour" near-miss for "informational" → resolveNearMissClusters upgrades to struggle; "expert" recovered by Parakeet in 3-way verdict'
+    },
+    note: 'Runs independently per engine (V1, V0, Parakeet) after alignWords() and before 3-way comparison. Uses only the engine\'s own data — no cross-engine dependency. Modifies alignment array in place. Downstream resolveNearMissClusters and absorbMispronunciationFragments consume the reassigned fragments naturally.'
+  },
+
   tier1NearMatchOverride: {
     description: 'When Tier 1 fuzzy match (similarity >= 0.8) has edit distance <= 1 on a long word, use the cross-validator word text instead of Reverb. Prevents false substitutions from minor Reverb transcription differences (e.g., dropped plural "s").',
     detector: 'app.js → crossValidateByReference() (near-match logic inherited from Plan 5)',
@@ -569,6 +590,7 @@ export function getDetectorLocation(type) {
  * - xvalAbbreviationConfirmation: Cross-validator confirms abbreviation reading
  * - preAlignmentFragmentMerge: Reverb BPE fragments merged before alignment ("i"+"d" → "id")
  * - tier1NearMatchOverride: Tier 1 fuzzy match uses xval word for 1-char diffs ("format"→"formats")
+ * - spilloverConsolidation: Struggle fragments reassigned from wrong ref slots back to anchor word
  *
  * INFRASTRUCTURE FIXES:
  * - sttLookup keys use raw normalized words (not getCanonical) to match alignment hyp values

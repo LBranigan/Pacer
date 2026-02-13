@@ -2,11 +2,11 @@ import { initRecorder, setOnComplete as recorderSetOnComplete } from './recorder
 import { initFileHandler, setOnComplete as fileHandlerSetOnComplete } from './file-handler.js';
 // Google Cloud STT — commented out, no longer used (Kitchen Sink pipeline replaces it)
 // import { sendToSTT, sendToAsyncSTT, sendChunkedSTT, sendEnsembleSTT } from './stt-api.js';
-import { alignWords } from './alignment.js';
+import { alignWords, consolidateSpilloverFragments } from './alignment.js';
 import { getCanonical } from './word-equivalences.js';
 import { computeWCPM, computeAccuracy, computeWCPMRange } from './metrics.js';
 import { setStatus, displayResults, displayAlignmentResults, showAudioPlayback, renderStudentSelector, renderHistory } from './ui.js';
-import { runDiagnostics, computeTierBreakdown, resolveNearMissClusters, absorbMispronunciationFragments, computePhrasingQuality, computePauseAtPunctuation, computePaceConsistency, computeWordDurationOutliers, computeWordSpeedTiers } from './diagnostics.js';
+import { runDiagnostics, computeTierBreakdown, resolveNearMissClusters, absorbMispronunciationFragments, computePhrasingQuality, computePauseAtPunctuation, computePaceConsistency, computeWordDurationOutliers, computeWordSpeedTiers, isNearMiss } from './diagnostics.js';
 import { extractTextFromImage } from './ocr-api.js';
 import { trimPassageToAttempted } from './passage-trimmer.js';
 import { analyzePassageText, levenshteinRatio } from './nl-api.js';
@@ -640,6 +640,15 @@ async function runAnalysis() {
   const parakeetAlignment = parakeetWords.length > 0
     ? alignWords(referenceText, parakeetWords)
     : null;
+
+  // 4d. Spillover fragment consolidation (each engine independently)
+  // Fixes NW greedily assigning struggle fragments to wrong ref slots.
+  const v1Spillover = consolidateSpilloverFragments(alignment, isNearMiss);
+  const v0Spillover = v0Alignment ? consolidateSpilloverFragments(v0Alignment, isNearMiss) : [];
+  const pkSpillover = parakeetAlignment ? consolidateSpilloverFragments(parakeetAlignment, isNearMiss) : [];
+  if (v1Spillover.length || v0Spillover.length || pkSpillover.length) {
+    addStage('spillover_consolidation', { v1: v1Spillover, v0: v0Spillover, pk: pkSpillover });
+  }
 
   addStage('v1_alignment', {
     totalEntries: alignment.length,
