@@ -2,169 +2,70 @@
  * Movie Trailer Generator
  *
  * Generates an epic movie-trailer-style voiceover of the student's reading passage
- * using either ElevenLabs TTS (cloud) or Kokoro.js (local, free, unlimited)
- * layered over synthesized dramatic background music via Web Audio API.
+ * using Gemini 2.5 Flash TTS (free tier: 1,500 requests/day) layered over
+ * synthesized dramatic background music via Web Audio API.
  */
 
-// ── ElevenLabs Config ──
-const VOICE_ID = 'pNInz6obpgDQGcFmaJgB'; // "Adam" — deep, cinematic narrator
-const ELEVENLABS_MODEL = 'eleven_multilingual_v2';
-
-// ── Kokoro Config ──
-const KOKORO_CDN = 'https://cdn.jsdelivr.net/npm/kokoro-js@1.1.0/+esm';
-const KOKORO_MODEL = 'onnx-community/Kokoro-82M-ONNX';
-const KOKORO_VOICE = 'am_adam'; // American male — deepest available
-const KOKORO_DTYPE = 'q8';     // good quality/size balance (~80MB)
-
-let kokoroInstance = null; // cached after first load
+const GEMINI_TTS_MODEL = 'gemini-2.5-flash-preview-tts';
+const GEMINI_TTS_URL = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_TTS_MODEL}:generateContent`;
+const GEMINI_VOICE = 'Charon'; // "Informative" — deep and authoritative
 
 /**
- * Build a trailer script from the reference passage.
- * Speaks EVERY word from the passage with minimal dramatic framing.
+ * Build a dramatic trailer prompt + passage for Gemini TTS.
+ * Gemini supports natural language style instructions inline with the text.
  */
-function buildTrailerScript(referenceText, studentName) {
+function buildTrailerPrompt(referenceText, studentName) {
   const name = studentName || 'a young reader';
-  return `This is the story of ${name}.\n\n${referenceText.trim()}`;
+  return (
+    `Read the following in a deep, dramatic movie trailer narrator voice. ` +
+    `Speak with gravitas, intensity, and epic pauses between sentences. ` +
+    `This is a cinematic narration.\n\n` +
+    `This is the story of ${name}.\n\n${referenceText.trim()}`
+  );
 }
 
 /**
- * Call ElevenLabs TTS API → returns audio ArrayBuffer (mp3).
+ * Call Gemini 2.5 Flash TTS → returns audio ArrayBuffer (wav).
  */
-async function callElevenLabs(text, apiKey) {
-  const url = `https://api.elevenlabs.io/v1/text-to-speech/${VOICE_ID}`;
-  const resp = await fetch(url, {
+async function callGeminiTTS(text, apiKey) {
+  const resp = await fetch(`${GEMINI_TTS_URL}?key=${encodeURIComponent(apiKey)}`, {
     method: 'POST',
-    headers: {
-      'xi-api-key': apiKey,
-      'Content-Type': 'application/json',
-      'Accept': 'audio/mpeg',
-    },
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      text,
-      model_id: ELEVENLABS_MODEL,
-      voice_settings: {
-        stability: 0.30,
-        similarity_boost: 0.85,
-        style: 0.7,
-        use_speaker_boost: true,
-      },
+      contents: [{ parts: [{ text }] }],
+      generationConfig: {
+        responseModalities: ['AUDIO'],
+        speechConfig: {
+          voiceConfig: {
+            prebuiltVoiceConfig: { voiceName: GEMINI_VOICE }
+          }
+        }
+      }
     }),
   });
 
   if (!resp.ok) {
     const errText = await resp.text();
-    throw new Error(`ElevenLabs API error (${resp.status}): ${errText}`);
+    throw new Error(`Gemini TTS error (${resp.status}): ${errText}`);
   }
 
-  return await resp.arrayBuffer();
-}
+  const data = await resp.json();
 
-/**
- * Load Kokoro TTS (downloads ~80MB model on first use, cached after).
- * Returns the KokoroTTS instance.
- */
-async function getKokoroInstance(onProgress) {
-  if (kokoroInstance) return kokoroInstance;
-
-  if (onProgress) onProgress('Loading Kokoro model (~80MB first time)...');
-  const { KokoroTTS } = await import(KOKORO_CDN);
-  kokoroInstance = await KokoroTTS.from_pretrained(KOKORO_MODEL, { dtype: KOKORO_DTYPE });
-  return kokoroInstance;
-}
-
-/**
- * Split text into chunks that fit Kokoro's ~512 token limit.
- * Splits on sentence boundaries, each chunk ≤ maxChars.
- */
-function splitTextForKokoro(text, maxChars = 400) {
-  const sentences = text.replace(/([.!?])\s+/g, '$1|').split('|').filter(s => s.trim());
-  const chunks = [];
-  let current = '';
-  for (const sentence of sentences) {
-    if (current && (current.length + sentence.length + 1) > maxChars) {
-      chunks.push(current.trim());
-      current = '';
-    }
-    current += (current ? ' ' : '') + sentence;
-  }
-  if (current.trim()) chunks.push(current.trim());
-  // Safety: if a single sentence exceeds maxChars, it's still one chunk (Kokoro will handle it)
-  return chunks.length ? chunks : [text];
-}
-
-/**
- * Generate voiceover using Kokoro.js (local, free, unlimited).
- * Splits long text into chunks, generates each, concatenates audio.
- * Returns audio ArrayBuffer (wav).
- */
-async function callKokoro(text, onProgress) {
-  const tts = await getKokoroInstance(onProgress);
-  const chunks = splitTextForKokoro(text);
-  const allSamples = [];
-  let sampleRate = 24000;
-
-  for (let i = 0; i < chunks.length; i++) {
-    if (onProgress) onProgress(`Generating voice (${i + 1}/${chunks.length})...`);
-    const raw = await tts.generate(chunks[i], { voice: KOKORO_VOICE });
-    sampleRate = raw.sampling_rate || 24000;
-    allSamples.push(raw.audio);
-    // Small silence gap between chunks (0.3s)
-    if (i < chunks.length - 1) {
-      allSamples.push(new Float32Array(Math.floor(sampleRate * 0.3)));
-    }
+  // Extract base64 audio from response
+  const parts = data.candidates?.[0]?.content?.parts;
+  if (!parts?.length || !parts[0].inlineData) {
+    throw new Error('No audio data in Gemini response');
   }
 
-  // Concatenate all chunks
-  const totalLength = allSamples.reduce((sum, a) => sum + a.length, 0);
-  const combined = new Float32Array(totalLength);
-  let offset = 0;
-  for (const arr of allSamples) {
-    combined.set(arr, offset);
-    offset += arr.length;
-  }
-
-  return float32ToWavArrayBuffer(combined, sampleRate);
+  const { mimeType, data: b64Audio } = parts[0].inlineData;
+  const binary = atob(b64Audio);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  return bytes.buffer;
 }
 
-/**
- * Encode a mono Float32Array as a WAV ArrayBuffer.
- */
-function float32ToWavArrayBuffer(samples, sampleRate) {
-  const numSamples = samples.length;
-  const bytesPerSample = 2;
-  const dataSize = numSamples * bytesPerSample;
-  const buffer = new ArrayBuffer(44 + dataSize);
-  const view = new DataView(buffer);
+// ── Background Music ──
 
-  const writeStr = (off, s) => { for (let i = 0; i < s.length; i++) view.setUint8(off + i, s.charCodeAt(i)); };
-  writeStr(0, 'RIFF');
-  view.setUint32(4, 36 + dataSize, true);
-  writeStr(8, 'WAVE');
-  writeStr(12, 'fmt ');
-  view.setUint32(16, 16, true);
-  view.setUint16(20, 1, true);       // PCM
-  view.setUint16(22, 1, true);       // mono
-  view.setUint32(24, sampleRate, true);
-  view.setUint32(28, sampleRate * bytesPerSample, true);
-  view.setUint16(32, bytesPerSample, true);
-  view.setUint16(34, 16, true);      // 16-bit
-  writeStr(36, 'data');
-  view.setUint32(40, dataSize, true);
-
-  let offset = 44;
-  for (let i = 0; i < numSamples; i++) {
-    const s = Math.max(-1, Math.min(1, samples[i]));
-    view.setInt16(offset, s < 0 ? s * 0x8000 : s * 0x7FFF, true);
-    offset += 2;
-  }
-
-  return buffer;
-}
-
-/**
- * Generate dramatic background music using Web Audio API.
- * Returns an AudioBuffer with a cinematic drone + percussion hits.
- */
 function generateTrailerMusic(audioCtx, durationSec) {
   const sampleRate = audioCtx.sampleRate;
   const length = Math.ceil(durationSec * sampleRate);
@@ -231,10 +132,8 @@ function generateTrailerMusic(audioCtx, durationSec) {
   return buffer;
 }
 
-/**
- * Mix voiceover (ArrayBuffer) with generated music.
- * Returns a Blob (wav) ready for playback/download.
- */
+// ── Mixer ──
+
 async function mixTrailer(voiceoverArrayBuffer) {
   const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
 
@@ -288,37 +187,29 @@ async function mixTrailer(voiceoverArrayBuffer) {
   return audioBufferToWavBlob(renderedBuffer);
 }
 
-/**
- * Encode an AudioBuffer as a WAV Blob.
- */
 function audioBufferToWavBlob(buffer) {
   const numChannels = buffer.numberOfChannels;
   const sampleRate = buffer.sampleRate;
-  const format = 1;
-  const bitDepth = 16;
-  const bytesPerSample = bitDepth / 8;
+  const bytesPerSample = 2;
   const blockAlign = numChannels * bytesPerSample;
   const numSamples = buffer.length;
   const dataSize = numSamples * blockAlign;
-  const headerSize = 44;
-  const arrayBuffer = new ArrayBuffer(headerSize + dataSize);
+  const arrayBuffer = new ArrayBuffer(44 + dataSize);
   const view = new DataView(arrayBuffer);
 
-  const writeString = (offset, str) => {
-    for (let i = 0; i < str.length; i++) view.setUint8(offset + i, str.charCodeAt(i));
-  };
-  writeString(0, 'RIFF');
+  const w = (off, s) => { for (let i = 0; i < s.length; i++) view.setUint8(off + i, s.charCodeAt(i)); };
+  w(0, 'RIFF');
   view.setUint32(4, 36 + dataSize, true);
-  writeString(8, 'WAVE');
-  writeString(12, 'fmt ');
+  w(8, 'WAVE');
+  w(12, 'fmt ');
   view.setUint32(16, 16, true);
-  view.setUint16(20, format, true);
+  view.setUint16(20, 1, true);
   view.setUint16(22, numChannels, true);
   view.setUint32(24, sampleRate, true);
   view.setUint32(28, sampleRate * blockAlign, true);
   view.setUint16(32, blockAlign, true);
-  view.setUint16(34, bitDepth, true);
-  writeString(36, 'data');
+  view.setUint16(34, 16, true);
+  w(36, 'data');
   view.setUint32(40, dataSize, true);
 
   const channels = [];
@@ -399,26 +290,14 @@ function showTrailerPlayer(trailerBlob, studentName) {
 }
 
 /**
- * Get selected voice engine from the trailer dropdown.
- */
-function getSelectedEngine() {
-  const sel = document.getElementById('trailerVoiceEngine');
-  return sel?.value || 'kokoro';
-}
-
-/**
  * Main entry point — called from the Movie Trailer button.
  */
 export async function generateMovieTrailer(referenceText, studentName) {
-  const engine = getSelectedEngine();
-
-  if (engine === 'elevenlabs') {
-    const apiKey = localStorage.getItem('orf_elevenlabs_key') || '';
-    if (!apiKey) {
-      alert('Please enter your ElevenLabs API key in the settings above.');
-      document.getElementById('elevenLabsKey')?.focus();
-      return;
-    }
+  const apiKey = localStorage.getItem('orf_gemini_key') || '';
+  if (!apiKey) {
+    alert('Please enter your Gemini API key in the settings above (free from aistudio.google.com).');
+    document.getElementById('geminiKey')?.focus();
+    return;
   }
 
   if (!referenceText || referenceText.trim().length < 20) {
@@ -430,22 +309,12 @@ export async function generateMovieTrailer(referenceText, studentName) {
   const originalText = btn?.textContent;
   if (btn) {
     btn.disabled = true;
-    btn.textContent = 'Generating...';
+    btn.textContent = 'Generating voiceover...';
   }
 
   try {
-    const script = buildTrailerScript(referenceText, studentName);
-    let voiceoverData;
-
-    if (engine === 'elevenlabs') {
-      if (btn) btn.textContent = 'Calling ElevenLabs...';
-      const apiKey = localStorage.getItem('orf_elevenlabs_key');
-      voiceoverData = await callElevenLabs(script, apiKey);
-    } else {
-      voiceoverData = await callKokoro(script, (msg) => {
-        if (btn) btn.textContent = msg;
-      });
-    }
+    const prompt = buildTrailerPrompt(referenceText, studentName);
+    const voiceoverData = await callGeminiTTS(prompt, apiKey);
 
     if (btn) btn.textContent = 'Mixing trailer...';
     const trailerBlob = await mixTrailer(voiceoverData);

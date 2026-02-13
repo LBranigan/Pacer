@@ -187,27 +187,8 @@ function showIllustratorButton(studentId, assessmentId) {
 function showMovieTrailerButton(referenceText, studentName) {
   const existing = document.getElementById('movieTrailerBtn');
   if (existing) existing.remove();
-  const existingSel = document.getElementById('trailerVoiceEngine');
-  if (existingSel) existingSel.remove();
 
   if (!referenceText || referenceText.trim().length < 20) return;
-
-  // Voice engine dropdown
-  const sel = document.createElement('select');
-  sel.id = 'trailerVoiceEngine';
-  sel.style.cssText = 'margin:0.5rem 0 0.5rem 0.5rem;padding:0.5rem 0.8rem;border-radius:8px;border:1px solid #666;background:#2a2a2a;color:#fff;font-size:0.9rem;cursor:pointer;';
-  const engines = [['kokoro', 'Kokoro (free/unlimited)'], ['elevenlabs', 'ElevenLabs (better quality)']];
-  const savedEngine = localStorage.getItem('orf_trailer_engine') || 'kokoro';
-  for (const [val, label] of engines) {
-    const opt = document.createElement('option');
-    opt.value = val;
-    opt.textContent = label;
-    if (val === savedEngine) opt.selected = true;
-    sel.appendChild(opt);
-  }
-  sel.addEventListener('change', () => {
-    localStorage.setItem('orf_trailer_engine', sel.value);
-  });
 
   const btn = document.createElement('button');
   btn.id = 'movieTrailerBtn';
@@ -221,8 +202,7 @@ function showMovieTrailerButton(referenceText, studentName) {
     || document.getElementById('mazeGameBtn')
     || document.getElementById('playbackAdventureBtn')
     || analyzeBtn;
-  anchor.insertAdjacentElement('afterend', sel);
-  sel.insertAdjacentElement('afterend', btn);
+  anchor.insertAdjacentElement('afterend', btn);
 }
 
 function showFutureYouButton(studentId, assessmentId) {
@@ -2143,13 +2123,12 @@ async function runAnalysis() {
 // Auto-fill API key for dev/testing
 document.getElementById('apiKey').value = 'AIzaSyCTx4rS7zxwRZqNseWcFJAaAgEH5HA50xA';
 
-// ElevenLabs API key — persist in localStorage
-const elevenLabsInput = document.getElementById('elevenLabsKey');
-const savedElevenKey = localStorage.getItem('orf_elevenlabs_key') || 'sk_c182a71af4500c874381721e3b21dd40dc850992a0da65f3';
-elevenLabsInput.value = savedElevenKey;
-localStorage.setItem('orf_elevenlabs_key', savedElevenKey);
-elevenLabsInput.addEventListener('input', () => {
-  localStorage.setItem('orf_elevenlabs_key', elevenLabsInput.value.trim());
+// Gemini API key — persist in localStorage (free from aistudio.google.com)
+const geminiKeyInput = document.getElementById('geminiKey');
+const savedGeminiKey = localStorage.getItem('orf_gemini_key') || '';
+if (savedGeminiKey) geminiKeyInput.value = savedGeminiKey;
+geminiKeyInput.addEventListener('input', () => {
+  localStorage.setItem('orf_gemini_key', geminiKeyInput.value.trim());
 });
 
 initRecorder();
