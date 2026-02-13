@@ -41,9 +41,12 @@ async function callGeminiTTS(text, apiKey, maxRetries = 3) {
   });
 
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
-    const resp = await fetch(`${GEMINI_TTS_URL}?key=${encodeURIComponent(apiKey)}`, {
+    const resp = await fetch(GEMINI_TTS_URL, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        'x-goog-api-key': apiKey,
+      },
       body,
     });
 
@@ -53,10 +56,10 @@ async function callGeminiTTS(text, apiKey, maxRetries = 3) {
       return parseGeminiAudio(data);
     }
 
-    // Retry on 500/503 (Google's TTS preview is flaky)
-    if ((resp.status === 500 || resp.status === 503) && attempt < maxRetries) {
+    // Retry on 429/500/503 (Google's TTS preview is flaky, rate limits masquerade as 500s)
+    if ((resp.status === 429 || resp.status === 500 || resp.status === 503) && attempt < maxRetries) {
       console.warn(`[MovieTrailer] Gemini returned ${resp.status}, retrying (${attempt}/${maxRetries})...`);
-      await new Promise(r => setTimeout(r, 2000 * attempt)); // 2s, 4s backoff
+      await new Promise(r => setTimeout(r, 3000 * attempt)); // 3s, 6s backoff
       continue;
     }
 
