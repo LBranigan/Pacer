@@ -17,7 +17,8 @@ const GEMINI_VOICE = 'Charon'; // "Informative" — deep and authoritative
 function buildTrailerPrompt(referenceText, studentName) {
   const name = studentName || 'a young reader';
   return (
-    `Say the following in a dramatic, deep narrator voice with slow pacing:\n\n` +
+    `Say the following in a deep, dramatic movie trailer narrator voice. ` +
+    `Keep the voice deep and powerful but speak at a brisk, energetic pace — not slow.\n\n` +
     `This is the story of ${name}.\n\n${referenceText.trim()}`
   );
 }
