@@ -59,9 +59,33 @@ async function callGeminiTTS(text, apiKey) {
 
   const { mimeType, data: b64Audio } = parts[0].inlineData;
   const binary = atob(b64Audio);
-  const bytes = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-  return bytes.buffer;
+  const pcmBytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) pcmBytes[i] = binary.charCodeAt(i);
+
+  // Gemini returns raw L16 PCM at 24kHz — wrap in WAV header for decodeAudioData
+  const sampleRate = 24000;
+  const numChannels = 1;
+  const bytesPerSample = 2;
+  const dataSize = pcmBytes.length;
+  const wavBuffer = new ArrayBuffer(44 + dataSize);
+  const view = new DataView(wavBuffer);
+  const w = (off, s) => { for (let i = 0; i < s.length; i++) view.setUint8(off + i, s.charCodeAt(i)); };
+  w(0, 'RIFF');
+  view.setUint32(4, 36 + dataSize, true);
+  w(8, 'WAVE');
+  w(12, 'fmt ');
+  view.setUint32(16, 16, true);
+  view.setUint16(20, 1, true);
+  view.setUint16(22, numChannels, true);
+  view.setUint32(24, sampleRate, true);
+  view.setUint32(28, sampleRate * numChannels * bytesPerSample, true);
+  view.setUint16(32, numChannels * bytesPerSample, true);
+  view.setUint16(34, 16, true);
+  w(36, 'data');
+  view.setUint32(40, dataSize, true);
+  new Uint8Array(wavBuffer, 44).set(pcmBytes);
+
+  return wavBuffer;
 }
 
 // ── Background Music ──
