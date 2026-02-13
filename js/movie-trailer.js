@@ -50,14 +50,32 @@ async function callGeminiTTS(text, apiKey) {
   }
 
   const data = await resp.json();
+  console.log('[MovieTrailer] Gemini response keys:', Object.keys(data));
 
-  // Extract base64 audio from response
-  const parts = data.candidates?.[0]?.content?.parts;
-  if (!parts?.length || !parts[0].inlineData) {
-    throw new Error('No audio data in Gemini response');
+  // Check for blocked/filtered responses
+  if (data.promptFeedback?.blockReason) {
+    throw new Error(`Gemini blocked: ${data.promptFeedback.blockReason}`);
   }
 
-  const { mimeType, data: b64Audio } = parts[0].inlineData;
+  // Extract base64 audio from response
+  const candidate = data.candidates?.[0];
+  if (!candidate) {
+    throw new Error('No candidates in Gemini response: ' + JSON.stringify(data).slice(0, 300));
+  }
+  console.log('[MovieTrailer] finishReason:', candidate.finishReason);
+
+  const parts = candidate.content?.parts;
+  if (!parts?.length) {
+    throw new Error('No parts in Gemini response: ' + JSON.stringify(candidate).slice(0, 300));
+  }
+
+  // Find the inlineData part (may not be parts[0])
+  const audioPart = parts.find(p => p.inlineData);
+  if (!audioPart) {
+    throw new Error('No audio data in Gemini parts: ' + parts.map(p => Object.keys(p)).join(', '));
+  }
+
+  const { mimeType, data: b64Audio } = audioPart.inlineData;
   const binary = atob(b64Audio);
   const pcmBytes = new Uint8Array(binary.length);
   for (let i = 0; i < binary.length; i++) pcmBytes[i] = binary.charCodeAt(i);
