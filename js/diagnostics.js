@@ -394,12 +394,18 @@ export function absorbMispronunciationFragments(alignment, transcriptWords) {
  *   - Otherwise: threshold is 500ms
  * Returns array of { wordIndex, word, gap, threshold, punctuationType }.
  */
-export function detectOnsetDelays(transcriptWords, referenceText, alignment) {
+export function detectOnsetDelays(transcriptWords, referenceText, alignment, xvalRawWords) {
   const results = [];
 
   // Build punctuation map and hyp->ref map for threshold adjustments
   const punctMap = referenceText ? getPunctuationPositions(referenceText) : new Map();
   const hypToRef = alignment ? buildHypToRefMap(alignment) : new Map();
+
+  // Pre-parse xval raw timestamps for gap narrowing
+  const xvalTimes = (xvalRawWords || []).map(w => ({
+    start: parseTime(w.start ?? w.startTime),
+    end: parseTime(w.end ?? w.endTime)
+  })).filter(t => t.start > 0 && t.end > 0);
 
   for (let i = 0; i < transcriptWords.length; i++) {
     const w = transcriptWords[i];
@@ -443,6 +449,22 @@ export function detectOnsetDelays(transcriptWords, referenceText, alignment) {
     if (i - prevIdx > 1) {
       const skipped = transcriptWords.slice(prevIdx + 1, i);
       gap = Math.min(gap, longestSilenceInGap(prevEnd, start, skipped));
+    }
+
+    // Narrow gap using Parakeet raw words (including fragments like "ng")
+    // that fall within the gap window. Parakeet may hear speech that Reverb
+    // missed or garbled, proving the silence is shorter than Reverb thinks.
+    if (xvalTimes.length > 0 && gap >= 0.5) {
+      let latestXvalEnd = prevEnd;
+      for (const xt of xvalTimes) {
+        // xval word must overlap the gap window [prevEnd, start]
+        if (xt.end > prevEnd && xt.start < start) {
+          if (xt.end > latestXvalEnd) latestXvalEnd = xt.end;
+        }
+      }
+      if (latestXvalEnd > prevEnd) {
+        gap = Math.min(gap, start - latestXvalEnd);
+      }
     }
 
     // Determine threshold based on punctuation after previous word
@@ -1903,9 +1925,9 @@ export function detectStruggleWords(transcriptWords, referenceText, alignment) {
 /**
  * Run all diagnostics and return unified result object.
  */
-export function runDiagnostics(transcriptWords, alignment, referenceText) {
+export function runDiagnostics(transcriptWords, alignment, referenceText, xvalRawWords) {
   return {
-    onsetDelays: detectOnsetDelays(transcriptWords, referenceText, alignment),
+    onsetDelays: detectOnsetDelays(transcriptWords, referenceText, alignment, xvalRawWords),
     longPauses: detectLongPauses(transcriptWords),
     selfCorrections: detectSelfCorrections(transcriptWords, alignment),
     morphologicalErrors: detectMorphologicalErrors(alignment, transcriptWords),

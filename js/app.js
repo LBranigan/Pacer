@@ -1237,7 +1237,7 @@ async function runAnalysis() {
   }
 
   // Run diagnostics (includes Path 1: pause struggle via modified detectStruggleWords)
-  const diagnostics = runDiagnostics(transcriptWords, alignment, referenceText);
+  const diagnostics = runDiagnostics(transcriptWords, alignment, referenceText, xvalRawWords);
 
   addStage('diagnostics', {
     longPauses: diagnostics.longPauses?.length || 0,
@@ -1658,19 +1658,6 @@ async function runAnalysis() {
         refIdx++;
       }
       if (promoted.length > 0) {
-        // Clear hesitations on promoted words — Reverb timestamps are unreliable
-        // in post-struggle regions (the same problem leniency exists to solve)
-        const promotedHypIdxs = new Set(
-          alignment.filter(e => e._postStruggleLeniency).map(e => e.hypIndex)
-        );
-        if (diagnostics.onsetDelays) {
-          const before = diagnostics.onsetDelays.length;
-          diagnostics.onsetDelays = diagnostics.onsetDelays.filter(
-            d => !promotedHypIdxs.has(d.wordIndex)
-          );
-          const cleared = before - diagnostics.onsetDelays.length;
-          if (cleared > 0) promoted.hesitationsCleared = cleared;
-        }
         addStage('post_struggle_leniency', { promoted });
       }
     }
