@@ -1886,12 +1886,16 @@ async function runAnalysis() {
       uncoveredMarks: pauseAtPunctuation.coverage?.uncoveredMarks?.map(m => ({
         punctType: m.punctType,
         afterWord: m.refWord,
-        gapMs: m.gap
+        gapMs: m.gapMs,
+        thresholdMs: m.thresholdMs
       })) || [],
+      periodMinPauseMs: pauseAtPunctuation.coverage?.periodMinPauseMs ?? null,
+      commaMinPauseMs: pauseAtPunctuation.coverage?.commaMinPauseMs ?? null,
       precisionRatio: pauseAtPunctuation.precision?.ratio ?? null,
       precisionDetail: pauseAtPunctuation.precision?.ratio != null
         ? `${pauseAtPunctuation.precision.atPunctuationCount} of ${pauseAtPunctuation.precision.totalPauses} pauses at punctuation`
-        : null
+        : null,
+      pauseDifferentiation: pauseAtPunctuation.pauseDifferentiation ?? null
     },
     paceConsistency: paceConsistency.insufficient ? null : {
       classification: paceConsistency.classification,

@@ -1273,9 +1273,9 @@ export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, di
     if (cov.ratio !== null) {
       ptTip.push('Of ' + cov.encounteredPunctuationMarks + ' punctuation marks encountered, the student paused at ' + cov.coveredCount + '.');
       ptTip.push('(' + cov.totalPunctuationMarks + ' total in passage, ' + cov.encounteredPunctuationMarks + ' encountered by student, last word excluded)');
-      ptTip.push('Pause threshold: ' + (cov.punctPauseThresholdMs || '?') + 'ms (1.5x median gap, floor 100ms)');
+      ptTip.push('Min pause: ' + (cov.periodMinPauseMs || 150) + 'ms (periods), ' + (cov.commaMinPauseMs || 100) + 'ms (commas)');
       if (cov.uncoveredMarks.length > 0) {
-        ptTip.push('Missed: ' + cov.uncoveredMarks.map(m => m.punctType + ' after "' + m.refWord + '"' + (m.gap != null ? ' (' + m.gap + 'ms gap)' : '')).join(', '));
+        ptTip.push('Missed: ' + cov.uncoveredMarks.map(m => m.punctType + ' after "' + m.refWord + '"' + (m.gapMs != null ? ' (' + m.gapMs + 'ms gap, need ' + m.thresholdMs + 'ms)' : ' (no gap)')).join(', '));
       }
     } else {
       ptTip.push(cov.label);
@@ -1283,6 +1283,11 @@ export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, di
     const prec = pros.pauseAtPunctuation.precision;
     if (prec.ratio !== null) {
       ptTip.push('Also: ' + Math.round(prec.ratio * 100) + '% of all pauses landed at punctuation (' + prec.atPunctuationCount + ' of ' + prec.totalPauses + ')');
+    }
+    const pd = pros.pauseAtPunctuation.pauseDifferentiation;
+    if (pd && pd.periodCommaRatio != null) {
+      ptTip.push('Period:comma pause ratio: ' + pd.periodCommaRatio + ':1 — ' + pd.label);
+      ptTip.push('  Avg period pause: ' + pd.meanPeriodPauseMs + 'ms, avg comma pause: ' + pd.meanCommaPauseMs + 'ms');
     }
     punctBox.title = ptTip.join('\n');
     metricsRow.appendChild(punctBox);

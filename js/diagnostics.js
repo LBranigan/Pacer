@@ -1291,9 +1291,9 @@ export function computePauseAtPunctuation(transcriptWords, referenceText, alignm
   }
 
   // Build hyp-index → gap-after-word map for punctuation-aware gap check.
-  // A fluent reader pauses briefly at commas (~100-200ms) — shorter than a
-  // phrasing break but still noticeably longer than inter-word gaps (~50ms).
-  // Use median gap * 1.5 (floor 100ms) as the punctuation pause threshold.
+  // Research (Goldman-Eisler 1968, SoapBox Labs): 200ms is the minimum meaningful
+  // pause. We use 150ms as a conservative floor for sentence-enders and 100ms for
+  // commas, since any measurable gap at punctuation is evidence of boundary awareness.
   const gapAfterHyp = new Map();
   const baselineGaps = [];
   for (let i = 0; i < transcriptWords.length - 1; i++) {
@@ -1304,7 +1304,11 @@ export function computePauseAtPunctuation(transcriptWords, referenceText, alignm
     }
   }
   const medianBaselineGap = median(baselineGaps) || 0.050;
-  const punctPauseThreshold = Math.max(medianBaselineGap * 1.5, 0.100);
+  // Per-punctuation-type minimum pause thresholds (seconds).
+  // Sentence-enders (. ! ?) need a slightly higher bar than commas because
+  // articulatory coarticulation across sentence boundaries is less likely.
+  const PUNCT_MIN_PAUSE = { period: 0.150, comma: 0.100 };
+  const punctPauseThreshold = Math.max(medianBaselineGap * 1.5, PUNCT_MIN_PAUSE.comma);
 
   // Find the last ref index the student actually read (for last-word exclusion)
   let lastEncounteredRefIdx = -1;
@@ -1320,15 +1324,20 @@ export function computePauseAtPunctuation(transcriptWords, referenceText, alignm
     // Skip the last word the student read — no opportunity to pause after it
     if (refIdx === lastEncounteredRefIdx) continue;
     encounteredPunctuationCount++;
-    // Primary: detected as a phrasing break (Sources A/B/C)
-    // Fallback (commas/semicolons/colons only): gap exceeds the lower punctuation
-    // pause threshold. Periods, ? and ! are sentence boundaries — require a full break.
     const gapAtPosition = gapAfterHyp.get(hypIdx);
-    const allowLowerThreshold = punctType === 'comma';
-    if (breakSet.has(hypIdx) || (allowLowerThreshold && gapAtPosition !== undefined && gapAtPosition >= punctPauseThreshold)) {
+    // Primary: detected as a phrasing break (Sources A/B/C).
+    // ±1 adjacency tolerance: ASR word boundaries don't always align perfectly
+    // with punctuation — a break at the next word's onset is still a boundary pause.
+    const inBreakSet = breakSet.has(hypIdx) || breakSet.has(hypIdx + 1);
+    // Fallback: direct gap-based check. ALL punctuation types get this path.
+    // Research (SoapBox Labs, Goldman-Eisler): any pause ≥150ms at a sentence
+    // boundary or ≥100ms at a comma is evidence of prosodic awareness.
+    const minPause = PUNCT_MIN_PAUSE[punctType] || PUNCT_MIN_PAUSE.period;
+    const gapCovered = gapAtPosition !== undefined && gapAtPosition >= minPause;
+    if (inBreakSet || gapCovered) {
       coveredCount++;
     } else {
-      uncoveredMarks.push({ refIndex: refIdx, refWord: refWords[refIdx] || '', punctType, gap: gapAtPosition != null ? Math.round(gapAtPosition * 1000) : null });
+      uncoveredMarks.push({ refIndex: refIdx, refWord: refWords[refIdx] || '', punctType, gapMs: gapAtPosition != null ? Math.round(gapAtPosition * 1000) : null, thresholdMs: Math.round(minPause * 1000) });
     }
   }
 
@@ -1363,6 +1372,23 @@ export function computePauseAtPunctuation(transcriptWords, referenceText, alignm
     ? Math.round((totalPunctuationMarks / totalWords) * 1000) / 1000
     : 0;
 
+  // Period:comma pause ratio — diagnostic signal for pause differentiation.
+  // Fluent readers: ~2:1 ratio. Struggling readers: ~1:1 (undifferentiated).
+  const periodGaps = [];
+  const commaGaps = [];
+  for (const [refIdx, punctType] of punctMap) {
+    const hIdx = refToHyp.get(refIdx);
+    if (hIdx === undefined) continue;
+    const g = gapAfterHyp.get(hIdx);
+    if (g !== undefined && g > 0) {
+      if (punctType === 'period') periodGaps.push(g);
+      else if (punctType === 'comma') commaGaps.push(g);
+    }
+  }
+  const meanPeriodPause = periodGaps.length > 0 ? periodGaps.reduce((a, b) => a + b, 0) / periodGaps.length : null;
+  const meanCommaPause = commaGaps.length > 0 ? commaGaps.reduce((a, b) => a + b, 0) / commaGaps.length : null;
+  const periodCommaRatio = (meanPeriodPause && meanCommaPause) ? Math.round((meanPeriodPause / meanCommaPause) * 100) / 100 : null;
+
   return {
     coverage: {
       ratio: coverageRatio,
@@ -1371,7 +1397,9 @@ export function computePauseAtPunctuation(transcriptWords, referenceText, alignm
       encounteredPunctuationMarks: encounteredPunctuationCount,
       totalPunctuationMarks,
       uncoveredMarks,
-      punctPauseThresholdMs: Math.round(punctPauseThreshold * 1000)
+      punctPauseThresholdMs: Math.round(punctPauseThreshold * 1000),
+      periodMinPauseMs: Math.round(PUNCT_MIN_PAUSE.period * 1000),
+      commaMinPauseMs: Math.round(PUNCT_MIN_PAUSE.comma * 1000)
     },
     precision: {
       ratio: precisionRatio,
@@ -1379,6 +1407,15 @@ export function computePauseAtPunctuation(transcriptWords, referenceText, alignm
       atPunctuationCount: breakClassification.atPunctuation,
       notAtPunctuationCount: breakClassification.unexpected,
       totalPauses
+    },
+    pauseDifferentiation: {
+      meanPeriodPauseMs: meanPeriodPause != null ? Math.round(meanPeriodPause * 1000) : null,
+      meanCommaPauseMs: meanCommaPause != null ? Math.round(meanCommaPause * 1000) : null,
+      periodCommaRatio,
+      label: periodCommaRatio == null ? 'Insufficient data'
+        : periodCommaRatio >= 1.5 ? 'Good differentiation'
+        : periodCommaRatio >= 1.2 ? 'Some differentiation'
+        : 'Undifferentiated pausing'
     },
     passagePunctuationDensity
   };
