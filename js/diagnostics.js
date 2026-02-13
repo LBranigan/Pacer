@@ -1715,9 +1715,19 @@ export function computeWordSpeedTiers(wordOutliers, alignment, xvalRawWords, tra
       if (hasXval) {
         const isDisfluency = transcriptWords[hypIndex] && transcriptWords[hypIndex].isDisfluency;
         if (!isDisfluency) {
+          let prevEnd = -Infinity;
           for (let p = 0; p < partsCount; p++) {
             if (transcriptWords[hypIndex + p]) {
-              consumeXvalAt(parseTime(transcriptWords[hypIndex + p].startTime));
+              const savedPtr = xvalPtr;
+              const m = consumeXvalAt(parseTime(transcriptWords[hypIndex + p].startTime));
+              if (m) {
+                if (p > 0 && m.startS > prevEnd + 0.2) {
+                  // Overshot — Parakeet merged this compound, unconsume
+                  xvalPtr = savedPtr;
+                  break;
+                }
+                prevEnd = m.endS;
+              }
             }
           }
         }
@@ -1751,13 +1761,21 @@ export function computeWordSpeedTiers(wordOutliers, alignment, xvalRawWords, tra
       const reverbS = parseTime(transcriptWords[hypIndex].startTime);
       const xvalMatch = consumeXvalAt(reverbS);
       if (xvalMatch) {
-        // For compounds, use span from first xval match start to last xval match end
+        // For compounds, consume additional xval parts and span first-start to last-end.
+        // Guard: only consume extras whose start is within 200ms of the first match's end,
+        // preventing overshoot when Parakeet merged the compound into fewer words.
         if (partsCount > 1) {
           let lastEnd = xvalMatch.endS;
           for (let extra = 1; extra < partsCount; extra++) {
             if (transcriptWords[hypIndex + extra]) {
+              const savedPtr = xvalPtr;
               const extraMatch = consumeXvalAt(parseTime(transcriptWords[hypIndex + extra].startTime));
-              if (extraMatch) lastEnd = extraMatch.endS;
+              if (extraMatch && extraMatch.startS <= lastEnd + 0.2) {
+                lastEnd = extraMatch.endS;
+              } else if (extraMatch) {
+                // Overshot — unconsume by restoring pointer
+                xvalPtr = savedPtr;
+              }
             }
           }
           durationMs = Math.round((lastEnd - xvalMatch.startS) * 1000);
