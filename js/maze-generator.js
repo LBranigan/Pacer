@@ -522,7 +522,7 @@ export function canRunMaze(passageText) {
  * @param {Array|null} nlAnnotations - NL API annotations (per-word POS, tier, etc.) or null
  * @param {string} difficulty - 'easy' | 'standard' | 'challenge'
  * @param {string} [seed] - Optional seed for deterministic shuffling (e.g. assessment ID)
- * @returns {Array} Array of maze items (up to 3)
+ * @returns {Array} Array of maze items (scales with passage size)
  */
 export function generateMazeItems(passageText, nlAnnotations, difficulty, seed) {
   const profile = DIFFICULTY_PROFILES[difficulty] || DIFFICULTY_PROFILES.standard;
@@ -537,19 +537,31 @@ export function generateMazeItems(passageText, nlAnnotations, difficulty, seed) 
     score: scoreSentence(sent, i, sentences.length, nlAnnotations)
   }));
 
-  // Select 3 sentences with spread
-  const targetCount = Math.min(3, sentences.length);
-  const selectedIndices = selectWithSpread(scored, targetCount);
+  // Scale challenge count with passage size
+  const targetCount = sentences.length <= 4 ? Math.min(3, sentences.length)
+    : sentences.length <= 8 ? Math.min(5, sentences.length)
+    : Math.min(8, sentences.length);
+
+  // Select more candidates than needed — fallback pool for sentences
+  // that fail target word selection or produce duplicate targets
+  const candidateCount = Math.min(sentences.length, targetCount * 2);
+  const candidateIndices = selectWithSpread(scored, candidateCount);
 
   const seedNum = seed ? hashString(seed) : Date.now();
   const items = [];
+  const usedTargets = new Set();
 
-  for (const idx of selectedIndices) {
+  for (const idx of candidateIndices) {
+    if (items.length >= targetCount) break;
+
     const sent = sentences[idx];
     const target = selectTargetWord(sent, idx, passageText, nlAnnotations, profile);
     if (!target) continue;
 
     const cleanTarget = cleanWord(target.word);
+    if (usedTargets.has(cleanTarget)) continue;
+    usedTargets.add(cleanTarget);
+
     const [d1, d2] = generateDistractors(target.word, idx, sentences, nlAnnotations, profile);
 
     // Build blank sentence
