@@ -9,38 +9,124 @@
  */
 
 const EQUIVALENCE_GROUPS = [
-  // Abbreviations & symbols
+  // ── Titles & honorifics ──
   ['vs', 'versus', 'verses'],
   ['mr', 'mister'],
   ['mrs', 'missus', 'misses'],
   ['ms', 'miss', 'miz'],
   ['dr', 'doctor'],
   ['st', 'saint', 'street'],
-  ['ave', 'avenue'],
-  ['blvd', 'boulevard'],
-  ['dept', 'department'],
-  ['govt', 'government'],
   ['jr', 'junior'],
   ['sr', 'senior'],
-  ['sgt', 'sergeant'],
-  ['capt', 'captain'],
-  ['lt', 'lieutenant'],
-  ['gen', 'general'],
-  ['prof', 'professor'],
+  ['gov', 'governor'],
+  ['pres', 'president'],
+  ['sen', 'senator'],
+  ['rep', 'representative'],
   ['rev', 'reverend'],
+  ['prof', 'professor'],
+  ['gen', 'general'],
+  ['col', 'colonel'],
+  ['maj', 'major'],
+  ['capt', 'captain'],
+  ['sgt', 'sergeant'],
+  ['lt', 'lieutenant'],
+  ['cpl', 'corporal'],
+  ['pvt', 'private'],
+  ['cmdr', 'commander'],
+  ['adm', 'admiral'],
 
-  // Trailing-period abbreviation expansions (after normalizeText strips periods)
-  ['etc', 'etcetera'],
-  ['mt', 'mount', 'mountain'],
-  ['ft', 'fort', 'foot', 'feet'],
+  // ── Address & place ──
+  ['ave', 'avenue'],
+  ['blvd', 'boulevard'],
+  ['rd', 'road'],
+  ['ln', 'lane'],
+  ['ct', 'court'],
+  ['pl', 'place'],
+  ['hwy', 'highway'],
+  ['pkwy', 'parkway'],
+  ['apt', 'apartment'],
+  ['bldg', 'building'],
+
+  // ── Compass directions (multi-letter only; single letters too ambiguous) ──
+  ['ne', 'northeast'],
+  ['nw', 'northwest'],
+  ['se', 'southeast'],
+  ['sw', 'southwest'],
+
+  // ── Organizations & business ──
+  ['dept', 'department'],
+  ['govt', 'government'],
   ['inc', 'incorporated'],
   ['ltd', 'limited'],
   ['co', 'company', 'county'],
   ['corp', 'corporation'],
+  ['assn', 'assoc', 'association'],
+  ['natl', 'national'],
+  ['intl', 'international'],
+
+  // ── Common abbreviation expansions (after normalizeText strips periods) ──
+  ['etc', 'etcetera'],
+  ['mt', 'mount', 'mountain'],
+  ['ft', 'fort', 'foot', 'feet'],
   ['vol', 'volume'],
   ['fig', 'figure'],
+  ['approx', 'approximately'],
+  ['info', 'information'],
+  ['tv', 'television'],
 
-  // Contractions ↔ expanded forms
+  // ── Measurement: metric ──
+  ['km', 'kilometer', 'kilometers', 'kilometre', 'kilometres'],
+  ['cm', 'centimeter', 'centimeters', 'centimetre', 'centimetres'],
+  ['mm', 'millimeter', 'millimeters', 'millimetre', 'millimetres'],
+  ['kg', 'kilogram', 'kilograms'],
+  ['mg', 'milligram', 'milligrams'],
+  ['ml', 'milliliter', 'milliliters', 'millilitre', 'millilitres'],
+
+  // ── Measurement: imperial / US customary ──
+  ['oz', 'ounce', 'ounces'],
+  ['lb', 'lbs', 'pound', 'pounds'],
+  ['yd', 'yard', 'yards'],
+  ['mi', 'mile', 'miles'],
+  ['gal', 'gallon', 'gallons'],
+  ['pt', 'pint', 'pints'],
+  ['qt', 'quart', 'quarts'],
+  ['tsp', 'teaspoon', 'teaspoons'],
+  ['tbsp', 'tablespoon', 'tablespoons'],
+
+  // ── Measurement: other ──
+  ['sq', 'square'],
+  ['cu', 'cubic'],
+  ['deg', 'degree', 'degrees'],
+
+  // ── Time units ──
+  // Note: 'hr'/'hours' handled in HOMOPHONE_GROUPS with 'our'/'hour'
+  ['min', 'minute', 'minutes'],
+  ['sec', 'seconds'],  // 'second' omitted — conflicts with ordinal ['2nd', 'second']
+  ['yr', 'year', 'years'],
+  ['mo', 'month', 'months'],
+  ['wk', 'week', 'weeks'],
+
+  // ── Days of the week (after normalizeText strips periods: "Mon." → "mon") ──
+  ['mon', 'monday'],
+  ['tue', 'tues', 'tuesday'],
+  ['wed', 'wednesday'],
+  ['thu', 'thur', 'thurs', 'thursday'],
+  ['fri', 'friday'],
+  ['sat', 'saturday'],
+  // Note: 'sun'/'sunday' handled in HOMOPHONE_GROUPS with 'sun'/'son'
+
+  // ── Months of the year (after period strip: "Jan." → "jan") ──
+  ['jan', 'january'],
+  ['feb', 'february'],
+  ['mar', 'march'],
+  ['apr', 'april'],
+  ['aug', 'august'],
+  ['sep', 'sept', 'september'],
+  ['oct', 'october'],
+  ['nov', 'november'],
+  ['dec', 'december'],
+
+  // ── Contractions ↔ expanded forms ──
   ["can't", 'cannot', 'can not'],
   ["won't", 'will not'],
   ["don't", 'do not'],
@@ -80,7 +166,7 @@ const EQUIVALENCE_GROUPS = [
   ["who's", 'who is', 'who has'],
   ["let's", 'let us'],
 
-  // Numbers written as digits ↔ words
+  // ── Numbers written as digits ↔ words ──
   ['1', 'one'],
   ['2', 'two'],
   ['3', 'three'],
@@ -102,11 +188,11 @@ const EQUIVALENCE_GROUPS = [
   ['19', 'nineteen'],
   ['20', 'twenty'],
 
-  // Symbols that might appear in text
+  // ── Symbols ──
   ['&', 'and'],
   ['%', 'percent'],
 
-  // Common alternate forms
+  // ── Common alternate forms ──
   ['ok', 'okay'],
   ['gonna', 'going to'],
   ['wanna', 'want to'],
@@ -132,10 +218,10 @@ const HOMOPHONE_GROUPS = [
   ['see', 'sea'],
   ['be', 'bee'],
   ['hear', 'here'],
-  ['our', 'hour'],
+  ['our', 'hour', 'hr', 'hours'],  // Extended: hr/hours abbreviation
   ['ate', 'eight'],
   ['one', 'won'],
-  ['sun', 'son'],
+  ['sun', 'son', 'sunday'],  // Extended: Sun. abbreviation for Sunday
   ['would', 'wood'],
   ['which', 'witch'],
   ['wear', 'where', 'ware'],

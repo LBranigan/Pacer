@@ -582,8 +582,13 @@ function renderNewAnalyzedWords(container, alignment, sttLookup, diagnostics, tr
       const s = token.replace(/^[^\w'-]+|[^\w'-]+$/g, '');
       if (s.includes('-')) {
         const parts = s.split('-').filter(p => p.length > 0);
-        for (let j = 0; j < parts.length - 1; j++) split.push(parts[j]);
-        split.push(token);
+        if (parts.length >= 2 && parts[0].length === 1) {
+          // Single-letter prefix (e-mail) → keep as one token
+          split.push(token);
+        } else {
+          for (let j = 0; j < parts.length - 1; j++) split.push(parts[j]);
+          split.push(token);
+        }
       } else split.push(token);
     }
     for (let i = 0; i < split.length; i++) {

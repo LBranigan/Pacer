@@ -759,7 +759,7 @@ async function runAnalysis() {
     if (!raw.includes('-')) { parakeetWords.push(w); continue; }
     const core = raw.toLowerCase().replace(/^[^\w'-]+|[^\w'-]+$/g, '').replace(/\./g, '');
     const parts = core.split('-').filter(p => p.length > 0);
-    if (parts.length <= 1 || parts.some(p => p.length === 1)) {
+    if (parts.length <= 1 || (parts.length >= 2 && parts[0].length === 1)) {
       parakeetWords.push(w); continue;
     }
     const startS = parseFloat(w.startTime) || 0;
@@ -1525,14 +1525,14 @@ async function runAnalysis() {
       }
       // Split internal-hyphen tokens to mirror normalizeText's hyphen split.
       // e.g., "smooth-on-skin" → [{word:"smooth",...}, {word:"on",...}, {word:"skin",...}]
-      // Exception: single-letter parts join instead (e-mail → email).
+      // Exception: single-letter prefix joins instead (e-mail → email).
       // Without this, refPositions has fewer entries than alignment and _displayRef/NL drift.
       const positions = [];
       for (const pos of merged) {
         const stripped = pos.word.replace(/^[^\w'-]+|[^\w'-]+$/g, '');
         if (stripped.includes('-')) {
           const parts = stripped.split('-').filter(p => p.length > 0);
-          if (parts.some(p => p.length === 1)) {
+          if (parts.length >= 2 && parts[0].length === 1) {
             // Single-letter part (e-mail, e-book) → keep as one token
             const joinedWord = parts.join('');
             const trailingPunct = pos.word.match(/[^\w'-]*$/)[0];

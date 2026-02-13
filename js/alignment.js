@@ -143,21 +143,36 @@ function mergeCompoundWords(alignment) {
  * Values are arrays of acceptable spoken expansions.
  */
 const ABBREVIATION_EXPANSIONS = {
+  // Latin / general
   'ie':    [['that', 'is']],
   'eg':    [['for', 'example']],
   'etc':   [['et', 'cetera']],
   'aka':   [['also', 'known', 'as']],
   'diy':   [['do', 'it', 'yourself']],
   'rsvp':  [['please', 'respond']],
+  'ps':    [['post', 'script']],
+  // Time
+  'am':    [['in', 'the', 'morning']],
+  'pm':    [['in', 'the', 'afternoon'], ['in', 'the', 'evening']],
+  // Historical eras
   'bc':    [['before', 'christ']],
   'ad':    [['anno', 'domini']],
-  'ps':    [['post', 'script']],
+  'bce':   [['before', 'common', 'era']],
+  'ce':    [['common', 'era']],
+  // Geography / organizations
   'us':    [['united', 'states']],
   'usa':   [['united', 'states', 'of', 'america']],
   'uk':    [['united', 'kingdom']],
   'dc':    [['district', 'of', 'columbia']],
-  'am':    [['in', 'the', 'morning']],
-  'pm':    [['in', 'the', 'afternoon'], ['in', 'the', 'evening']],
+  'nyc':   [['new', 'york', 'city']],
+  'un':    [['united', 'nations']],
+  'eu':    [['european', 'union']],
+  // Speed / rate units
+  'mph':   [['miles', 'per', 'hour']],
+  'kph':   [['kilometers', 'per', 'hour']],
+  // War / history
+  'wwi':   [['world', 'war', 'one'], ['world', 'war', 'i']],
+  'wwii':  [['world', 'war', 'two'], ['world', 'war', 'ii']],
 };
 
 /**
