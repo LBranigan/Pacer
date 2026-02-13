@@ -1,0 +1,296 @@
+/* illustrator.css — Reading Illustrator scene styling */
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+  background: #1a1a2e;
+  color: #e0e0e0;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem;
+}
+
+/* ── Screens ── */
+
+.screen {
+  display: none;
+  width: 100%;
+  max-width: 700px;
+  text-align: center;
+}
+.screen.active { display: block; }
+
+/* ── Intro screen ── */
+
+#intro h1 {
+  font-size: 2rem;
+  color: #66bb6a;
+  margin-bottom: 1rem;
+}
+
+#intro .instructions {
+  font-size: 1.05rem;
+  line-height: 1.7;
+  color: #bbb;
+  margin-bottom: 1.5rem;
+  padding: 0 1rem;
+}
+
+#intro .instructions p {
+  margin-bottom: 0.5rem;
+}
+
+.btn-primary {
+  background: #2e7d32;
+  color: #fff;
+  border: none;
+  border-radius: 10px;
+  padding: 0.8rem 2.5rem;
+  font-size: 1.15rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+.btn-primary:hover { background: #388e3c; }
+
+/* ── Scene screen ── */
+
+.scene-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.8rem;
+  padding: 0 0.25rem;
+}
+
+#progressLabel {
+  font-size: 0.95rem;
+  color: #aaa;
+}
+
+.speed-controls {
+  display: flex;
+  gap: 0.3rem;
+}
+
+.speed-btn {
+  background: #16213e;
+  color: #aaa;
+  border: 1px solid #333;
+  border-radius: 6px;
+  padding: 0.25rem 0.6rem;
+  font-size: 0.8rem;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.speed-btn:hover { border-color: #66bb6a; color: #e0e0e0; }
+.speed-btn.active {
+  background: #2e7d32;
+  color: #fff;
+  border-color: #2e7d32;
+}
+
+/* ── Scene area ── */
+
+.scene-area, .results-scene-area {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  background: #0f1528;
+  border-radius: 16px;
+  border: 2px solid #222;
+  overflow: hidden;
+  box-shadow: inset 0 2px 12px rgba(0,0,0,0.4), 0 4px 24px rgba(0,0,0,0.3);
+}
+
+/* ── Stickers ── */
+
+.sticker {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  opacity: 0;
+  transform: scale(0);
+  transition: none;
+  pointer-events: none;
+}
+
+.sticker.pop-in {
+  animation: stickerPop 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+}
+
+.sticker.omitted {
+  opacity: 0.25;
+  filter: grayscale(1);
+  transform: scale(1);
+}
+
+.sticker.visible {
+  opacity: 1;
+  transform: scale(1);
+}
+
+.sticker-emoji {
+  font-size: 2.5rem;
+  line-height: 1;
+  user-select: none;
+}
+
+.sticker-label {
+  font-size: 0.65rem;
+  color: #aaa;
+  margin-top: 0.15rem;
+  opacity: 0;
+  white-space: nowrap;
+  text-shadow: 0 1px 4px rgba(0,0,0,0.8);
+  font-weight: 500;
+}
+
+.sticker-label.show {
+  opacity: 1;
+}
+
+/* Unknown noun marker */
+.sticker-emoji.unknown {
+  opacity: 0.6;
+}
+.sticker-emoji.unknown + .sticker-label {
+  opacity: 1;
+  color: #ff9800;
+}
+
+/* ── Timeline ── */
+
+.timeline-row {
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
+  margin-top: 0.8rem;
+}
+
+.play-pause-btn {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  border: none;
+  background: #2e7d32;
+  color: #fff;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: background 0.2s;
+}
+.play-pause-btn:hover { background: #388e3c; }
+
+.play-icon { margin-left: 2px; }
+
+.timeline-bar-container {
+  flex: 1;
+  height: 6px;
+  background: #333;
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.timeline-bar {
+  height: 100%;
+  width: 0%;
+  background: #66bb6a;
+  border-radius: 3px;
+  transition: width 0.15s linear;
+}
+
+/* ── Results screen ── */
+
+#results h2 {
+  font-size: 1.8rem;
+  color: #66bb6a;
+  margin-bottom: 1rem;
+}
+
+.results-scene-area {
+  margin-bottom: 1rem;
+}
+
+.results-score {
+  font-size: 2rem;
+  font-weight: 700;
+  color: #fff;
+  margin-bottom: 0.8rem;
+}
+
+.missing-nouns {
+  color: #ff9800;
+  font-size: 0.95rem;
+  margin-bottom: 1.2rem;
+  line-height: 1.6;
+}
+
+.missing-nouns:empty { display: none; }
+
+#replayBtn {
+  margin-right: 0.5rem;
+}
+
+.btn-close {
+  background: #555;
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  padding: 0.6rem 2rem;
+  font-size: 1rem;
+  cursor: pointer;
+}
+.btn-close:hover { background: #777; }
+
+/* ── Error screen ── */
+
+#error { color: #f44336; }
+#error h2 { margin-bottom: 1rem; }
+#error p { color: #999; margin-bottom: 1rem; }
+
+/* ── Animations ── */
+
+@keyframes stickerPop {
+  0% {
+    opacity: 0;
+    transform: scale(0);
+  }
+  60% {
+    opacity: 1;
+    transform: scale(1.3);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* ── Reduced motion ── */
+
+@media (prefers-reduced-motion: reduce) {
+  .sticker.pop-in {
+    animation: none;
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* ── Responsive ── */
+
+@media (max-width: 500px) {
+  body { padding: 1rem; }
+
+  #intro h1 { font-size: 1.5rem; }
+
+  .sticker-emoji { font-size: 2rem; }
+
+  .scene-header { flex-direction: column; gap: 0.4rem; }
+}

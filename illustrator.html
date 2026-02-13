@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Reading Illustrator</title>
+<link rel="stylesheet" href="css/illustrator.css">
+</head>
+<body>
+
+<!-- Intro Screen -->
+<div id="intro" class="screen active">
+  <h1>Reading Illustrator</h1>
+  <div class="instructions">
+    <p>Watch your reading come to life!</p>
+    <p>Every noun you read becomes a picture.</p>
+    <p>Words you missed will appear as ghosts.</p>
+  </div>
+  <button class="btn-primary" id="buildBtn">Build My Picture</button>
+</div>
+
+<!-- Scene Screen -->
+<div id="scene" class="screen">
+  <div class="scene-header">
+    <span id="progressLabel">0 / 0 nouns</span>
+    <div class="speed-controls">
+      <button class="speed-btn" data-speed="0.5">0.5x</button>
+      <button class="speed-btn active" data-speed="1">1x</button>
+      <button class="speed-btn" data-speed="2">2x</button>
+      <button class="speed-btn" data-speed="4">4x</button>
+    </div>
+  </div>
+
+  <div class="scene-area" id="sceneArea"></div>
+
+  <div class="timeline-row">
+    <button class="play-pause-btn" id="playPauseBtn">
+      <svg class="play-icon" id="playIcon" width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><polygon points="6,3 20,12 6,21"/></svg>
+      <svg class="pause-icon" id="pauseIcon" width="24" height="24" viewBox="0 0 24 24" fill="currentColor" style="display:none"><rect x="5" y="3" width="4" height="18"/><rect x="15" y="3" width="4" height="18"/></svg>
+    </button>
+    <div class="timeline-bar-container">
+      <div class="timeline-bar" id="timelineBar"></div>
+    </div>
+  </div>
+</div>
+
+<!-- Results Screen -->
+<div id="results" class="screen">
+  <h2>Your Picture Is Complete!</h2>
+  <div class="results-scene-area" id="resultsSceneArea"></div>
+  <div class="results-score" id="resultsScore"></div>
+  <div class="missing-nouns" id="missingNouns"></div>
+  <button class="btn-primary" id="replayBtn">Replay</button>
+  <button class="btn-close" id="closeBtn">Close</button>
+</div>
+
+<!-- Error Screen -->
+<div id="error" class="screen">
+  <h2>Oops!</h2>
+  <p id="errorMessage">Something went wrong.</p>
+  <button class="btn-close" id="errorCloseBtn">Close</button>
+</div>
+
+<script type="module" src="js/illustrator.js"></script>
+</body>
+</html>
