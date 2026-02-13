@@ -349,6 +349,7 @@ body::before {
    ============================================================ */
 
 .visualizer-container {
+  position: relative;
   width: 100%;
   max-width: 680px;
   height: 40px;
@@ -357,6 +358,28 @@ body::before {
   border-radius: var(--rm-radius-sm);
   overflow: hidden;
   box-shadow: 0 2px 12px rgba(0, 0, 0, 0.15);
+}
+
+.chord-badge {
+  display: none;
+  position: absolute;
+  top: 50%;
+  right: 10px;
+  transform: translateY(-50%);
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--rm-accent);
+  background: rgba(26, 21, 32, 0.75);
+  padding: 2px 8px;
+  border-radius: 4px;
+  letter-spacing: 0.5px;
+  pointer-events: none;
+  transition: opacity 0.3s ease;
+  z-index: 1;
+}
+
+.chord-badge.visible {
+  display: block;
 }
 
 #visualizer-canvas {

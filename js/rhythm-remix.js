@@ -666,6 +666,21 @@ function drawVisualizer() {
   vizCtx.globalAlpha = 1;
 }
 
+// ── Chord badge ──────────────────────────────────────────────────────────────
+
+let lastChordName = '';
+
+function updateChordBadge() {
+  const badge = document.getElementById('chordBadge');
+  if (!badge || !lofi) return;
+  const name = lofi.currentChordName;
+  if (name !== lastChordName) {
+    badge.textContent = name;
+    lastChordName = name;
+  }
+  badge.classList.toggle('visible', sentenceAlignedEnabled);
+}
+
 // ── Main animation loop ─────────────────────────────────────────────────────
 
 function animationLoop(timestamp) {
@@ -723,6 +738,9 @@ function animationLoop(timestamp) {
 
   // 7. Draw visualizer
   drawVisualizer();
+
+  // 8. Update chord badge
+  updateChordBadge();
 
   animFrameId = requestAnimationFrame(animationLoop);
 }

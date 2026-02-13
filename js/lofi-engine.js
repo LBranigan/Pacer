@@ -245,6 +245,18 @@ export class LofiEngine {
   }
 
   /**
+   * The name of the current chord (e.g. 'Dm7').
+   * @returns {string}
+   */
+  get currentChordName() {
+    const chordSet = CHORD_SETS[this._style];
+    const idx = this._sentenceAligned
+      ? ((this._chordOverrideIdx || 0) % chordSet.chords.length)
+      : (Math.floor(this._currentBeat / 8) % chordSet.chords.length);
+    return chordSet.chords[idx].name;
+  }
+
+  /**
    * Start playing the beat from the beginning.
    */
   start() {
