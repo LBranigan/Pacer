@@ -528,6 +528,10 @@ export function generateMazeItems(passageText, nlAnnotations, difficulty, seed) 
   const profile = DIFFICULTY_PROFILES[difficulty] || DIFFICULTY_PROFILES.standard;
   const sentences = splitIntoSentences(passageText);
 
+  console.log(`[maze-gen] passageText length: ${passageText.length} chars, ${passageText.split(/\s+/).length} words`);
+  console.log(`[maze-gen] sentences found: ${sentences.length}`);
+  sentences.forEach((s, i) => console.log(`  [${i}] (${s.split(/\s+/).length}w) "${s.slice(0, 80)}${s.length > 80 ? '...' : ''}"`));
+
   if (sentences.length === 0) return [];
 
   // Score all sentences
@@ -547,6 +551,8 @@ export function generateMazeItems(passageText, nlAnnotations, difficulty, seed) 
   const candidateCount = Math.min(sentences.length, targetCount * 2);
   const candidateIndices = selectWithSpread(scored, candidateCount);
 
+  console.log(`[maze-gen] targetCount: ${targetCount}, candidateCount: ${candidateCount}, candidates: [${candidateIndices}]`);
+
   const seedNum = seed ? hashString(seed) : Date.now();
   const items = [];
   const usedTargets = new Set();
@@ -556,10 +562,16 @@ export function generateMazeItems(passageText, nlAnnotations, difficulty, seed) 
 
     const sent = sentences[idx];
     const target = selectTargetWord(sent, idx, passageText, nlAnnotations, profile);
-    if (!target) continue;
+    if (!target) {
+      console.log(`[maze-gen] sentence ${idx} SKIPPED: no eligible target word`);
+      continue;
+    }
 
     const cleanTarget = cleanWord(target.word);
-    if (usedTargets.has(cleanTarget)) continue;
+    if (usedTargets.has(cleanTarget)) {
+      console.log(`[maze-gen] sentence ${idx} SKIPPED: duplicate target "${cleanTarget}"`);
+      continue;
+    }
     usedTargets.add(cleanTarget);
 
     const [d1, d2] = generateDistractors(target.word, idx, sentences, nlAnnotations, profile);
@@ -593,8 +605,10 @@ export function generateMazeItems(passageText, nlAnnotations, difficulty, seed) 
       shuffledOptions,
       correctShuffledIndex
     });
+    console.log(`[maze-gen] item ${items.length}: sentence ${idx}, target="${cleanTarget}"`);
   }
 
+  console.log(`[maze-gen] FINAL: ${items.length} items generated (target was ${targetCount})`);
   return items;
 }
 
