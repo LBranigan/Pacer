@@ -2,6 +2,7 @@
 // Follows the same standalone-page pattern as maze-game.js
 
 import { getAssessment } from './storage.js';
+import { getAudioBlob } from './audio-store.js';
 import NOUN_EMOJI from './noun-emoji-map.js';
 
 // ── DOM refs ──
@@ -20,6 +21,7 @@ let state = {
   events: [],      // extracted noun events
   positions: [],   // computed layout positions
   engine: null,    // ReplayEngine instance
+  audioEl: null,   // student's recorded audio
 };
 
 
@@ -165,104 +167,142 @@ function playPopSound() {
 }
 
 
-// ── Replay Engine ──
+// ── Replay Engine (audio-driven) ──
 
 class ReplayEngine {
-  constructor(events, stickers, onProgress, onComplete) {
+  constructor(events, stickers, audioEl, onProgress, onComplete) {
     this.events = events;
     this.stickers = stickers;
+    this.audioEl = audioEl;
     this.onProgress = onProgress;
     this.onComplete = onComplete;
-    this.speed = 1;
     this.playing = false;
-    this.currentIndex = 0;
-    this.timerId = null;
+    this.revealed = new Set();
+    this.rafId = null;
 
-    // Build schedule: spoken events sorted by timestamp, then omitted events at end
+    // Build schedule: spoken events sorted by timestamp, omitted appended at end
     const spoken = events
       .map((ev, i) => ({ ...ev, idx: i }))
-      .filter(ev => !ev.wasOmitted)
-      .sort((a, b) => (a.timestampSec ?? 0) - (b.timestampSec ?? 0));
+      .filter(ev => !ev.wasOmitted && ev.timestampSec != null)
+      .sort((a, b) => a.timestampSec - b.timestampSec);
     const omitted = events
       .map((ev, i) => ({ ...ev, idx: i }))
       .filter(ev => ev.wasOmitted);
-    this.schedule = [...spoken, ...omitted];
+    // Spoken events with no timestamp get revealed at start
+    const noTs = events
+      .map((ev, i) => ({ ...ev, idx: i }))
+      .filter(ev => !ev.wasOmitted && ev.timestampSec == null);
+    this.spoken = spoken;
+    this.omitted = omitted;
+    this.noTimestamp = noTs;
+    this.omittedRevealed = false;
+    this.audioDuration = 0;
 
-    // Compute delays between reveals
-    this.delays = [];
-    for (let i = 0; i < this.schedule.length; i++) {
-      if (i === 0) {
-        this.delays.push(300); // initial delay
-        continue;
-      }
-      const prev = this.schedule[i - 1];
-      const curr = this.schedule[i];
-      if (curr.wasOmitted) {
-        this.delays.push(800);
-      } else if (prev.timestampSec != null && curr.timestampSec != null) {
-        const gap = (curr.timestampSec - prev.timestampSec) * 1000;
-        this.delays.push(Math.max(200, Math.min(3000, gap)));
-      } else {
-        this.delays.push(800); // fallback slideshow
-      }
+    if (audioEl) {
+      audioEl.addEventListener('ended', () => {
+        this._revealOmitted();
+        this.playing = false;
+        cancelAnimationFrame(this.rafId);
+        // Brief delay then complete
+        setTimeout(() => onComplete(), 1500);
+      });
     }
   }
 
   play() {
-    if (this.currentIndex >= this.schedule.length) return;
     this.playing = true;
-    this._scheduleNext();
+    // Reveal any noTimestamp events immediately
+    for (const item of this.noTimestamp) {
+      if (!this.revealed.has(item.idx)) {
+        this._revealSticker(item);
+      }
+    }
+    if (this.audioEl) {
+      this.audioEl.play().catch(() => {});
+      this._tick();
+    } else {
+      // No audio: fallback to timed reveals
+      this._fallbackPlay();
+    }
   }
 
   pause() {
     this.playing = false;
-    clearTimeout(this.timerId);
-    this.timerId = null;
+    cancelAnimationFrame(this.rafId);
+    if (this.audioEl) this.audioEl.pause();
   }
 
   setSpeed(s) {
-    this.speed = s;
-    if (this.playing) {
-      clearTimeout(this.timerId);
-      this._scheduleNext();
-    }
+    if (this.audioEl) this.audioEl.playbackRate = s;
   }
 
-  _scheduleNext() {
-    if (!this.playing || this.currentIndex >= this.schedule.length) {
-      if (this.currentIndex >= this.schedule.length) {
-        this.playing = false;
-        this.onComplete();
+  _tick() {
+    if (!this.playing) return;
+    const t = this.audioEl.currentTime;
+    const dur = this.audioEl.duration || 1;
+
+    // Reveal spoken stickers whose timestamp has been reached
+    for (const item of this.spoken) {
+      if (this.revealed.has(item.idx)) continue;
+      if (t >= item.timestampSec) {
+        this._revealSticker(item);
       }
-      return;
     }
 
-    const delay = this.delays[this.currentIndex] / this.speed;
-    this.timerId = setTimeout(() => {
-      this._revealCurrent();
-      this.currentIndex++;
-      this.onProgress(this.currentIndex, this.schedule.length);
-      this._scheduleNext();
-    }, delay);
+    this.onProgress(this.revealed.size, this.events.length);
+    this.rafId = requestAnimationFrame(() => this._tick());
   }
 
-  _revealCurrent() {
-    const item = this.schedule[this.currentIndex];
+  _revealSticker(item) {
+    if (this.revealed.has(item.idx)) return;
+    this.revealed.add(item.idx);
     const sticker = this.stickers[item.idx];
     if (!sticker) return;
+    sticker.classList.add('pop-in');
+    playPopSound();
+  }
 
-    if (item.wasOmitted) {
-      sticker.classList.add('omitted');
-      sticker.querySelector('.sticker-label').classList.add('show');
-    } else {
-      sticker.classList.add('pop-in');
-      playPopSound();
+  _revealOmitted() {
+    if (this.omittedRevealed) return;
+    this.omittedRevealed = true;
+    let delay = 0;
+    for (const item of this.omitted) {
+      setTimeout(() => {
+        this.revealed.add(item.idx);
+        const sticker = this.stickers[item.idx];
+        if (sticker) {
+          sticker.classList.add('omitted');
+          sticker.querySelector('.sticker-label').classList.add('show');
+        }
+        this.onProgress(this.revealed.size, this.events.length);
+      }, delay);
+      delay += 600;
     }
+  }
+
+  // Fallback when no audio: delay-based scheduling
+  _fallbackPlay() {
+    const sorted = [...this.spoken, ...this.noTimestamp];
+    let i = 0;
+    const next = () => {
+      if (i >= sorted.length) {
+        this._revealOmitted();
+        setTimeout(() => this.onComplete(), 1500);
+        return;
+      }
+      this._revealSticker(sorted[i]);
+      this.onProgress(this.revealed.size, this.events.length);
+      i++;
+      setTimeout(next, 600);
+    };
+    next();
   }
 
   reset() {
     this.pause();
-    this.currentIndex = 0;
+    this.revealed.clear();
+    this.omittedRevealed = false;
+    if (this.audioEl) this.audioEl.currentTime = 0;
     for (const s of this.stickers) {
       s.classList.remove('pop-in', 'omitted', 'visible');
       s.querySelector('.sticker-label').classList.remove('show');
@@ -334,7 +374,7 @@ function saveIllustratorResults(assessmentId, events) {
 
 // ── Initialization ──
 
-function init() {
+async function init() {
   const params = new URLSearchParams(window.location.search);
   state.studentId = params.get('student');
   state.assessmentId = params.get('assessment');
@@ -358,6 +398,19 @@ function init() {
 
   // Compute layout based on a reference 4:3 area
   state.positions = computeLayout(state.events, 400, 300);
+
+  // Load student audio from IndexedDB
+  if (assessment.audioRef) {
+    try {
+      const blob = await getAudioBlob(assessment.audioRef);
+      if (blob) {
+        state.audioEl = new Audio();
+        state.audioEl.src = URL.createObjectURL(blob);
+      }
+    } catch (e) {
+      console.warn('[illustrator] Could not load audio:', e.message);
+    }
+  }
 
   // Wire up intro button
   $('buildBtn').addEventListener('click', () => startReplay());
@@ -399,9 +452,13 @@ function startReplay() {
   const activeSpeedBtn = document.querySelector('.speed-btn.active');
   const speed = activeSpeedBtn ? parseFloat(activeSpeedBtn.dataset.speed) : 1;
 
+  // Reset audio to start
+  if (state.audioEl) state.audioEl.currentTime = 0;
+
   state.engine = new ReplayEngine(
     state.events,
     stickers,
+    state.audioEl,
     (current, total) => {
       $('progressLabel').textContent = `${current} / ${total} nouns`;
       $('timelineBar').style.width = (current / total * 100) + '%';
