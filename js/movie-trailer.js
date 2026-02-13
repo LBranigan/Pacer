@@ -333,12 +333,24 @@ export async function generateMovieTrailer(referenceText, studentName) {
   const originalText = btn?.textContent;
   if (btn) {
     btn.disabled = true;
-    btn.textContent = 'Generating voiceover...';
+    btn.textContent = 'Generating voiceover (~20s)...';
   }
 
   try {
     const prompt = buildTrailerPrompt(referenceText, studentName);
-    const voiceoverData = await callGeminiTTS(prompt, apiKey);
+    // Animated countdown on button while waiting
+    let elapsed = 0;
+    const timer = setInterval(() => {
+      elapsed++;
+      if (btn) btn.textContent = `Generating voiceover (${elapsed}s)...`;
+    }, 1000);
+
+    let voiceoverData;
+    try {
+      voiceoverData = await callGeminiTTS(prompt, apiKey);
+    } finally {
+      clearInterval(timer);
+    }
 
     if (btn) btn.textContent = 'Mixing trailer...';
     const trailerBlob = await mixTrailer(voiceoverData);
