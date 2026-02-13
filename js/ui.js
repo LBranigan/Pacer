@@ -1153,6 +1153,27 @@ export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, di
 
   plainDiv.appendChild(metricsBar);
 
+  // ── Data Quality Warning ──
+  // Detect heavy errors in the opening words (background audio, false starts, re-reads)
+  {
+    const WINDOW = 10;
+    const THRESHOLD = 5;
+    const refEntries = alignment.filter(e => e.type !== 'insertion');
+    let earlyErrors = 0;
+    for (let i = 0; i < Math.min(WINDOW, refEntries.length); i++) {
+      if (refEntries[i].type !== 'correct') earlyErrors++;
+    }
+    if (earlyErrors >= THRESHOLD) {
+      const warn = document.createElement('div');
+      warn.className = 'data-quality-warning';
+      warn.innerHTML = '<strong>Recording Quality Issue</strong> — '
+        + earlyErrors + ' of the first ' + Math.min(WINDOW, refEntries.length) + ' words are errors. '
+        + 'This may indicate background audio, a false start, or the student re-reading the passage. '
+        + 'Scores may be unreliable.';
+      plainDiv.appendChild(warn);
+    }
+  }
+
   // ── Collapsible Prosody Section ──
   if (diagnostics && diagnostics.prosody && !diagnostics.prosody.phrasing.insufficient) {
     const pros = diagnostics.prosody;

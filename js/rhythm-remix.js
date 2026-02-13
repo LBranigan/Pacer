@@ -10,6 +10,7 @@
 import { LofiEngine } from './lofi-engine.js';
 import { getAudioBlob } from './audio-store.js';
 import { getAssessment } from './storage.js';
+import { getPunctuationPositions } from './diagnostics.js';
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
@@ -75,6 +76,13 @@ let vizCtx = null;
 
 /** Assessment data loaded at init. */
 let assessment = null;
+
+/** Pause-reactive beat state. */
+let inPause = false;
+let savedDensity = 'normal'; // density to restore after pause ends
+
+/** Sentence-aligned chord toggle state. */
+let sentenceAlignedEnabled = false;
 
 // ── Ball state ───────────────────────────────────────────────────────────────
 
@@ -176,7 +184,7 @@ function updateSpring(dt) {
 
 function wcpmToBpm(wcpm) {
   const raw = 60 + ((wcpm - 40) * 30 / 140);
-  return Math.max(55, Math.min(95, raw));
+  return Math.max(55, Math.min(100, raw));
 }
 
 // ── Word rect caching ────────────────────────────────────────────────────────
@@ -294,6 +302,14 @@ function onWordChange(fromIdx, toIdx) {
   previousWordIdx = fromIdx;
   const w = wordSequence[toIdx];
   const rect = wordRects[toIdx];
+
+  // Sentence-aligned chord: advance when leaving a sentence-final word
+  if (sentenceAlignedEnabled && lofi && fromIdx >= 0) {
+    const prev = wordSequence[fromIdx];
+    if (prev && prev.sentenceFinal) {
+      lofi.advanceChord();
+    }
+  }
   if (!rect) return;
 
   // Determine ball color based on word type
@@ -665,15 +681,39 @@ function animationLoop(timestamp) {
 
   // 2. If word changed, trigger transition
   if (newIdx !== currentWordIdx && newIdx >= 0) {
+    // Leaving a pause — restore density
+    if (inPause) {
+      inPause = false;
+      if (lofi) lofi.setDensity(savedDensity);
+    }
     onWordChange(currentWordIdx, newIdx);
     currentWordIdx = newIdx;
+  }
+
+  // 2b. Pause-reactive beat: check if we're in a gap between words
+  if (lofi && newIdx >= 0 && newIdx < wordSequence.length) {
+    const cw = wordSequence[newIdx];
+    const nextIdx = newIdx + 1;
+    const nw = nextIdx < wordSequence.length ? wordSequence[nextIdx] : null;
+    if (cw.endTime > 0 && ct > cw.endTime && nw && nw.startTime > 0) {
+      const gapRemaining = nw.startTime - ct;
+      const gapTotal = cw.gapAfter;
+      if (gapRemaining > 0.3 && gapTotal > 0.8) {
+        if (!inPause) {
+          // Save current error-rate density before overriding
+          savedDensity = lastDensity;
+          inPause = true;
+        }
+        lofi.setDensity(gapTotal > 1.5 ? 'whisper' : 'sparse');
+      }
+    }
   }
 
   // 3. Update ball physics
   updateBallPhysics(dt);
 
-  // 4. Update beat density
-  updateBeatDensity(newIdx);
+  // 4. Update beat density (only when not in a pause)
+  if (!inPause) updateBeatDensity(newIdx);
 
   // 5. Update word CSS
   updateWordClasses(currentWordIdx);
@@ -850,6 +890,15 @@ function wireControls() {
       }
     });
   }
+
+  // Sentence-aligned chords toggle
+  const sentenceToggle = document.getElementById('sentenceToggle');
+  if (sentenceToggle) {
+    sentenceToggle.addEventListener('change', () => {
+      sentenceAlignedEnabled = sentenceToggle.checked;
+      if (lofi) lofi.setSentenceAligned(sentenceAlignedEnabled);
+    });
+  }
 }
 
 // ── Load audio blob ──────────────────────────────────────────────────────────
@@ -893,6 +942,12 @@ function buildWordSequence(alignment, sttWords) {
   if (!wordArea) return seq;
   wordArea.innerHTML = '';
 
+  // Pre-compute sentence boundaries from reference text
+  const punctMap = (assessment && assessment.passageText)
+    ? getPunctuationPositions(assessment.passageText) : new Map();
+
+  let refIdx = 0; // tracks position within non-insertion entries (matches punctMap keys)
+
   for (const entry of alignment) {
     const type = entry.type || 'correct';
 
@@ -914,6 +969,8 @@ function buildWordSequence(alignment, sttWords) {
     span.textContent = entry.ref || '';
     wordArea.appendChild(span);
 
+    const isSentenceFinal = punctMap.get(refIdx) === 'period';
+
     seq.push({
       text: entry.ref || '',
       type,
@@ -924,7 +981,18 @@ function buildWordSequence(alignment, sttWords) {
       isStruggle: type === 'struggle',
       isOmission: type === 'omission',
       forgiven: !!entry.forgiven,
+      sentenceFinal: isSentenceFinal,
+      gapAfter: 0, // filled below
     });
+
+    refIdx++;
+  }
+
+  // Pre-compute gaps between spoken words
+  for (let i = 0; i < seq.length - 1; i++) {
+    if (seq[i].endTime > 0 && seq[i + 1].startTime > 0) {
+      seq[i].gapAfter = seq[i + 1].startTime - seq[i].endTime;
+    }
   }
 
   return seq;

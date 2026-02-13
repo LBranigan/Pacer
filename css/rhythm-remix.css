@@ -567,6 +567,62 @@ body::before {
 }
 
 /* ============================================================
+   TOGGLE SWITCH
+   ============================================================ */
+
+.remix-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  cursor: pointer;
+  user-select: none;
+}
+
+.remix-toggle input {
+  display: none;
+}
+
+.toggle-slider {
+  position: relative;
+  width: 36px;
+  height: 20px;
+  background: var(--rm-surface-alt);
+  border-radius: 10px;
+  transition: background 0.25s ease;
+  flex-shrink: 0;
+}
+
+.toggle-slider::after {
+  content: '';
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--rm-muted);
+  transition: transform 0.25s ease, background 0.25s ease;
+}
+
+.remix-toggle input:checked + .toggle-slider {
+  background: rgba(232, 168, 124, 0.25);
+}
+
+.remix-toggle input:checked + .toggle-slider::after {
+  transform: translateX(16px);
+  background: var(--rm-accent);
+  box-shadow: 0 0 6px var(--rm-accent-glow);
+}
+
+.toggle-text {
+  font-size: 0.8rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  color: var(--rm-muted);
+}
+
+/* ============================================================
    STATUS / FEEDBACK
    ============================================================ */
 

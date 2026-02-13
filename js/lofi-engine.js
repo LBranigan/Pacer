@@ -216,8 +216,32 @@ export class LofiEngine {
    * @param {'sparse'|'normal'|'full'} level
    */
   setDensity(level) {
-    if (!['sparse', 'normal', 'full'].includes(level)) return;
+    if (!['whisper', 'sparse', 'normal', 'full'].includes(level)) return;
     this._density = level;
+  }
+
+  /**
+   * Enable/disable sentence-aligned chord changes.
+   * When enabled, chords only advance when advanceChord() is called.
+   * @param {boolean} enabled
+   */
+  setSentenceAligned(enabled) {
+    this._sentenceAligned = !!enabled;
+    if (!enabled) {
+      // Reset so fixed cycle takes over cleanly
+      this._chordOverrideIdx = 0;
+      this._pendingChordChange = false;
+    }
+  }
+
+  /**
+   * Advance to the next chord (used with sentence-aligned mode).
+   */
+  advanceChord() {
+    if (!this._sentenceAligned) return;
+    const chordSet = CHORD_SETS[this._style];
+    this._chordOverrideIdx = ((this._chordOverrideIdx || 0) + 1) % chordSet.chords.length;
+    this._pendingChordChange = true;
   }
 
   /**
@@ -429,15 +453,20 @@ export class LofiEngine {
     const chordSet = CHORD_SETS[style];
     const secondsPerBeat = 60.0 / this._bpm;
 
-    // Determine which chord we're on (each chord = 8 beats = 2 bars)
-    const chordIndex = Math.floor(beat / 8) % chordSet.chords.length;
+    // Determine which chord we're on
+    let chordIndex;
+    if (this._sentenceAligned) {
+      chordIndex = (this._chordOverrideIdx || 0) % chordSet.chords.length;
+    } else {
+      chordIndex = Math.floor(beat / 8) % chordSet.chords.length;
+    }
     const chord = chordSet.chords[chordIndex];
 
     // Swing offset for jazzhop hi-hats: delay every odd beat by 30%
     const swingOffset = (style === 'jazzhop' && beat % 2 === 1) ? secondsPerBeat * 0.3 : 0;
 
-    // ── Drums ──
-    if (style !== 'ambient') {
+    // ── Drums (whisper = no drums at all) ──
+    if (style !== 'ambient' && density !== 'whisper') {
       // Kick: always plays in normal/full; plays in sparse too
       if (drumPat.kick[beat]) {
         this._playKick(time);
@@ -459,17 +488,29 @@ export class LofiEngine {
       }
     }
 
-    // ── Chord pads (trigger on first beat of each chord change) ──
-    if (beat % 8 === 0) {
+    // ── Chord pads ──
+    let triggerPad = false;
+    if (this._sentenceAligned) {
+      // In sentence-aligned mode: trigger on pending chord change at nearest even beat
+      if (this._pendingChordChange && beat % 2 === 0) {
+        triggerPad = true;
+        this._pendingChordChange = false;
+      }
+    } else {
+      // Fixed 8-beat cycle
+      triggerPad = (beat % 8 === 0);
+    }
+
+    if (triggerPad) {
       const padDuration = 8 * secondsPerBeat; // lasts 2 bars
-      const padVol = density === 'sparse' ? 0.5 : density === 'normal' ? 0.75 : 1.0;
+      const padVol = density === 'whisper' ? 0.25 : density === 'sparse' ? 0.5 : density === 'normal' ? 0.75 : 1.0;
       const attackTime = style === 'ambient' ? 0.6 : 0.2;
       const releaseTime = style === 'ambient' ? 1.5 : 0.5;
       this._playChordPad(time, chord.notes, padDuration, padVol, attackTime, releaseTime);
     }
 
-    // ── Bass ──
-    if (bassPat[beat]) {
+    // ── Bass (skip in whisper) ──
+    if (density !== 'whisper' && bassPat[beat]) {
       const bassVol = style === 'ambient' ? 0.3 : (density === 'full' ? 0.9 : 0.65);
       const bassDur = style === 'ambient' ? secondsPerBeat * 3.5 : secondsPerBeat * 0.8;
       this._playBass(time, chord.root, bassDur, bassVol);
