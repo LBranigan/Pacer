@@ -2196,7 +2196,7 @@ export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, di
         if (item._hasHesitation) notes.push('hesitation');
         if (item._abandonedAttempt) notes.push('abandoned attempt');
         if (item._healed) notes.push('healed');
-        if (item.compound) notes.push('parts: ' + item.parts.join('+'));
+        if (item.compound) notes.push('parts: ' + (item.parts || [item.hyp]).join('+'));
         tdNotes.textContent = notes.join('; ') || '';
         tr.appendChild(tdNotes);
 
