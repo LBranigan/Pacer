@@ -2133,10 +2133,14 @@ async function runAnalysis() {
           promoted.push({ ref: entry.ref, v1Hyp: entry.hyp, pkWord: pkEntry.hyp });
         }
         // Update trigger for next word
-        prevRefWasError = (entry.type === 'substitution' || entry.type === 'struggle'
-                           || entry.type === 'omission') && !entry.forgiven;
-        // OOV-excluded words also trigger leniency — Reverb was off-track during OOV struggle
-        if (entry._oovExcluded) prevRefWasError = true;
+        // Collateral damage entries (function word / OOV collateral) are transparent —
+        // they were caught in the blast radius and shouldn't consume the leniency window.
+        if (!entry._functionWordCollateral && !entry._oovCollateralOmission) {
+          prevRefWasError = (entry.type === 'substitution' || entry.type === 'struggle'
+                             || entry.type === 'omission') && !entry.forgiven;
+          // OOV-excluded words also trigger leniency — Reverb was off-track during OOV struggle
+          if (entry._oovExcluded) prevRefWasError = true;
+        }
         refIdx++;
       }
       if (promoted.length > 0) {
