@@ -1827,7 +1827,11 @@ async function runAnalysis() {
         if (j < 0 || j >= alignment.length) continue;
         const candidate = alignment[j];
         if (candidate.type === 'insertion') continue;
-        if (candidate.type === 'correct') continue; // 3-way verdict resolved — don't undo
+        if (candidate.type === 'correct') continue; // already resolved as correct — don't undo
+        // If another engine heard this word correctly, the <unknown> is V1's CTC confusion,
+        // not the OOV word's vocalization. The 3-way verdict sets crossValidation='disagreed'
+        // but does NOT change V1's type — so we must check engine types directly.
+        if (candidate._pkType === 'correct' || candidate._v0Type === 'correct') continue;
         if (candidate._isOOV) continue;             // don't steal from another OOV word
         if (candidate.forgiven) continue;            // don't steal from already-resolved entries
         if (candidate.hyp !== 'unknown') continue;
