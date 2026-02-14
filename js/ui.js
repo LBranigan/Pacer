@@ -614,7 +614,11 @@ function renderNewAnalyzedWords(container, alignment, sttLookup, diagnostics, tr
   // ── 3. Classification ──────────────────────────────────────────────────
   function classifyWord(entry, group, nextGroup) {
     if (group._isConfirmedInsertion) return 'confirmed-insertion';
-    if (entry.forgiven) return 'correct';
+    if (entry.forgiven) {
+      if (entry._oovExcluded) return 'oov-excluded';
+      if (entry._functionWordCollateral) return 'function-word-forgiven';
+      return 'correct';  // proper noun, OOV phonetic match → still "correct"
+    }
     if (entry.type === 'omission') return 'omitted';
 
     // Correct or compound-struggle (which resolved to correct word)
@@ -677,6 +681,8 @@ function renderNewAnalyzedWords(container, alignment, sttLookup, diagnostics, tr
 
   const BUCKET = {
     'correct':                 { label: 'Correct',                   color: '#2e7d32' },
+    'oov-excluded':            { label: 'OOV Excluded',              color: '#4caf50' },
+    'function-word-forgiven':  { label: 'Forgiven',                  color: '#4caf50' },
     'struggle-correct':        { label: 'Struggle but Correct',      color: '#558b2f' },
     'omitted':                 { label: 'Omitted',                   color: '#757575' },
     'attempted-struggled':     { label: 'Attempted but Struggled',   color: '#e65100' },
@@ -706,6 +712,20 @@ function renderNewAnalyzedWords(container, alignment, sttLookup, diagnostics, tr
       '\u2022 Not a recovered word (at least V1 or V0 heard it)\n' +
       '\u2022 OR: word was forgiven (proper noun with dictionary guard)\n' +
       '\u2022 Does NOT count as an error',
+
+    'oov-excluded': 'OOV EXCLUDED\n' +
+      'Out-of-vocabulary word excluded from scoring.\n\n' +
+      'The reference word is not in the ASR vocabulary (not in CMUdict).\n' +
+      'ASR emitted [unknown] tokens \u2014 student attempted the word but\n' +
+      'ASR could not decode it. Time credited back to WCPM.\n\n' +
+      'Does NOT count as correct or error \u2014 excluded entirely.',
+
+    'function-word-forgiven': 'FUNCTION WORD FORGIVEN\n' +
+      'Single-letter word ("a", "I") forgiven as collateral.\n\n' +
+      'All three engines missed this word, and it is adjacent to a\n' +
+      'struggle or OOV word. Too short for ASR to capture reliably\n' +
+      'when the student was struggling with a nearby word.\n\n' +
+      'Does NOT count as an error.',
 
     'struggle-correct': 'STRUGGLE BUT CORRECT\n' +
       'Student ultimately produced the correct word, but showed signs of difficulty.\n\n' +
@@ -916,6 +936,9 @@ function renderNewAnalyzedWords(container, alignment, sttLookup, diagnostics, tr
     // ── Main word span ──
     const span = document.createElement('span');
     span.className = `word word-bucket-${bucket}`;
+    if (bucket === 'oov-excluded' || bucket === 'function-word-forgiven') {
+      span.classList.add('word-forgiven');
+    }
     const isConfIns = bucket === 'confirmed-insertion';
     const displayText = isConfIns ? ('+' + (entry.hyp || '?')) : (entry._displayRef || entry.ref || '');
     span.textContent = displayText;
@@ -993,6 +1016,13 @@ function renderNewAnalyzedWords(container, alignment, sttLookup, diagnostics, tr
     }
     if (bucket === 'confirmed-insertion') {
       tip.push(`All ${entry._insertionEngines || 'available'} engines heard "${entry.hyp}" \u2014 not in passage`);
+    }
+    if (bucket === 'oov-excluded') {
+      tip.push('OOV word \u2014 not in ASR vocabulary (CMUdict)');
+      tip.push('ASR emitted [unknown] \u2014 excluded from scoring, time credited back');
+    }
+    if (bucket === 'function-word-forgiven') {
+      tip.push('All engines missed this word near a struggle/OOV \u2014 forgiven as collateral');
     }
     if (hesitation) {
       tip.push(`Hesitation: ${Math.round(hesitation.gap * 1000)}ms before this word`);
@@ -1128,6 +1158,13 @@ export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, di
 
     container.appendChild(primary);
     container.appendChild(range);
+
+    // WCPM tooltip: show correct count, elapsed time, and OOV time credit
+    let wcpmTip = `WCPM: ${wcpm.wcpmMin ?? wcpm.wcpm ?? 'N/A'}  (${wcpm.correctCount} correct / ${wcpm.elapsedSeconds?.toFixed(2) ?? '?'}s \u00d7 60)`;
+    if (wcpm.oovTimeCreditSeconds) {
+      wcpmTip += `\nOOV time excluded: ${wcpm.oovTimeCreditSeconds}s`;
+    }
+    wcpmBox.title = wcpmTip;
 
     wcpmBox.appendChild(container);
     metricsBar.appendChild(wcpmBox);

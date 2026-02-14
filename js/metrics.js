@@ -28,6 +28,7 @@ export function computeAccuracy(alignmentResult, options = {}) {
   let correctCount = 0, wordErrors = 0, omissions = 0, insertionErrors = 0, forgiven = 0;
   const longPauseErrors = options.longPauseCount || 0;
   for (const w of alignmentResult) {
+    if (w._oovExcluded) { forgiven++; continue; }  // excluded from all counts
     switch (w.type) {
       case 'correct':
         correctCount++;

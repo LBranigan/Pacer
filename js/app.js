@@ -1805,6 +1805,72 @@ async function runAnalysis() {
       oovLog.push(logEntry);
     }
 
+    // ── OOV <unknown> reassignment (Part 1) ────────────────────────────
+    // After NW alignment, <unknown> tokens may be assigned to wrong ref
+    // words (e.g., ref="a" gets hyp="unknown" instead of ref="cayuco").
+    // Multiple <unknown> tokens near an OOV word are fragments of the
+    // SAME vocalization attempt — they all belong to the OOV word.
+    // Steal ALL <unknown> donors within ±3, not just the closest.
+    // MUST run before existing OOV omission recovery so that donors are
+    // cleaned up before path 2 forgives the OOV entry.
+    for (let i = 0; i < alignment.length; i++) {
+      const entry = alignment[i];
+      if (!entry._isOOV || entry.type !== 'omission' || entry.forgiven) continue;
+
+      // Find ALL <unknown> donors within ±3 ref positions
+      const SCAN_RADIUS = 3;
+      const donors = [];
+
+      for (let d = -SCAN_RADIUS; d <= SCAN_RADIUS; d++) {
+        if (d === 0) continue;
+        const j = i + d;
+        if (j < 0 || j >= alignment.length) continue;
+        const candidate = alignment[j];
+        if (candidate.type === 'insertion') continue;
+        if (candidate.type === 'correct') continue; // 3-way verdict resolved — don't undo
+        if (candidate._isOOV) continue;             // don't steal from another OOV word
+        if (candidate.forgiven) continue;            // don't steal from already-resolved entries
+        if (candidate.hyp !== 'unknown') continue;
+
+        // Verify the hyp actually came from a <unknown> CTC token, not the English word "unknown"
+        if (candidate.hypIndex < 0) continue;
+        const tw = transcriptWords[candidate.hypIndex];
+        if (!(typeof tw?.word === 'string' && tw.word.startsWith('<') && tw.word.endsWith('>'))) continue;
+        if (tw._ctcArtifact) continue; // CTC artifacts are false onsets, not student speech
+
+        donors.push({ candidate, dist: Math.abs(d) });
+      }
+
+      if (donors.length === 0) continue;
+
+      // Sort by distance — assign closest donor's hypIndex to the OOV entry
+      donors.sort((a, b) => a.dist - b.dist);
+      const closest = donors[0].candidate;
+
+      // OOV entry gets one <unknown> hyp (enough to trigger Part 2 exclusion)
+      entry.hyp = 'unknown';
+      entry.type = 'substitution';
+      entry.hypIndex = closest.hypIndex;
+
+      // ALL donors lose their hyp — become omissions.
+      // Multiple <unknown> tokens near an OOV word are fragments of the
+      // same vocalization attempt, not independent hearings of different words.
+      for (const { candidate } of donors) {
+        candidate.hyp = null;
+        candidate.type = 'omission';
+        candidate.hypIndex = -1;
+        // Clear cross-validation metadata that no longer applies
+        delete candidate._v0Word;
+        delete candidate._v0Type;
+        delete candidate._xvalWord;
+        delete candidate._pkType;
+        delete candidate.crossValidation;
+        candidate._oovCollateralOmission = true;
+      }
+
+      oovLog.push({ ref: entry.ref, type: 'unknown_reassigned', donorCount: donors.length });
+    }
+
     // OOV omission recovery: if an OOV word is omitted but <unknown> tokens
     // exist in its temporal window AND Parakeet heard speech there, forgive it —
     // student vocalized but ASR couldn't decode (word not in vocabulary).
@@ -1859,6 +1925,7 @@ async function runAnalysis() {
 
       if (unknownCount > 0) {
         entry.forgiven = true;
+        entry._oovExcluded = true;       // exclude from assessment, not count as correct
         entry._oovForgiven = true;
         entry._oovRecoveredViaUnknown = true;
         entry._unknownTokenCount = unknownCount;
@@ -1872,6 +1939,27 @@ async function runAnalysis() {
       notForgiven: oovLog.filter(l => !l.forgiven).length,
       details: oovLog
     });
+  }
+
+  // ── OOV exclusion (Part 2) ───────────────────────────────────────────
+  // Catch OOV substitutions created by Part 1 (reassignment).
+  // Existing path 2 only handles omissions — this handles subs.
+  // ASR couldn't decode → can't credit or penalize. Exclude entirely.
+  for (const entry of alignment) {
+    if (!entry._isOOV) continue;
+    if (entry.type !== 'substitution') continue;
+    if (entry.forgiven) continue;
+    if (entry.hyp !== 'unknown') continue;
+
+    // Verify hyp is from <unknown> token (same guard as Part 1)
+    if (entry.hypIndex >= 0) {
+      const tw = transcriptWords[entry.hypIndex];
+      if (!(typeof tw?.word === 'string' && tw.word.startsWith('<') && tw.word.endsWith('>'))) continue;
+    }
+
+    entry._oovExcluded = true;
+    entry.forgiven = true;
+    entry._oovForgiven = true;
   }
 
   // Calculate effective reading time: first word start = t=0
@@ -1896,6 +1984,57 @@ async function runAnalysis() {
     });
   }
 
+  // ── OOV time credit (Part 2b) ────────────────────────────────────────
+  // For OOV-excluded words, credit back the time the student spent
+  // struggling with a word the ASR couldn't decode.
+  let oovTimeCreditSeconds = 0;
+  {
+    let i = 0;
+    while (i < alignment.length) {
+      const entry = alignment[i];
+      if (!entry._oovExcluded) { i++; continue; }
+
+      // Find the OOV cluster: contiguous _oovExcluded entries
+      let clusterEnd = i;
+      while (clusterEnd + 1 < alignment.length && alignment[clusterEnd + 1]._oovExcluded) {
+        clusterEnd++;
+      }
+
+      // Find temporal boundaries: last confirmed word before cluster,
+      // first confirmed word after cluster
+      let gapStart = null, gapEnd = null;
+
+      for (let j = i - 1; j >= 0; j--) {
+        if (alignment[j].type === 'insertion') continue;
+        if (alignment[j].hypIndex >= 0 && !alignment[j]._oovExcluded) {
+          gapStart = parseT(transcriptWords[alignment[j].hypIndex].endTime);
+          break;
+        }
+      }
+      for (let j = clusterEnd + 1; j < alignment.length; j++) {
+        if (alignment[j].type === 'insertion') continue;
+        if (alignment[j].hypIndex >= 0 && !alignment[j]._oovExcluded) {
+          gapEnd = parseT(transcriptWords[alignment[j].hypIndex].startTime);
+          break;
+        }
+      }
+
+      if (gapStart !== null && gapEnd !== null && gapEnd > gapStart) {
+        oovTimeCreditSeconds += (gapEnd - gapStart);
+      }
+
+      // Skip past the entire cluster to avoid double-counting
+      i = clusterEnd + 1;
+    }
+  }
+  if (oovTimeCreditSeconds > 0) {
+    effectiveElapsedSeconds -= oovTimeCreditSeconds;
+    addStage('oov_time_credit', {
+      creditSeconds: Math.round(oovTimeCreditSeconds * 100) / 100,
+      adjustedElapsed: Math.round(effectiveElapsedSeconds * 100) / 100
+    });
+  }
+
   // Clear _confirmedInsertion on excluded insertions (fillers, self-corrections, etc.)
   // These are already classified — they shouldn't count as confirmed insertion errors.
   for (const entry of alignment) {
@@ -1908,6 +2047,57 @@ async function runAnalysis() {
       const tw = transcriptWords[entry.hypIndex];
       if (tw?.isDisfluency || tw?._ctcArtifact || tw?._preWordArtifact || tw?._postWordArtifact) {
         delete entry._confirmedInsertion;
+      }
+    }
+  }
+
+  // ── Single-letter function word forgiveness (Part 4) ─────────────────
+  // "a" and "I" are too short for ASR to capture when student is
+  // struggling with an adjacent word. Forgive if ALL engines missed it.
+  {
+    const FUNCTION_LETTERS = new Set(['a', 'i']);
+    const pkRefEntries = data._threeWay?.pkRef;
+    const v0RefEntries = data._threeWay?.v0Ref;
+
+    let refIdx = 0;
+    for (let i = 0; i < alignment.length; i++) {
+      const entry = alignment[i];
+      if (entry.type === 'insertion') continue;
+      // Track refIdx for _threeWay lookup (same pattern as post-struggle leniency)
+      const currentRefIdx = refIdx;
+      refIdx++;
+
+      if (entry.type !== 'omission') continue;
+      if (entry.forgiven) continue;
+      if (!FUNCTION_LETTERS.has(entry.ref.toLowerCase())) continue;
+
+      // Must be adjacent to a struggle, OOV, or error (in ref-word space, skip insertions)
+      let prev = null;
+      for (let j = i - 1; j >= 0; j--) {
+        if (alignment[j].type !== 'insertion') { prev = alignment[j]; break; }
+      }
+      let next = null;
+      for (let j = i + 1; j < alignment.length; j++) {
+        if (alignment[j].type !== 'insertion') { next = alignment[j]; break; }
+      }
+      const adjacentStruggle =
+        (prev && (prev._isOOV || prev.type === 'struggle' ||
+                  prev.type === 'substitution' || prev._oovExcluded)) ||
+        (next && (next._isOOV || next.type === 'struggle' ||
+                  next.type === 'substitution' || next._oovExcluded));
+
+      if (!adjacentStruggle) continue;
+
+      // Verify ALL engines missed it (no engine heard this word at this position)
+      const v0Entry = v0RefEntries?.[currentRefIdx];
+      const pkEntry = pkRefEntries?.[currentRefIdx];
+      const v1Omission = entry.type === 'omission';
+      const v0Omission = !v0Entry || v0Entry.type === 'omission';
+      const pkOmission = !pkEntry || pkEntry.type === 'omission';
+
+      if (v1Omission && v0Omission && pkOmission) {
+        entry.forgiven = true;
+        entry._functionWordCollateral = true;
       }
     }
   }
@@ -1941,6 +2131,8 @@ async function runAnalysis() {
         // Update trigger for next word
         prevRefWasError = (entry.type === 'substitution' || entry.type === 'struggle'
                            || entry.type === 'omission') && !entry.forgiven;
+        // OOV-excluded words also trigger leniency — Reverb was off-track during OOV struggle
+        if (entry._oovExcluded) prevRefWasError = true;
         refIdx++;
       }
       if (promoted.length > 0) {
@@ -1952,6 +2144,9 @@ async function runAnalysis() {
   const wcpm = (effectiveElapsedSeconds != null && effectiveElapsedSeconds > 0)
     ? computeWCPMRange(alignment, effectiveElapsedSeconds)
     : null;
+  if (wcpm && oovTimeCreditSeconds > 0) {
+    wcpm.oovTimeCreditSeconds = Math.round(oovTimeCreditSeconds * 100) / 100;
+  }
   const longPauseCount = diagnostics.longPauses?.length || 0;
   const accuracy = computeAccuracy(alignment, { forgivenessEnabled: !!nlAnnotations, longPauseCount });
   const tierBreakdown = nlAnnotations ? computeTierBreakdown(alignment) : null;
@@ -1985,7 +2180,10 @@ async function runAnalysis() {
       _confirmedInsertion: a._confirmedInsertion || false,
       _isOOV: a._isOOV || false,
       _oovForgiven: a._oovForgiven || false,
+      _oovExcluded: a._oovExcluded || false,
       _oovRecoveredViaUnknown: a._oovRecoveredViaUnknown || false,
+      _oovCollateralOmission: a._oovCollateralOmission || false,
+      _functionWordCollateral: a._functionWordCollateral || false,
       _partOfOOVForgiven: a._partOfOOVForgiven || false
     }))
   });

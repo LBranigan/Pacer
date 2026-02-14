@@ -468,7 +468,7 @@ const FORGIVENESS_RULES = {
   },
 
   oovOmissionRecovery: {
-    description: 'Out-of-vocabulary reference word scored as omission, but <unknown> CTC tokens exist in the temporal window — student vocalized something but ASR could not decode it because the word is not in its vocabulary.',
+    description: 'Out-of-vocabulary reference word scored as omission, but <unknown> CTC tokens exist in the temporal window — student vocalized something but ASR could not decode it because the word is not in its vocabulary. Excluded from assessment (neither correct nor error).',
     detector: 'app.js → OOV omission recovery loop (inside OOV forgiveness block, after phonetic forgiveness)',
     countsAsError: false,
     config: {
@@ -479,7 +479,7 @@ const FORGIVENESS_RULES = {
     example: {
       reference: 'cayuco',
       spoken: 'Reverb → two <unknown> tokens at 31s and 32s',
-      result: 'OOV omission + <unknown> tokens in window → forgiven (_oovRecoveredViaUnknown: true)'
+      result: 'OOV omission + <unknown> tokens in window → excluded (_oovExcluded: true)'
     },
     guards: [
       'Reference word must be OOV (_isOOV: true)',
@@ -488,7 +488,57 @@ const FORGIVENESS_RULES = {
       'CTC artifacts excluded (_ctcArtifact tokens skipped)'
     ],
     uiClass: 'word-forgiven',
-    note: 'When NW alignment maps <unknown> tokens to wrong ref words, the OOV word gets scored as a false omission. This recovery detects that speech was present (CTC heard something) in the right time window. Existing forgiven-omission handling in computeAccuracy and classifyWord applies automatically.'
+    note: 'Now sets _oovExcluded: true in addition to forgiven: true. Word is excluded from assessment entirely (not counted as correct). Part 1 (reassignment) runs first and may convert the omission to a substitution by stealing a <unknown> from a donor — in that case this path skips the entry and Part 2 handles exclusion instead.'
+  },
+
+  oovExcluded: {
+    description: 'OOV word with <unknown> token that phonetic forgiveness could not match. Excluded from assessment entirely — neither correct nor error. Student attempted the word but ASR could not decode it.',
+    detector: 'app.js → OOV exclusion block (Part 2, after existing OOV omission recovery)',
+    countsAsError: false,
+    config: {
+      mechanism: 'OOV entry has hyp="unknown" from <unknown> token + phonetic match < 0.6',
+      timeCredit: 'Gap between last confirmed word before and first confirmed word after OOV cluster',
+      adjacentClustering: 'Adjacent OOV-excluded entries share one time window (no double-counting)'
+    },
+    example: {
+      reference: 'cayuco',
+      spoken: 'Reverb → <unknown> tokens, Parakeet → speech detected but undecodable',
+      result: 'OOV-excluded (_oovExcluded: true), forgiven, time credited back'
+    },
+    guards: [
+      'Reference word must be OOV (_isOOV: true)',
+      'Entry must have hyp="unknown" from verified <unknown> CTC token',
+      'Phonetic forgiveness (path 1) must not have fired',
+      'Raw transcriptWords[hypIndex].word must match <...> pattern',
+      'CTC artifacts excluded (_ctcArtifact tokens skipped in Part 1)'
+    ],
+    uiClass: 'word-forgiven',
+    note: 'Appears with dashed green border + checkmark in analyzed words view. Tooltip explains OOV exclusion. Time credit reflected in WCPM tooltip. Two entry points: (1) Part 1 reassigns donor → Part 2 excludes the OOV substitution, (2) existing path 2 excludes the OOV omission directly when no donor found.'
+  },
+
+  functionWordCollateral: {
+    description: 'Single-letter function word ("a", "I") omitted by all engines and adjacent to OOV/struggle word. Forgiven as collateral damage — word too short for ASR when student struggling nearby.',
+    detector: 'app.js → function word forgiveness block (Part 4, after clear-confirmed-insertions, before post-struggle leniency)',
+    countsAsError: false,
+    config: {
+      FUNCTION_LETTERS: ['a', 'i'],
+      requirement: 'Omitted by ALL engines (V1, V0, Parakeet) at this ref position',
+      adjacency: 'Adjacent non-insertion ref entry must be OOV, struggle, substitution, or _oovExcluded'
+    },
+    example: {
+      reference: 'cayuco a small',
+      spoken: 'Reverb → [unknown tokens], Parakeet → no "a" detected',
+      result: '"a" forgiven — all engines missed it, adjacent to OOV struggle'
+    },
+    guards: [
+      'Reference word must be single letter: "a" or "I"',
+      'Entry type must be omission',
+      'ALL three engines must have omission at this ref position (checked via _threeWay)',
+      'Must be adjacent (in ref-word space, skipping insertions) to OOV or struggle entry',
+      'Entry must not already be forgiven'
+    ],
+    uiClass: 'word-forgiven',
+    note: 'Uses _threeWay.pkRef[refIdx] and _threeWay.v0Ref[refIdx] for per-engine verification. refIdx tracked by incrementing counter for each non-insertion alignment entry (same pattern as post-struggle leniency).'
   },
 
   oovPhoneticForgiveness: {
