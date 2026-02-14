@@ -375,11 +375,12 @@ async function correctWithGemini(base64, mimeType, assembledText, geminiKey) {
 You receive OCR-assembled passage text alongside the original page image.
 Your job is to fix OCR artifacts by visually comparing text against the image.
 
-Fix these artifacts:
-- Digit-letter fusions: "6ageography" → "geography", "1earning" → "learning"
-- Fused line numbers: "78At school" → "At school"
-- Stray punctuation not on the page: trailing "/", ")", ">" that are scanning artifacts
-- Missing spaces between words that the image shows as separate
+Fix these artifacts by comparing each word against what is actually printed on the page:
+- Digits fused to words: a line number or margin number stuck to the start of a word — drop the digits
+- Stray characters fused to words: extra characters at the start or end of a word that don't appear on the printed page — remove them to match what's printed
+- Stray punctuation not on the page: slashes, brackets, or symbols that are scanning artifacts — remove them
+- Handwritten marks: teacher check marks, scribbles, or annotations that are not part of the printed text — remove them
+- Missing spaces: words that the image shows as separate but OCR joined together — add the space
 
 Do NOT change:
 - Words that match what is printed on the page, even if unusual
