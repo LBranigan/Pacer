@@ -150,15 +150,6 @@ function extractParagraphs(annotation) {
 }
 
 /**
- * A paragraph is junk if it contains no letters (pure digits, punctuation, symbols).
- * Line numbers (78, 117), page numbers (12, 52), stray marks (>, ), ✓) are all junk.
- * Passage text always has letters, even with inline numbers ("8 A.M.", "3 km").
- */
-function isJunkParagraph(text) {
-  return !/[a-zA-Z]/.test(text);
-}
-
-/**
  * Extract a sorted array of lowercase alphanumeric tokens from text.
  * Used for word-bag validation: ensures Gemini didn't add, remove, or change words.
  */
@@ -303,9 +294,9 @@ Return ONLY the reassembled passage text. No explanation, no commentary.`;
  * Hybrid OCR: Cloud Vision for character accuracy + Gemini for text assembly.
  *
  * 1. Cloud Vision extracts the full paragraph hierarchy (excellent character accuracy)
- * 2. Junk paragraphs (pure digits/punctuation) are filtered out
- * 3. Fragments + image are sent to Gemini, which reassembles them in correct reading order
- * 4. Superset word-bag validation: all Cloud Vision words must be in output (extras OK)
+ * 2. All fragments sent to Gemini (no junk filtering — Gemini handles everything)
+ * 3. Gemini reassembles fragments in correct reading order using image + text
+ * 4. Word-bag validation: all Cloud Vision words must be in output
  *
  * If Gemini fails or removes words, falls back to Cloud Vision's raw ordering.
  *
@@ -327,10 +318,8 @@ export async function extractTextHybrid(file, visionKey, geminiKey) {
     return { text: '', engine: 'vision (empty)' };
   }
 
-  // Step 2: Extract fragments from hierarchy, filter junk (pure digits/punctuation)
-  const allParagraphs = extractParagraphs(annotation);
-  const paragraphs = allParagraphs.filter(text => !isJunkParagraph(text));
-  const junkCount = allParagraphs.length - paragraphs.length;
+  // Step 2: Extract all fragments from hierarchy (no filtering — Gemini handles everything)
+  const paragraphs = extractParagraphs(annotation);
 
   if (paragraphs.length <= 1) {
     return { text: flatText, engine: 'vision (single paragraph)' };
@@ -339,7 +328,7 @@ export async function extractTextHybrid(file, visionKey, geminiKey) {
   // Step 3: Gemini assembles fragments into correct reading order
   try {
     const assembled = await assembleWithGemini(base64, mimeType, paragraphs, geminiKey);
-    return { text: assembled, engine: `hybrid (${paragraphs.length} fragments assembled${junkCount ? `, ${junkCount} junk filtered` : ''})` };
+    return { text: assembled, engine: `hybrid (${paragraphs.length} fragments assembled)` };
   } catch (err) {
     console.warn('[OCR Hybrid] Gemini assembly failed, using Cloud Vision ordering:', err.message);
     return { text: flatText, engine: `vision fallback (${err.message})` };
