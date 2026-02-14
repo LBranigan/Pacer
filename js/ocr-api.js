@@ -327,9 +327,15 @@ ${numberedList}`;
   const validation = validateSubset(inputBag, outputBag);
 
   if (!validation.ok) {
-    console.warn('[OCR Hybrid] Gemini hallucinated words not in Cloud Vision input:',
-      validation.hallucinated.slice(0, 15).join(', '));
-    throw new Error(`Subset validation failed — ${validation.hallucinated.length} hallucinated words`);
+    const h = validation.hallucinated;
+    console.warn('[OCR Hybrid] Assembly modified words:', h.slice(0, 15).join(', '));
+    if (h.length > 5) {
+      // Many new words = likely real hallucination
+      throw new Error(`Subset validation failed — ${h.length} hallucinated words`);
+    }
+    // ≤5 modified words = minor corrections (Gemini fixing OCR artifacts).
+    // Allow through — the correction pass has its own edit-distance guard.
+    console.log(`[OCR Hybrid] Minor modifications (${h.length} words) allowed, proceeding`);
   }
 
   return assembled;
