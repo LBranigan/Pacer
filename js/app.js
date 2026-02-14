@@ -1593,31 +1593,6 @@ async function runAnalysis() {
       ri++;
     }
 
-    // Phonetic normalization: collapse common phonetic equivalences before Levenshtein
-    // Turns "cayuco"→"kayuko", "kayoko"→"kayoko" → ratio 0.83 (vs 0.50 raw)
-    function phoneticNormalize(word) {
-      return word.toLowerCase()
-        .replace(/[^a-z]/g, '')
-        .replace(/ck/g, 'k')
-        .replace(/ph/g, 'f')
-        .replace(/c/g, 'k');
-    }
-
-    // ── OOV Detection ─────────────────────────────────────────────────────
-    // Flag reference words absent from CMUdict (125K English words).
-    // If a word isn't in CMUdict, English ASR models almost certainly can't recognize it.
-    await loadPhonemeData();
-    for (const entry of alignment) {
-      if (entry.type === 'insertion') continue;
-      const refNorm = entry.ref.toLowerCase().replace(/[^a-z'-]/g, '');
-      if (refNorm.length < 3) continue;           // too short for reliable phonetic comparison
-      if (/\d/.test(entry.ref)) continue;          // handled by number expansion
-      if (entry.forgiven) continue;                // already forgiven (proper noun)
-      if (getPhonemeCount(refNorm) === null) {
-        entry._isOOV = true;
-      }
-    }
-
     // Dictionary-based common word detection: checks Free Dictionary API
     // to distinguish exotic names (Mallon, Shanna) from common words (Straight, North).
     // Common words get 200 → skip forgiveness; exotic names get 404 → allow forgiveness.
@@ -1741,6 +1716,30 @@ async function runAnalysis() {
       forgiven: forgivenessLog.filter(l => l.forgiven).length,
       details: forgivenessLog
     });
+  }
+
+  // ── OOV Detection ─────────────────────────────────────────────────────
+  // Flag reference words absent from CMUdict (125K English words).
+  // If a word isn't in CMUdict, English ASR models almost certainly can't recognize it.
+  await loadPhonemeData();
+  for (const entry of alignment) {
+    if (entry.type === 'insertion') continue;
+    const refNorm = entry.ref.toLowerCase().replace(/[^a-z'-]/g, '');
+    if (refNorm.length < 3) continue;           // too short for reliable phonetic comparison
+    if (/\d/.test(entry.ref)) continue;          // handled by number expansion
+    if (entry.forgiven) continue;                // already forgiven (proper noun)
+    if (getPhonemeCount(refNorm) === null) {
+      entry._isOOV = true;
+    }
+  }
+
+  // Phonetic normalization: collapse common phonetic equivalences before Levenshtein
+  function phoneticNormalize(word) {
+    return word.toLowerCase()
+      .replace(/[^a-z]/g, '')
+      .replace(/ck/g, 'k')
+      .replace(/ph/g, 'f')
+      .replace(/c/g, 'k');
   }
 
   // ── OOV Phonetic Forgiveness ──────────────────────────────────────────
