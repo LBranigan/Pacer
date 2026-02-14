@@ -943,7 +943,7 @@ function renderNewAnalyzedWords(container, alignment, sttLookup, diagnostics, tr
     // ── Main word span ──
     const span = document.createElement('span');
     span.className = `word word-bucket-${bucket}`;
-    if (bucket === 'oov-excluded' || bucket === 'function-word-forgiven') {
+    if (bucket === 'oov-excluded' || bucket === 'function-word-forgiven' || entry.forgiven) {
       span.classList.add('word-forgiven');
     }
     const isConfIns = bucket === 'confirmed-insertion';
@@ -986,7 +986,8 @@ function renderNewAnalyzedWords(container, alignment, sttLookup, diagnostics, tr
 
     // Tooltip
     const tip = [];
-    tip.push(`"${displayText}" \u2014 ${BUCKET[bucket]?.label || bucket}`);
+    const bucketLabel = entry.forgiven && entry.properNounSource ? 'Forgiven (proper noun)' : (BUCKET[bucket]?.label || bucket);
+    tip.push(`"${displayText}" \u2014 ${bucketLabel}`);
     if (isConfIns) {
       tip.push(`All engines heard: "${entry.hyp}"`);
     } else {
@@ -1030,6 +1031,15 @@ function renderNewAnalyzedWords(container, alignment, sttLookup, diagnostics, tr
     }
     if (bucket === 'function-word-forgiven') {
       tip.push('All engines missed this word near a struggle/OOV \u2014 forgiven as collateral');
+    }
+    if (entry.forgiven && entry.properNounSource) {
+      const ratioText = entry.phoneticRatio ? ` (${entry.phoneticRatio}%)` : '';
+      if (entry.type === 'omission' && entry._forgivenEvidence) {
+        const src = entry._forgivenEvidenceSource === 'parakeet' ? 'Parakeet heard' : 'Fragments';
+        tip.push(`Proper noun forgiven${ratioText}: ${src} "${entry._forgivenEvidence}"`);
+      } else {
+        tip.push(`Proper noun forgiven${ratioText}: "${entry.hyp}" \u2248 "${entry.ref}"`);
+      }
     }
     if (hesitation) {
       tip.push(`Hesitation: ${Math.round(hesitation.gap * 1000)}ms before this word`);
