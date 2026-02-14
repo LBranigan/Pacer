@@ -149,6 +149,15 @@ function extractParagraphs(annotation) {
 }
 
 /**
+ * A paragraph is junk if it contains no letters (pure digits, punctuation, symbols).
+ * Line numbers (78, 117), page numbers (12, 52), stray marks (>, ), ✓) are all junk.
+ * Passage text always has letters, even with inline numbers ("8 A.M.", "3 km").
+ */
+function isJunkParagraph(text) {
+  return !/[a-zA-Z]/.test(text);
+}
+
+/**
  * Ask Gemini to reorder numbered paragraphs by looking at the image.
  * Returns a JSON array of paragraph numbers in correct reading order.
  * Gemini never generates passage text — only returns numbers.
@@ -158,16 +167,16 @@ async function reorderWithGemini(base64, mimeType, paragraphs, geminiKey) {
     .map((text, i) => `[${i + 1}] ${text}`)
     .join('\n');
 
-  const prompt = `These numbered text fragments were extracted via OCR from the reading assessment page shown in the image. The fragments may be in the wrong reading order.
+  const prompt = `These numbered text fragments were extracted via OCR from a reading assessment page. They may be in the wrong reading order.
 
-Look at the image and return the correct reading order as a JSON array of fragment numbers. For two-column layouts, read the left column top-to-bottom first, then the right column top-to-bottom.
+Look at the image and return ALL fragment numbers in the correct reading order as a JSON array. For two-column layouts, read the left column top-to-bottom first, then the right column top-to-bottom.
 
-Include ONLY passage text fragments (title, introduction, body text). EXCLUDE any fragments that are clearly line numbers, page numbers, comprehension questions, answer choices, or margin annotations.
+You MUST include every fragment number exactly once. Do not skip any fragments.
 
 Fragments:
 ${numberedList}
 
-Return ONLY a JSON array of integers, e.g. [3, 1, 5, 2, 4]. No other text.`;
+Return ONLY a JSON array of integers, e.g. [3, 1, 5, 2, 4].`;
 
   const response = await fetch(
     `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${geminiKey}`,
@@ -219,10 +228,10 @@ Return ONLY a JSON array of integers, e.g. [3, 1, 5, 2, 4]. No other text.`;
     throw new Error(`Gemini returned invalid JSON: ${text.slice(0, 100)}`);
   }
 
-  // Validate: array of integers, each in [1, N], no duplicates
+  // Validate: must be a complete permutation of [1..N]
   const maxN = paragraphs.length;
-  if (!Array.isArray(order) || order.length === 0) {
-    throw new Error('Gemini returned empty or non-array response');
+  if (!Array.isArray(order) || order.length !== maxN) {
+    throw new Error(`Expected ${maxN} numbers, got ${Array.isArray(order) ? order.length : 'non-array'}`);
   }
   const seen = new Set();
   for (const n of order) {
@@ -266,21 +275,22 @@ export async function extractTextHybrid(file, visionKey, geminiKey) {
     return { text: '', engine: 'vision (empty)' };
   }
 
-  // Step 2: Extract paragraphs from hierarchy
-  const paragraphs = extractParagraphs(annotation);
+  // Step 2: Extract paragraphs from hierarchy, filter junk (pure digits/punctuation)
+  const allParagraphs = extractParagraphs(annotation);
+  const paragraphs = allParagraphs.filter(text => !isJunkParagraph(text));
+  const junkCount = allParagraphs.length - paragraphs.length;
 
   if (paragraphs.length <= 1) {
-    // Single paragraph — no reordering needed
     return { text: flatText, engine: 'vision (single paragraph)' };
   }
 
-  // Step 3: Gemini reorder
+  // Step 3: Gemini reorder (forced complete permutation — every fragment must be placed)
   try {
     const order = await reorderWithGemini(base64, mimeType, paragraphs, geminiKey);
     const reorderedText = order.map(i => paragraphs[i - 1]).join('\n');
-    return { text: reorderedText, engine: `hybrid (vision + gemini, ${paragraphs.length} paragraphs → ${order.length} kept)` };
+    return { text: reorderedText, engine: `hybrid (${paragraphs.length} paragraphs reordered${junkCount ? `, ${junkCount} junk filtered` : ''})` };
   } catch (err) {
     console.warn('[OCR Hybrid] Gemini reorder failed, using Cloud Vision ordering:', err.message);
-    return { text: flatText, engine: `vision (gemini fallback: ${err.message})` };
+    return { text: flatText, engine: `vision fallback (${err.message})` };
   }
 }
