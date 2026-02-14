@@ -209,6 +209,7 @@ function validateSubset(inputBag, outputBag) {
  * Gemini is expected to drop junk (line numbers, page numbers, comprehension questions).
  */
 async function assembleWithGemini(base64, mimeType, fragments, geminiKey) {
+  console.log('[OCR Hybrid] assembleWithGemini: system_instruction + temperature=0, topK=1, topP=1');
   const numberedList = fragments
     .map((text, i) => `[${i + 1}] ${text}`)
     .join('\n');
@@ -341,6 +342,7 @@ function levenshteinSimilarity(a, b) {
  * Edit-distance guard rejects corrections that change too much.
  */
 async function correctWithGemini(base64, mimeType, assembledText, geminiKey) {
+  console.log('[OCR Hybrid] correctWithGemini: starting image-based artifact correction');
   const systemInstruction = {
     parts: [{ text: `You are an OCR text corrector for children's reading assessment passages.
 You receive OCR-assembled passage text alongside the original page image.
@@ -486,6 +488,7 @@ export async function extractTextHybrid(file, visionKey, geminiKey) {
 
   // Extract low-confidence words from Cloud Vision (available in all paths)
   const lowConfidenceWords = extractLowConfidenceWords(annotation);
+  console.log(`[OCR Hybrid] Pipeline v2: Unicode norm + system instructions + correction pass | ${lowConfidenceWords.length} low-confidence words`);
 
   if (!flatText) {
     return { text: '', engine: 'vision (empty)', lowConfidenceWords: [] };
