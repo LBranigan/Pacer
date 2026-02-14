@@ -1,9 +1,10 @@
 /**
  * OCR API module — Cloud Vision + Gemini hybrid text extraction.
  *
- * Cloud Vision: excellent character accuracy, but wrong paragraph ordering on multi-column pages.
- * Hybrid mode: Cloud Vision extracts text, Gemini reorders paragraphs by looking at the image.
- * Gemini never generates passage text — it only returns paragraph numbers — so zero hallucination risk.
+ * Cloud Vision: excellent character accuracy, but wrong paragraph ordering on multi-column pages,
+ * and sometimes splits one paragraph into multiple fragments.
+ * Hybrid mode: Cloud Vision extracts text, Gemini groups fragments and reorders by looking at the image.
+ * Gemini never generates passage text — it only returns fragment numbers — so zero hallucination risk.
  */
 
 /**
@@ -158,25 +159,35 @@ function isJunkParagraph(text) {
 }
 
 /**
- * Ask Gemini to reorder numbered paragraphs by looking at the image.
- * Returns a JSON array of paragraph numbers in correct reading order.
- * Gemini never generates passage text — only returns numbers.
+ * Ask Gemini to group and reorder numbered fragments by looking at the image.
+ * Cloud Vision sometimes splits one paragraph into multiple fragments.
+ * Gemini uses reading comprehension to group fragments that belong together,
+ * then orders both fragments within groups and groups within the page.
+ *
+ * Returns a nested array: [[3, 1], [5], [2, 4]] where each inner array
+ * is one paragraph's fragments in reading order, outer array is paragraph order.
+ * Gemini never generates passage text — only returns fragment numbers.
  */
-async function reorderWithGemini(base64, mimeType, paragraphs, geminiKey) {
+async function groupAndReorderWithGemini(base64, mimeType, paragraphs, geminiKey) {
   const numberedList = paragraphs
     .map((text, i) => `[${i + 1}] ${text}`)
     .join('\n');
 
-  const prompt = `These numbered text fragments were extracted via OCR from a reading assessment page. They may be in the wrong reading order.
+  const prompt = `These numbered text fragments were extracted via OCR from a reading assessment page. The OCR sometimes splits one paragraph into multiple fragments incorrectly.
 
-Look at the image and return ALL fragment numbers in the correct reading order as a JSON array. For two-column layouts, read the left column top-to-bottom first, then the right column top-to-bottom.
+Look at the image and:
+1. Group fragments that belong to the same paragraph
+2. Order fragments correctly within each group
+3. Order the groups in correct reading order (for two-column layouts: left column top-to-bottom first, then right column top-to-bottom)
 
-You MUST include every fragment number exactly once. Do not skip any fragments.
+You MUST include every fragment number exactly once. Do not skip any.
 
 Fragments:
 ${numberedList}
 
-Return ONLY a JSON array of integers, e.g. [3, 1, 5, 2, 4].`;
+Return ONLY a JSON array of arrays, e.g. [[3, 1], [5], [2, 4]].
+Each inner array = one paragraph (its fragments in reading order).
+Outer array = paragraphs in reading order.`;
 
   const response = await fetch(
     `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${geminiKey}`,
@@ -228,32 +239,47 @@ Return ONLY a JSON array of integers, e.g. [3, 1, 5, 2, 4].`;
     throw new Error(`Gemini returned invalid JSON: ${text.slice(0, 100)}`);
   }
 
-  // Validate: must be a complete permutation of [1..N]
-  const maxN = paragraphs.length;
-  if (!Array.isArray(order) || order.length !== maxN) {
-    throw new Error(`Expected ${maxN} numbers, got ${Array.isArray(order) ? order.length : 'non-array'}`);
+  if (!Array.isArray(order) || order.length === 0) {
+    throw new Error('Expected non-empty array of arrays');
   }
+
+  // Graceful degradation: if Gemini returns a flat array [3, 1, 5, 2, 4]
+  // instead of nested [[3, 1], [5], [2, 4]], wrap each number in its own group
+  if (typeof order[0] === 'number') {
+    order = order.map(n => [n]);
+  }
+
+  // Validate: nested array, complete permutation of [1..N]
+  const maxN = paragraphs.length;
   const seen = new Set();
-  for (const n of order) {
-    if (typeof n !== 'number' || !Number.isInteger(n) || n < 1 || n > maxN) {
-      throw new Error(`Gemini returned invalid paragraph number: ${n} (max: ${maxN})`);
+  for (const group of order) {
+    if (!Array.isArray(group) || group.length === 0) {
+      throw new Error('Each group must be a non-empty array');
     }
-    if (seen.has(n)) {
-      throw new Error(`Gemini returned duplicate paragraph number: ${n}`);
+    for (const n of group) {
+      if (typeof n !== 'number' || !Number.isInteger(n) || n < 1 || n > maxN) {
+        throw new Error(`Invalid fragment number: ${n} (max: ${maxN})`);
+      }
+      if (seen.has(n)) {
+        throw new Error(`Duplicate fragment number: ${n}`);
+      }
+      seen.add(n);
     }
-    seen.add(n);
+  }
+  if (seen.size !== maxN) {
+    throw new Error(`Expected ${maxN} fragments, got ${seen.size}`);
   }
 
   return order;
 }
 
 /**
- * Hybrid OCR: Cloud Vision for character accuracy + Gemini for reading order.
+ * Hybrid OCR: Cloud Vision for character accuracy + Gemini for grouping & reading order.
  *
  * 1. Cloud Vision extracts the full paragraph hierarchy (excellent character accuracy)
- * 2. Paragraphs are numbered and sent to Gemini along with the image
- * 3. Gemini returns the correct reading order as a JSON array of numbers
- * 4. Text is reassembled in Gemini's order using Cloud Vision's character-perfect text
+ * 2. Fragments are numbered and sent to Gemini along with the image
+ * 3. Gemini groups fragments that belong to the same paragraph and orders everything
+ * 4. Text is reassembled: fragments within groups joined with spaces, groups with newlines
  *
  * If Gemini fails for any reason, falls back to Cloud Vision's raw ordering.
  *
@@ -275,7 +301,7 @@ export async function extractTextHybrid(file, visionKey, geminiKey) {
     return { text: '', engine: 'vision (empty)' };
   }
 
-  // Step 2: Extract paragraphs from hierarchy, filter junk (pure digits/punctuation)
+  // Step 2: Extract fragments from hierarchy, filter junk (pure digits/punctuation)
   const allParagraphs = extractParagraphs(annotation);
   const paragraphs = allParagraphs.filter(text => !isJunkParagraph(text));
   const junkCount = allParagraphs.length - paragraphs.length;
@@ -284,13 +310,16 @@ export async function extractTextHybrid(file, visionKey, geminiKey) {
     return { text: flatText, engine: 'vision (single paragraph)' };
   }
 
-  // Step 3: Gemini reorder (forced complete permutation — every fragment must be placed)
+  // Step 3: Gemini groups fragments + reorders (nested array — merges broken paragraphs)
   try {
-    const order = await reorderWithGemini(base64, mimeType, paragraphs, geminiKey);
-    const reorderedText = order.map(i => paragraphs[i - 1]).join('\n');
-    return { text: reorderedText, engine: `hybrid (${paragraphs.length} paragraphs reordered${junkCount ? `, ${junkCount} junk filtered` : ''})` };
+    const grouped = await groupAndReorderWithGemini(base64, mimeType, paragraphs, geminiKey);
+    // Join fragments within each group with spaces, join groups with newlines
+    const mergedText = grouped
+      .map(group => group.map(i => paragraphs[i - 1]).join(' '))
+      .join('\n');
+    return { text: mergedText, engine: `hybrid (${paragraphs.length} fragments → ${grouped.length} paragraphs${junkCount ? `, ${junkCount} junk filtered` : ''})` };
   } catch (err) {
-    console.warn('[OCR Hybrid] Gemini reorder failed, using Cloud Vision ordering:', err.message);
+    console.warn('[OCR Hybrid] Gemini grouping failed, using Cloud Vision ordering:', err.message);
     return { text: flatText, engine: `vision fallback (${err.message})` };
   }
 }
