@@ -190,14 +190,34 @@ function validateSubset(inputBag, outputBag) {
 
   const used = new Map();
   const hallucinated = [];
+  const fuzzyMatched = [];
   for (const w of outputBag) {
     const usedCount = used.get(w) || 0;
     const availCount = available.get(w) || 0;
     if (usedCount < availCount) {
       used.set(w, usedCount + 1);
+    } else if (w.length > 3) {
+      // Fuzzy match: allow minor character changes (OCR artifacts Gemini partially fixed).
+      // Only for words > 3 chars to avoid false positives on short words like "the"/"them".
+      let matched = false;
+      for (const [inputWord, inputCount] of available) {
+        const inputUsed = used.get(inputWord) || 0;
+        if (inputUsed < inputCount && inputWord.length > 3 &&
+            levenshteinSimilarity(w, inputWord) >= 0.7) {
+          used.set(inputWord, inputUsed + 1);
+          fuzzyMatched.push(`${w} ≈ ${inputWord}`);
+          matched = true;
+          break;
+        }
+      }
+      if (!matched) hallucinated.push(w);
     } else {
       hallucinated.push(w);
     }
+  }
+
+  if (fuzzyMatched.length > 0) {
+    console.log('[OCR Hybrid] Subset validation fuzzy matches:', fuzzyMatched.join(', '));
   }
 
   return { ok: hallucinated.length === 0, hallucinated };
@@ -222,7 +242,8 @@ Your job is to reassemble OCR-extracted text fragments into the correct reading 
 Rules you must always follow:
 - Output ONLY the reading passage text
 - Drop ALL of these: line numbers (numbers in the margin like 5, 10, 15, 20...), page numbers, comprehension questions, answer choices, scoring rubrics, margin annotations, checkboxes, form fields
-- If a line number is fused with a word (e.g., "78At" or "78 At" where 78 is a line number), drop only the number, keep the word
+- Line numbers are typically 2+ digit multiples of 5 (10, 15, 20, 25...). If a line number is fused with a word (e.g., "78At" → "At"), drop only the number
+- Do NOT remove single-digit prefixes from words — those are OCR artifacts, not line numbers (e.g., keep "6ageography" exactly as "6ageography")
 - For two-column layouts, read left column top-to-bottom first, then right column
 - Merge fragments that belong to the same paragraph into a single paragraph
 - Separate distinct paragraphs with a blank line
