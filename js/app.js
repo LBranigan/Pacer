@@ -1805,6 +1805,54 @@ async function runAnalysis() {
       oovLog.push(logEntry);
     }
 
+    // OOV omission recovery: if an OOV word is omitted but <unknown> tokens
+    // exist in its temporal window, forgive it — student vocalized but ASR
+    // couldn't decode (word not in vocabulary).
+    for (let i = 0; i < alignment.length; i++) {
+      const entry = alignment[i];
+      if (!entry._isOOV || entry.type !== 'omission' || entry.forgiven) continue;
+
+      // Find temporal window from adjacent non-insertion entries
+      let prevEnd = null, nextStart = null;
+      for (let j = i - 1; j >= 0; j--) {
+        if (alignment[j].type === 'insertion') continue;
+        if (alignment[j].hypIndex >= 0) {
+          prevEnd = parseT(transcriptWords[alignment[j].hypIndex].endTime);
+        }
+        break;
+      }
+      for (let j = i + 1; j < alignment.length; j++) {
+        if (alignment[j].type === 'insertion') continue;
+        if (alignment[j].hypIndex >= 0) {
+          nextStart = parseT(transcriptWords[alignment[j].hypIndex].startTime);
+        }
+        break;
+      }
+
+      // Need at least one boundary to define a window
+      if (prevEnd === null && nextStart === null) continue;
+      const winStart = (prevEnd !== null ? prevEnd : nextStart) - 0.5;
+      const winEnd = (nextStart !== null ? nextStart : prevEnd) + 0.5;
+
+      // Scan transcriptWords for <unknown> tokens in window
+      let unknownCount = 0;
+      for (const tw of transcriptWords) {
+        if (!(typeof tw.word === 'string' && tw.word.startsWith('<') && tw.word.endsWith('>'))) continue;
+        if (tw._ctcArtifact) continue;
+        const tStart = parseT(tw.startTime);
+        const tEnd = parseT(tw.endTime);
+        if (tEnd >= winStart && tStart <= winEnd) unknownCount++;
+      }
+
+      if (unknownCount > 0) {
+        entry.forgiven = true;
+        entry._oovForgiven = true;
+        entry._oovRecoveredViaUnknown = true;
+        entry._unknownTokenCount = unknownCount;
+        oovLog.push({ ref: entry.ref, type: 'omission_recovered', unknownTokens: unknownCount, forgiven: true });
+      }
+    }
+
     addStage('oov_forgiveness', {
       totalOOV: alignment.filter(e => e._isOOV).length,
       forgiven: oovLog.filter(l => l.forgiven).length,
@@ -1924,6 +1972,7 @@ async function runAnalysis() {
       _confirmedInsertion: a._confirmedInsertion || false,
       _isOOV: a._isOOV || false,
       _oovForgiven: a._oovForgiven || false,
+      _oovRecoveredViaUnknown: a._oovRecoveredViaUnknown || false,
       _partOfOOVForgiven: a._partOfOOVForgiven || false
     }))
   });

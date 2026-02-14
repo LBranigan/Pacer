@@ -367,7 +367,12 @@ function buildEnhancedTooltip(item, sttWord, extras) {
       lines.push(`Attempts: ${attempts.join(', ')}`);
     }
   } else if (item.type === 'omission') {
-    lines.push('Omission');
+    if (item._oovRecoveredViaUnknown) {
+      lines.push(`OOV omission forgiven (${item._unknownTokenCount} [unknown] token${item._unknownTokenCount > 1 ? 's' : ''})`);
+      lines.push('Student vocalized but ASR could not decode (not in vocabulary)');
+    } else {
+      lines.push('Omission');
+    }
   } else if (item._recovered) {
     lines.push(item._isLastRefWord ? 'Recovered (final word)' : 'Recovered');
   } else if (item.type === 'self-correction') {
@@ -717,7 +722,10 @@ function renderNewAnalyzedWords(container, alignment, sttLookup, diagnostics, tr
       'Rules:\n' +
       '\u2022 No engine produced any word for this reference position\n' +
       '\u2022 Needleman-Wunsch alignment left a gap (ref word with no hyp match)\n' +
-      '\u2022 Counts as an ERROR',
+      '\u2022 Counts as an ERROR\n\n' +
+      'Exception:\n' +
+      '\u2022 OOV words with [unknown] tokens in the time window are forgiven\n' +
+      '  (student attempted but ASR couldn\'t decode \u2014 not in vocabulary)',
 
     'attempted-struggled': 'ATTEMPTED BUT STRUGGLED\n' +
       'Student tried to read the word but did not fully produce it.\n\n' +
@@ -1030,9 +1038,11 @@ function renderNewAnalyzedWords(container, alignment, sttLookup, diagnostics, tr
     }
 
     if (entry._isOOV) {
-      span.dataset.oov = entry._oovForgiven
-        ? `OOV word (forgiven, ${entry._oovRatio}% phonetic match)`
-        : 'OOV word (not in ASR vocabulary)';
+      span.dataset.oov = entry._oovRecoveredViaUnknown
+        ? `OOV word (forgiven, ${entry._unknownTokenCount} [unknown] token${entry._unknownTokenCount > 1 ? 's' : ''} detected)`
+        : entry._oovForgiven
+          ? `OOV word (forgiven, ${entry._oovRatio}% phonetic match)`
+          : 'OOV word (not in ASR vocabulary)';
     }
 
     const playFn = makePlayFn(entry.hypIndex);

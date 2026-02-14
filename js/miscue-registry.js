@@ -467,6 +467,30 @@ const FORGIVENESS_RULES = {
     note: 'Student used phonics correctly but doesn\'t know the name. Common words like "north", "straight" are blocked by dictionary lookup even if NL API tags them as proper nouns.'
   },
 
+  oovOmissionRecovery: {
+    description: 'Out-of-vocabulary reference word scored as omission, but <unknown> CTC tokens exist in the temporal window — student vocalized something but ASR could not decode it because the word is not in its vocabulary.',
+    detector: 'app.js → OOV omission recovery loop (inside OOV forgiveness block, after phonetic forgiveness)',
+    countsAsError: false,
+    config: {
+      oovDetection: 'getPhonemeCount(refNorm) === null — word not in CMUdict',
+      temporalWindow: 'From adjacent non-insertion alignment entries\' timestamps ±0.5s',
+      unknownTokenDetection: 'transcriptWords where word starts with < and ends with >, excluding _ctcArtifact'
+    },
+    example: {
+      reference: 'cayuco',
+      spoken: 'Reverb → two <unknown> tokens at 31s and 32s',
+      result: 'OOV omission + <unknown> tokens in window → forgiven (_oovRecoveredViaUnknown: true)'
+    },
+    guards: [
+      'Reference word must be OOV (_isOOV: true)',
+      'Entry must be an omission (type === "omission")',
+      'At least one <unknown> token in temporal window',
+      'CTC artifacts excluded (_ctcArtifact tokens skipped)'
+    ],
+    uiClass: 'word-forgiven',
+    note: 'When NW alignment maps <unknown> tokens to wrong ref words, the OOV word gets scored as a false omission. This recovery detects that speech was present (CTC heard something) in the right time window. Existing forgiven-omission handling in computeAccuracy and classifyWord applies automatically.'
+  },
+
   oovPhoneticForgiveness: {
     description: 'Out-of-vocabulary reference word (not in CMUdict) that the student pronounced phonetically close enough to forgive. ASR engines can\'t recognize foreign/rare words absent from their training vocabulary, so string comparison produces false errors.',
     detector: 'app.js → OOV forgiveness loop (after proper noun forgiveness, uses phoneticNormalize + levenshteinRatio)',
@@ -619,6 +643,7 @@ export function getDetectorLocation(type) {
  * - preAlignmentFragmentMerge: Reverb BPE fragments merged before alignment ("i"+"d" → "id")
  * - tier1NearMatchOverride: Tier 1 fuzzy match uses xval word for 1-char diffs ("format"→"formats")
  * - spilloverConsolidation: Struggle fragments reassigned from wrong ref slots back to anchor word
+ * - oovOmissionRecovery: OOV omission forgiven when <unknown> CTC tokens exist in time window
  * - oovPhoneticForgiveness: Foreign/rare OOV words forgiven via phonetic-normalized Levenshtein (≥60%)
  *
  * INFRASTRUCTURE FIXES:
