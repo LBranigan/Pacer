@@ -180,15 +180,39 @@ function extractWithLayoutAwareness(annotation) {
     return avgA - avgB;
   });
 
+  // Compute each column's full x-range (for absorbing orphan paragraphs)
+  const colRanges = substantial.map(col => ({
+    col,
+    left:  Math.min(...col.map(p => p.left)),
+    right: Math.max(...col.map(p => p.right))
+  }));
+
+  // Two-pass assignment: orphan paragraphs whose center-x falls within
+  // a column's x-range get absorbed into that column. This catches
+  // short end-of-line phrases (like "my favorite") whose left edge is
+  // far right of the column's typical left edge but spatially belong there.
+  const assignedSet = new Set(substantial.flat());
+  const orphans = narrow.filter(p => !assignedSet.has(p));
+  const stray = [];
+
+  for (const p of orphans) {
+    const cx = (p.left + p.right) / 2;
+    let absorbed = false;
+    for (const cr of colRanges) {
+      if (cx >= cr.left && cx <= cr.right) {
+        cr.col.push(p);
+        absorbed = true;
+        break;
+      }
+    }
+    if (!absorbed) stray.push(p);
+  }
+
   // Sort within each group by y-position
   fullWidth.sort((a, b) => a.top - b.top);
   for (const col of substantial) {
     col.sort((a, b) => a.top - b.top);
   }
-
-  // Collect stray narrow paragraphs (in small columns that didn't meet threshold)
-  const assignedSet = new Set(substantial.flat());
-  const stray = narrow.filter(p => !assignedSet.has(p));
   stray.sort((a, b) => a.top - b.top);
 
   // Combine: full-width → each column left-to-right → stray
