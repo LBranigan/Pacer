@@ -1806,8 +1806,9 @@ async function runAnalysis() {
     }
 
     // OOV omission recovery: if an OOV word is omitted but <unknown> tokens
-    // exist in its temporal window, forgive it — student vocalized but ASR
-    // couldn't decode (word not in vocabulary).
+    // exist in its temporal window AND Parakeet heard speech there, forgive it —
+    // student vocalized but ASR couldn't decode (word not in vocabulary).
+    // Guard: if Parakeet also has no speech in the window, student genuinely skipped.
     for (let i = 0; i < alignment.length; i++) {
       const entry = alignment[i];
       if (!entry._isOOV || entry.type !== 'omission' || entry.forgiven) continue;
@@ -1833,6 +1834,18 @@ async function runAnalysis() {
       if (prevEnd === null && nextStart === null) continue;
       const winStart = (prevEnd !== null ? prevEnd : nextStart) - 0.5;
       const winEnd = (nextStart !== null ? nextStart : prevEnd) + 0.5;
+
+      // Guard: Parakeet must have speech in the core gap (not just overlapping edges).
+      // Check for a Parakeet word starting within prevEnd..nextStart.
+      // If Parakeet also has silence there, student genuinely skipped the word.
+      const gapStart = prevEnd !== null ? prevEnd : winStart;
+      const gapEnd = nextStart !== null ? nextStart : winEnd;
+      let parakeetHasWord = false;
+      for (const xw of xvalRawWords) {
+        const xStart = parseFloat(String(xw.start || '0').replace('s', '')) || 0;
+        if (xStart > gapStart && xStart < gapEnd) { parakeetHasWord = true; break; }
+      }
+      if (!parakeetHasWord) continue;
 
       // Scan transcriptWords for <unknown> tokens in window
       let unknownCount = 0;
@@ -2423,7 +2436,7 @@ if (imageInput) {
     const useHybrid = ocrEngineToggle && ocrEngineToggle.checked;
 
     try {
-      let text, engineInfo;
+      let text, engineInfo, lowConfWords = [];
       if (useHybrid) {
         const visionKey = document.getElementById('apiKey').value.trim();
         const geminiKey = localStorage.getItem('orf_gemini_key') || '';
@@ -2435,10 +2448,11 @@ if (imageInput) {
           ocrStatus.textContent = 'Error: Please enter a Gemini API key first.';
           return;
         }
-        ocrStatus.textContent = 'Extracting text (Cloud Vision + Gemini reorder)...';
+        ocrStatus.textContent = 'Extracting text (Cloud Vision + Gemini assembly + cleanup)...';
         const result = await extractTextHybrid(file, visionKey, geminiKey);
         text = result.text;
         engineInfo = result.engine;
+        lowConfWords = result.lowConfidenceWords || [];
       } else {
         const apiKey = document.getElementById('apiKey').value.trim();
         if (!apiKey) {
@@ -2450,9 +2464,14 @@ if (imageInput) {
         engineInfo = 'vision';
       }
       ocrText.value = text;
-      ocrStatus.textContent = text
+      let statusMsg = text
         ? `Text extracted [${engineInfo}] — review and edit, then click 'Use as Reference Passage'.`
         : 'No text detected in image.';
+      if (lowConfWords.length > 0) {
+        const wordList = lowConfWords.slice(0, 8).map(w => `${w.word} (${w.confidence}%)`).join(', ');
+        statusMsg += ` | Check: ${wordList}`;
+      }
+      ocrStatus.textContent = statusMsg;
     } catch (err) {
       ocrStatus.textContent = `OCR error: ${err.message}`;
     }
