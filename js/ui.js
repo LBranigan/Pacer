@@ -20,6 +20,15 @@ function showWordTooltip(span, playFn) {
   tip.className = 'word-tooltip';
   tip.textContent = text;
 
+  // OOV badge (between main text and footer)
+  const oovData = span.dataset.oov;
+  if (oovData) {
+    const oovDiv = document.createElement('div');
+    oovDiv.className = 'tooltip-oov';
+    oovDiv.textContent = oovData;
+    tip.appendChild(oovDiv);
+  }
+
   // Footer row: play button + NL info on same line
   const nlData = span.dataset.nl;
   if (playFn || nlData) {
@@ -1020,6 +1029,12 @@ function renderNewAnalyzedWords(container, alignment, sttLookup, diagnostics, tr
       span.dataset.nl = '\ud83c\udf10 ' + nlParts.join(' \u00b7 ');
     }
 
+    if (entry._isOOV) {
+      span.dataset.oov = entry._oovForgiven
+        ? `OOV word (forgiven, ${entry._oovRatio}% phonetic match)`
+        : 'OOV word (not in ASR vocabulary)';
+    }
+
     const playFn = makePlayFn(entry.hypIndex);
     if (playFn) span.classList.add('word-clickable');
     span.addEventListener('click', (e) => { e.stopPropagation(); showWordTooltip(span, playFn); });
@@ -1113,7 +1128,7 @@ export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, di
 
   const accBox = document.createElement('div');
   accBox.className = 'metric-box';
-  const forgivenNote = accuracy.forgiven > 0 ? ' (' + accuracy.forgiven + ' proper noun' + (accuracy.forgiven > 1 ? 's' : '') + ' forgiven)' : '';
+  const forgivenNote = accuracy.forgiven > 0 ? ' (' + accuracy.forgiven + ' word' + (accuracy.forgiven > 1 ? 's' : '') + ' forgiven)' : '';
   accBox.innerHTML = '<span class="metric-value">' + accuracy.accuracy + '%</span><span class="metric-label">Accuracy' + forgivenNote + '</span>';
   metricsBar.appendChild(accBox);
 

@@ -7,7 +7,7 @@ import { getCanonical } from './word-equivalences.js';
 import { computeWCPM, computeAccuracy, computeWCPMRange } from './metrics.js';
 import { setStatus, displayResults, displayAlignmentResults, showAudioPlayback, renderStudentSelector, renderHistory } from './ui.js';
 import { runDiagnostics, computeTierBreakdown, resolveNearMissClusters, absorbMispronunciationFragments, computePhrasingQuality, computePauseAtPunctuation, computePaceConsistency, computeWordDurationOutliers, computeWordSpeedTiers, isNearMiss, annotatePauseContext, computeFunctionWordCompression, computeSyntacticAlignment } from './diagnostics.js';
-import { extractTextFromImage, extractTextWithGemini } from './ocr-api.js';
+import { extractTextFromImage, extractTextHybrid } from './ocr-api.js';
 import { trimPassageToAttempted } from './passage-trimmer.js';
 import { analyzePassageText, levenshteinRatio } from './nl-api.js';
 import { getStudents, addStudent, deleteStudent, saveAssessment, getAssessments } from './storage.js';
@@ -20,7 +20,7 @@ import { getCrossValidatorEngine, setCrossValidatorEngine, getCrossValidatorName
 import { padAudioWithSilence } from './audio-padding.js';
 import { enrichDiagnosticsWithVAD, computeVADGapSummary, adjustGapsWithVADOverhang } from './vad-gap-analyzer.js';
 import { canRunMaze } from './maze-generator.js';
-import { loadPhonemeData, getPhonemeCountWithFallback } from './phoneme-counter.js';
+import { loadPhonemeData, getPhonemeCount, getPhonemeCountWithFallback } from './phoneme-counter.js';
 import { generateMovieTrailer } from './movie-trailer.js';
 
 // Code version for cache verification
@@ -1593,6 +1593,31 @@ async function runAnalysis() {
       ri++;
     }
 
+    // ── OOV Detection ─────────────────────────────────────────────────────
+    // Flag reference words absent from CMUdict (125K English words).
+    // If a word isn't in CMUdict, English ASR models almost certainly can't recognize it.
+    await loadPhonemeData();
+    for (const entry of alignment) {
+      if (entry.type === 'insertion') continue;
+      const refNorm = entry.ref.toLowerCase().replace(/[^a-z'-]/g, '');
+      if (refNorm.length < 3) continue;           // too short for reliable phonetic comparison
+      if (/\d/.test(entry.ref)) continue;          // handled by number expansion
+      if (entry.forgiven) continue;                // already forgiven (proper noun)
+      if (getPhonemeCount(refNorm) === null) {
+        entry._isOOV = true;
+      }
+    }
+
+    // Phonetic normalization: collapse common phonetic equivalences before Levenshtein
+    // Turns "cayuco"→"kayuko", "kayoko"→"kayoko" → ratio 0.83 (vs 0.50 raw)
+    function phoneticNormalize(word) {
+      return word.toLowerCase()
+        .replace(/[^a-z]/g, '')
+        .replace(/ck/g, 'k')
+        .replace(/ph/g, 'f')
+        .replace(/c/g, 'k');
+    }
+
     // Dictionary-based common word detection: checks Free Dictionary API
     // to distinguish exotic names (Mallon, Shanna) from common words (Straight, North).
     // Common words get 200 → skip forgiveness; exotic names get 404 → allow forgiveness.
@@ -1718,6 +1743,77 @@ async function runAnalysis() {
     });
   }
 
+  // ── OOV Phonetic Forgiveness ──────────────────────────────────────────
+  // Foreign/rare words absent from ASR vocabulary get phonetic comparison.
+  // If the student's combined engine output is phonetically close, forgive.
+  {
+    const oovLog = [];
+    for (let i = 0; i < alignment.length; i++) {
+      const entry = alignment[i];
+      if (!entry._isOOV) continue;
+      if (entry.type !== 'substitution' && entry.type !== 'struggle') continue;
+      if (entry.forgiven) continue; // already forgiven by proper noun
+
+      // Collect all engine hearings for this ref word
+      const hearings = [];
+      if (entry._v1RawAttempt) hearings.push(entry._v1RawAttempt.join(''));
+      else if (entry.hyp) hearings.push(entry.hyp);
+      if (entry._v0Attempt) hearings.push(entry._v0Attempt.join(''));
+      else if (entry._v0Word) hearings.push(entry._v0Word);
+      if (entry._xvalAttempt) hearings.push(entry._xvalAttempt.join(''));
+      else if (entry._xvalWord) hearings.push(entry._xvalWord);
+
+      const refPhonetic = phoneticNormalize(entry.ref);
+      let bestRatio = 0;
+      let bestHearing = '';
+      for (const h of hearings) {
+        if (!h) continue;
+        const ratio = levenshteinRatio(refPhonetic, phoneticNormalize(h));
+        if (ratio > bestRatio) {
+          bestRatio = ratio;
+          bestHearing = h;
+        }
+      }
+
+      // Also try combining hyp + following insertions (ASR may fragment OOV words)
+      let combined = entry.hyp || '';
+      for (let j = i + 1; j < alignment.length && alignment[j].type === 'insertion'; j++) {
+        combined += alignment[j].hyp || '';
+        const ratio = levenshteinRatio(refPhonetic, phoneticNormalize(combined));
+        if (ratio > bestRatio) {
+          bestRatio = ratio;
+          bestHearing = combined;
+        }
+      }
+
+      const logEntry = { ref: entry.ref, bestHearing, bestRatio: Math.round(bestRatio * 100) };
+
+      if (bestRatio >= 0.6) {
+        entry.forgiven = true;
+        entry._oovForgiven = true;
+        entry._oovRatio = Math.round(bestRatio * 100);
+        entry.phoneticRatio = Math.round(bestRatio * 100);
+        logEntry.forgiven = true;
+
+        // Clean up fragments: adjacent insertions that were part of ASR's split
+        for (let j = i + 1; j < alignment.length && alignment[j].type === 'insertion'; j++) {
+          const ins = alignment[j];
+          if (ins._confirmedInsertion) delete ins._confirmedInsertion;
+          ins._partOfOOVForgiven = true;
+          if (ins._partOfStruggle) delete ins._partOfStruggle;
+        }
+      }
+      oovLog.push(logEntry);
+    }
+
+    addStage('oov_forgiveness', {
+      totalOOV: alignment.filter(e => e._isOOV).length,
+      forgiven: oovLog.filter(l => l.forgiven).length,
+      notForgiven: oovLog.filter(l => !l.forgiven).length,
+      details: oovLog
+    });
+  }
+
   // Calculate effective reading time: first word start = t=0
   // This gives the student a full 60 seconds from when they start speaking
   let effectiveElapsedSeconds = appState.elapsedSeconds;
@@ -1826,7 +1922,10 @@ async function runAnalysis() {
       _abandonedAttempt: a._abandonedAttempt || false,
       _isSelfCorrection: a._isSelfCorrection || false,
       _partOfStruggle: a._partOfStruggle || false,
-      _confirmedInsertion: a._confirmedInsertion || false
+      _confirmedInsertion: a._confirmedInsertion || false,
+      _isOOV: a._isOOV || false,
+      _oovForgiven: a._oovForgiven || false,
+      _partOfOOVForgiven: a._partOfOOVForgiven || false
     }))
   });
 
@@ -2244,24 +2343,24 @@ const ocrToggleTrack = document.getElementById('ocrToggleTrack');
 const ocrToggleThumb = document.getElementById('ocrToggleThumb');
 const ocrEngineLabel = document.getElementById('ocrEngineLabel');
 
-// Persist toggle state
-const savedOcrEngine = localStorage.getItem('orf_ocr_engine') || 'gemini';
+// Persist toggle state (default: hybrid on)
+const savedOcrEngine = localStorage.getItem('orf_ocr_engine') || 'hybrid';
 if (ocrEngineToggle) {
-  ocrEngineToggle.checked = savedOcrEngine === 'gemini';
+  ocrEngineToggle.checked = savedOcrEngine === 'hybrid';
   updateOcrToggleUI();
   ocrEngineToggle.addEventListener('change', () => {
-    localStorage.setItem('orf_ocr_engine', ocrEngineToggle.checked ? 'gemini' : 'vision');
+    localStorage.setItem('orf_ocr_engine', ocrEngineToggle.checked ? 'hybrid' : 'vision');
     updateOcrToggleUI();
   });
 }
 
 function updateOcrToggleUI() {
   if (!ocrEngineToggle) return;
-  const isGemini = ocrEngineToggle.checked;
-  ocrToggleTrack.style.background = isGemini ? '#4285f4' : '#ccc';
-  ocrToggleThumb.style.left = isGemini ? '20px' : '2px';
-  ocrEngineLabel.textContent = isGemini ? 'Gemini 2.0 Flash' : 'Cloud Vision';
-  ocrEngineLabel.style.color = isGemini ? '#4285f4' : '#666';
+  const isHybrid = ocrEngineToggle.checked;
+  ocrToggleTrack.style.background = isHybrid ? '#4285f4' : '#ccc';
+  ocrToggleThumb.style.left = isHybrid ? '20px' : '2px';
+  ocrEngineLabel.textContent = isHybrid ? 'Vision + Gemini' : 'Cloud Vision';
+  ocrEngineLabel.style.color = isHybrid ? '#4285f4' : '#666';
 }
 
 if (imageInput) {
@@ -2273,33 +2372,41 @@ if (imageInput) {
     ocrImage.src = URL.createObjectURL(file);
     ocrText.value = '';
 
-    const useGemini = ocrEngineToggle && ocrEngineToggle.checked;
-    const engineName = useGemini ? 'Gemini 2.0 Flash' : 'Cloud Vision';
-    ocrStatus.textContent = `Extracting text via ${engineName}...`;
+    const useHybrid = ocrEngineToggle && ocrEngineToggle.checked;
 
     try {
-      let text;
-      if (useGemini) {
+      let text, engineInfo;
+      if (useHybrid) {
+        const visionKey = document.getElementById('apiKey').value.trim();
         const geminiKey = localStorage.getItem('orf_gemini_key') || '';
+        if (!visionKey) {
+          ocrStatus.textContent = 'Error: Please enter a Google Cloud API key first.';
+          return;
+        }
         if (!geminiKey) {
           ocrStatus.textContent = 'Error: Please enter a Gemini API key first.';
           return;
         }
-        text = await extractTextWithGemini(file, geminiKey);
+        ocrStatus.textContent = 'Extracting text (Cloud Vision + Gemini reorder)...';
+        const result = await extractTextHybrid(file, visionKey, geminiKey);
+        text = result.text;
+        engineInfo = result.engine;
       } else {
         const apiKey = document.getElementById('apiKey').value.trim();
         if (!apiKey) {
           ocrStatus.textContent = 'Error: Please enter a Google Cloud API key first.';
           return;
         }
+        ocrStatus.textContent = 'Extracting text (Cloud Vision)...';
         text = await extractTextFromImage(file, apiKey);
+        engineInfo = 'vision';
       }
       ocrText.value = text;
       ocrStatus.textContent = text
-        ? `Text extracted via ${engineName} — review and edit, then click 'Use as Reference Passage'.`
+        ? `Text extracted [${engineInfo}] — review and edit, then click 'Use as Reference Passage'.`
         : 'No text detected in image.';
     } catch (err) {
-      ocrStatus.textContent = `${engineName} error: ${err.message}`;
+      ocrStatus.textContent = `OCR error: ${err.message}`;
     }
   });
 }

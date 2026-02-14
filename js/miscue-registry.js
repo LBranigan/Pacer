@@ -465,6 +465,34 @@ const FORGIVENESS_RULES = {
     ],
     uiClass: 'word-forgiven',
     note: 'Student used phonics correctly but doesn\'t know the name. Common words like "north", "straight" are blocked by dictionary lookup even if NL API tags them as proper nouns.'
+  },
+
+  oovPhoneticForgiveness: {
+    description: 'Out-of-vocabulary reference word (not in CMUdict) that the student pronounced phonetically close enough to forgive. ASR engines can\'t recognize foreign/rare words absent from their training vocabulary, so string comparison produces false errors.',
+    detector: 'app.js → OOV forgiveness loop (after proper noun forgiveness, uses phoneticNormalize + levenshteinRatio)',
+    countsAsError: false,
+    config: {
+      oovDetection: 'getPhonemeCount(refNorm) === null — word not in CMUdict (125K English words)',
+      phoneticNormalization: 'Collapse ck→k, ph→f, c→k before Levenshtein comparison',
+      min_similarity: 0.60,
+      min_ref_length: 3,
+      skip_digits: true,
+      skip_already_forgiven: true
+    },
+    example: {
+      reference: 'cayuco',
+      spoken: 'Reverb → "ca" + "yoko", Parakeet → "Kayoko"',
+      result: 'phoneticNormalize: "kayuko" vs "kayoko" → ratio 0.83 ≥ 0.6 → forgiven'
+    },
+    guards: [
+      'Reference word must be ≥ 3 chars',
+      'Reference word must not contain digits (handled by number expansion)',
+      'Reference word must not already be forgiven (proper noun)',
+      'Only substitutions and struggles are candidates (omissions = student didn\'t attempt)',
+      'Best ratio across all engine hearings must be ≥ 0.6'
+    ],
+    uiClass: 'word-forgiven',
+    note: 'Foreign words (Spanish "cayuco", French "château") and rare English words absent from CMUdict trigger OOV detection. Phonetic normalization collapses common equivalences (c/k, ph/f, ck/k) before Levenshtein comparison. Adjacent insertion fragments from ASR splitting are cleaned up (_partOfOOVForgiven).'
   }
 };
 
@@ -591,6 +619,7 @@ export function getDetectorLocation(type) {
  * - preAlignmentFragmentMerge: Reverb BPE fragments merged before alignment ("i"+"d" → "id")
  * - tier1NearMatchOverride: Tier 1 fuzzy match uses xval word for 1-char diffs ("format"→"formats")
  * - spilloverConsolidation: Struggle fragments reassigned from wrong ref slots back to anchor word
+ * - oovPhoneticForgiveness: Foreign/rare OOV words forgiven via phonetic-normalized Levenshtein (≥60%)
  *
  * INFRASTRUCTURE FIXES:
  * - sttLookup keys use raw normalized words (not getCanonical) to match alignment hyp values

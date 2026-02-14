@@ -129,16 +129,17 @@ export function buildHypToRefMap(alignment) {
   for (const op of alignment) {
     const type = op.type || op.operation;
     if (type === 'insertion') {
-      // hyp word with no ref counterpart
-      hypIndex++;
+      const h = (op.hypIndex != null && op.hypIndex >= 0) ? op.hypIndex : hypIndex;
+      hypIndex = h + 1;
     } else if (type === 'omission' || type === 'deletion') {
-      // ref word with no hyp counterpart
       refIndex++;
     } else {
-      // correct, substitution, or struggle — all advance both indices
-      map.set(hypIndex, refIndex);
+      // Use op.hypIndex when available (compound entries share the same
+      // hypIndex for multiple ref words — counter-based tracking drifts).
+      const h = (op.hypIndex != null && op.hypIndex >= 0) ? op.hypIndex : hypIndex;
+      map.set(h, refIndex);
       refIndex++;
-      hypIndex++;
+      hypIndex = h + 1;
     }
   }
   return map;
@@ -701,7 +702,8 @@ export function detectMorphologicalErrors(alignment, transcriptWords) {
         if (diffLen <= 1) continue;
 
         if (sharedLen >= 3) {
-          const sttWord = transcriptWords?.[hypIndex];
+          const eHyp = (op.hypIndex != null && op.hypIndex >= 0) ? op.hypIndex : hypIndex;
+          const sttWord = transcriptWords?.[eHyp];
           const matchType = prefixLen >= suffixLen ? 'prefix' : 'suffix';
           const sharedPart = matchType === 'prefix'
             ? ref.slice(0, prefixLen)
@@ -718,8 +720,10 @@ export function detectMorphologicalErrors(alignment, transcriptWords) {
       }
     }
 
-    // Advance hypIndex for non-omission types (correct, substitution, insertion)
-    hypIndex++;
+    // Advance hypIndex — use entry.hypIndex to prevent drift on shared-hypIndex entries
+    const eHyp = (op.hypIndex != null && op.hypIndex >= 0) ? op.hypIndex : hypIndex;
+    const partsCount = op.compound && op.parts ? op.parts.length : 1;
+    hypIndex = eHyp + partsCount;
   }
 
   return results;
@@ -767,16 +771,18 @@ export function computePhrasingQuality(diagnostics, transcriptWords, referenceTe
   let hypIdx = 0;
   for (const entry of alignment) {
     if (entry.type === 'omission' || entry.type === 'deletion') continue;
+    const eHyp = (entry.hypIndex != null && entry.hypIndex >= 0) ? entry.hypIndex : hypIdx;
     if (entry.type === 'insertion') {
-      if (transcriptWords[hypIdx] && transcriptWords[hypIdx].isDisfluency) excludeFromCount.add(hypIdx);
-      if (entry._isSelfCorrection) excludeFromCount.add(hypIdx);
-      if (entry._partOfStruggle) excludeFromCount.add(hypIdx);
+      if (transcriptWords[eHyp] && transcriptWords[eHyp].isDisfluency) excludeFromCount.add(eHyp);
+      if (entry._isSelfCorrection) excludeFromCount.add(eHyp);
+      if (entry._partOfStruggle) excludeFromCount.add(eHyp);
+      if (entry._partOfOOVForgiven) excludeFromCount.add(eHyp);
     }
-    if (transcriptWords[hypIdx] && transcriptWords[hypIdx].crossValidation === 'unconfirmed') {
-      excludeFromCount.add(hypIdx);
+    if (transcriptWords[eHyp] && transcriptWords[eHyp].crossValidation === 'unconfirmed') {
+      excludeFromCount.add(eHyp);
     }
     const partsCount = entry.compound && entry.parts ? entry.parts.length : 1;
-    hypIdx += partsCount;
+    hypIdx = eHyp + partsCount;
   }
 
   // ── Pre-step: Build compoundPositions set ──
@@ -784,13 +790,14 @@ export function computePhrasingQuality(diagnostics, transcriptWords, referenceTe
   hypIdx = 0;
   for (const entry of alignment) {
     if (entry.type === 'omission' || entry.type === 'deletion') continue;
+    const eHyp = (entry.hypIndex != null && entry.hypIndex >= 0) ? entry.hypIndex : hypIdx;
     if (entry.compound && entry.parts) {
       for (let p = 0; p < entry.parts.length - 1; p++) {
-        compoundPositions.add(hypIdx + p);
+        compoundPositions.add(eHyp + p);
       }
-      hypIdx += entry.parts.length;
+      hypIdx = eHyp + entry.parts.length;
     } else {
-      hypIdx++;
+      hypIdx = eHyp + 1;
     }
   }
 
@@ -985,14 +992,15 @@ export function computePhrasingQuality(diagnostics, transcriptWords, referenceTe
   hypIdx = 0;
   for (const entry of alignment) {
     if (entry.type === 'omission' || entry.type === 'deletion') continue;
-    if (excludeFromCount.has(hypIdx)) {
-      if (entry.type === 'insertion' && transcriptWords[hypIdx] && transcriptWords[hypIdx].isDisfluency) disfluencyCount++;
+    const eHyp = (entry.hypIndex != null && entry.hypIndex >= 0) ? entry.hypIndex : hypIdx;
+    if (excludeFromCount.has(eHyp)) {
+      if (entry.type === 'insertion' && transcriptWords[eHyp] && transcriptWords[eHyp].isDisfluency) disfluencyCount++;
       else if (entry._isSelfCorrection) selfCorrCount++;
       else if (entry._partOfStruggle) strugglePartCount++;
-      else if (transcriptWords[hypIdx] && transcriptWords[hypIdx].crossValidation === 'unconfirmed') unconfirmedCount++;
+      else if (transcriptWords[eHyp] && transcriptWords[eHyp].crossValidation === 'unconfirmed') unconfirmedCount++;
     }
     const partsCount = entry.compound && entry.parts ? entry.parts.length : 1;
-    hypIdx += partsCount;
+    hypIdx = eHyp + partsCount;
   }
 
   return {
@@ -1495,21 +1503,34 @@ export function computeWordDurationOutliers(transcriptWords, alignment) {
   let xvalCount = 0;
   let primaryCount = 0;
   let hypIndex = 0;
+  let lastHypIdx = -1; // track shared-hypIndex entries (two ref words → same hyp)
 
   for (const entry of alignment) {
     if (entry.type === 'omission' || entry.type === 'deletion') continue;
 
     const partsCount = entry.compound && entry.parts ? entry.parts.length : 1;
+    // Use entry.hypIndex when available to prevent drift from shared-hypIndex entries
+    const effectiveHyp = (entry.hypIndex != null && entry.hypIndex >= 0) ? entry.hypIndex : hypIndex;
 
     // Skip disfluency insertions, self-corrections, struggle parts
     if (entry.type === 'insertion') {
-      if (transcriptWords[hypIndex] && transcriptWords[hypIndex].isDisfluency) { hypIndex += partsCount; continue; }
-      if (entry._isSelfCorrection) { hypIndex += partsCount; continue; }
-      if (entry._partOfStruggle) { hypIndex += partsCount; continue; }
+      if (transcriptWords[effectiveHyp] && transcriptWords[effectiveHyp].isDisfluency) { hypIndex = effectiveHyp + partsCount; continue; }
+      if (entry._isSelfCorrection) { hypIndex = effectiveHyp + partsCount; continue; }
+      if (entry._partOfStruggle) { hypIndex = effectiveHyp + partsCount; continue; }
     }
 
-    const word = transcriptWords[hypIndex];
-    if (!word) { hypIndex += partsCount; continue; }
+    // Shared hypIndex: two ref words aligned to same hyp (e.g., "on"+"to" → "onto").
+    // Reuse the previous entry's data — don't re-read timestamps.
+    if (effectiveHyp === lastHypIdx && allWords.length > 0) {
+      const prev = allWords[allWords.length - 1];
+      allWords.push({ ...prev, refWord: entry.ref || prev.refWord, refIndex: null });
+      hypIndex = effectiveHyp + partsCount;
+      continue;
+    }
+    lastHypIdx = effectiveHyp;
+
+    const word = transcriptWords[effectiveHyp];
+    if (!word) { hypIndex = effectiveHyp + partsCount; continue; }
 
     // Prefer cross-validator timestamps; fall back to primary (Reverb) timestamps
     let startMs, endMs, tsSource;
@@ -1517,7 +1538,7 @@ export function computeWordDurationOutliers(transcriptWords, alignment) {
       startMs = parseTime(word._xvalStartTime) * 1000;
       // For compound words, use end time of last part
       if (entry.compound && entry.parts && entry.parts.length > 1) {
-        const lastPartIdx = hypIndex + entry.parts.length - 1;
+        const lastPartIdx = effectiveHyp + entry.parts.length - 1;
         const lastPart = transcriptWords[lastPartIdx];
         endMs = lastPart && lastPart._xvalEndTime != null
           ? parseTime(lastPart._xvalEndTime) * 1000
@@ -1531,7 +1552,7 @@ export function computeWordDurationOutliers(transcriptWords, alignment) {
       // Fallback: primary timestamps (Reverb or whichever engine provided them)
       startMs = parseTime(word.startTime) * 1000;
       if (entry.compound && entry.parts && entry.parts.length > 1) {
-        const lastPartIdx = hypIndex + entry.parts.length - 1;
+        const lastPartIdx = effectiveHyp + entry.parts.length - 1;
         const lastPart = transcriptWords[lastPartIdx];
         endMs = lastPart && lastPart.endTime != null
           ? parseTime(lastPart.endTime) * 1000
@@ -1543,12 +1564,12 @@ export function computeWordDurationOutliers(transcriptWords, alignment) {
       primaryCount++;
     } else {
       wordsSkippedNoTimestamps++;
-      hypIndex += partsCount;
+      hypIndex = effectiveHyp + partsCount;
       continue;
     }
 
     const durationMs = endMs - startMs;
-    if (durationMs <= 0) { hypIndex += partsCount; continue; }
+    if (durationMs <= 0) { hypIndex = effectiveHyp + partsCount; continue; }
 
     const wordText = entry.compound ? (entry.hyp || entry.ref || word.word) : word.word;
     const phonemeInfo = getPhonemeCountWithFallback(wordText);
@@ -1557,7 +1578,7 @@ export function computeWordDurationOutliers(transcriptWords, alignment) {
     const normalizedDurationMs = durationMs / Math.max(phonemes, PHONEME_FLOOR);
 
     allWords.push({
-      hypIndex,
+      hypIndex: effectiveHyp,
       word: wordText,
       refWord: entry.ref || entry.reference || wordText,
       refIndex: null, // filled below
@@ -1571,7 +1592,7 @@ export function computeWordDurationOutliers(transcriptWords, alignment) {
       timestampSource: tsSource
     });
 
-    hypIndex += partsCount;
+    hypIndex = effectiveHyp + partsCount;
   }
 
   // Fill refIndex from hypToRef
@@ -1741,25 +1762,26 @@ export function computeWordSpeedTiers(wordOutliers, alignment, xvalRawWords, tra
   const xvalDurations = []; // for computing own baseline from xval timestamps
   let hypIndex = 0;
   let refIndex = 0;
+  let lastSpokenHypIdx = -1; // track shared-hypIndex entries
 
   for (const entry of alignment) {
     // Insertions: not in reference passage — advance hypIndex and xval pointer
     if (entry.type === 'insertion') {
       const partsCount = entry.compound && entry.parts ? entry.parts.length : 1;
+      const effectiveHyp = (entry.hypIndex != null && entry.hypIndex >= 0) ? entry.hypIndex : hypIndex;
       // Advance xval pointer past this insertion so it doesn't misalign.
       // Skip disfluencies — Parakeet doesn't produce fillers like "uh"/"um",
       // so consuming an xval word for them steals the next real word's timestamp.
       if (hasXval) {
-        const isDisfluency = transcriptWords[hypIndex] && transcriptWords[hypIndex].isDisfluency;
+        const isDisfluency = transcriptWords[effectiveHyp] && transcriptWords[effectiveHyp].isDisfluency;
         if (!isDisfluency) {
           let prevEnd = -Infinity;
           for (let p = 0; p < partsCount; p++) {
-            if (transcriptWords[hypIndex + p]) {
+            if (transcriptWords[effectiveHyp + p]) {
               const savedPtr = xvalPtr;
-              const m = consumeXvalAt(parseTime(transcriptWords[hypIndex + p].startTime));
+              const m = consumeXvalAt(parseTime(transcriptWords[effectiveHyp + p].startTime));
               if (m) {
                 if (p > 0 && m.startS > prevEnd + 0.2) {
-                  // Overshot — Parakeet merged this compound, unconsume
                   xvalPtr = savedPtr;
                   break;
                 }
@@ -1769,7 +1791,7 @@ export function computeWordSpeedTiers(wordOutliers, alignment, xvalRawWords, tra
           }
         }
       }
-      hypIndex += partsCount;
+      hypIndex = effectiveHyp + partsCount;
       continue;
     }
 
@@ -1790,12 +1812,38 @@ export function computeWordSpeedTiers(wordOutliers, alignment, xvalRawWords, tra
 
     // Correct, substitution, struggle — has a spoken word
     const partsCount = entry.compound && entry.parts ? entry.parts.length : 1;
+    const effectiveHyp = (entry.hypIndex != null && entry.hypIndex >= 0) ? entry.hypIndex : hypIndex;
+
+    // Shared hypIndex: two ref words aligned to same hyp (e.g., "on"+"to" → "onto").
+    // Reuse previous entry's duration data — don't re-consume xval.
+    if (effectiveHyp === lastSpokenHypIdx && words.length > 0) {
+      const prev = words[words.length - 1];
+      words.push({
+        refIndex, refWord: entry.ref,
+        hypIndex: effectiveHyp, word: prev.word,
+        durationMs: prev.durationMs, phonemes: prev.phonemes,
+        phonemeSource: prev.phonemeSource, syllables: prev.syllables,
+        normalizedMs: prev.normalizedMs,
+        ratio: null, tier: null,
+        alignmentType: entry.type,
+        isOutlier: prev.isOutlier,
+        sentenceFinal: sentenceFinalSet.has(refIndex),
+        _tsSource: prev._tsSource
+      });
+      if (prev.durationMs != null && prev.durationMs > 0) {
+        xvalDurations.push({ phonemes: prev.phonemes, syllables: prev.syllables, normalizedMs: prev.normalizedMs, durationMs: prev.durationMs });
+      }
+      hypIndex = effectiveHyp + partsCount;
+      refIndex++;
+      continue;
+    }
+    lastSpokenHypIdx = effectiveHyp;
 
     // Try xval timestamp first
     let durationMs = null;
     let tsSource = null;
-    if (hasXval && transcriptWords[hypIndex]) {
-      const reverbS = parseTime(transcriptWords[hypIndex].startTime);
+    if (hasXval && transcriptWords[effectiveHyp]) {
+      const reverbS = parseTime(transcriptWords[effectiveHyp].startTime);
       const xvalMatch = consumeXvalAt(reverbS);
       if (xvalMatch) {
         // For compounds, consume additional xval parts and span first-start to last-end.
@@ -1804,13 +1852,12 @@ export function computeWordSpeedTiers(wordOutliers, alignment, xvalRawWords, tra
         if (partsCount > 1) {
           let lastEnd = xvalMatch.endS;
           for (let extra = 1; extra < partsCount; extra++) {
-            if (transcriptWords[hypIndex + extra]) {
+            if (transcriptWords[effectiveHyp + extra]) {
               const savedPtr = xvalPtr;
-              const extraMatch = consumeXvalAt(parseTime(transcriptWords[hypIndex + extra].startTime));
+              const extraMatch = consumeXvalAt(parseTime(transcriptWords[effectiveHyp + extra].startTime));
               if (extraMatch && extraMatch.startS <= lastEnd + 0.2) {
                 lastEnd = extraMatch.endS;
               } else if (extraMatch) {
-                // Overshot — unconsume by restoring pointer
                 xvalPtr = savedPtr;
               }
             }
@@ -1824,7 +1871,7 @@ export function computeWordSpeedTiers(wordOutliers, alignment, xvalRawWords, tra
     }
 
     // Fallback to Metric 4 data (NW-matched cross-validator timestamps)
-    const m4Word = allWordsMap.get(hypIndex);
+    const m4Word = allWordsMap.get(effectiveHyp);
     if (durationMs == null && m4Word && m4Word.durationMs != null) {
       durationMs = m4Word.durationMs;
       tsSource = 'metric4';
@@ -1843,7 +1890,7 @@ export function computeWordSpeedTiers(wordOutliers, alignment, xvalRawWords, tra
       // Tier classification deferred — need baseline first
       words.push({
         refIndex, refWord: entry.ref,
-        hypIndex, word: entry.hyp || m4Word?.word || '',
+        hypIndex: effectiveHyp, word: entry.hyp || m4Word?.word || '',
         durationMs, phonemes, phonemeSource: phonemeInfo.source, syllables, normalizedMs,
         ratio: null, // filled after baseline computation
         tier: null,  // filled after baseline computation
@@ -1855,7 +1902,7 @@ export function computeWordSpeedTiers(wordOutliers, alignment, xvalRawWords, tra
     } else {
       words.push({
         refIndex, refWord: entry.ref,
-        hypIndex, word: entry.hyp,
+        hypIndex: effectiveHyp, word: entry.hyp,
         durationMs: null, syllables: null,
         normalizedMs: null, ratio: null,
         tier: 'no-data', alignmentType: entry.type,
@@ -1864,7 +1911,7 @@ export function computeWordSpeedTiers(wordOutliers, alignment, xvalRawWords, tra
       });
     }
 
-    hypIndex += partsCount;
+    hypIndex = effectiveHyp + partsCount;
     refIndex++;
   }
 
@@ -1904,6 +1951,11 @@ export function computeWordSpeedTiers(wordOutliers, alignment, xvalRawWords, tra
       w.tier = 'struggling';
     } else {
       w.tier = 'stalled';
+    }
+    // Outliers (above IQR fence from Metric 4) must show at least "slow" —
+    // the two systems use different baselines and can disagree.
+    if (w.isOutlier && (w.tier === 'quick' || w.tier === 'steady')) {
+      w.tier = 'slow';
     }
   }
 
@@ -2032,6 +2084,9 @@ export function recomputeWordSpeedWithPauses(wordSpeedData, transcriptWords, ref
     } else {
       w.tier = 'stalled';
     }
+    if (w.isOutlier && (w.tier === 'quick' || w.tier === 'steady')) {
+      w.tier = 'slow';
+    }
     distribution[w.tier]++;
   }
 
@@ -2118,35 +2173,37 @@ export function detectStruggleWords(transcriptWords, referenceText, alignment) {
   let hypIndex = 0;
   for (const entry of alignment) {
     if (entry.type === 'insertion') {
-      hypIndex++;
+      const eHyp = (entry.hypIndex != null && entry.hypIndex >= 0) ? entry.hypIndex : hypIndex;
+      hypIndex = eHyp + 1;
       continue;
     }
     if (entry.type === 'omission') {
       continue;
     }
 
+    const partsCount = entry.compound && entry.parts ? entry.parts.length : 1;
+    const effectiveHyp = (entry.hypIndex != null && entry.hypIndex >= 0) ? entry.hypIndex : hypIndex;
+
     // Only process substitutions and existing struggles (from Path 2)
     if (entry.type === 'substitution' || entry.type === 'struggle') {
       const refClean = (entry.ref || '').toLowerCase().replace(/[^a-z'-]/g, '');
 
       // ── Path 1: Hesitation (pause >= 3s before a substitution) ──
-      if (refClean.length > 3 && pauseBeforeIndex.has(hypIndex)) {
-        const gap = pauseBeforeIndex.get(hypIndex);
+      if (refClean.length > 3 && pauseBeforeIndex.has(effectiveHyp)) {
+        const gap = pauseBeforeIndex.get(effectiveHyp);
 
         if (entry.type === 'substitution') {
-          // Upgrade substitution to struggle (Path 1)
           entry._originalType = 'substitution';
           entry.type = 'struggle';
           entry._strugglePath = 'hesitation';
           entry._hesitationGap = gap;
         } else {
-          // Already struggle from Path 2 — add hesitation evidence
           entry._hasHesitation = true;
           entry._hesitationGap = gap;
         }
 
         results.push({
-          hypIndex,
+          hypIndex: effectiveHyp,
           word: entry.ref,
           hyp: entry.hyp,
           gap: Math.round(gap * 1000) / 1000,
@@ -2155,25 +2212,20 @@ export function detectStruggleWords(transcriptWords, referenceText, alignment) {
       }
 
       // ── Path 3: Abandoned Attempt (cross-validator N/A + near-miss) ──
-      // The student made a partial/garbled attempt that only verbatim STT detected.
-      // Cross-validator didn't hear it (crossValidation: unconfirmed) and it's a near-miss
-      // of the reference word (shared prefix/suffix/Levenshtein).
-      const sttWord = transcriptWords[hypIndex];
+      const sttWord = transcriptWords[effectiveHyp];
       if (sttWord && sttWord.crossValidation === 'unconfirmed' &&
           isNearMiss(entry.hyp, entry.ref)) {
         if (entry.type === 'substitution') {
-          // Upgrade substitution to struggle (Path 3)
           entry._originalType = 'substitution';
           entry.type = 'struggle';
           entry._strugglePath = 'abandoned';
           entry._abandonedAttempt = true;
         } else {
-          // Already struggle from Path 1 or 2 — add abandoned evidence
           entry._abandonedAttempt = true;
         }
 
         results.push({
-          hypIndex,
+          hypIndex: effectiveHyp,
           word: entry.ref,
           hyp: entry.hyp,
           crossValidation: 'unconfirmed',
@@ -2182,9 +2234,7 @@ export function detectStruggleWords(transcriptWords, referenceText, alignment) {
       }
     }
 
-    // Advance hypIndex — compound words consume multiple STT words
-    const partsCount = entry.compound && entry.parts ? entry.parts.length : 1;
-    hypIndex += partsCount;
+    hypIndex = effectiveHyp + partsCount;
   }
 
   return results;
