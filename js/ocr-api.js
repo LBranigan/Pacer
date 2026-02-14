@@ -4,7 +4,7 @@
  * Cloud Vision: excellent character accuracy, but wrong paragraph ordering on multi-column pages,
  * and sometimes splits one paragraph into multiple fragments.
  * Hybrid mode: Cloud Vision extracts text fragments, Gemini reassembles them into correct
- * reading order by looking at the image. Word-bag validation ensures Gemini doesn't modify text.
+ * reading order by looking at the image. Superset word-bag validation ensures no Cloud Vision words are lost.
  */
 
 /**
@@ -167,15 +167,38 @@ function extractWordBag(text) {
 }
 
 /**
- * Compare two word bags. Returns true if they contain the same tokens
- * in the same quantities (multiset equality).
+ * Check that every token in inputBag appears in outputBag (with same or greater count).
+ * Gemini may add extra words from the image (comprehension questions, margin text) —
+ * that's harmless (teacher deletes extras in textarea). But Gemini removing or changing
+ * Cloud Vision words would be dangerous, so we reject if any input word is missing.
+ * Returns { ok, missing[], extra[] }.
  */
-function wordBagsMatch(bagA, bagB) {
-  if (bagA.length !== bagB.length) return false;
-  for (let i = 0; i < bagA.length; i++) {
-    if (bagA[i] !== bagB[i]) return false;
+function validateWordBag(inputBag, outputBag) {
+  // Build frequency maps
+  const inputFreq = new Map();
+  for (const w of inputBag) inputFreq.set(w, (inputFreq.get(w) || 0) + 1);
+  const outputFreq = new Map();
+  for (const w of outputBag) outputFreq.set(w, (outputFreq.get(w) || 0) + 1);
+
+  // Check every input word appears in output with at least the same count
+  const missing = [];
+  for (const [word, count] of inputFreq) {
+    const outCount = outputFreq.get(word) || 0;
+    if (outCount < count) {
+      missing.push(word);
+    }
   }
-  return true;
+
+  // Identify extra words Gemini added (for logging only)
+  const extra = [];
+  for (const [word, count] of outputFreq) {
+    const inCount = inputFreq.get(word) || 0;
+    if (count > inCount) {
+      extra.push(word);
+    }
+  }
+
+  return { ok: missing.length === 0, missing, extra };
 }
 
 /**
@@ -185,8 +208,9 @@ function wordBagsMatch(bagA, bagB) {
  * This lets Gemini use reading comprehension to handle sentence-level merging
  * (e.g., placing "my favorite" correctly within "But my favorite class is phys ed").
  *
- * Word-bag validation ensures Gemini preserved all Cloud Vision text exactly.
- * If Gemini modified any words, throws an error → caller falls back to Cloud Vision.
+ * Superset word-bag validation ensures Gemini preserved all Cloud Vision words.
+ * Extra words (Gemini reading the image) are allowed — teacher deletes in textarea.
+ * If Gemini removed or changed any Cloud Vision words, throws → falls back.
  */
 async function assembleWithGemini(base64, mimeType, fragments, geminiKey) {
   const numberedList = fragments
@@ -254,25 +278,22 @@ Return ONLY the reassembled passage text. No explanation, no commentary.`;
     throw new Error('Gemini returned empty text');
   }
 
-  // Word-bag validation: ensure Gemini used exactly the same words as input
+  // Word-bag validation: ensure Gemini preserved all Cloud Vision words.
+  // Extra words (from image) are allowed — teacher deletes in textarea.
+  // Missing/changed words are rejected — Cloud Vision's text is ground truth.
   const inputBag = extractWordBag(fragments.join(' '));
   const outputBag = extractWordBag(assembled);
+  const validation = validateWordBag(inputBag, outputBag);
 
-  if (!wordBagsMatch(inputBag, outputBag)) {
-    // Log details for debugging
-    const added = outputBag.filter((w, i) => {
-      const idx = inputBag.indexOf(w, i > 0 ? inputBag.indexOf(outputBag[i - 1]) + 1 : 0);
-      return idx === -1;
-    });
-    const inputSet = new Set(inputBag);
-    const outputSet = new Set(outputBag);
-    const missing = [...inputSet].filter(w => !outputSet.has(w));
-    const extra = [...outputSet].filter(w => !inputSet.has(w));
-    console.warn('[OCR Hybrid] Word-bag mismatch — Gemini modified text.',
-      `Input: ${inputBag.length} words, Output: ${outputBag.length} words.`,
-      missing.length ? `Missing: ${missing.slice(0, 10).join(', ')}` : '',
-      extra.length ? `Added: ${extra.slice(0, 10).join(', ')}` : '');
-    throw new Error(`Word-bag validation failed (input: ${inputBag.length}, output: ${outputBag.length} words)`);
+  if (validation.extra.length > 0) {
+    console.info(`[OCR Hybrid] Gemini added ${validation.extra.length} extra words:`,
+      validation.extra.slice(0, 15).join(', '));
+  }
+
+  if (!validation.ok) {
+    console.warn('[OCR Hybrid] Gemini removed/changed words.',
+      `Missing: ${validation.missing.slice(0, 15).join(', ')}`);
+    throw new Error(`Word-bag validation failed — ${validation.missing.length} words missing`);
   }
 
   return assembled;
@@ -284,9 +305,9 @@ Return ONLY the reassembled passage text. No explanation, no commentary.`;
  * 1. Cloud Vision extracts the full paragraph hierarchy (excellent character accuracy)
  * 2. Junk paragraphs (pure digits/punctuation) are filtered out
  * 3. Fragments + image are sent to Gemini, which reassembles them in correct reading order
- * 4. Word-bag validation ensures Gemini preserved Cloud Vision's exact text
+ * 4. Superset word-bag validation: all Cloud Vision words must be in output (extras OK)
  *
- * If Gemini fails or modifies text, falls back to Cloud Vision's raw ordering.
+ * If Gemini fails or removes words, falls back to Cloud Vision's raw ordering.
  *
  * @param {File} file - Image file
  * @param {string} visionKey - Google Cloud API key
