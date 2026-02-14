@@ -7,7 +7,7 @@ import { getCanonical } from './word-equivalences.js';
 import { computeWCPM, computeAccuracy, computeWCPMRange } from './metrics.js';
 import { setStatus, displayResults, displayAlignmentResults, showAudioPlayback, renderStudentSelector, renderHistory } from './ui.js';
 import { runDiagnostics, computeTierBreakdown, resolveNearMissClusters, absorbMispronunciationFragments, computePhrasingQuality, computePauseAtPunctuation, computePaceConsistency, computeWordDurationOutliers, computeWordSpeedTiers, isNearMiss, annotatePauseContext, computeFunctionWordCompression, computeSyntacticAlignment } from './diagnostics.js';
-import { extractTextFromImage } from './ocr-api.js';
+import { extractTextFromImage, extractTextWithGemini } from './ocr-api.js';
 import { trimPassageToAttempted } from './passage-trimmer.js';
 import { analyzePassageText, levenshteinRatio } from './nl-api.js';
 import { getStudents, addStudent, deleteStudent, saveAssessment, getAssessments } from './storage.js';
@@ -2238,6 +2238,32 @@ const ocrText = document.getElementById('ocrText');
 const ocrStatus = document.getElementById('ocrStatus');
 const useOcrBtn = document.getElementById('useOcrBtn');
 
+// OCR engine toggle (Cloud Vision vs Gemini)
+const ocrEngineToggle = document.getElementById('ocrEngineToggle');
+const ocrToggleTrack = document.getElementById('ocrToggleTrack');
+const ocrToggleThumb = document.getElementById('ocrToggleThumb');
+const ocrEngineLabel = document.getElementById('ocrEngineLabel');
+
+// Persist toggle state
+const savedOcrEngine = localStorage.getItem('orf_ocr_engine') || 'gemini';
+if (ocrEngineToggle) {
+  ocrEngineToggle.checked = savedOcrEngine === 'gemini';
+  updateOcrToggleUI();
+  ocrEngineToggle.addEventListener('change', () => {
+    localStorage.setItem('orf_ocr_engine', ocrEngineToggle.checked ? 'gemini' : 'vision');
+    updateOcrToggleUI();
+  });
+}
+
+function updateOcrToggleUI() {
+  if (!ocrEngineToggle) return;
+  const isGemini = ocrEngineToggle.checked;
+  ocrToggleTrack.style.background = isGemini ? '#4285f4' : '#ccc';
+  ocrToggleThumb.style.left = isGemini ? '20px' : '2px';
+  ocrEngineLabel.textContent = isGemini ? 'Gemini 2.0 Flash' : 'Cloud Vision';
+  ocrEngineLabel.style.color = isGemini ? '#4285f4' : '#666';
+}
+
 if (imageInput) {
   imageInput.addEventListener('change', async () => {
     const file = imageInput.files[0];
@@ -2245,23 +2271,35 @@ if (imageInput) {
 
     ocrPreview.style.display = 'block';
     ocrImage.src = URL.createObjectURL(file);
-    ocrStatus.textContent = 'Extracting text...';
     ocrText.value = '';
 
-    const apiKey = document.getElementById('apiKey').value.trim();
-    if (!apiKey) {
-      ocrStatus.textContent = 'Error: Please enter an API key first.';
-      return;
-    }
+    const useGemini = ocrEngineToggle && ocrEngineToggle.checked;
+    const engineName = useGemini ? 'Gemini 2.0 Flash' : 'Cloud Vision';
+    ocrStatus.textContent = `Extracting text via ${engineName}...`;
 
     try {
-      const text = await extractTextFromImage(file, apiKey);
+      let text;
+      if (useGemini) {
+        const geminiKey = localStorage.getItem('orf_gemini_key') || '';
+        if (!geminiKey) {
+          ocrStatus.textContent = 'Error: Please enter a Gemini API key first.';
+          return;
+        }
+        text = await extractTextWithGemini(file, geminiKey);
+      } else {
+        const apiKey = document.getElementById('apiKey').value.trim();
+        if (!apiKey) {
+          ocrStatus.textContent = 'Error: Please enter a Google Cloud API key first.';
+          return;
+        }
+        text = await extractTextFromImage(file, apiKey);
+      }
       ocrText.value = text;
       ocrStatus.textContent = text
-        ? "Text extracted — review and edit, then click 'Use as Reference Passage'."
+        ? `Text extracted via ${engineName} — review and edit, then click 'Use as Reference Passage'.`
         : 'No text detected in image.';
     } catch (err) {
-      ocrStatus.textContent = 'OCR error: ' + err.message;
+      ocrStatus.textContent = `${engineName} error: ${err.message}`;
     }
   });
 }
