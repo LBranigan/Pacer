@@ -158,38 +158,30 @@ function extractWordBag(text) {
 }
 
 /**
- * Check that every token in inputBag appears in outputBag (with same or greater count).
- * Gemini may add extra words from the image (comprehension questions, margin text) —
- * that's harmless (teacher deletes extras in textarea). But Gemini removing or changing
- * Cloud Vision words would be dangerous, so we reject if any input word is missing.
- * Returns { ok, missing[], extra[] }.
+ * Subset validation: every word in Gemini's output must come from Cloud Vision's input.
+ * Gemini SHOULD drop junk (line numbers, page numbers, comprehension questions) — that's
+ * the whole point. But Gemini must NOT hallucinate new words. Subset check catches that.
+ * Returns { ok, hallucinated[] }.
  */
-function validateWordBag(inputBag, outputBag) {
-  // Build frequency maps
-  const inputFreq = new Map();
-  for (const w of inputBag) inputFreq.set(w, (inputFreq.get(w) || 0) + 1);
-  const outputFreq = new Map();
-  for (const w of outputBag) outputFreq.set(w, (outputFreq.get(w) || 0) + 1);
+function validateSubset(inputBag, outputBag) {
+  // Build frequency map of available input words
+  const available = new Map();
+  for (const w of inputBag) available.set(w, (available.get(w) || 0) + 1);
 
-  // Check every input word appears in output with at least the same count
-  const missing = [];
-  for (const [word, count] of inputFreq) {
-    const outCount = outputFreq.get(word) || 0;
-    if (outCount < count) {
-      missing.push(word);
+  // Check every output word exists in input with sufficient count
+  const used = new Map();
+  const hallucinated = [];
+  for (const w of outputBag) {
+    const usedCount = used.get(w) || 0;
+    const availCount = available.get(w) || 0;
+    if (usedCount < availCount) {
+      used.set(w, usedCount + 1);
+    } else {
+      hallucinated.push(w);
     }
   }
 
-  // Identify extra words Gemini added (for logging only)
-  const extra = [];
-  for (const [word, count] of outputFreq) {
-    const inCount = inputFreq.get(word) || 0;
-    if (count > inCount) {
-      extra.push(word);
-    }
-  }
-
-  return { ok: missing.length === 0, missing, extra };
+  return { ok: hallucinated.length === 0, hallucinated };
 }
 
 /**
@@ -199,9 +191,9 @@ function validateWordBag(inputBag, outputBag) {
  * This lets Gemini use reading comprehension to handle sentence-level merging
  * (e.g., placing "my favorite" correctly within "But my favorite class is phys ed").
  *
- * Superset word-bag validation ensures Gemini preserved all Cloud Vision words.
- * Extra words (Gemini reading the image) are allowed — teacher deletes in textarea.
- * If Gemini removed or changed any Cloud Vision words, throws → falls back.
+ * Subset word-bag validation ensures Gemini didn't hallucinate new words.
+ * Gemini is expected to drop junk (line numbers, page numbers, comprehension questions).
+ * If Gemini adds words not in Cloud Vision's output, throws → falls back.
  */
 async function assembleWithGemini(base64, mimeType, fragments, geminiKey) {
   const numberedList = fragments
@@ -210,13 +202,13 @@ async function assembleWithGemini(base64, mimeType, fragments, geminiKey) {
 
   const prompt = `You are reassembling text fragments extracted via OCR from a reading assessment page. The OCR extracted text with excellent character accuracy, but the fragments may be in the wrong order or incorrectly split across paragraph boundaries.
 
-Look at the image and reassemble these fragments into the correct reading order. For two-column layouts, read the left column top-to-bottom first, then the right column top-to-bottom.
+Look at the image and reassemble ONLY the reading passage in the correct reading order. For two-column layouts, read the left column top-to-bottom first, then the right column top-to-bottom.
 
 CRITICAL RULES:
-- Use ONLY the exact text from these fragments
-- Do NOT correct any words, even if they look like OCR errors
-- Do NOT add, remove, or change any words or punctuation
-- Include ALL fragments — do not skip any
+- Output ONLY the reading passage — drop line numbers, page numbers, comprehension questions, answer choices, and margin annotations
+- Use ONLY the exact text from these fragments for passage words
+- Do NOT correct any words, even if they look like OCR errors (e.g., keep "6ageography" as-is)
+- Do NOT add any words that aren't in the fragments
 - Merge fragments that belong to the same paragraph into a single paragraph
 - Separate distinct paragraphs with a blank line
 
@@ -269,22 +261,17 @@ Return ONLY the reassembled passage text. No explanation, no commentary.`;
     throw new Error('Gemini returned empty text');
   }
 
-  // Word-bag validation: ensure Gemini preserved all Cloud Vision words.
-  // Extra words (from image) are allowed — teacher deletes in textarea.
-  // Missing/changed words are rejected — Cloud Vision's text is ground truth.
+  // Subset validation: every output word must come from Cloud Vision's input.
+  // Gemini is expected to drop junk (line numbers, comprehension questions).
+  // But Gemini must not hallucinate words that weren't in the input.
   const inputBag = extractWordBag(fragments.join(' '));
   const outputBag = extractWordBag(assembled);
-  const validation = validateWordBag(inputBag, outputBag);
-
-  if (validation.extra.length > 0) {
-    console.info(`[OCR Hybrid] Gemini added ${validation.extra.length} extra words:`,
-      validation.extra.slice(0, 15).join(', '));
-  }
+  const validation = validateSubset(inputBag, outputBag);
 
   if (!validation.ok) {
-    console.warn('[OCR Hybrid] Gemini removed/changed words.',
-      `Missing: ${validation.missing.slice(0, 15).join(', ')}`);
-    throw new Error(`Word-bag validation failed — ${validation.missing.length} words missing`);
+    console.warn('[OCR Hybrid] Gemini hallucinated words not in Cloud Vision input:',
+      validation.hallucinated.slice(0, 15).join(', '));
+    throw new Error(`Subset validation failed — ${validation.hallucinated.length} hallucinated words`);
   }
 
   return assembled;
@@ -294,9 +281,9 @@ Return ONLY the reassembled passage text. No explanation, no commentary.`;
  * Hybrid OCR: Cloud Vision for character accuracy + Gemini for text assembly.
  *
  * 1. Cloud Vision extracts the full paragraph hierarchy (excellent character accuracy)
- * 2. All fragments sent to Gemini (no junk filtering — Gemini handles everything)
- * 3. Gemini reassembles fragments in correct reading order using image + text
- * 4. Word-bag validation: all Cloud Vision words must be in output
+ * 2. All fragments sent to Gemini — it reassembles the reading passage only
+ * 3. Gemini drops junk (line numbers, page numbers, comprehension questions)
+ * 4. Subset validation: every output word must exist in Cloud Vision input (no hallucinations)
  *
  * If Gemini fails or removes words, falls back to Cloud Vision's raw ordering.
  *
