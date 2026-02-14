@@ -467,6 +467,29 @@ const FORGIVENESS_RULES = {
     note: 'Student used phonics correctly but doesn\'t know the name. Common words like "north", "straight" are blocked by dictionary lookup even if NL API tags them as proper nouns.'
   },
 
+  properNounOmissionForgiveness: {
+    description: 'Proper noun scored as omission by V1/V0 (Reverb fragmented the attempt) but Parakeet captured a near-miss. Student attempted the word — ASR fragmentation caused the false omission.',
+    detector: 'app.js → forgiveness loop (omission branch, uses _xvalWord or preceding insertion fragments)',
+    countsAsError: false,
+    config: {
+      min_similarity: 0.40,
+      primary_evidence: '_xvalWord (Parakeet hearing)',
+      secondary_evidence: 'preceding insertion fragments concatenated',
+    },
+    example: {
+      reference: 'Escondido',
+      spoken: '(Reverb: "so" + "ascal" + "deal"; Parakeet: "Escaldio")',
+      result: 'Proper noun + _xvalWord "escaldio" → 67% similar → forgiven'
+    },
+    guards: [
+      'Same guards as properNounForgiveness (NL API, dictionary, lowercase)',
+      'Must have _xvalWord (Parakeet) or preceding insertion fragments as evidence',
+      'Evidence must meet 0.4 Levenshtein threshold against ref word',
+    ],
+    uiClass: 'word-forgiven',
+    note: 'Reverb CTC fragments non-English words into meaningless tokens. Parakeet (or fragment concatenation) provides evidence the child actually attempted the word. Sets _forgivenEvidence and _forgivenEvidenceSource on the entry.'
+  },
+
   oovOmissionRecovery: {
     description: 'Out-of-vocabulary reference word scored as omission, but <unknown> CTC tokens exist in the temporal window — student vocalized something but ASR could not decode it because the word is not in its vocabulary. Excluded from assessment (neither correct nor error).',
     detector: 'app.js → OOV omission recovery loop (inside OOV forgiveness block, after phonetic forgiveness)',

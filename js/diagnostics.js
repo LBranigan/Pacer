@@ -1796,13 +1796,15 @@ export function computeWordSpeedTiers(wordOutliers, alignment, xvalRawWords, tra
     }
 
     // Omissions: in reference but not spoken — no hypIndex advance, no xval consumption
+    // Forgiven omissions (proper noun with Parakeet evidence) → 'no-data' instead of 'omitted'
     if (entry.type === 'omission' || entry.type === 'deletion') {
       words.push({
         refIndex, refWord: entry.ref,
         hypIndex: null, word: null,
         durationMs: null, syllables: null,
         normalizedMs: null, ratio: null,
-        tier: 'omitted', alignmentType: 'omission',
+        tier: entry.forgiven ? 'no-data' : 'omitted',
+        alignmentType: entry.forgiven ? 'forgiven-omission' : 'omission',
         isOutlier: false,
         sentenceFinal: sentenceFinalSet.has(refIndex)
       });

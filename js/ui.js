@@ -367,7 +367,12 @@ function buildEnhancedTooltip(item, sttWord, extras) {
       lines.push(`Attempts: ${attempts.join(', ')}`);
     }
   } else if (item.type === 'omission') {
-    if (item._oovRecoveredViaUnknown) {
+    if (item.forgiven && item._forgivenEvidenceSource) {
+      const ratioText = item.phoneticRatio ? ` (${item.phoneticRatio}% similar)` : '';
+      const src = item._forgivenEvidenceSource === 'parakeet' ? 'Parakeet heard' : 'Fragments';
+      lines.push(`Forgiven proper noun omission${ratioText}`);
+      lines.push(`${src}: "${item._forgivenEvidence}"`);
+    } else if (item._oovRecoveredViaUnknown) {
       lines.push(`OOV omission forgiven (${item._unknownTokenCount} [unknown] token${item._unknownTokenCount > 1 ? 's' : ''})`);
       lines.push('Student vocalized but ASR could not decode (not in vocabulary)');
     } else {
@@ -743,9 +748,11 @@ function renderNewAnalyzedWords(container, alignment, sttLookup, diagnostics, tr
       '\u2022 No engine produced any word for this reference position\n' +
       '\u2022 Needleman-Wunsch alignment left a gap (ref word with no hyp match)\n' +
       '\u2022 Counts as an ERROR\n\n' +
-      'Exception:\n' +
+      'Exceptions:\n' +
       '\u2022 OOV words with [unknown] tokens in the time window are forgiven\n' +
-      '  (student attempted but ASR couldn\'t decode \u2014 not in vocabulary)',
+      '  (student attempted but ASR couldn\'t decode \u2014 not in vocabulary)\n' +
+      '\u2022 Proper nouns where Parakeet heard a near-miss are forgiven\n' +
+      '  (Reverb fragmented the attempt but Parakeet captured it)',
 
     'attempted-struggled': 'ATTEMPTED BUT STRUGGLED\n' +
       'Student tried to read the word but did not fully produce it.\n\n' +
@@ -2196,7 +2203,13 @@ export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, di
         lists.push({
           label: 'Forgiven Proper Nouns (' + forgiven.length + ')',
           cls: 'pipeline-pp-forgiven',
-          items: forgiven.map(e => '"' + e.ref + '" \u2014 said "' + e.hyp + '" (' + (e.phoneticRatio || '?') + '% similar)')
+          items: forgiven.map(e => {
+            if (e.type === 'omission' && e._forgivenEvidence) {
+              const src = e._forgivenEvidenceSource === 'parakeet' ? 'Parakeet heard' : 'fragments';
+              return '"' + e.ref + '" \u2014 ' + src + ' "' + e._forgivenEvidence + '" (' + (e.phoneticRatio || '?') + '% similar)';
+            }
+            return '"' + e.ref + '" \u2014 said "' + e.hyp + '" (' + (e.phoneticRatio || '?') + '% similar)';
+          })
         });
       }
 

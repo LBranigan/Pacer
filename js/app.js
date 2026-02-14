@@ -1705,15 +1705,102 @@ async function runAnalysis() {
         }
         forgivenessLog.push(logEntry);
       }
+
+      // Omission of a proper noun: forgive if Parakeet (or preceding fragments) captured the attempt.
+      // Before _xvalWord existed we had no evidence of attempt — now we do.
+      if (entry.type === 'omission') {
+        const refWordOriginal = refIdx < refPositions.length
+          ? refPositions[refIdx].word.replace(/^[^\w'-]+|[^\w'-]+$/g, '')
+          : '';
+        const refIsLowercase = refWordOriginal.length > 0 &&
+          refWordOriginal.charAt(0) === refWordOriginal.charAt(0).toLowerCase();
+
+        let isProperViaNL = entry.nl && entry.nl.isProperNoun;
+        if (isProperViaNL && refIsLowercase) isProperViaNL = false;
+        if (isProperViaNL && refLowercaseSet.has(entry.ref.toLowerCase())) isProperViaNL = false;
+
+        let isDictionaryCommon = false;
+        if (isProperViaNL) {
+          isDictionaryCommon = await isCommonDictionaryWord(entry.ref);
+          if (isDictionaryCommon) isProperViaNL = false;
+        }
+
+        const logEntry = {
+          refWord: entry.ref,
+          hypWord: null,
+          refIdx,
+          isOmission: true,
+          isProperViaNL,
+          isDictionaryCommon,
+          refIsLowercase,
+          nlData: entry.nl
+        };
+
+        if (isProperViaNL) {
+          let bestRatio = 0;
+          let bestEvidence = null;
+          let evidenceSource = null;
+
+          // Primary: Parakeet heard something for this ref slot
+          if (entry._xvalWord) {
+            const xvalNorm = entry._xvalWord.toLowerCase().replace(/[^a-z]/g, '');
+            const ratio = levenshteinRatio(entry.ref, xvalNorm);
+            if (ratio > bestRatio) {
+              bestRatio = ratio;
+              bestEvidence = xvalNorm;
+              evidenceSource = 'parakeet';
+            }
+          }
+
+          // Secondary: preceding insertions may be Reverb fragments of the attempt
+          const precedingIns = [];
+          for (let j = i - 1; j >= 0 && alignment[j].type === 'insertion'; j--) {
+            if (alignment[j].partOfForgiven) break; // claimed by previous proper noun
+            precedingIns.unshift(alignment[j]);
+          }
+          if (precedingIns.length > 0) {
+            let combined = '';
+            const fragmentAttempts = [];
+            for (let j = precedingIns.length - 1; j >= 0; j--) {
+              combined = precedingIns[j].hyp + combined;
+              const ratio = levenshteinRatio(entry.ref, combined);
+              fragmentAttempts.push({ combined, ratio, fragments: precedingIns.length - j });
+              if (ratio > bestRatio) {
+                bestRatio = ratio;
+                bestEvidence = combined;
+                evidenceSource = 'fragments';
+              }
+            }
+            logEntry.fragmentAttempts = fragmentAttempts;
+          }
+
+          logEntry.bestRatio = bestRatio;
+          logEntry.bestEvidence = bestEvidence;
+          logEntry.evidenceSource = evidenceSource;
+          logEntry.threshold = 0.4;
+          logEntry.meetsThreshold = bestRatio >= 0.4;
+
+          if (bestRatio >= 0.4) {
+            entry.forgiven = true;
+            entry.phoneticRatio = Math.round(bestRatio * 100);
+            entry.properNounSource = 'NL API';
+            entry._forgivenEvidence = bestEvidence;
+            entry._forgivenEvidenceSource = evidenceSource;
+            logEntry.forgiven = true;
+          }
+        }
+        forgivenessLog.push(logEntry);
+      }
+
       refIdx++;
-      // Omissions of proper nouns are NOT forgiven - student didn't attempt the word
     }
 
     addStage('proper_noun_forgiveness', {
-      totalSubstitutions: forgivenessLog.length,
+      totalCandidates: forgivenessLog.length,
       properNounsFound: forgivenessLog.filter(l => l.isProperViaNL).length,
       dictionaryBlocked: forgivenessLog.filter(l => l.isDictionaryCommon).length,
       forgiven: forgivenessLog.filter(l => l.forgiven).length,
+      forgivenOmissions: forgivenessLog.filter(l => l.forgiven && l.isOmission).length,
       details: forgivenessLog
     });
   }
