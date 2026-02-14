@@ -2308,12 +2308,16 @@ async function runAnalysis() {
   analyzeBtn.disabled = false;
 }
 
-// Auto-fill API key for dev/testing
-document.getElementById('apiKey').value = 'AIzaSyCTx4rS7zxwRZqNseWcFJAaAgEH5HA50xA';
+// Auto-fill API key from localStorage or env.js (gitignored)
+const _envKeys = window.ENV_API_KEYS || {};
+document.getElementById('apiKey').value = localStorage.getItem('orf_api_key') || _envKeys.stt || '';
+document.getElementById('apiKey').addEventListener('input', (e) => {
+  localStorage.setItem('orf_api_key', e.target.value.trim());
+});
 
 // Gemini API key — persist in localStorage (free from aistudio.google.com)
 const geminiKeyInput = document.getElementById('geminiKey');
-const savedGeminiKey = localStorage.getItem('orf_gemini_key') || 'AIzaSyCygt7nB45xje5j8-VA_kiXToxmA3xe5LM';
+const savedGeminiKey = localStorage.getItem('orf_gemini_key') || _envKeys.gemini || '';
 geminiKeyInput.value = savedGeminiKey;
 localStorage.setItem('orf_gemini_key', savedGeminiKey);
 geminiKeyInput.addEventListener('input', () => {

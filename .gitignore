@@ -3,6 +3,7 @@ keys/
 services/reverb/.env
 .env
 .env.local
+env.js
 
 # Audio test files (large, user-specific)
 audio files/
