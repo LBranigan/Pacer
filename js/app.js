@@ -2316,10 +2316,12 @@ document.getElementById('apiKey').addEventListener('input', (e) => {
 });
 
 // Gemini API key — persist in localStorage (free from aistudio.google.com)
+// Clear any old revoked keys stuck in localStorage
+const _revokedKeys = ['AIzaSyCygt7nB45xje5j8-VA_kiXToxmA3xe5LM', 'AIzaSyCTx4rS7zxwRZqNseWcFJAaAgEH5HA50xA'];
+if (_revokedKeys.includes(localStorage.getItem('orf_gemini_key'))) localStorage.removeItem('orf_gemini_key');
+if (_revokedKeys.includes(localStorage.getItem('orf_api_key'))) localStorage.removeItem('orf_api_key');
 const geminiKeyInput = document.getElementById('geminiKey');
-const savedGeminiKey = localStorage.getItem('orf_gemini_key') || _envKeys.gemini || '';
-geminiKeyInput.value = savedGeminiKey;
-localStorage.setItem('orf_gemini_key', savedGeminiKey);
+geminiKeyInput.value = localStorage.getItem('orf_gemini_key') || _envKeys.gemini || '';
 geminiKeyInput.addEventListener('input', () => {
   localStorage.setItem('orf_gemini_key', geminiKeyInput.value.trim());
 });
