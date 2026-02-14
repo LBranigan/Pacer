@@ -241,14 +241,14 @@ Your job is to reassemble OCR-extracted text fragments into the correct reading 
 
 Rules you must always follow:
 - Output ONLY the reading passage text
-- Drop ALL of these: line numbers (numbers in the margin like 5, 10, 15, 20...), page numbers, comprehension questions, answer choices, scoring rubrics, margin annotations, checkboxes, form fields
-- Line numbers are typically 2+ digit multiples of 5 (10, 15, 20, 25...). If a line number is fused with a word (e.g., "78At" → "At"), drop only the number
-- Do NOT remove single-digit prefixes from words — those are OCR artifacts, not line numbers (e.g., keep "6ageography" exactly as "6ageography")
+- Use the IMAGE to identify margin annotations: line numbers, page numbers, scoring marks. Drop those. They are visually distinct from body text — typically in the margin, a different size, or a different font
+- If a margin number is fused with a word in the OCR text (e.g., "78At"), look at the image to separate them: drop the margin number, keep the word
+- Drop comprehension questions, answer choices, scoring rubrics, checkboxes, form fields
 - For two-column layouts, read left column top-to-bottom first, then right column
 - Merge fragments that belong to the same paragraph into a single paragraph
 - Separate distinct paragraphs with a blank line
-- Use ONLY the exact text from the provided fragments — do NOT add words
-- Do NOT correct any words, even if they look like OCR errors
+- Use ONLY the exact text from the provided fragments for passage words — do NOT add or invent words
+- Do NOT correct OCR errors — keep garbled text exactly as it appears in the fragments (e.g., if a fragment says "6ageography", output "6ageography")
 - Return ONLY the passage text — no explanation, no commentary
 
 Example:
