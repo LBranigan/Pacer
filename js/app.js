@@ -1593,6 +1593,16 @@ async function runAnalysis() {
       ri++;
     }
 
+    // Phonetic normalization: collapse common phonetic equivalences before Levenshtein
+    // Turns "cayuco"→"kayuko", "kayoko"→"kayoko" → ratio 0.83 (vs 0.50 raw)
+    function phoneticNormalize(word) {
+      return word.toLowerCase()
+        .replace(/[^a-z]/g, '')
+        .replace(/ck/g, 'k')
+        .replace(/ph/g, 'f')
+        .replace(/c/g, 'k');
+    }
+
     // ── OOV Detection ─────────────────────────────────────────────────────
     // Flag reference words absent from CMUdict (125K English words).
     // If a word isn't in CMUdict, English ASR models almost certainly can't recognize it.
@@ -1606,16 +1616,6 @@ async function runAnalysis() {
       if (getPhonemeCount(refNorm) === null) {
         entry._isOOV = true;
       }
-    }
-
-    // Phonetic normalization: collapse common phonetic equivalences before Levenshtein
-    // Turns "cayuco"→"kayuko", "kayoko"→"kayoko" → ratio 0.83 (vs 0.50 raw)
-    function phoneticNormalize(word) {
-      return word.toLowerCase()
-        .replace(/[^a-z]/g, '')
-        .replace(/ck/g, 'k')
-        .replace(/ph/g, 'f')
-        .replace(/c/g, 'k');
     }
 
     // Dictionary-based common word detection: checks Free Dictionary API
