@@ -8,6 +8,26 @@
  */
 
 /**
+ * Normalize Unicode characters commonly emitted by OCR engines.
+ * NFKC decomposes ligatures (fi→fi, fl→fl) and normalizes compatibility chars.
+ * Explicit replacements handle smart quotes, dashes, invisible characters.
+ * Safe to apply unconditionally — only affects visually-identical or invisible chars.
+ */
+function normalizeUnicode(text) {
+  if (!text) return text;
+  return text
+    .normalize('NFKC')
+    .replace(/\u00A0/g, ' ')                     // non-breaking space → space
+    .replace(/[\u201C\u201D\u201E\u201F]/g, '"') // smart double quotes → straight
+    .replace(/[\u2018\u2019\u201A\u201B]/g, "'") // smart single quotes → straight
+    .replace(/\u2014/g, ' - ')                    // em-dash → spaced hyphen
+    .replace(/\u2013/g, '-')                      // en-dash → hyphen
+    .replace(/\u2026/g, '...')                    // ellipsis char → three dots
+    .replace(/\u00AD/g, '')                       // soft hyphen → remove
+    .replace(/[\u200B\u200C\u200D\uFEFF]/g, ''); // zero-width chars → remove
+}
+
+/**
  * Resize an image if either dimension exceeds maxDimension.
  * Returns a Promise resolving to a Blob (JPEG 0.85 quality).
  */
@@ -80,7 +100,8 @@ export async function extractTextFromImage(file, apiKey) {
     throw new Error(`Vision API: ${result.error.message}`);
   }
 
-  return (result && result.fullTextAnnotation && result.fullTextAnnotation.text) || '';
+  const rawText = (result && result.fullTextAnnotation && result.fullTextAnnotation.text) || '';
+  return normalizeUnicode(rawText);
 }
 
 // ─── Hybrid: Cloud Vision characters + Gemini text assembly + OOV cleanup ───
@@ -139,7 +160,7 @@ function extractParagraphs(annotation) {
       if (block.blockType && block.blockType !== 'TEXT') continue;
 
       for (const para of (block.paragraphs || [])) {
-        const text = paraToText(para);
+        const text = normalizeUnicode(paraToText(para));
         if (text) {
           paragraphs.push(text);
         }
@@ -192,22 +213,41 @@ async function assembleWithGemini(base64, mimeType, fragments, geminiKey) {
     .map((text, i) => `[${i + 1}] ${text}`)
     .join('\n');
 
-  const prompt = `You are reassembling text fragments extracted via OCR from a reading assessment page. The OCR extracted text with excellent character accuracy, but the fragments may be in the wrong order or incorrectly split across paragraph boundaries.
+  // System instruction: persistent behavioral rules (higher priority in Gemini)
+  const systemInstruction = {
+    parts: [{ text: `You are an expert OCR text assembler for children's reading assessment passages.
+Your job is to reassemble OCR-extracted text fragments into the correct reading order.
 
-Look at the image and reassemble ONLY the reading passage in the correct reading order. For two-column layouts, read the left column top-to-bottom first, then the right column top-to-bottom.
-
-CRITICAL RULES:
-- Output ONLY the reading passage — drop line numbers, page numbers, comprehension questions, answer choices, and margin annotations
-- Use ONLY the exact text from these fragments for passage words
-- Do NOT correct any words, even if they look like OCR errors (e.g., keep "6ageography" as-is)
-- Do NOT add any words that aren't in the fragments
+Rules you must always follow:
+- Output ONLY the reading passage text
+- Drop ALL of these: line numbers (numbers in the margin like 5, 10, 15, 20...), page numbers, comprehension questions, answer choices, scoring rubrics, margin annotations, checkboxes, form fields
+- If a line number is fused with a word (e.g., "78At" or "78 At" where 78 is a line number), drop only the number, keep the word
+- For two-column layouts, read left column top-to-bottom first, then right column
 - Merge fragments that belong to the same paragraph into a single paragraph
 - Separate distinct paragraphs with a blank line
+- Use ONLY the exact text from the provided fragments — do NOT add words
+- Do NOT correct any words, even if they look like OCR errors
+- Return ONLY the passage text — no explanation, no commentary
+
+Example:
+
+Input fragments:
+[1] 78 The fox jumped over
+[2] the lazy dog. He
+[3] 79 landed softly on the
+[4] grass beside the fence.
+[5] 1. What did the fox do?
+[6] A) Ran away B) Jumped
+
+Output:
+The fox jumped over the lazy dog. He landed softly on the grass beside the fence.` }]
+  };
+
+  // User prompt: per-request fragment data
+  const userPrompt = `Reassemble these OCR fragments from the attached image into the reading passage:
 
 Fragments:
-${numberedList}
-
-Return ONLY the reassembled passage text. No explanation, no commentary.`;
+${numberedList}`;
 
   const response = await fetch(
     `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${geminiKey}`,
@@ -215,12 +255,18 @@ Return ONLY the reassembled passage text. No explanation, no commentary.`;
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
+        system_instruction: systemInstruction,
         contents: [{
           parts: [
             { inline_data: { mime_type: mimeType, data: base64 } },
-            { text: prompt }
+            { text: userPrompt }
           ]
-        }]
+        }],
+        generationConfig: {
+          temperature: 0,
+          topK: 1,
+          topP: 1
+        }
       })
     }
   );
@@ -267,6 +313,153 @@ Return ONLY the reassembled passage text. No explanation, no commentary.`;
   return assembled;
 }
 
+/**
+ * Character-level Levenshtein similarity ratio.
+ * Returns 1.0 for identical strings, 0.0 for completely different.
+ */
+function levenshteinSimilarity(a, b) {
+  const m = a.length, n = b.length;
+  if (m === 0 && n === 0) return 1;
+  if (m === 0 || n === 0) return 0;
+  const dp = Array.from({length: m + 1}, () => new Array(n + 1).fill(0));
+  for (let i = 0; i <= m; i++) dp[i][0] = i;
+  for (let j = 0; j <= n; j++) dp[0][j] = j;
+  for (let i = 1; i <= m; i++) {
+    for (let j = 1; j <= n; j++) {
+      dp[i][j] = a[i-1] === b[j-1]
+        ? dp[i-1][j-1]
+        : 1 + Math.min(dp[i-1][j-1], dp[i-1][j], dp[i][j-1]);
+    }
+  }
+  return 1 - dp[m][n] / Math.max(m, n);
+}
+
+/**
+ * Second Gemini pass: fix OCR artifacts by comparing assembled text against the page image.
+ * Unlike the reverted OOV cleanup (text-only), this pass INCLUDES the image so Gemini
+ * can distinguish intentional text ("phys ed") from artifacts ("6ageography").
+ * Edit-distance guard rejects corrections that change too much.
+ */
+async function correctWithGemini(base64, mimeType, assembledText, geminiKey) {
+  const systemInstruction = {
+    parts: [{ text: `You are an OCR text corrector for children's reading assessment passages.
+You receive OCR-assembled passage text alongside the original page image.
+Your job is to fix OCR artifacts by visually comparing text against the image.
+
+Fix these artifacts:
+- Digit-letter fusions: "6ageography" → "geography", "1earning" → "learning"
+- Fused line numbers: "78At school" → "At school"
+- Stray punctuation not on the page: trailing "/", ")", ">" that are scanning artifacts
+- Missing spaces between words that the image shows as separate
+
+Do NOT change:
+- Words that match what is printed on the page, even if unusual
+- Spelling in the original text — if the page says "colour", keep "colour"
+- Abbreviations that match the page (e.g., "phys ed" stays as "phys ed")
+- Paragraph structure — preserve blank lines exactly
+
+Return ONLY the corrected passage text.` }]
+  };
+
+  const userPrompt = `Compare this OCR text against the attached page image. Fix only OCR artifacts — characters that don't match what's printed on the page:
+
+${assembledText}`;
+
+  const response = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${geminiKey}`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        system_instruction: systemInstruction,
+        contents: [{
+          parts: [
+            { inline_data: { mime_type: mimeType, data: base64 } },
+            { text: userPrompt }
+          ]
+        }],
+        generationConfig: {
+          temperature: 0,
+          topK: 1,
+          topP: 1
+        }
+      })
+    }
+  );
+
+  if (!response.ok) {
+    const errBody = await response.text().catch(() => '');
+    if (response.status === 429) throw new Error('Gemini rate limit');
+    throw new Error(`Gemini correction error: ${response.status} ${errBody.slice(0, 200)}`);
+  }
+
+  const data = await response.json();
+
+  if (data.promptFeedback?.blockReason) {
+    throw new Error(`Gemini blocked: ${data.promptFeedback.blockReason}`);
+  }
+
+  const candidate = data.candidates?.[0];
+  if (!candidate) throw new Error('Gemini returned no candidates');
+
+  if (candidate.finishReason === 'SAFETY' || candidate.finishReason === 'RECITATION') {
+    throw new Error(`Gemini blocked (${candidate.finishReason})`);
+  }
+
+  const corrected = (candidate.content?.parts?.[0]?.text || '').trim();
+  if (!corrected) throw new Error('Gemini returned empty correction');
+
+  // Edit-distance guard: reject if Gemini changed more than 15% of characters
+  const similarity = levenshteinSimilarity(assembledText, corrected);
+  if (similarity < 0.85) {
+    throw new Error(`Correction too aggressive (${Math.round(similarity * 100)}% similar, need 85%+)`);
+  }
+
+  // Word count guard: corrected should not have significantly more words
+  const assembledWordCount = (assembledText.match(/\S+/g) || []).length;
+  const correctedWordCount = (corrected.match(/\S+/g) || []).length;
+  if (correctedWordCount > assembledWordCount * 1.1) {
+    throw new Error(`Correction added too many words (${assembledWordCount} → ${correctedWordCount})`);
+  }
+
+  return corrected;
+}
+
+/**
+ * Extract words with low OCR confidence from Cloud Vision's annotation hierarchy.
+ * Returns deduplicated list sorted by confidence (lowest first).
+ */
+function extractLowConfidenceWords(annotation, threshold = 0.85) {
+  const lowConf = [];
+  if (!annotation || !annotation.pages) return lowConf;
+
+  for (const page of annotation.pages) {
+    for (const block of (page.blocks || [])) {
+      if (block.blockType && block.blockType !== 'TEXT') continue;
+      for (const para of (block.paragraphs || [])) {
+        for (const word of (para.words || [])) {
+          const text = (word.symbols || []).map(s => s.text).join('');
+          const conf = word.confidence;
+          if (conf !== undefined && conf < threshold && text.length > 1) {
+            lowConf.push({ word: text, confidence: Math.round(conf * 100) });
+          }
+        }
+      }
+    }
+  }
+
+  // Deduplicate: keep lowest confidence per unique word
+  const seen = new Map();
+  for (const item of lowConf) {
+    const key = item.word.toLowerCase();
+    if (!seen.has(key) || seen.get(key).confidence > item.confidence) {
+      seen.set(key, item);
+    }
+  }
+
+  return Array.from(seen.values()).sort((a, b) => a.confidence - b.confidence);
+}
+
 // ─── Main hybrid entry point ───
 
 /**
@@ -289,17 +482,20 @@ export async function extractTextHybrid(file, visionKey, geminiKey) {
 
   // Step 1: Cloud Vision — get full annotation
   const annotation = await getVisionAnnotation(base64, visionKey);
-  const flatText = (annotation && annotation.text) || '';
+  const flatText = normalizeUnicode((annotation && annotation.text) || '');
+
+  // Extract low-confidence words from Cloud Vision (available in all paths)
+  const lowConfidenceWords = extractLowConfidenceWords(annotation);
 
   if (!flatText) {
-    return { text: '', engine: 'vision (empty)' };
+    return { text: '', engine: 'vision (empty)', lowConfidenceWords: [] };
   }
 
   // Step 2: Extract all fragments from hierarchy
   const paragraphs = extractParagraphs(annotation);
 
   if (paragraphs.length <= 1) {
-    return { text: flatText, engine: 'vision (single paragraph)' };
+    return { text: flatText, engine: 'vision (single paragraph)', lowConfidenceWords };
   }
 
   // Step 3: Gemini assembles fragments into correct reading order
@@ -308,11 +504,23 @@ export async function extractTextHybrid(file, visionKey, geminiKey) {
     assembled = await assembleWithGemini(base64, mimeType, paragraphs, geminiKey);
   } catch (err) {
     console.warn('[OCR Hybrid] Gemini assembly failed, using Cloud Vision ordering:', err.message);
-    return { text: flatText, engine: `vision fallback (${err.message})` };
+    return { text: flatText, engine: `vision fallback (${err.message})`, lowConfidenceWords };
+  }
+
+  // Step 4: Gemini corrects OCR artifacts by comparing assembled text against the image
+  let finalText = assembled;
+  try {
+    finalText = await correctWithGemini(base64, mimeType, assembled, geminiKey);
+    if (finalText !== assembled) {
+      console.log('[OCR Hybrid] Gemini correction applied');
+    }
+  } catch (err) {
+    console.warn('[OCR Hybrid] Gemini correction skipped:', err.message);
   }
 
   return {
-    text: assembled,
-    engine: `hybrid (${paragraphs.length} fragments assembled)`
+    text: finalText,
+    engine: `hybrid (${paragraphs.length} fragments${finalText !== assembled ? ' + corrected' : ''})`,
+    lowConfidenceWords
   };
 }
