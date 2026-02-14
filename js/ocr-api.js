@@ -4,11 +4,8 @@
  * Cloud Vision: excellent character accuracy, but wrong paragraph ordering on multi-column pages,
  * and sometimes splits one paragraph into multiple fragments.
  * Hybrid mode: Cloud Vision extracts text fragments, Gemini reassembles them into correct
- * reading order by looking at the image, then a cleanup pass fixes OCR artifacts using CMUdict
- * OOV detection + targeted Gemini correction.
+ * reading order by looking at the image. Subset validation prevents hallucination.
  */
-
-import { getPhonemeCount, loadPhonemeData } from './phoneme-counter.js';
 
 /**
  * Resize an image if either dimension exceeds maxDimension.
@@ -270,201 +267,15 @@ Return ONLY the reassembled passage text. No explanation, no commentary.`;
   return assembled;
 }
 
-// ─── OOV Cleanup: CMUdict detection + Gemini correction ───
-
-/**
- * Find OOV (out-of-vocabulary) words in text using CMUdict.
- * Returns array of { token, normalized, contextBefore, contextAfter }
- * for each word not found in the 125K-word CMUdict dictionary.
- */
-function findOOVWords(text) {
-  const tokens = text.split(/\s+/).filter(Boolean);
-  const oovWords = [];
-  const seen = new Set(); // deduplicate — same token only flagged once
-
-  for (let i = 0; i < tokens.length; i++) {
-    const token = tokens[i];
-
-    // Normalize: lowercase, strip leading/trailing non-alpha characters
-    const normalized = token.toLowerCase().replace(/^[^a-z]+|[^a-z]+$/g, '');
-    if (!normalized || normalized.length < 2) continue; // skip single chars, pure punctuation
-
-    // Skip if already flagged this exact normalized form
-    if (seen.has(normalized)) continue;
-
-    // Check CMUdict — null means OOV
-    if (getPhonemeCount(normalized) !== null) continue;
-
-    // Also check without hyphens (e.g., "twenty-four" → "twentyfour" might not match,
-    // but "twenty" and "four" individually would)
-    const hyphenParts = normalized.split('-').filter(Boolean);
-    if (hyphenParts.length > 1 && hyphenParts.every(p => getPhonemeCount(p) !== null)) continue;
-
-    seen.add(normalized);
-
-    // Gather context: 5 words before and after
-    const contextBefore = tokens.slice(Math.max(0, i - 5), i).join(' ');
-    const contextAfter = tokens.slice(i + 1, i + 6).join(' ');
-
-    oovWords.push({ token, normalized, contextBefore, contextAfter });
-  }
-
-  return oovWords;
-}
-
-/**
- * Send OOV words to Gemini for targeted correction.
- * Gemini determines for each word whether it's an OCR artifact (correct it),
- * a foreign/proper word (keep it), or a line number/junk (remove it).
- *
- * Text-only call — no image needed, fast and cheap.
- * Returns a map: originalToken → corrected string (or empty string for removal).
- */
-async function correctOOVWithGemini(oovWords, geminiKey) {
-  const wordList = oovWords.map((w, i) =>
-    `${i + 1}. "${w.token}" — context: "...${w.contextBefore} [${w.token}] ${w.contextAfter}..."`
-  ).join('\n');
-
-  const prompt = `These words were found in OCR-extracted text from a children's reading assessment passage. They are NOT in the English dictionary. For each word, determine what it is and what action to take.
-
-Actions:
-- "correct": The word is an OCR artifact (digits fused with letters, fused words, garbled text). Provide the corrected version.
-- "keep": The word is a foreign word, proper noun, place name, or specialized term that is correct as-is.
-- "remove": The word is a stray line number, page number, or scanning artifact that should be deleted.
-
-Words:
-${wordList}
-
-Return a JSON array with one object per word:
-[{"word": "6ageography", "action": "correct", "correction": "geography"}, {"word": "cayuco", "action": "keep"}, ...]
-
-For "correct" actions, provide ONLY the corrected word/phrase. For "keep" and "remove", omit the "correction" field.`;
-
-  const response = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${geminiKey}`,
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: {
-          response_mime_type: 'application/json'
-        }
-      })
-    }
-  );
-
-  if (!response.ok) {
-    throw new Error(`Gemini OOV cleanup error: ${response.status}`);
-  }
-
-  const data = await response.json();
-  const candidate = data.candidates?.[0];
-  if (!candidate) {
-    throw new Error('Gemini OOV cleanup returned no candidates');
-  }
-
-  const text = candidate.content?.parts?.[0]?.text || '';
-  let corrections;
-  try {
-    corrections = JSON.parse(text);
-  } catch {
-    throw new Error(`Gemini OOV cleanup returned invalid JSON: ${text.slice(0, 100)}`);
-  }
-
-  if (!Array.isArray(corrections)) {
-    throw new Error('Gemini OOV cleanup did not return an array');
-  }
-
-  // Build correction map: original token → replacement
-  const correctionMap = new Map();
-  for (const entry of corrections) {
-    if (!entry || !entry.word) continue;
-
-    // Find the original token that matches this word
-    const match = oovWords.find(w =>
-      w.normalized === entry.word.toLowerCase().replace(/[^a-z]/g, '') ||
-      w.token === entry.word ||
-      w.token.toLowerCase().includes(entry.word.toLowerCase())
-    );
-    if (!match) continue;
-
-    if (entry.action === 'correct' && entry.correction) {
-      correctionMap.set(match.token, entry.correction);
-    } else if (entry.action === 'remove') {
-      correctionMap.set(match.token, '');
-    }
-    // "keep" → no entry in map → token stays as-is
-  }
-
-  return correctionMap;
-}
-
-/**
- * Apply OOV corrections to assembled text.
- * Each correction replaces the exact original token.
- */
-function applyCorrections(text, correctionMap) {
-  let result = text;
-  for (const [original, replacement] of correctionMap) {
-    if (replacement === '') {
-      // Remove: delete the token and any trailing/leading extra whitespace
-      result = result.split(original).join('').replace(/  +/g, ' ');
-    } else {
-      // Replace: swap exact token
-      result = result.split(original).join(replacement);
-    }
-  }
-  return result.trim();
-}
-
-/**
- * Full OOV cleanup pass: find OOV words via CMUdict, send to Gemini for correction.
- * Returns cleaned text. If cleanup fails, returns original text unchanged.
- */
-async function cleanupOOV(text, geminiKey) {
-  await loadPhonemeData();
-
-  const oovWords = findOOVWords(text);
-  if (oovWords.length === 0) {
-    console.info('[OCR Cleanup] No OOV words found — text is clean');
-    return { text, oovCount: 0, fixCount: 0 };
-  }
-
-  console.info(`[OCR Cleanup] Found ${oovWords.length} OOV words:`,
-    oovWords.map(w => w.normalized).join(', '));
-
-  try {
-    const corrections = await correctOOVWithGemini(oovWords, geminiKey);
-    const fixCount = corrections.size;
-
-    if (fixCount === 0) {
-      console.info('[OCR Cleanup] Gemini kept all OOV words as-is (foreign/proper nouns)');
-      return { text, oovCount: oovWords.length, fixCount: 0 };
-    }
-
-    console.info(`[OCR Cleanup] Applying ${fixCount} corrections:`,
-      [...corrections.entries()].map(([k, v]) => `"${k}" → "${v || '[removed]'}"`).join(', '));
-
-    const cleaned = applyCorrections(text, corrections);
-    return { text: cleaned, oovCount: oovWords.length, fixCount };
-  } catch (err) {
-    console.warn('[OCR Cleanup] Gemini OOV correction failed, keeping original text:', err.message);
-    return { text, oovCount: oovWords.length, fixCount: 0 };
-  }
-}
-
 // ─── Main hybrid entry point ───
 
 /**
- * Hybrid OCR: Cloud Vision + Gemini assembly + OOV cleanup.
+ * Hybrid OCR: Cloud Vision + Gemini assembly.
  *
  * 1. Cloud Vision extracts the full paragraph hierarchy (excellent character accuracy)
  * 2. Gemini assembles fragments into correct reading order, drops junk
- * 3. CMUdict identifies OOV words in the assembled text
- * 4. Gemini corrects OCR artifacts while preserving foreign words and proper nouns
  *
- * If any step fails, falls back gracefully (assembly → raw Vision, cleanup → uncleaned).
+ * If Gemini fails, falls back to Cloud Vision's raw text ordering.
  *
  * @param {File} file - Image file
  * @param {string} visionKey - Google Cloud API key
@@ -500,14 +311,8 @@ export async function extractTextHybrid(file, visionKey, geminiKey) {
     return { text: flatText, engine: `vision fallback (${err.message})` };
   }
 
-  // Step 4: OOV cleanup — find non-dictionary words, ask Gemini to fix artifacts
-  const cleanup = await cleanupOOV(assembled, geminiKey);
-  const cleanupInfo = cleanup.oovCount > 0
-    ? `, ${cleanup.fixCount}/${cleanup.oovCount} OOV fixed`
-    : '';
-
   return {
-    text: cleanup.text,
-    engine: `hybrid (${paragraphs.length} fragments assembled${cleanupInfo})`
+    text: assembled,
+    engine: `hybrid (${paragraphs.length} fragments assembled)`
   };
 }
