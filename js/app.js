@@ -2318,7 +2318,8 @@ async function runAnalysis() {
       _oovRecoveredViaUnknown: a._oovRecoveredViaUnknown || false,
       _oovCollateralOmission: a._oovCollateralOmission || false,
       _functionWordCollateral: a._functionWordCollateral || false,
-      _partOfOOVForgiven: a._partOfOOVForgiven || false
+      _partOfOOVForgiven: a._partOfOOVForgiven || false,
+      _syllableCoverage: a._syllableCoverage || null
     }))
   });
 
