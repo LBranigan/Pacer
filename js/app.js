@@ -2762,6 +2762,10 @@ const ocrImage = document.getElementById('ocrImage');
 const ocrText = document.getElementById('ocrText');
 const ocrStatus = document.getElementById('ocrStatus');
 const useOcrBtn = document.getElementById('useOcrBtn');
+const viewOcrBtn = document.getElementById('viewOcrBtn');
+
+// OCR diagnostic data (stored for View OCR feature)
+let ocrDiagnosticData = null;
 
 // OCR engine toggle (Cloud Vision vs Gemini)
 const ocrEngineToggle = document.getElementById('ocrEngineToggle');
@@ -2818,6 +2822,13 @@ if (imageInput) {
         text = result.text;
         engineInfo = result.engine;
         lowConfWords = result.lowConfidenceWords || [];
+        ocrDiagnosticData = {
+          imageBase64: result.imageBase64,
+          imageMimeType: result.imageMimeType,
+          lowConfidenceWords: lowConfWords,
+          pageWidth: result.pageWidth,
+          pageHeight: result.pageHeight
+        };
       } else {
         const apiKey = document.getElementById('apiKey').value.trim();
         if (!apiKey) {
@@ -2827,8 +2838,10 @@ if (imageInput) {
         ocrStatus.textContent = 'Extracting text (Cloud Vision)...';
         text = await extractTextFromImage(file, apiKey);
         engineInfo = 'vision';
+        ocrDiagnosticData = null; // No bounding box data in plain Vision mode
       }
       ocrText.value = text;
+      if (viewOcrBtn) viewOcrBtn.style.display = ocrDiagnosticData ? '' : 'none';
       let statusMsg = text
         ? `Text extracted [${engineInfo}] — review and edit, then click 'Use as Reference Passage'.`
         : 'No text detected in image.';
@@ -2849,6 +2862,153 @@ if (useOcrBtn) {
     appState.referenceIsFromOCR = true;
     ocrStatus.textContent = 'Reference passage updated.';
   });
+}
+
+if (viewOcrBtn) {
+  viewOcrBtn.addEventListener('click', () => {
+    if (ocrDiagnosticData) openOcrDiagnosticView(ocrDiagnosticData);
+  });
+}
+
+function openOcrDiagnosticView(diag) {
+  const w = window.open('', '_blank');
+  if (!w) return;
+
+  const words = diag.lowConfidenceWords || [];
+  const dataUri = `data:${diag.imageMimeType || 'image/jpeg'};base64,${diag.imageBase64}`;
+
+  // Build word list rows
+  const rowsHtml = words.map((item, i) => {
+    const pct = item.confidence;
+    const hue = Math.round((pct / 85) * 60); // 0=red at 0%, 60=yellow at threshold
+    return `<tr data-idx="${i}" style="cursor:pointer;" onclick="flashBox(${i})">
+      <td>${item.word}</td>
+      <td><div style="display:flex;align-items:center;gap:6px;">
+        <div style="width:60px;height:14px;background:#eee;border-radius:3px;overflow:hidden;">
+          <div style="width:${pct}%;height:100%;background:hsl(${hue},80%,50%);"></div>
+        </div>
+        <span>${pct}%</span>
+      </div></td>
+    </tr>`;
+  }).join('');
+
+  // Serialize bounding boxes for the script
+  const boxesJson = JSON.stringify(words.map(item => ({
+    confidence: item.confidence,
+    vertices: item.boundingBox?.vertices || item.boundingBox?.normalizedVertices || []
+  })));
+
+  w.document.write(`<!DOCTYPE html>
+<html><head><title>OCR Diagnostic View</title>
+<style>
+  body { font-family: -apple-system, system-ui, sans-serif; margin: 1rem; background: #f5f5f5; }
+  h2 { margin: 0 0 0.5rem; }
+  .img-container { position: relative; display: inline-block; margin-bottom: 1rem; }
+  .img-container img { display: block; max-width: 100%; }
+  .img-container canvas { position: absolute; top: 0; left: 0; pointer-events: none; }
+  table { border-collapse: collapse; width: auto; min-width: 300px; }
+  th, td { padding: 6px 12px; border-bottom: 1px solid #ddd; text-align: left; font-size: 0.9rem; }
+  th { background: #eee; font-weight: 600; }
+  tr:hover { background: #e3f2fd; }
+  .flash-highlight { outline: 3px solid #ff1744; outline-offset: 2px; }
+</style>
+</head><body>
+<h2>OCR Diagnostic — Low-Confidence Words (${words.length})</h2>
+<p style="color:#666;font-size:0.85rem;">Page dimensions: ${diag.pageWidth || '?'} × ${diag.pageHeight || '?'} px. Bounding boxes shown for words below 85% confidence.</p>
+<div class="img-container" id="imgContainer">
+  <img id="ocrImg" src="${dataUri}" onload="drawBoxes()">
+  <canvas id="overlay"></canvas>
+</div>
+<h3>All Low-Confidence Words</h3>
+<table>
+  <thead><tr><th>Word</th><th>Confidence</th></tr></thead>
+  <tbody>${rowsHtml}</tbody>
+</table>
+<script>
+const boxes = ${boxesJson};
+const pageW = ${diag.pageWidth || 0};
+const pageH = ${diag.pageHeight || 0};
+
+function drawBoxes() {
+  const img = document.getElementById('ocrImg');
+  const canvas = document.getElementById('overlay');
+  canvas.width = img.naturalWidth;
+  canvas.height = img.naturalHeight;
+  canvas.style.width = img.clientWidth + 'px';
+  canvas.style.height = img.clientHeight + 'px';
+  const ctx = canvas.getContext('2d');
+  const scaleX = pageW ? img.naturalWidth / pageW : 1;
+  const scaleY = pageH ? img.naturalHeight / pageH : 1;
+
+  for (let i = 0; i < boxes.length; i++) {
+    const v = boxes[i].vertices;
+    if (!v || v.length < 4) continue;
+    const pct = boxes[i].confidence;
+    const hue = Math.round((pct / 85) * 60);
+    ctx.strokeStyle = 'hsl(' + hue + ',80%,50%)';
+    ctx.lineWidth = 2;
+    ctx.fillStyle = 'hsla(' + hue + ',80%,50%,0.15)';
+    const x0 = (v[0].x || 0) * scaleX, y0 = (v[0].y || 0) * scaleY;
+    const x1 = (v[1].x || 0) * scaleX, y1 = (v[1].y || 0) * scaleY;
+    const x2 = (v[2].x || 0) * scaleX, y2 = (v[2].y || 0) * scaleY;
+    const x3 = (v[3].x || 0) * scaleX, y3 = (v[3].y || 0) * scaleY;
+    ctx.beginPath();
+    ctx.moveTo(x0, y0);
+    ctx.lineTo(x1, y1);
+    ctx.lineTo(x2, y2);
+    ctx.lineTo(x3, y3);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+  }
+}
+
+function flashBox(idx) {
+  const canvas = document.getElementById('overlay');
+  const img = document.getElementById('ocrImg');
+  const v = boxes[idx]?.vertices;
+  if (!v || v.length < 4) return;
+  const scaleX = pageW ? img.naturalWidth / pageW : 1;
+  const scaleY = pageH ? img.naturalHeight / pageH : 1;
+  const displayScaleX = img.clientWidth / img.naturalWidth;
+  const displayScaleY = img.clientHeight / img.naturalHeight;
+  const x = (v[0].x || 0) * scaleX * displayScaleX;
+  const y = (v[0].y || 0) * scaleY * displayScaleY;
+
+  // Scroll into view
+  const container = document.getElementById('imgContainer');
+  container.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+
+  // Flash overlay
+  const ctx = canvas.getContext('2d');
+  const x0 = (v[0].x || 0) * scaleX, y0 = (v[0].y || 0) * scaleY;
+  const x2 = (v[2].x || 0) * scaleX, y2 = (v[2].y || 0) * scaleY;
+  const bw = x2 - x0, bh = y2 - y0;
+
+  let count = 0;
+  const interval = setInterval(() => {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    drawBoxes();
+    if (count % 2 === 0) {
+      ctx.strokeStyle = '#ff1744';
+      ctx.lineWidth = 3;
+      ctx.strokeRect(x0 - 2, y0 - 2, bw + 4, bh + 4);
+    }
+    count++;
+    if (count >= 6) clearInterval(interval);
+  }, 250);
+}
+
+// Resize canvas on window resize
+window.addEventListener('resize', () => {
+  const img = document.getElementById('ocrImg');
+  const canvas = document.getElementById('overlay');
+  canvas.style.width = img.clientWidth + 'px';
+  canvas.style.height = img.clientHeight + 'px';
+});
+<\/script>
+</body></html>`);
+  w.document.close();
 }
 
 // Initialize student selector on page load

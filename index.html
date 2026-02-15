@@ -15,7 +15,7 @@
 </head>
 <body>
 
-<div id="version" style="text-align:right;font-size:0.75rem;color:#999;">v 2026-02-16 00:10</div>
+<div id="version" style="text-align:right;font-size:0.75rem;color:#999;">v 2026-02-15 22:30</div>
 <h1>Pacer — Fluency and Comprehension Training</h1>
 <p class="subtitle">Reverb + Parakeet &mdash; 3-Engine Consensus Pipeline</p>
 
@@ -102,7 +102,10 @@
   <div id="ocrPreview" style="display:none; margin-top:0.5rem;">
     <img id="ocrImage" style="max-width:100%; max-height:200px; border-radius:4px; margin-bottom:0.5rem;">
     <textarea id="ocrText" rows="6" placeholder="OCR text will appear here for review..."></textarea>
-    <button id="useOcrBtn" style="margin-top:0.5rem; background:#1976d2; color:#fff; padding:0.5rem 1rem; border:none; border-radius:4px; cursor:pointer; font-weight:600;">Use as Reference Passage</button>
+    <div style="margin-top:0.5rem; display:flex; gap:0.5rem; align-items:center;">
+      <button id="useOcrBtn" style="background:#1976d2; color:#fff; padding:0.5rem 1rem; border:none; border-radius:4px; cursor:pointer; font-weight:600;">Use as Reference Passage</button>
+      <button id="viewOcrBtn" style="display:none; background:#6a1b9a; color:#fff; padding:0.5rem 1rem; border:none; border-radius:4px; cursor:pointer; font-weight:600;">View OCR</button>
+    </div>
   </div>
   <div id="ocrStatus"></div>
 </div>
