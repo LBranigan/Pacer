@@ -844,8 +844,8 @@ function renderNewAnalyzedWords(container, alignment, sttLookup, diagnostics, tr
     const v1Ev = entry._recovered ? '(omitted)'
       : entry._v1RawAttempt?.length > 0 ? entry._v1RawAttempt.join(' + ')
       : (entry.hyp || '\u2014');
-    const v0Ev = entry._v0Attempt?.length > 0
-      ? entry._v0Attempt.join(' + ')
+    const v0Ev = (entry._recovered && entry._v0Type === 'omission') ? '(omitted)'
+      : entry._v0Attempt?.length > 0 ? entry._v0Attempt.join(' + ')
       : (entry._v0Word || (entry._v0Type === 'omission' ? '(omitted)' : '\u2014'));
     const pkEv = entry._xvalAttempt?.length > 0
       ? entry._xvalAttempt.join(' + ')
@@ -858,7 +858,9 @@ function renderNewAnalyzedWords(container, alignment, sttLookup, diagnostics, tr
     if (isConfIns) {
       tip.push(`All engines heard: "${entry.hyp}"`);
     } else {
-      tip.push(`V1: ${v1Ev} | V0: ${v0Ev} | Pk: ${pkEv}`);
+      tip.push(`V1: ${v1Ev}`);
+      tip.push(`V0: ${v0Ev}`);
+      tip.push(`Pk: ${pkEv}`);
       // V0 fusion: ASR joined adjacent ref words into one token, resolved by contraction merge
       if (entry._v0Type === 'correct' && entry._v0Word && norm(entry._v0Word) !== norm(entry.ref)) {
         tip.push(`V0 fused: "${entry._v0Word}" covers multiple ref words (ASR artifact, resolved)`);
