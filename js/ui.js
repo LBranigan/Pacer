@@ -388,16 +388,8 @@ function buildEnhancedTooltip(item, sttWord, extras) {
     lines.push('Disfluency \u2014 not an error');
   }
 
-  // Syllable coverage (substitutions, struggles, confirmed insertions)
-  if (item._syllableCoverage && item._syllableCoverage.totalSyllables > 1) {
-    const sc = item._syllableCoverage;
-    if (sc.position === 'insertion') {
-      lines.push(`Syllables: ${sc.totalSyllables} ([${sc.refSyllables.join('|')}])`);
-    } else {
-      const partial = sc.partialNext ? '+' : '';
-      lines.push(`Syllables: ${sc.syllablesCovered}${partial}/${sc.totalSyllables} (${sc.position}, [${sc.refSyllables.join('|')}])`);
-    }
-  }
+  // NOTE: _syllableCoverage tooltip is in the inline tooltip builder (~line 1055), not here.
+  // buildEnhancedTooltip is currently unused (dead code).
 
   // Cross-validation verdict
   if (item.crossValidation) {
@@ -1050,6 +1042,15 @@ function renderNewAnalyzedWords(container, alignment, sttLookup, diagnostics, tr
         tip.push(`Proper noun forgiven${ratioText}: ${src} "${entry._forgivenEvidence}"`);
       } else {
         tip.push(`Proper noun forgiven${ratioText}: "${entry.hyp}" \u2248 "${entry.ref}"`);
+      }
+    }
+    if (entry._syllableCoverage && entry._syllableCoverage.totalSyllables > 1) {
+      const sc = entry._syllableCoverage;
+      if (sc.position === 'insertion') {
+        tip.push(`Syllables: ${sc.totalSyllables} ([${sc.refSyllables.join('|')}])`);
+      } else {
+        const partial = sc.partialNext ? '+' : '';
+        tip.push(`Syllables: ${sc.syllablesCovered}${partial}/${sc.totalSyllables} (${sc.position}, [${sc.refSyllables.join('|')}])`);
       }
     }
     if (hesitation) {
