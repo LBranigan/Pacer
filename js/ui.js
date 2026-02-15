@@ -920,10 +920,9 @@ function renderNewAnalyzedWords(container, alignment, sttLookup, diagnostics, tr
         tip.push(`Syllables: ${sc.totalSyllables} ([${sc.refSyllables.join('|')}])`);
       } else {
         const partial = sc.partialNext ? '+' : '';
-        // Mark covered syllables with checkmark, uncovered with X
         const covSet = new Set(sc.coveredSyllables || []);
-        const syllMap = sc.refSyllables.map(s => covSet.has(s) ? s + '\u2713' : s + '\u2717').join('|');
-        tip.push(`Syllables: ${sc.syllablesCovered}${partial}/${sc.totalSyllables} (${sc.position}, [${syllMap}])`);
+        const syllMap = sc.refSyllables.map(s => covSet.has(s) ? s.toUpperCase() : s).join('|');
+        tip.push(`Syllables: ${sc.syllablesCovered}${partial}/${sc.totalSyllables} [${syllMap}]`);
       }
     }
     if (hesitation) {
