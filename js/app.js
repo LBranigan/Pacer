@@ -1841,7 +1841,7 @@ async function runAnalysis() {
   // If a word isn't in CMUdict, English ASR models almost certainly can't recognize it.
   await loadPhonemeData();
   for (const entry of alignment) {
-    if (entry.type === 'insertion') continue;
+    if (entry.type === 'insertion' || !entry.ref) continue;
     const refNorm = entry.ref.toLowerCase().replace(/[^a-z'-]/g, '');
     if (refNorm.length < 3) continue;           // too short for reliable phonetic comparison
     if (/\d/.test(entry.ref)) continue;          // handled by number expansion
