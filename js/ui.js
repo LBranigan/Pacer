@@ -388,11 +388,15 @@ function buildEnhancedTooltip(item, sttWord, extras) {
     lines.push('Disfluency \u2014 not an error');
   }
 
-  // Syllable coverage (for any non-correct multisyllabic word)
+  // Syllable coverage (substitutions, struggles, confirmed insertions)
   if (item._syllableCoverage && item._syllableCoverage.totalSyllables > 1) {
     const sc = item._syllableCoverage;
-    const partial = sc.partialNext ? '+' : '';
-    lines.push(`Syllables: ${sc.syllablesCovered}${partial}/${sc.totalSyllables} (${sc.position}, [${sc.refSyllables.join('|')}])`);
+    if (sc.position === 'insertion') {
+      lines.push(`Syllables: ${sc.totalSyllables} ([${sc.refSyllables.join('|')}])`);
+    } else {
+      const partial = sc.partialNext ? '+' : '';
+      lines.push(`Syllables: ${sc.syllablesCovered}${partial}/${sc.totalSyllables} (${sc.position}, [${sc.refSyllables.join('|')}])`);
+    }
   }
 
   // Cross-validation verdict

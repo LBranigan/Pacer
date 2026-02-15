@@ -22,7 +22,7 @@ import { enrichDiagnosticsWithVAD, computeVADGapSummary, adjustGapsWithVADOverha
 import { canRunMaze } from './maze-generator.js';
 import { loadPhonemeData, getPhonemeCount, getPhonemeCountWithFallback } from './phoneme-counter.js';
 import { generateMovieTrailer } from './movie-trailer.js';
-import { analyzeSyllableCoverage, analyzeFragmentsCoverage } from './syllable-analysis.js';
+import { syllabifyWord, analyzeSyllableCoverage, analyzeFragmentsCoverage } from './syllable-analysis.js';
 
 // Code version for cache verification
 const CODE_VERSION = 'v39-2026-02-07';
@@ -1371,23 +1371,31 @@ async function runAnalysis() {
   const diagnostics = runDiagnostics(transcriptWords, alignment, referenceText, xvalRawWords);
 
   // ── Syllable Coverage Annotation ─────────────────────────────────
-  // Annotate every non-correct entry (substitutions, struggles, omissions)
-  // with syllable-level coverage data so the AI layer can make grounded
-  // claims like "decoded 2 of 3 syllables."
+  // Annotate substitutions, struggles, and confirmed insertions with
+  // syllable-level coverage data. Targets the orange (attempted-struggled),
+  // red (definite-struggle), blue (confirmed-substitution), and purple
+  // (confirmed-insertion) UI buckets. Skips correct, forgiven, and omissions.
   for (const entry of alignment) {
-    if (entry.type === 'correct' || entry.type === 'insertion') continue;
+    // Confirmed insertions: no ref word, just syllabify the inserted word itself
+    if (entry.type === 'insertion' && entry._confirmedInsertion) {
+      const hyp = (entry.hyp || '').toLowerCase().replace(/[^a-z]/g, '');
+      if (hyp.length >= 4) {
+        const sylls = syllabifyWord(hyp);
+        entry._syllableCoverage = { fragment: hyp, refWord: null, refSyllables: sylls,
+          totalSyllables: sylls.length, syllablesCovered: sylls.length,
+          coverageRatio: 1, position: 'insertion', coveredSyllables: sylls, partialNext: false };
+      }
+      continue;
+    }
+    // Substitutions and (legacy) struggles — words where the student said something wrong
+    if (entry.type !== 'substitution' && entry.type !== 'struggle') continue;
     if (entry.forgiven || entry._oovRecoveredViaUnknown) continue;
     const ref = (entry.ref || '').toLowerCase().replace(/[^a-z]/g, '');
-    if (ref.length < 4) continue; // skip short words — syllable analysis not meaningful
+    if (ref.length < 4) continue;
 
     if (entry._nearMissEvidence && entry._nearMissEvidence.length > 0) {
-      // Decoding struggle: fragments available from near-miss resolution
       entry._syllableCoverage = analyzeFragmentsCoverage(entry._nearMissEvidence, ref);
-    } else if (entry.type === 'omission') {
-      // Omission: no attempt — record ref syllable count only (0 covered)
-      entry._syllableCoverage = analyzeSyllableCoverage('', ref);
     } else {
-      // Substitution / struggle: the hyp itself is the attempt
       entry._syllableCoverage = analyzeSyllableCoverage(entry.hyp || '', ref);
     }
   }
