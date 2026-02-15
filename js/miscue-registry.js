@@ -215,6 +215,22 @@ const DIAGNOSTIC_MISCUES = {
         detector: 'diagnostics.js → resolveNearMissClusters() (concatenation pass)',
         guards: ['Max 3 insertions concatenated', 'Each insertion >= 2 chars', 'Combined length <= 2× ref length', 'Skips already-claimed insertions (_partOfStruggle)'],
         fields: '_concatAttempt on the substitution entry stores the combined form for tooltip enrichment'
+      },
+      fullAttemptReconstruction: {
+        description: 'After all fragment absorption and near-miss resolution, reconstructs the student\'s full attempt at a word by walking backward/forward from the struggle entry to collect all adjacent _partOfStruggle insertions + main hyp. Computes syllable coverage and similarity on the full attempt rather than fragments individually.',
+        detector: 'app.js → syllable coverage annotation block (walks alignment array from struggle entry)',
+        fields: {
+          _fullAttempt: 'Array of fragment strings in reading order (e.g., ["bar", "a", "coda"])',
+          _fullAttemptJoined: 'Concatenated attempt string (e.g., "baracoda")',
+          _fullAttemptRatio: 'levenshteinRatio(fullAttemptJoined, ref) — similarity to reference word'
+        },
+        example: {
+          reference: 'barracuda',
+          spoken: '"bar" + "a" + "coda"',
+          before: '_nearMissEvidence: ["bar"] → syllable coverage 1/4 (25%) — only pass 1 fragment',
+          after: '_fullAttempt: ["bar","a","coda"] → "baracoda" → syllable coverage 3/4 (75%)'
+        },
+        note: 'Fixes undercounting where _nearMissEvidence only contained pass 1 fragments but absorbMispronunciationFragments added more _partOfStruggle insertions (like single-char "a") that were missed. The full attempt gives downstream AI the complete picture of what the student produced.'
       }
     },
     note: 'A word can match multiple pathways simultaneously. Paths 1-3 require a substitution base (student said wrong word). Compound fragments pathway reclassifies correct words where V1 compound merge combined 2+ fragments — detected via independent 3-way reference alignment (V1, V0, Parakeet each aligned to reference separately).'

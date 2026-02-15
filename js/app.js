@@ -1368,7 +1368,8 @@ async function runAnalysis() {
   // syllable-level coverage data. Targets the orange (attempted-struggled),
   // red (definite-struggle), blue (confirmed-substitution), and purple
   // (confirmed-insertion) UI buckets. Skips correct, forgiven, and omissions.
-  for (const entry of alignment) {
+  for (let i = 0; i < alignment.length; i++) {
+    const entry = alignment[i];
     // Confirmed insertions: no ref word, just syllabify the inserted word itself
     if (entry.type === 'insertion' && entry._confirmedInsertion) {
       const hyp = (entry.hyp || '').toLowerCase().replace(/[^a-z]/g, '');
@@ -1386,7 +1387,32 @@ async function runAnalysis() {
     const ref = (entry.ref || '').toLowerCase().replace(/[^a-z]/g, '');
     if (ref.length < 4) continue;
 
-    if (entry._nearMissEvidence && entry._nearMissEvidence.length > 0) {
+    // Build full attempt: walk backward/forward from this entry to collect all
+    // adjacent _partOfStruggle insertions, then include the main hyp.
+    // For "barracuda": ins("bar",_partOfStruggle) + ins("a",_partOfStruggle) + sub("coda")
+    // → fullAttempt = ["bar","a","coda"] → "baracoda" → 75%+ syllable coverage
+    const attemptParts = [];
+    const _clean = s => (s || '').toLowerCase().replace(/[^a-z]/g, '');
+    for (let j = i - 1; j >= 0; j--) {
+      if (alignment[j].type === 'insertion' && alignment[j]._partOfStruggle) {
+        attemptParts.unshift(_clean(alignment[j].hyp));
+      } else break;
+    }
+    const mainHyp = _clean(entry.hyp);
+    if (mainHyp) attemptParts.push(mainHyp);
+    for (let j = i + 1; j < alignment.length; j++) {
+      if (alignment[j].type === 'insertion' && alignment[j]._partOfStruggle) {
+        attemptParts.push(_clean(alignment[j].hyp));
+      } else break;
+    }
+
+    const fullAttempt = attemptParts.join('');
+    if (attemptParts.length > 1) {
+      entry._fullAttempt = attemptParts;
+      entry._fullAttemptJoined = fullAttempt;
+      entry._fullAttemptRatio = levenshteinRatio(fullAttempt, ref);
+      entry._syllableCoverage = analyzeSyllableCoverage(fullAttempt, ref);
+    } else if (entry._nearMissEvidence && entry._nearMissEvidence.length > 0) {
       entry._syllableCoverage = analyzeFragmentsCoverage(entry._nearMissEvidence, ref);
     } else {
       entry._syllableCoverage = analyzeSyllableCoverage(entry.hyp || '', ref);

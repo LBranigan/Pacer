@@ -909,6 +909,11 @@ function renderNewAnalyzedWords(container, alignment, sttLookup, diagnostics, tr
         tip.push(`Proper noun forgiven${ratioText}: "${entry.hyp}" \u2248 "${entry.ref}"`);
       }
     }
+    if (entry._fullAttempt) {
+      const parts = entry._fullAttempt.join(' + ');
+      const pct = Math.round(entry._fullAttemptRatio * 100);
+      tip.push(`Attempt: ${parts} \u2192 "${entry._fullAttemptJoined}" (${pct}% match)`);
+    }
     if (entry._syllableCoverage && entry._syllableCoverage.totalSyllables > 1) {
       const sc = entry._syllableCoverage;
       if (sc.position === 'insertion') {
