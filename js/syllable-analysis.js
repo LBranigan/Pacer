@@ -369,19 +369,27 @@ export function analyzeSyllableCoverage(fragment, refWord) {
     return _computeSuffixCoverage(frag, ref, refSyllables);
   }
 
-  // Interior or scattered match — use Levenshtein-based estimation
-  // Fragment doesn't cleanly align to prefix or suffix.
-  // Estimate coverage by character ratio scaled to syllable count.
-  const charRatio = frag.length / ref.length;
-  const estSyllables = Math.round(charRatio * totalSyllables);
-  const capped = Math.min(estSyllables, totalSyllables);
+  // Interior or scattered match — ordered substring check per syllable.
+  // Walk through ref syllables in order, checking if each appears in the
+  // fragment at or after the previous match. Non-overlapping, order-preserving.
+  // "baracoda" vs ["bar","ra","cu","da"] → "bar" at 0, "da" at 6 → 2/4
+  let searchFrom = 0;
+  const coveredSyllables = [];
+  for (const syl of refSyllables) {
+    const idx = frag.indexOf(syl, searchFrom);
+    if (idx >= 0) {
+      coveredSyllables.push(syl);
+      searchFrom = idx + syl.length;
+    }
+  }
+  const syllablesCovered = coveredSyllables.length;
 
   return {
     fragment: frag, refWord: ref, refSyllables, totalSyllables,
-    syllablesCovered: capped,
-    coverageRatio: capped / totalSyllables,
+    syllablesCovered,
+    coverageRatio: syllablesCovered / totalSyllables,
     position: 'interior',
-    coveredSyllables: [],
+    coveredSyllables,
     partialNext: false,
   };
 }
