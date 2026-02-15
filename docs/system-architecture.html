@@ -1,0 +1,2147 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PACER — System Architecture</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700&family=DM+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&family=Playfair+Display:wght@700;800;900&display=swap');
+
+:root {
+  --bg-dark: #0d1117;
+  --bg-sidebar: #0a0e14;
+  --bg-content: #f8f9fb;
+  --bg-card: #ffffff;
+  --bg-code: #1a1f2e;
+  --text-primary: #1a1a2e;
+  --text-secondary: #4a5568;
+  --text-muted: #8892a4;
+  --text-light: #c9d1d9;
+  --accent-blue: #3b82f6;
+  --accent-teal: #14b8a6;
+  --accent-orange: #f59e0b;
+  --accent-red: #ef4444;
+  --accent-green: #22c55e;
+  --accent-purple: #8b5cf6;
+  --accent-pink: #ec4899;
+  --border-light: #e2e8f0;
+  --border-dark: #1e293b;
+  --sidebar-w: 280px;
+  --grid-color: rgba(59, 130, 246, 0.04);
+  --noise: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.03'/%3E%3C/svg%3E");
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+html { scroll-behavior: smooth; scroll-padding-top: 2rem; }
+
+body {
+  font-family: 'DM Sans', sans-serif;
+  background: var(--bg-content);
+  color: var(--text-primary);
+  line-height: 1.7;
+  overflow-x: hidden;
+}
+
+/* ── SIDEBAR ── */
+.sidebar {
+  position: fixed;
+  top: 0; left: 0;
+  width: var(--sidebar-w);
+  height: 100vh;
+  background: var(--bg-sidebar);
+  border-right: 1px solid var(--border-dark);
+  overflow-y: auto;
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+}
+
+.sidebar::-webkit-scrollbar { width: 4px; }
+.sidebar::-webkit-scrollbar-track { background: transparent; }
+.sidebar::-webkit-scrollbar-thumb { background: #1e293b; border-radius: 2px; }
+
+.sidebar-brand {
+  padding: 1.75rem 1.5rem 1rem;
+  border-bottom: 1px solid var(--border-dark);
+}
+
+.sidebar-brand h1 {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: var(--accent-blue);
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+}
+
+.sidebar-brand p {
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  margin-top: 0.25rem;
+  font-family: 'JetBrains Mono', monospace;
+  letter-spacing: 0.05em;
+}
+
+.sidebar-nav { padding: 1rem 0; flex: 1; }
+
+.nav-section-label {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.6rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.15em;
+  padding: 0.75rem 1.5rem 0.35rem;
+}
+
+.nav-link {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.45rem 1.5rem;
+  color: var(--text-light);
+  text-decoration: none;
+  font-size: 0.8rem;
+  font-weight: 400;
+  transition: all 0.2s;
+  border-left: 2px solid transparent;
+}
+
+.nav-link:hover {
+  color: #fff;
+  background: rgba(59, 130, 246, 0.08);
+  border-left-color: var(--accent-blue);
+}
+
+.nav-link .nav-num {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.65rem;
+  color: var(--text-muted);
+  min-width: 1.6rem;
+}
+
+.nav-link .nav-dot {
+  width: 5px; height: 5px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.sidebar-footer {
+  padding: 1rem 1.5rem;
+  border-top: 1px solid var(--border-dark);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.6rem;
+  color: #3d4555;
+}
+
+/* ── MAIN CONTENT ── */
+.main {
+  margin-left: var(--sidebar-w);
+  min-height: 100vh;
+  background-image:
+    linear-gradient(var(--grid-color) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid-color) 1px, transparent 1px);
+  background-size: 40px 40px;
+  background-position: -1px -1px;
+}
+
+.content { max-width: 960px; margin: 0 auto; padding: 3rem 2.5rem 6rem; }
+
+/* ── HERO ── */
+.hero {
+  padding: 3rem 0 4rem;
+  position: relative;
+}
+
+.hero-overline {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.7rem;
+  font-weight: 500;
+  color: var(--accent-blue);
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  margin-bottom: 1rem;
+}
+
+.hero h1 {
+  font-family: 'Playfair Display', serif;
+  font-size: 3rem;
+  font-weight: 900;
+  line-height: 1.1;
+  color: var(--text-primary);
+  margin-bottom: 1rem;
+}
+
+.hero h1 span { color: var(--accent-blue); }
+
+.hero-desc {
+  font-size: 1.05rem;
+  color: var(--text-secondary);
+  max-width: 640px;
+  line-height: 1.8;
+}
+
+.hero-stats {
+  display: flex;
+  gap: 2rem;
+  margin-top: 2rem;
+  flex-wrap: wrap;
+}
+
+.hero-stat {
+  display: flex;
+  flex-direction: column;
+}
+
+.hero-stat-value {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.hero-stat-label {
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+
+/* ── SECTIONS ── */
+.section {
+  margin-bottom: 3.5rem;
+  scroll-margin-top: 2rem;
+}
+
+.section-header {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 1.75rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 2px solid var(--border-light);
+}
+
+.section-num {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--accent-blue);
+  background: rgba(59, 130, 246, 0.08);
+  padding: 0.25rem 0.6rem;
+  border-radius: 4px;
+  letter-spacing: 0.05em;
+}
+
+.section-title {
+  font-family: 'Playfair Display', serif;
+  font-size: 1.6rem;
+  font-weight: 800;
+  color: var(--text-primary);
+}
+
+.section p, .section li {
+  color: var(--text-secondary);
+  font-size: 0.92rem;
+  line-height: 1.8;
+}
+
+.section p { margin-bottom: 1rem; }
+
+.section ul, .section ol {
+  margin-bottom: 1rem;
+  padding-left: 1.5rem;
+}
+
+.section li { margin-bottom: 0.4rem; }
+
+/* ── COLLAPSIBLE ── */
+.collapsible {
+  background: var(--bg-card);
+  border: 1px solid var(--border-light);
+  border-radius: 10px;
+  margin-bottom: 1rem;
+  overflow: hidden;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+  transition: box-shadow 0.3s;
+}
+
+.collapsible:hover { box-shadow: 0 4px 12px rgba(0,0,0,0.06); }
+
+.collapsible-header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 1rem 1.25rem;
+  cursor: pointer;
+  user-select: none;
+  transition: background 0.2s;
+}
+
+.collapsible-header:hover { background: rgba(59, 130, 246, 0.03); }
+
+.collapsible-arrow {
+  width: 20px; height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.collapsible.open .collapsible-arrow { transform: rotate(90deg); }
+
+.collapsible-tag {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.6rem;
+  font-weight: 600;
+  padding: 0.15rem 0.5rem;
+  border-radius: 3px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  flex-shrink: 0;
+}
+
+.tag-engine { background: #dbeafe; color: #1d4ed8; }
+.tag-pipeline { background: #d1fae5; color: #065f46; }
+.tag-algorithm { background: #fef3c7; color: #92400e; }
+.tag-detector { background: #fce7f3; color: #9d174d; }
+.tag-ui { background: #ede9fe; color: #5b21b6; }
+.tag-data { background: #e0f2fe; color: #0369a1; }
+.tag-server { background: #fee2e2; color: #991b1b; }
+.tag-metric { background: #ecfdf5; color: #047857; }
+
+.collapsible-title {
+  font-weight: 600;
+  font-size: 0.92rem;
+  color: var(--text-primary);
+  flex: 1;
+}
+
+.collapsible-body {
+  max-height: 0;
+  overflow: hidden;
+  transition: max-height 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.collapsible.open .collapsible-body { max-height: 5000px; }
+
+.collapsible-content {
+  padding: 0 1.25rem 1.25rem;
+  border-top: 1px solid var(--border-light);
+}
+
+.collapsible-content p { margin-top: 1rem; }
+
+/* ── SUB-SECTION ── */
+.subsection {
+  margin-top: 1.5rem;
+}
+
+.subsection-title {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--accent-blue);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  margin-bottom: 0.75rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.subsection-title::before {
+  content: '';
+  width: 8px; height: 2px;
+  background: var(--accent-blue);
+  display: inline-block;
+}
+
+/* ── CODE BLOCKS ── */
+.code-block {
+  background: var(--bg-code);
+  border-radius: 8px;
+  padding: 1.1rem 1.3rem;
+  margin: 1rem 0;
+  overflow-x: auto;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.78rem;
+  line-height: 1.7;
+  color: #c9d1d9;
+  border: 1px solid #21262d;
+}
+
+.code-block .kw { color: #ff7b72; }
+.code-block .fn { color: #d2a8ff; }
+.code-block .str { color: #a5d6ff; }
+.code-block .num { color: #79c0ff; }
+.code-block .cmt { color: #4a5568; font-style: italic; }
+.code-block .op { color: #ff7b72; }
+.code-block .var { color: #ffa657; }
+.code-block .type { color: #7ee787; }
+
+code {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.82em;
+  background: rgba(59, 130, 246, 0.08);
+  color: var(--accent-blue);
+  padding: 0.15em 0.4em;
+  border-radius: 4px;
+}
+
+/* ── PIPELINE DIAGRAMS ── */
+.pipeline {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  margin: 1.5rem 0;
+}
+
+.pipeline-step {
+  display: flex;
+  align-items: stretch;
+  gap: 0;
+  min-height: 56px;
+}
+
+.pipeline-line {
+  width: 40px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.pipeline-dot {
+  width: 12px; height: 12px;
+  border-radius: 50%;
+  background: var(--accent-blue);
+  border: 2px solid #fff;
+  box-shadow: 0 0 0 2px var(--accent-blue);
+  flex-shrink: 0;
+  z-index: 1;
+  margin-top: 18px;
+}
+
+.pipeline-dot.dot-teal { background: var(--accent-teal); box-shadow: 0 0 0 2px var(--accent-teal); }
+.pipeline-dot.dot-orange { background: var(--accent-orange); box-shadow: 0 0 0 2px var(--accent-orange); }
+.pipeline-dot.dot-red { background: var(--accent-red); box-shadow: 0 0 0 2px var(--accent-red); }
+.pipeline-dot.dot-green { background: var(--accent-green); box-shadow: 0 0 0 2px var(--accent-green); }
+.pipeline-dot.dot-purple { background: var(--accent-purple); box-shadow: 0 0 0 2px var(--accent-purple); }
+
+.pipeline-stem {
+  width: 2px;
+  flex: 1;
+  background: linear-gradient(to bottom, var(--accent-blue) 0%, rgba(59,130,246,0.2) 100%);
+}
+
+.pipeline-step:last-child .pipeline-stem { display: none; }
+
+.pipeline-card {
+  flex: 1;
+  background: var(--bg-card);
+  border: 1px solid var(--border-light);
+  border-radius: 8px;
+  padding: 0.75rem 1rem;
+  margin: 0.35rem 0;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.pipeline-card:hover {
+  border-color: var(--accent-blue);
+  box-shadow: 0 2px 8px rgba(59,130,246,0.08);
+}
+
+.pipeline-card-title {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 0.25rem;
+}
+
+.pipeline-card-desc {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+
+.pipeline-card-file {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.65rem;
+  color: var(--accent-blue);
+  margin-top: 0.35rem;
+  opacity: 0.8;
+}
+
+/* ── FLOW DIAGRAM (3-engine) ── */
+.flow-diagram {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 2rem 0;
+  padding: 2rem 1rem;
+  background: var(--bg-card);
+  border: 1px solid var(--border-light);
+  border-radius: 12px;
+}
+
+.flow-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.flow-box {
+  padding: 0.6rem 1.1rem;
+  border-radius: 8px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-align: center;
+  border: 2px solid;
+  min-width: 120px;
+  position: relative;
+}
+
+.flow-box.box-blue { background: #dbeafe; color: #1d4ed8; border-color: #93c5fd; }
+.flow-box.box-teal { background: #ccfbf1; color: #0f766e; border-color: #5eead4; }
+.flow-box.box-orange { background: #fef3c7; color: #92400e; border-color: #fcd34d; }
+.flow-box.box-red { background: #fee2e2; color: #991b1b; border-color: #fca5a5; }
+.flow-box.box-green { background: #d1fae5; color: #065f46; border-color: #6ee7b7; }
+.flow-box.box-purple { background: #ede9fe; color: #5b21b6; border-color: #c4b5fd; }
+.flow-box.box-gray { background: #f1f5f9; color: #475569; border-color: #cbd5e1; }
+.flow-box.box-pink { background: #fce7f3; color: #9d174d; border-color: #f9a8d4; }
+
+.flow-box small {
+  display: block;
+  font-weight: 400;
+  font-size: 0.6rem;
+  opacity: 0.8;
+  margin-top: 0.15rem;
+}
+
+.flow-arrow {
+  font-size: 1.2rem;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.flow-arrow-down {
+  font-size: 1.4rem;
+  color: var(--text-muted);
+  line-height: 1;
+}
+
+.flow-label {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.6rem;
+  color: var(--text-muted);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+/* ── DATA TABLE ── */
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 1rem 0;
+  font-size: 0.82rem;
+}
+
+.data-table th {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  padding: 0.65rem 0.75rem;
+  text-align: left;
+  border-bottom: 2px solid var(--border-light);
+  background: rgba(59,130,246,0.03);
+}
+
+.data-table td {
+  padding: 0.55rem 0.75rem;
+  border-bottom: 1px solid var(--border-light);
+  color: var(--text-secondary);
+  vertical-align: top;
+}
+
+.data-table tr:hover td { background: rgba(59,130,246,0.02); }
+
+.data-table .file-path {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.75rem;
+  color: var(--accent-blue);
+}
+
+.data-table .line-count {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+/* ── BADGES ── */
+.badge {
+  display: inline-block;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.65rem;
+  font-weight: 600;
+  padding: 0.2rem 0.5rem;
+  border-radius: 4px;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  vertical-align: middle;
+}
+
+.badge-confirmed { background: #d1fae5; color: #065f46; }
+.badge-disagreed { background: #fef3c7; color: #92400e; }
+.badge-unconfirmed { background: #dbeafe; color: #1d4ed8; }
+.badge-unavailable { background: #f1f5f9; color: #475569; }
+
+/* ── COMPARISON CARDS ── */
+.comparison {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+  margin: 1.25rem 0;
+}
+
+.compare-card {
+  background: var(--bg-card);
+  border: 2px solid var(--border-light);
+  border-radius: 10px;
+  padding: 1.1rem;
+  position: relative;
+}
+
+.compare-card.card-verbatim { border-color: #93c5fd; }
+.compare-card.card-clean { border-color: #6ee7b7; }
+.compare-card.card-parakeet { border-color: #c4b5fd; }
+
+.compare-label {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  margin-bottom: 0.5rem;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.compare-label .label-dot {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+.compare-card.card-verbatim .compare-label { color: #1d4ed8; }
+.compare-card.card-verbatim .label-dot { background: #3b82f6; }
+.compare-card.card-clean .compare-label { color: #065f46; }
+.compare-card.card-clean .label-dot { background: #22c55e; }
+.compare-card.card-parakeet .compare-label { color: #5b21b6; }
+.compare-card.card-parakeet .label-dot { background: #8b5cf6; }
+
+.compare-card p { font-size: 0.82rem; margin-bottom: 0.5rem; }
+
+/* ── HIGHLIGHT WORDS (in compare) ── */
+.hw {
+  display: inline-block;
+  padding: 0.1em 0.35em;
+  border-radius: 3px;
+  font-weight: 600;
+  font-size: 0.85em;
+}
+
+.hw-correct { background: #d1fae5; color: #065f46; }
+.hw-sub { background: #fef3c7; color: #92400e; }
+.hw-omission { background: #fee2e2; color: #991b1b; text-decoration: line-through; }
+.hw-insertion { background: #dbeafe; color: #1d4ed8; }
+.hw-struggle { background: #ccfbf1; color: #0f766e; border: 1px dotted #14b8a6; }
+.hw-disfluency { background: #f5f5f5; color: #9e9e9e; font-style: italic; }
+.hw-unknown { background: #f3e5f5; color: #7b1fa2; font-style: italic; }
+
+/* ── TIER LEGEND ── */
+.tier-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin: 1rem 0;
+}
+
+.tier-chip {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.3rem 0.65rem;
+  border-radius: 6px;
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+
+.tier-quick { background: #c8e6c9; color: #1b5e20; }
+.tier-steady { background: #e8f5e9; color: #2e7d32; }
+.tier-slow { background: #fff9c4; color: #f57f17; }
+.tier-struggling { background: #ffe0b2; color: #e65100; }
+.tier-stalled { background: #ffcdd2; color: #b71c1c; }
+.tier-omitted { background: #e0e0e0; color: #616161; text-decoration: line-through; }
+.tier-nodata { background: #f5f5f5; color: #bdbdbd; }
+
+/* ── CALLOUT ── */
+.callout {
+  border-left: 3px solid;
+  padding: 0.85rem 1rem;
+  margin: 1rem 0;
+  border-radius: 0 8px 8px 0;
+  font-size: 0.85rem;
+}
+
+.callout-blue { border-color: var(--accent-blue); background: rgba(59,130,246,0.05); }
+.callout-orange { border-color: var(--accent-orange); background: rgba(245,158,11,0.05); }
+.callout-green { border-color: var(--accent-green); background: rgba(34,197,94,0.05); }
+.callout-red { border-color: var(--accent-red); background: rgba(239,68,68,0.05); }
+.callout-purple { border-color: var(--accent-purple); background: rgba(139,92,246,0.05); }
+
+.callout strong { color: var(--text-primary); }
+
+/* ── SCORING FORMULA ── */
+.formula {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 1rem 1.25rem;
+  background: var(--bg-card);
+  border: 1px solid var(--border-light);
+  border-radius: 8px;
+  margin: 1rem 0;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.85rem;
+  flex-wrap: wrap;
+}
+
+.formula-label {
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-right: 0.25rem;
+}
+
+.formula-eq { color: var(--accent-blue); font-weight: 700; }
+
+/* ── STATUS MATRIX ── */
+.status-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 0.75rem;
+  margin: 1rem 0;
+}
+
+.status-card {
+  padding: 0.75rem;
+  border-radius: 8px;
+  border: 1px solid;
+}
+
+.status-card h4 {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.75rem;
+  font-weight: 700;
+  margin-bottom: 0.3rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.status-card p {
+  font-size: 0.78rem;
+  line-height: 1.5;
+  margin: 0;
+}
+
+.status-confirmed { background: #f0fdf4; border-color: #86efac; }
+.status-confirmed h4 { color: #166534; }
+.status-disagreed { background: #fffbeb; border-color: #fde68a; }
+.status-disagreed h4 { color: #92400e; }
+.status-unconfirmed { background: #eff6ff; border-color: #93c5fd; }
+.status-unconfirmed h4 { color: #1e40af; }
+.status-unavailable { background: #f8fafc; border-color: #e2e8f0; }
+.status-unavailable h4 { color: #64748b; }
+
+/* ── MOBILE ── */
+.sidebar-toggle {
+  display: none;
+  position: fixed;
+  top: 1rem; left: 1rem;
+  width: 40px; height: 40px;
+  background: var(--bg-sidebar);
+  border: 1px solid var(--border-dark);
+  border-radius: 8px;
+  color: #fff;
+  font-size: 1.2rem;
+  cursor: pointer;
+  z-index: 200;
+  align-items: center;
+  justify-content: center;
+}
+
+@media (max-width: 900px) {
+  .sidebar { transform: translateX(-100%); transition: transform 0.3s; }
+  .sidebar.mobile-open { transform: translateX(0); }
+  .main { margin-left: 0; }
+  .content { padding: 2rem 1.25rem 4rem; }
+  .sidebar-toggle { display: flex; }
+  .hero h1 { font-size: 2rem; }
+  .comparison { grid-template-columns: 1fr; }
+  .flow-row { flex-direction: column; }
+  .flow-arrow { transform: rotate(90deg); }
+}
+
+/* ── STRUGGLE PATHS ── */
+.paths-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.75rem;
+  margin: 1rem 0;
+}
+
+@media (max-width: 700px) { .paths-grid { grid-template-columns: 1fr; } }
+
+.path-card {
+  background: var(--bg-card);
+  border: 2px solid var(--border-light);
+  border-radius: 10px;
+  padding: 1rem;
+  text-align: center;
+}
+
+.path-card h4 {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.75rem;
+  font-weight: 700;
+  margin-bottom: 0.5rem;
+}
+
+.path-card p { font-size: 0.78rem; text-align: left; margin: 0; }
+
+.path-card.path-1 { border-color: #fcd34d; }
+.path-card.path-1 h4 { color: #92400e; }
+.path-card.path-2 { border-color: #f9a8d4; }
+.path-card.path-2 h4 { color: #9d174d; }
+.path-card.path-3 { border-color: #c4b5fd; }
+.path-card.path-3 h4 { color: #5b21b6; }
+
+/* ── DIVIDER ── */
+.divider {
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--border-light) 20%, var(--border-light) 80%, transparent);
+  margin: 3rem 0;
+}
+
+/* ── ANIMATIONS ── */
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.section { animation: fadeUp 0.5s ease both; }
+.section:nth-child(2) { animation-delay: 0.05s; }
+.section:nth-child(3) { animation-delay: 0.1s; }
+
+/* ── FIVE-SYNC ── */
+.sync-list {
+  counter-reset: sync;
+  list-style: none;
+  padding-left: 0;
+  margin: 1rem 0;
+}
+
+.sync-list li {
+  counter-increment: sync;
+  display: flex;
+  align-items: baseline;
+  gap: 0.75rem;
+  padding: 0.5rem 0;
+  border-bottom: 1px solid var(--border-light);
+}
+
+.sync-list li::before {
+  content: counter(sync);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: var(--accent-blue);
+  background: rgba(59,130,246,0.1);
+  width: 22px; height: 22px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+</style>
+</head>
+<body>
+
+<button class="sidebar-toggle" onclick="document.querySelector('.sidebar').classList.toggle('mobile-open')" aria-label="Toggle navigation">&#9776;</button>
+
+<nav class="sidebar">
+  <div class="sidebar-brand">
+    <h1>PACER</h1>
+    <p>System Architecture v3.0</p>
+  </div>
+  <div class="sidebar-nav">
+    <div class="nav-section-label">Overview</div>
+    <a href="#vision" class="nav-link"><span class="nav-num">00</span> Why This Exists</a>
+    <a href="#overview" class="nav-link"><span class="nav-num">01</span> System Overview</a>
+    <a href="#audio" class="nav-link"><span class="nav-num">02</span> Audio Capture</a>
+
+    <div class="nav-section-label">ASR Engines</div>
+    <a href="#reverb" class="nav-link"><span class="nav-dot" style="background:#3b82f6"></span> Reverb Engine</a>
+    <a href="#parakeet" class="nav-link"><span class="nav-dot" style="background:#8b5cf6"></span> Parakeet TDT</a>
+    <a href="#deepgram" class="nav-link"><span class="nav-dot" style="background:#f59e0b"></span> Deepgram Nova-3</a>
+    <a href="#crossval" class="nav-link"><span class="nav-dot" style="background:#14b8a6"></span> 3-Way Verdict</a>
+
+    <div class="nav-section-label">Processing</div>
+    <a href="#normalize" class="nav-link"><span class="nav-num">07</span> Text Normalization</a>
+    <a href="#alignment" class="nav-link"><span class="nav-num">08</span> Alignment Engine</a>
+    <a href="#diagnostics" class="nav-link"><span class="nav-num">09</span> Diagnostics Pipeline</a>
+    <a href="#struggle" class="nav-link"><span class="nav-num">10</span> Struggle System</a>
+
+    <div class="nav-section-label">Output</div>
+    <a href="#speedmap" class="nav-link"><span class="nav-num">11</span> Word Speed Map</a>
+    <a href="#metrics" class="nav-link"><span class="nav-num">12</span> Metrics</a>
+    <a href="#ui" class="nav-link"><span class="nav-num">13</span> UI Rendering</a>
+    <a href="#ocr" class="nav-link"><span class="nav-num">14</span> OCR Integration</a>
+    <a href="#engagement" class="nav-link"><span class="nav-num">15</span> Engagement</a>
+    <a href="#filemap" class="nav-link"><span class="nav-num">16</span> File Map</a>
+  </div>
+  <div class="sidebar-footer">
+    45+ JS modules &middot; 1 Python server<br>
+    &copy; PACER Assessment Tool
+  </div>
+</nav>
+
+<div class="main">
+<div class="content">
+
+<!-- ═══════════ HERO ═══════════ -->
+<div class="hero">
+  <div class="hero-overline">Technical Reference</div>
+  <h1>System <span>Architecture</span> &amp; Data Flow</h1>
+  <p class="hero-desc">
+    PACER is a <strong>struggle detector</strong> that goes beyond traditional ORF scoring.
+    The goal is not just words-correct-per-minute &mdash; it's understanding <em>every dimension</em>
+    of a child's reading difficulty: where they hesitate, how they attempt to decode, when they
+    self-correct, what patterns reveal about their phonemic awareness. ASR models were never
+    designed for this &mdash; they produce artifacts, hallucinations, and timing quirks that must
+    be untangled before the signal becomes trustworthy. This pipeline exists to do that untangling,
+    so an AI can ultimately receive a clean, rich portrait of the child's reading and deliver
+    actionable insight to the teacher.
+  </p>
+</div>
+
+<!-- ═══════════ 00 VISION ═══════════ -->
+<div class="section" id="vision">
+  <div class="section-header">
+    <span class="section-num">00</span>
+    <h2 class="section-title">Why This Exists</h2>
+  </div>
+
+  <div class="callout callout-purple">
+    <strong>The mission:</strong> Build a struggle detector, not just an ORF scorer.
+  </div>
+
+  <p>Traditional ORF tools answer a narrow question: <em>how many words did the child read correctly in one minute?</em>
+  That number is useful, but it's a shadow on the wall. It doesn't tell the teacher <em>why</em> the child scored 47 WCPM.
+  Was it because they can't decode multisyllabic words? Because they freeze at proper nouns? Because they read every word
+  correctly but at a glacial pace? Because they self-correct constantly, burning time on words they actually know?</p>
+
+  <p>PACER's goal is to capture the <strong>full texture of the child's reading struggle</strong> &mdash; every hesitation,
+  every partial attempt, every self-correction, every pace anomaly &mdash; and preserve it with enough fidelity that an AI
+  can later reason over it and produce a clear, actionable explanation for the teacher. Something like:
+  <em>"Jayden decoded most single-syllable words fluently but stalled on 4 of 6 multisyllabic words, often producing
+  the first syllable correctly before giving up. He self-corrected twice, both on high-frequency sight words, suggesting
+  he recognizes his own errors but loses confidence on longer words."</em></p>
+
+  <div class="callout callout-blue">
+    <strong>Independent Reference Alignment:</strong> The current architecture aligns each ASR engine
+    independently to the reference text, then compares per-reference-word in a 3-way verdict.
+  </div>
+
+  <p>The problem is that <strong>ASR models were never designed to be reading assessment tools</strong>. They produce artifacts
+  that look like student errors but aren't:</p>
+
+  <ul>
+    <li><strong>BPE fragmentation:</strong> The student says "platforms" once, but the model outputs "pla" + "for" + "ms" &mdash; three tokens that look like three failed attempts</li>
+    <li><strong>Timestamp quantization:</strong> Short words always show ~100ms duration due to CTC alignment boundaries, making pace analysis unreliable</li>
+    <li><strong>Hallucinated disfluencies:</strong> A model might insert "um" or repeat a word that the student said cleanly</li>
+    <li><strong>Missed disfluencies:</strong> The student said "the the the book" but the model collapses it to "the book"</li>
+    <li><strong>Compound splitting:</strong> "everyone" becomes "every" + "one" &mdash; one correct word looks like a substitution plus an insertion</li>
+    <li><strong>Confidence score fiction:</strong> Some models report 1.0 confidence on every word, others report 0.3 on words they transcribed perfectly</li>
+  </ul>
+
+  <p>Every stage of this pipeline exists to <strong>separate student behavior from ASR artifact</strong>. The multi-engine
+  approach (Reverb dual-pass + Parakeet cross-validation) provides redundancy. The graded alignment, compound merging,
+  fragment absorption, and struggle detection recover the true signal. The result is a data structure rich enough that
+  an AI layer on top can move beyond "47 WCPM, 82% accuracy" and toward genuine understanding of the child's reading profile.</p>
+</div>
+
+<div class="divider"></div>
+
+<!-- ═══════════ 01 OVERVIEW ═══════════ -->
+<div class="section" id="overview">
+  <div class="section-header">
+    <span class="section-num">01</span>
+    <h2 class="section-title">System Overview</h2>
+  </div>
+
+  <p>The "Kitchen Sink" pipeline combines three independent ASR engines to produce a high-confidence
+  oral reading fluency assessment. Audio is processed in parallel by Reverb (dual-pass) and Parakeet
+  (optionally Deepgram as fallback). Each engine is independently aligned to the reference text via
+  Needleman-Wunsch, then compared per-reference-word in a 3-way verdict.</p>
+
+  <div class="flow-diagram">
+    <div class="flow-label">Audio Input</div>
+    <div class="flow-row">
+      <div class="flow-box box-gray">Browser<small>MediaRecorder</small></div>
+      <span class="flow-arrow">&rarr;</span>
+      <div class="flow-box box-gray">WAV + Pad<small>+1s silence</small></div>
+      <span class="flow-arrow">&rarr;</span>
+      <div class="flow-box box-blue">Backend<small>FastAPI :8765</small></div>
+    </div>
+    <span class="flow-arrow-down">&darr;</span>
+    <div class="flow-label">Parallel ASR Processing</div>
+    <div class="flow-row">
+      <div class="flow-box box-blue">Reverb v=1.0<small>Verbatim</small></div>
+      <div class="flow-box box-green">Reverb v=0.0<small>Clean</small></div>
+      <div class="flow-box box-purple">Parakeet TDT<small>Cross-validator</small></div>
+    </div>
+    <span class="flow-arrow-down">&darr;</span>
+    <div class="flow-label">3 Independent Reference Alignments</div>
+    <div class="flow-row">
+      <div class="flow-box box-blue">V1 &rarr; Ref<small>NW graded</small></div>
+      <div class="flow-box box-green">V0 &rarr; Ref<small>NW graded</small></div>
+      <div class="flow-box box-purple">Pk &rarr; Ref<small>NW graded</small></div>
+    </div>
+    <span class="flow-arrow-down">&darr;</span>
+    <div class="flow-label">Spillover &amp; 3-Way Verdict</div>
+    <div class="flow-row">
+      <div class="flow-box box-teal">Spillover<small>Per-engine</small></div>
+      <span class="flow-arrow">&rarr;</span>
+      <div class="flow-box box-orange">3-Way Verdict<small>Per-ref-word</small></div>
+      <span class="flow-arrow">&rarr;</span>
+      <div class="flow-box box-pink">Diagnostics<small>5 detectors</small></div>
+    </div>
+    <span class="flow-arrow-down">&darr;</span>
+    <div class="flow-label">Output</div>
+    <div class="flow-row">
+      <div class="flow-box box-green">WCPM &amp; Accuracy</div>
+      <div class="flow-box box-purple">Word Speed Map</div>
+      <div class="flow-box box-blue">Interactive UI</div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════ 02 AUDIO ═══════════ -->
+<div class="section" id="audio">
+  <div class="section-header">
+    <span class="section-num">02</span>
+    <h2 class="section-title">Audio Capture &amp; Preprocessing</h2>
+  </div>
+
+  <div class="collapsible">
+    <div class="collapsible-header" onclick="this.parentElement.classList.toggle('open')">
+      <span class="collapsible-arrow">&#9654;</span>
+      <span class="collapsible-tag tag-pipeline">Pipeline</span>
+      <span class="collapsible-title">Recording &amp; Audio Padding</span>
+    </div>
+    <div class="collapsible-body"><div class="collapsible-content">
+      <p>The browser captures audio via <code>MediaRecorder</code> at 48kHz/128kbps Opus.
+      All browser processing (AGC, noise suppression, echo cancellation) is <strong>disabled</strong> &mdash;
+      both Reverb and Parakeet handle their own internal normalization during feature extraction.</p>
+
+      <div class="subsection">
+        <div class="subsection-title">1s Silence Padding</div>
+        <p>CTC-based ASR models use a "lookahead window" to resolve final phonemes. If audio ends exactly
+        when the last word ends, the model has zero future context. Solution: append 1000ms of silence.</p>
+        <div class="code-block">
+<span class="kw">const</span> <span class="var">PADDING_DURATION_MS</span> = <span class="num">1000</span>;  <span class="cmt">// CTC models need ≥1s trailing context</span>
+
+<span class="cmt">// Decode → create padded buffer → encode WAV</span>
+<span class="kw">const</span> <span class="var">paddedBuffer</span> = audioContext.<span class="fn">createBuffer</span>(
+  originalBuffer.numberOfChannels,
+  originalBuffer.length + paddingSamples,  <span class="cmt">// silence = zeros</span>
+  sampleRate
+);
+        </div>
+      </div>
+
+      <div class="subsection">
+        <div class="subsection-title">WAV Encoding</div>
+        <p>Audio is encoded to PCM 16-bit WAV for backend compatibility. The <code>encodeWAV()</code> function
+        writes a standard 44-byte RIFF header followed by interleaved sample data.</p>
+      </div>
+
+      <p><code>js/audio-padding.js</code> &middot; <code>js/recorder.js</code></p>
+    </div></div>
+  </div>
+</div>
+
+<!-- ═══════════ 03 REVERB ═══════════ -->
+<div class="section" id="reverb">
+  <div class="section-header">
+    <span class="section-num">03</span>
+    <h2 class="section-title">Reverb ASR Engine</h2>
+  </div>
+
+  <p>Reverb is the primary ASR engine &mdash; Rev.ai's open-source model built on the wenet CTC toolkit
+  with attention rescoring. The key innovation is the <strong>dual-pass system</strong>: running the same model
+  twice with different verbatimicity settings to detect disfluencies.</p>
+
+  <div class="comparison">
+    <div class="compare-card card-verbatim">
+      <div class="compare-label"><span class="label-dot"></span>Verbatim Pass &mdash; v=1.0</div>
+      <p><strong>Preserves all disfluencies:</strong> fillers (um, uh), repetitions, false starts, hesitations.</p>
+      <p>Output includes word-level timestamps and real confidence scores from the attention decoder's log-softmax probabilities.</p>
+      <p style="margin:0">Example: <span class="hw hw-correct">I</span> <span class="hw hw-disfluency">um</span> <span class="hw hw-correct">like</span> <span class="hw hw-correct">to</span> <span class="hw hw-correct">read</span> <span class="hw hw-correct">the</span> <span class="hw hw-disfluency">the</span> <span class="hw hw-correct">book</span></p>
+    </div>
+    <div class="compare-card card-clean">
+      <div class="compare-label"><span class="label-dot"></span>Clean Pass &mdash; v=0.0</div>
+      <p><strong>Removes disfluencies</strong> via model conditioning. Same model, same audio &mdash; only the verbatimicity parameter changes.</p>
+      <p>Comparing v=1.0 vs v=0.0 via sequence alignment reveals exactly <em>where</em> disfluencies occurred.</p>
+      <p style="margin:0">Example: <span class="hw hw-correct">I</span> <span class="hw hw-correct">like</span> <span class="hw hw-correct">to</span> <span class="hw hw-correct">read</span> <span class="hw hw-correct">the</span> <span class="hw hw-correct">book</span></p>
+    </div>
+  </div>
+
+  <div class="collapsible open">
+    <div class="collapsible-header" onclick="this.parentElement.classList.toggle('open')">
+      <span class="collapsible-arrow">&#9654;</span>
+      <span class="collapsible-tag tag-engine">Engine</span>
+      <span class="collapsible-title">Why Both Passes Are Needed</span>
+    </div>
+    <div class="collapsible-body"><div class="collapsible-content">
+      <div class="callout callout-blue">
+        <strong>Clinical ORF context:</strong> Disfluencies (fillers, repetitions, false starts) are NOT reading errors.
+        They're self-correction attempts that show student effort. They don't count against WCPM.
+      </div>
+      <p>Generic STT models (Google, Deepgram, Parakeet) aren't trained to preserve disfluencies consistently. They may
+      hallucinate disfluencies, miss ones that occurred, or collapse multiple tokens. By running the <em>same</em> model
+      in two modes on the <em>same</em> audio:</p>
+      <ul>
+        <li><strong>Verbatim</strong> shows what the student actually said (including disfluencies)</li>
+        <li><strong>Clean</strong> shows what the student intended to say (without disfluencies)</li>
+        <li><strong>V0 serves as a voter</strong> in the 3-way verdict (its alignment is compared per-ref-word alongside V1 and Parakeet)</li>
+      </ul>
+      <p>Disfluency classification happens in <code>js/app.js</code> (filler tagging at line 965): known fillers
+      (<code>um</code>, <code>uh</code>, <code>uh-huh</code>, <code>mm</code>, <code>hmm</code>, <code>er</code>, <code>ah</code>)
+      are tagged via the <code>FILLER_WORDS</code> set. The earlier V0 insertion diff approach (flagging false starts
+      by comparing V1 vs V0 insertions) was removed &mdash; false starts are now caught by the near-miss / self-correction system in diagnostics.</p>
+    </div></div>
+  </div>
+
+  <div class="collapsible">
+    <div class="collapsible-header" onclick="this.parentElement.classList.toggle('open')">
+      <span class="collapsible-arrow">&#9654;</span>
+      <span class="collapsible-tag tag-data">Data</span>
+      <span class="collapsible-title">CTM Format &amp; Timestamp Parsing</span>
+    </div>
+    <div class="collapsible-body"><div class="collapsible-content">
+      <p>wenet's CTC decoder outputs CTM (Conversation Time Marked) format with real per-word confidence scores
+      when using <code>mode="attention_rescoring"</code>.</p>
+      <div class="code-block">
+<span class="cmt"># CTM format: &lt;file&gt; &lt;channel&gt; &lt;start&gt; &lt;duration&gt; &lt;word&gt; &lt;confidence&gt;</span>
+1  1  0.12  0.33  I      <span class="num">0.92</span>
+1  1  0.45  0.17  um     <span class="num">0.78</span>
+1  1  0.62  0.42  like   <span class="num">0.85</span>
+1  1  1.04  0.28  to     <span class="num">0.91</span>
+      </div>
+      <div class="callout callout-orange">
+        <strong>100ms Duration Quirk:</strong> Single-BPE-token words always show ~100ms duration. This is <em>not</em> a parsing bug &mdash;
+        it's inherent to wenet's CTC alignment boundary heuristic (<code>g_time_stamp_gap_ms = 100</code>). Multi-token words get
+        variable durations (e.g., "waddled" 340ms, "soaked" 860ms).
+      </div>
+      <p>The <code>&lt;unknown&gt;</code> token is emitted when the CTC decoder detects speech but can't match vocabulary.
+      It flows through the pipeline unchanged and is displayed as <span class="hw hw-unknown">[unknown]</span> in the UI.</p>
+    </div></div>
+  </div>
+
+  <div class="collapsible">
+    <div class="collapsible-header" onclick="this.parentElement.classList.toggle('open')">
+      <span class="collapsible-arrow">&#9654;</span>
+      <span class="collapsible-tag tag-server">Server</span>
+      <span class="collapsible-title">Backend Architecture</span>
+    </div>
+    <div class="collapsible-body"><div class="collapsible-content">
+      <table class="data-table">
+        <tr><th>Component</th><th>Detail</th></tr>
+        <tr><td>Framework</td><td>FastAPI + Uvicorn, port 8765</td></tr>
+        <tr><td>Container</td><td>Docker with NVIDIA GPU (8GB VRAM min)</td></tr>
+        <tr><td>GPU Lock</td><td><code>asyncio.Lock()</code> serializes all GPU operations (prevents OOM)</td></tr>
+        <tr><td>Model Loading</td><td>Lazy on first request (~30&ndash;60s), then ~5&ndash;15s per request</td></tr>
+        <tr><td>Rate Limit</td><td>10 req/min on <code>/ensemble</code></td></tr>
+        <tr><td>Auth</td><td>Optional Bearer token via <code>ORF_AUTH_TOKEN</code></td></tr>
+        <tr><td>Max Payload</td><td>25MB (covers ~15MB base64-encoded WAV)</td></tr>
+        <tr><td>VRAM Cleanup</td><td><code>torch.cuda.empty_cache()</code> after each transcription</td></tr>
+      </table>
+
+      <div class="subsection">
+        <div class="subsection-title">Endpoints</div>
+      </div>
+      <div class="code-block">
+<span class="kw">GET</span>  <span class="str">/health</span>     <span class="cmt">— Service status, GPU info, model state</span>
+<span class="kw">POST</span> <span class="str">/ensemble</span>   <span class="cmt">— Dual-pass transcription (v=1.0 + v=0.0)</span>
+<span class="kw">POST</span> <span class="str">/deepgram</span>   <span class="cmt">— Deepgram Nova-3 proxy (CORS bypass)</span>
+<span class="kw">POST</span> <span class="str">/parakeet</span>   <span class="cmt">— Parakeet TDT local inference</span>
+<span class="kw">POST</span> <span class="str">/deepgram-maze</span> <span class="cmt">— Keyterm-boosted short-audio recognition (maze game, 20 req/min)</span>
+      </div>
+
+      <p><code>services/reverb/server.py</code> &middot; <code>services/reverb/Dockerfile</code> &middot; <code>services/reverb/docker-compose.yml</code></p>
+    </div></div>
+  </div>
+</div>
+
+<!-- ═══════════ 04 PARAKEET ═══════════ -->
+<div class="section" id="parakeet">
+  <div class="section-header">
+    <span class="section-num">04</span>
+    <h2 class="section-title">Parakeet TDT Engine</h2>
+  </div>
+
+  <div class="collapsible open">
+    <div class="collapsible-header" onclick="this.parentElement.classList.toggle('open')">
+      <span class="collapsible-arrow">&#9654;</span>
+      <span class="collapsible-tag tag-engine">Engine</span>
+      <span class="collapsible-title">NVIDIA Parakeet TDT 0.6B v3</span>
+    </div>
+    <div class="collapsible-body"><div class="collapsible-content">
+      <p>Parakeet is NVIDIA's Token-and-Duration Transducer model, running locally on the same GPU as Reverb.
+      It serves as the <strong>cross-validator</strong>: an independent second opinion on what the student said.</p>
+
+      <table class="data-table">
+        <tr><th>Property</th><th>Value</th></tr>
+        <tr><td>Model</td><td><code>nvidia/parakeet-tdt-0.6b-v3</code></td></tr>
+        <tr><td>Architecture</td><td>Token-and-Duration Transducer (TDT)</td></tr>
+        <tr><td>VRAM</td><td>~600MB (lightweight)</td></tr>
+        <tr><td>Audio Format</td><td>Mono, 16kHz (ffmpeg conversion required)</td></tr>
+        <tr><td>Confidence</td><td>Always 1.0 (TDT limitation &mdash; no per-word scores)</td></tr>
+        <tr><td>API Key</td><td>Not required (local inference)</td></tr>
+        <tr><td>Role</td><td>Cross-validator &amp; <strong>primary timekeeper</strong></td></tr>
+      </table>
+
+      <div class="callout callout-purple">
+        <strong>Primary Timekeeper:</strong> Parakeet's word-level timestamps are used as the primary time source
+        for duration analysis, word speed tiers, and click-to-play audio. Reverb's timestamps are secondary
+        (100ms BPE quantization makes them less reliable for short words).
+      </div>
+
+      <div class="subsection">
+        <div class="subsection-title">Audio Preprocessing</div>
+        <p>Parakeet TDT requires mono audio at 16kHz. The server converts via ffmpeg before inference:</p>
+        <div class="code-block">
+ffmpeg -y -i input.wav -ac <span class="num">1</span> -ar <span class="num">16000</span> output_mono.wav
+        </div>
+      </div>
+
+      <p><code>js/parakeet-api.js</code> &middot; Timeout: 40s &middot; Endpoint: <code>POST /parakeet</code></p>
+    </div></div>
+  </div>
+</div>
+
+<!-- ═══════════ 05 DEEPGRAM ═══════════ -->
+<div class="section" id="deepgram">
+  <div class="section-header">
+    <span class="section-num">05</span>
+    <h2 class="section-title">Deepgram Nova-3</h2>
+  </div>
+
+  <div class="collapsible">
+    <div class="collapsible-header" onclick="this.parentElement.classList.toggle('open')">
+      <span class="collapsible-arrow">&#9654;</span>
+      <span class="collapsible-tag tag-engine">Engine</span>
+      <span class="collapsible-title">Alternative Cross-Validator (Cloud API)</span>
+    </div>
+    <div class="collapsible-body"><div class="collapsible-content">
+      <p>Deepgram Nova-3 is a cloud-based ASR used as a <strong>fallback cross-validator</strong> when Parakeet is unavailable.
+      Deepgram fills Parakeet's slot in the 3-way alignment when needed.
+      The browser cannot call Deepgram directly (CORS restrictions), so requests are proxied through the backend server.</p>
+
+      <table class="data-table">
+        <tr><th>Property</th><th>Value</th></tr>
+        <tr><td>Model</td><td><code>nova-3</code> with <code>smart_format=True</code></td></tr>
+        <tr><td>Confidence</td><td>Real per-word scores (0.0&ndash;1.0)</td></tr>
+        <tr><td>Timestamp Format</td><td>String with 's' suffix: <code>"1.234s"</code></td></tr>
+        <tr><td>Timeout</td><td>30s (browser-side AbortSignal)</td></tr>
+        <tr><td>Auth</td><td><code>DEEPGRAM_API_KEY</code> env var on server</td></tr>
+      </table>
+
+      <p><code>js/deepgram-api.js</code> &middot; Endpoint: <code>POST /deepgram</code></p>
+    </div></div>
+  </div>
+</div>
+
+<!-- ═══════════ 06 CROSSVAL ═══════════ -->
+<div class="section" id="crossval">
+  <div class="section-header">
+    <span class="section-num">06</span>
+    <h2 class="section-title">3-Way Verdict System</h2>
+  </div>
+
+  <p>Each engine is independently
+  aligned to the reference text via <code>alignWords()</code>, producing three parallel ref-entry arrays.
+  After spillover consolidation, insertions are filtered out and the remaining ref-aligned entries
+  are compared per-reference-word in a 3-way decision matrix.</p>
+
+  <div class="collapsible open">
+    <div class="collapsible-header" onclick="this.parentElement.classList.toggle('open')">
+      <span class="collapsible-arrow">&#9654;</span>
+      <span class="collapsible-tag tag-algorithm">Algorithm</span>
+      <span class="collapsible-title">3-Way Per-Ref-Word Decision Matrix</span>
+    </div>
+    <div class="collapsible-body"><div class="collapsible-content">
+
+      <p>For each reference word, the V1, V0, and Parakeet alignment entries are compared.
+      The V1 entry is primary; V0 and Parakeet serve as validators.</p>
+
+      <div class="status-grid">
+        <div class="status-card status-confirmed">
+          <h4>Confirmed</h4>
+          <p>2+ engines agree on correct; or V1 compound match confirmed by another engine;
+          or all engines agree on the same substitution; or 2+ engines report omission.</p>
+        </div>
+        <div class="status-card status-disagreed">
+          <h4>Disagreed</h4>
+          <p>V1 substitution but Parakeet heard it correctly (V1 overridden);
+          or V1 &amp; Parakeet wrong but V0 correct (V0 tiebreak).</p>
+        </div>
+        <div class="status-card" style="background:#fff0f0;border-color:#fca5a5">
+          <h4 style="color:#991b1b">Recovered</h4>
+          <p>V1 omitted the word, but Parakeet heard it correctly &mdash;
+          word is recovered from cross-validator with timestamps.</p>
+        </div>
+        <div class="status-card" style="background:#fefce8;border-color:#fde68a">
+          <h4 style="color:#92400e">Confirmed Omission</h4>
+          <p>All three engines omitted the word. High confidence the student
+          did not attempt it.</p>
+        </div>
+        <div class="status-card status-unconfirmed">
+          <h4>Unconfirmed</h4>
+          <p>Only V1 heard the word correctly; other engines disagree or are absent.</p>
+        </div>
+        <div class="status-card status-unavailable">
+          <h4>Unavailable</h4>
+          <p>No cross-validator engines available. Graceful degradation to V1 only.</p>
+        </div>
+      </div>
+
+      <div class="callout callout-blue">
+        <strong>Three timestamp sources per word:</strong> Cross-validator / Parakeet (primary for timing),
+        Reverb v=1.0 (secondary), and Reverb v=0.0 (for disfluency delta). When engines disagree,
+        V1 entry is the anchor; disagreed words are overridden to correct with Parakeet timestamps.
+      </div>
+    </div></div>
+  </div>
+
+  <div class="collapsible">
+    <div class="collapsible-header" onclick="this.parentElement.classList.toggle('open')">
+      <span class="collapsible-arrow">&#9654;</span>
+      <span class="collapsible-tag tag-data">Data</span>
+      <span class="collapsible-title">Confirmed Insertions &amp; Timestamp Propagation</span>
+    </div>
+    <div class="collapsible-body"><div class="collapsible-content">
+      <p>After the 3-way ref-word comparison, insertions are cross-validated at their ref-word boundary position.
+      When <strong>all available engines</strong> independently hear the same extra word at the same boundary,
+      it becomes a <strong>confirmed insertion</strong> (<code>_confirmedInsertion: true</code>) and counts as an error.</p>
+      <ul>
+        <li>Exclusions: fillers, self-corrections, struggle fragments, CTC artifacts are cleared in post-validation</li>
+        <li>Regular (single/dual-engine) insertions remain non-errors</li>
+        <li>Omission recovery: unconsumed Parakeet words at omitted ref slots recover the word with timestamps</li>
+      </ul>
+      <p>Timestamps flow through the entire pipeline: <code>_xvalStartTime</code> / <code>_xvalEndTime</code> (primary),
+      <code>_reverbStartTime</code> / <code>_reverbEndTime</code> (fallback), used by prosody metrics, word speed tiers, and click-to-play.</p>
+      <p><code>js/cross-validator.js</code> (engine routing) &middot; <code>js/app.js</code> (3-way logic)</p>
+    </div></div>
+  </div>
+</div>
+
+<div class="divider"></div>
+
+<!-- ═══════════ 07 NORMALIZE ═══════════ -->
+<div class="section" id="normalize">
+  <div class="section-header">
+    <span class="section-num">07</span>
+    <h2 class="section-title">Text Normalization</h2>
+  </div>
+
+  <div class="collapsible open">
+    <div class="collapsible-header" onclick="this.parentElement.classList.toggle('open')">
+      <span class="collapsible-arrow">&#9654;</span>
+      <span class="collapsible-tag tag-pipeline">Pipeline</span>
+      <span class="collapsible-title">normalizeText() Transformation Chain</span>
+    </div>
+    <div class="collapsible-body"><div class="collapsible-content">
+      <div class="code-block">
+<span class="kw">export function</span> <span class="fn">normalizeText</span>(text) {
+  <span class="kw">const</span> <span class="var">tokens</span> = text
+    .<span class="fn">replace</span>(<span class="str">/-\s*\n\s*/g</span>, <span class="str">''</span>)     <span class="cmt">// Rejoin line-break hyphens</span>
+    .<span class="fn">toLowerCase</span>()
+    .<span class="fn">split</span>(<span class="str">/\s+/</span>)
+    .<span class="fn">map</span>(w => w.<span class="fn">replace</span>(<span class="str">/^[^\w'-]+|[^\w'-]+$/g</span>, <span class="str">''</span>))  <span class="cmt">// Strip punctuation</span>
+    .<span class="fn">map</span>(w => w.<span class="fn">replace</span>(<span class="str">/\./g</span>, <span class="str">''</span>))     <span class="cmt">// Strip periods (i.e. → ie)</span>
+    .<span class="fn">filter</span>(w => w.length > <span class="num">0</span>);
+
+  <span class="cmt">// 1. Merge trailing-hyphen tokens: "spread-" + "sheet" → "spreadsheet"</span>
+  <span class="cmt">// 2. Split internal-hyphen words: "soft-on-skin" → ["soft", "on", "skin"]</span>
+}
+      </div>
+
+      <div class="callout callout-red">
+        <strong>Critical: Five-place synchronization required.</strong> Whenever hyphen splitting changes in <code>normalizeText()</code>,
+        these five locations must be updated in lockstep, or <code>_displayRef</code> drift causes wrong words displayed:
+      </div>
+
+      <ol class="sync-list">
+        <li><code>normalizeText()</code> in <code>text-normalize.js</code> &mdash; source of truth for alignment word count</li>
+        <li><code>refPositions</code> IIFE in <code>app.js</code> (~line 994) &mdash; drives <code>_displayRef</code> and NL annotation matching</li>
+        <li>Inline punctuation map in <code>ui.js</code> &mdash; cosmetic punctuation map indices</li>
+        <li><code>getPunctuationPositions()</code> in <code>diagnostics.js</code> &mdash; prosody punctuation awareness</li>
+        <li><code>computePauseAtPunctuation()</code> refWords in <code>diagnostics.js</code> &mdash; uncovered mark display text</li>
+      </ol>
+
+      <div class="subsection">
+        <div class="subsection-title">Period Stripping</div>
+        <p>All periods are stripped: <code>"i.e." &rarr; "ie"</code>, <code>"U.S." &rarr; "us"</code>.
+        This ensures internal-period abbreviations produce a single token. The abbreviation expansion merge
+        in alignment.js handles spoken forms (e.g., "that is" for "ie").</p>
+      </div>
+
+      <div class="subsection">
+        <div class="subsection-title">Single-Letter Hyphen Join</div>
+        <p>If any part from hyphen-split is a single character, all parts are joined: <code>"e-mail" &rarr; "email"</code>,
+        <code>"x-ray" &rarr; "xray"</code>. Without this, "e-mail" produces 2 ref tokens but ASR hears "email" as 1 &mdash;
+        causing cascading misalignment.</p>
+      </div>
+
+      <div class="subsection">
+        <div class="subsection-title">Disfluency Filter</div>
+        <p>Common speech disfluencies are removed before alignment: <code>um</code>, <code>uh</code>, <code>uh-huh</code>,
+        <code>mm</code>, <code>hmm</code>, <code>er</code>, <code>ah</code>.</p>
+      </div>
+    </div></div>
+  </div>
+</div>
+
+<!-- ═══════════ 08 ALIGNMENT ═══════════ -->
+<div class="section" id="alignment">
+  <div class="section-header">
+    <span class="section-num">08</span>
+    <h2 class="section-title">Alignment Engine</h2>
+  </div>
+
+  <div class="collapsible open">
+    <div class="collapsible-header" onclick="this.parentElement.classList.toggle('open')">
+      <span class="collapsible-arrow">&#9654;</span>
+      <span class="collapsible-tag tag-algorithm">Algorithm</span>
+      <span class="collapsible-title">Needleman-Wunsch with Graded Substitution</span>
+    </div>
+    <div class="collapsible-body"><div class="collapsible-content">
+      <p>Replaced the original diff-match-patch approach. When two hypothesis words compete for the same
+      reference slot, the one with higher character-level similarity wins.</p>
+
+      <div class="formula">
+        <span class="formula-label">Scoring:</span>
+        match <span class="formula-eq">+2</span> &middot;
+        gap <span class="formula-eq">-1</span> &middot;
+        mismatch <span class="formula-eq">= -1.5 &times; (1 - levenshteinRatio)</span>
+      </div>
+
+      <p><strong>Near-miss</strong> ("bark" &rarr; "barked", ratio ~0.67): penalty = <strong>-0.50</strong> (cheap sub)<br>
+      <strong>Distant</strong> ("the" &rarr; "mission", ratio ~0): penalty = <strong>-1.50</strong> (expensive sub)</p>
+
+      <p>Substitution is always preferred over ins+del (-1.5 &lt; -2.0), so no false gap pairs are created.</p>
+
+      <div class="subsection">
+        <div class="subsection-title">Output Types</div>
+      </div>
+      <div style="display:flex;gap:0.5rem;flex-wrap:wrap;margin:0.5rem 0 1rem">
+        <span class="hw hw-correct">correct</span>
+        <span class="hw hw-sub">substitution</span>
+        <span class="hw hw-omission">omission</span>
+        <span class="hw hw-insertion">insertion</span>
+        <span class="hw hw-struggle">struggle</span>
+      </div>
+    </div></div>
+  </div>
+
+  <div class="collapsible">
+    <div class="collapsible-header" onclick="this.parentElement.classList.toggle('open')">
+      <span class="collapsible-arrow">&#9654;</span>
+      <span class="collapsible-tag tag-pipeline">Pipeline</span>
+      <span class="collapsible-title">Post-Alignment Merging</span>
+    </div>
+    <div class="collapsible-body"><div class="collapsible-content">
+      <p>After initial NW alignment, four merging passes consolidate multi-token STT output into single reference tokens:</p>
+      <ol>
+        <li><strong>mergeCompoundWords:</strong> <code>sub("everyone"/"every") + ins("one")</code> &rarr; <code>correct("everyone")</code>. Creates synthetic <code>sttLookup</code> entries.</li>
+        <li><strong>mergeAbbreviationExpansions:</strong> <code>ref "ie"</code> &rarr; <code>hyp "that is"</code> using the <code>ABBREVIATION_EXPANSIONS</code> table (ie&rarr;"that is", eg&rarr;"for example", etc&rarr;"et cetera").</li>
+        <li><strong>mergeNumberExpansions:</strong> <code>ref "2014"</code> &rarr; <code>hyp "twenty" + "fourteen"</code>. Uses <code>numberToWordForms()</code> to generate all valid spoken forms (year-style, formal, British, oh-style) for numbers 0&ndash;9999.</li>
+        <li><strong>mergeContractions:</strong> Handles <code>don't</code>, <code>can't</code>, <code>I'm</code> where STT splits them.</li>
+      </ol>
+
+      <div class="subsection">
+        <div class="subsection-title">Word Equivalences</div>
+        <p><code>getCanonical()</code> maps equivalent forms: one/1, and/&amp;, etc/etcetera, mt/mount/mountain, ft/fort/foot/feet.
+        Used during alignment scoring but <strong>not</strong> for <code>sttLookup</code> keys (those use normalized forms to avoid misses).</p>
+      </div>
+
+      <p><code>js/alignment.js</code> (870 lines) &middot; <code>js/word-equivalences.js</code> &middot; <code>js/number-words.js</code></p>
+    </div></div>
+  </div>
+</div>
+
+<!-- ═══════════ 09 DIAGNOSTICS ═══════════ -->
+<div class="section" id="diagnostics">
+  <div class="section-header">
+    <span class="section-num">09</span>
+    <h2 class="section-title">Diagnostics Pipeline</h2>
+  </div>
+
+  <p>The full pipeline runs sequentially after the Kitchen Sink returns raw ASR results. Order matters &mdash;
+  several stages depend on outputs from earlier ones (e.g., omission recovery must precede near-miss resolution).
+  The 3 independent reference alignments and 3-way verdict significantly expand the pipeline.</p>
+
+  <div class="pipeline">
+    <div class="pipeline-step">
+      <div class="pipeline-line"><div class="pipeline-dot"></div><div class="pipeline-stem"></div></div>
+      <div class="pipeline-card">
+        <div class="pipeline-card-title">1. Kitchen Sink Merger</div>
+        <div class="pipeline-card-desc">Reverb dual-pass (V1 verbatim + V0 clean) + Parakeet in parallel &rarr; raw words returned</div>
+        <div class="pipeline-card-file">js/kitchen-sink-merger.js</div>
+      </div>
+    </div>
+    <div class="pipeline-step">
+      <div class="pipeline-line"><div class="pipeline-dot"></div><div class="pipeline-stem"></div></div>
+      <div class="pipeline-card">
+        <div class="pipeline-card-title">2. Fragment Pre-Merge</div>
+        <div class="pipeline-card-desc">Reference-aware pre-merging of STT fragments using <code>refNormSet</code> from <code>normalizeText()</code>. Runs before alignment.</div>
+        <div class="pipeline-card-file">js/app.js:512&ndash;577</div>
+      </div>
+    </div>
+    <div class="pipeline-step">
+      <div class="pipeline-line"><div class="pipeline-dot"></div><div class="pipeline-stem"></div></div>
+      <div class="pipeline-card">
+        <div class="pipeline-card-title">3. Three Independent NW Alignments</div>
+        <div class="pipeline-card-desc">V1, V0, and Parakeet each independently aligned to reference text via <code>alignWords()</code> with graded substitution scoring.</div>
+        <div class="pipeline-card-file">js/alignment.js &middot; js/app.js:712&ndash;763</div>
+      </div>
+    </div>
+    <div class="pipeline-step">
+      <div class="pipeline-line"><div class="pipeline-dot dot-teal"></div><div class="pipeline-stem"></div></div>
+      <div class="pipeline-card">
+        <div class="pipeline-card-title">4. Spillover Consolidation</div>
+        <div class="pipeline-card-desc">Per-engine: reassigns struggle fragments greedily assigned to wrong ref slots. Guards: candidate NOT near-miss for own ref, concat with anchor IS near-miss for anchor's ref.</div>
+        <div class="pipeline-card-file">js/alignment.js &middot; consolidateSpilloverFragments()</div>
+      </div>
+    </div>
+    <div class="pipeline-step">
+      <div class="pipeline-line"><div class="pipeline-dot dot-teal"></div><div class="pipeline-stem"></div></div>
+      <div class="pipeline-card">
+        <div class="pipeline-card-title">5&ndash;8. Post-Alignment Merging</div>
+        <div class="pipeline-card-desc">Compound words &rarr; abbreviation expansions &rarr; number expansions &rarr; contractions. Creates synthetic <code>sttLookup</code> entries.</div>
+        <div class="pipeline-card-file">js/alignment.js &middot; merge*()</div>
+      </div>
+    </div>
+    <div class="pipeline-step">
+      <div class="pipeline-line"><div class="pipeline-dot dot-orange"></div><div class="pipeline-stem"></div></div>
+      <div class="pipeline-card">
+        <div class="pipeline-card-title">9. Compound Struggle Reclassification</div>
+        <div class="pipeline-card-desc"><code>type='correct' + compound + parts.length >= 2</code> &rarr; reclassified as struggle. Skips <code>_abbreviationExpansion</code> and <code>_numberExpansion</code> entries.</div>
+        <div class="pipeline-card-file">js/app.js:793&ndash;817</div>
+      </div>
+    </div>
+    <div class="pipeline-step">
+      <div class="pipeline-line"><div class="pipeline-dot dot-red"></div><div class="pipeline-stem"></div></div>
+      <div class="pipeline-card">
+        <div class="pipeline-card-title">10. 3-Way Per-Ref-Word Verdict</div>
+        <div class="pipeline-card-desc">Compares V1, V0, Parakeet per reference word. Statuses: confirmed, disagreed, recovered, confirmed_omission, unconfirmed, unavailable.</div>
+        <div class="pipeline-card-file">js/app.js:849&ndash;1038</div>
+      </div>
+    </div>
+    <div class="pipeline-step">
+      <div class="pipeline-line"><div class="pipeline-dot dot-purple"></div><div class="pipeline-stem"></div></div>
+      <div class="pipeline-card">
+        <div class="pipeline-card-title">11. Filler &amp; Insertion Cross-Validation</div>
+        <div class="pipeline-card-desc">Filler classification (um, uh, etc.) &rarr; 3-way insertion cross-validation (<code>_confirmedInsertion</code>).</div>
+        <div class="pipeline-card-file">js/app.js:1057&ndash;1171</div>
+      </div>
+    </div>
+    <div class="pipeline-step">
+      <div class="pipeline-line"><div class="pipeline-dot dot-purple"></div><div class="pipeline-stem"></div></div>
+      <div class="pipeline-card">
+        <div class="pipeline-card-title">12. CTC Artifact Filtering</div>
+        <div class="pipeline-card-desc">Flags overlapping <code>&lt;unknown&gt;</code> tokens (&le;120ms) as <code>_ctcArtifact</code>. Also filters pre-word and post-word artifacts outside the confirmed word window.</div>
+        <div class="pipeline-card-file">js/app.js:1173&ndash;1227</div>
+      </div>
+    </div>
+    <div class="pipeline-step">
+      <div class="pipeline-line"><div class="pipeline-dot dot-green"></div><div class="pipeline-stem"></div></div>
+      <div class="pipeline-card">
+        <div class="pipeline-card-title">13. Omission Recovery</div>
+        <div class="pipeline-card-desc">Recovers omitted words from unconsumed Parakeet words with timestamps. Adjusts all subsequent <code>hypIndex</code> references. Must run before near-miss resolution.</div>
+        <div class="pipeline-card-file">js/app.js:1229&ndash;1305</div>
+      </div>
+    </div>
+    <div class="pipeline-step">
+      <div class="pipeline-line"><div class="pipeline-dot dot-green"></div><div class="pipeline-stem"></div></div>
+      <div class="pipeline-card">
+        <div class="pipeline-card-title">14. Xval Abbreviation Confirmation</div>
+        <div class="pipeline-card-desc">If Parakeet raw words confirm a short abbreviation form (e.g., "ie"), reclassify substitution as correct.</div>
+        <div class="pipeline-card-file">js/app.js:1307&ndash;1337</div>
+      </div>
+    </div>
+    <div class="pipeline-step">
+      <div class="pipeline-line"><div class="pipeline-dot dot-orange"></div><div class="pipeline-stem"></div></div>
+      <div class="pipeline-card">
+        <div class="pipeline-card-title">15. resolveNearMissClusters</div>
+        <div class="pipeline-card-desc"><strong>Path 2:</strong> Near-miss insertions around substitutions &rarr; upgrade to "struggle" type. Self-corrections identified.</div>
+        <div class="pipeline-card-file">js/diagnostics.js &middot; resolveNearMissClusters()</div>
+      </div>
+    </div>
+    <div class="pipeline-step">
+      <div class="pipeline-line"><div class="pipeline-dot dot-orange"></div><div class="pipeline-stem"></div></div>
+      <div class="pipeline-card">
+        <div class="pipeline-card-title">16. absorbMispronunciationFragments</div>
+        <div class="pipeline-card-desc">Temporal containment: absorbs orphan insertions from BPE fragmentation into parent struggle/substitution (&plusmn;150ms tolerance).</div>
+        <div class="pipeline-card-file">js/diagnostics.js &middot; absorbMispronunciationFragments()</div>
+      </div>
+    </div>
+    <div class="pipeline-step">
+      <div class="pipeline-line"><div class="pipeline-dot dot-red"></div><div class="pipeline-stem"></div></div>
+      <div class="pipeline-card">
+        <div class="pipeline-card-title">17. runDiagnostics Orchestrator</div>
+        <div class="pipeline-card-desc">
+          detectOnsetDelays (500ms/800ms/1200ms) &middot;
+          detectLongPauses (&ge;3s) &middot;
+          detectSelfCorrections &middot;
+          detectMorphologicalErrors &middot;
+          detectStruggleWords (Path 1 + Path 3)
+        </div>
+        <div class="pipeline-card-file">js/diagnostics.js:2248&ndash;2256</div>
+      </div>
+    </div>
+    <div class="pipeline-step">
+      <div class="pipeline-line"><div class="pipeline-dot dot-purple"></div><div class="pipeline-stem"></div></div>
+      <div class="pipeline-card">
+        <div class="pipeline-card-title">18. VAD Gap Analysis</div>
+        <div class="pipeline-card-desc">Enriches onset delays and long pauses with speech percentage via <code>enrichDiagnosticsWithVAD()</code>. Computes VAD gap summary.</div>
+        <div class="pipeline-card-file">js/app.js:1390&ndash;1439 &middot; js/vad-gap-analyzer.js</div>
+      </div>
+    </div>
+    <div class="pipeline-step">
+      <div class="pipeline-line"><div class="pipeline-dot dot-purple"></div><div class="pipeline-stem"></div></div>
+      <div class="pipeline-card">
+        <div class="pipeline-card-title">19. Self-Correction Reclassification</div>
+        <div class="pipeline-card-desc">Uses diagnostics <code>selfCorrections</code> to convert alignment entries from <code>insertion</code> to <code>self-correction</code>. Skips <code>_isSelfCorrection</code> and <code>_partOfStruggle</code> entries.</div>
+        <div class="pipeline-card-file">js/app.js:1441&ndash;1475</div>
+      </div>
+    </div>
+    <div class="pipeline-step">
+      <div class="pipeline-line"><div class="pipeline-dot dot-green"></div><div class="pipeline-stem"></div></div>
+      <div class="pipeline-card">
+        <div class="pipeline-card-title">20. NL Annotations &amp; Proper Noun Forgiveness</div>
+        <div class="pipeline-card-desc">Maps NL API annotations to ref words. Three-stage proper noun forgiveness: NL detection &rarr; <code>refLowercaseSet</code> guard &rarr; Free Dictionary API (200 = common word, 404 = exotic name) &rarr; phonetic similarity (&ge;0.4).</div>
+        <div class="pipeline-card-file">js/app.js:1477&ndash;1719</div>
+      </div>
+    </div>
+    <div class="pipeline-step">
+      <div class="pipeline-line"><div class="pipeline-dot dot-green"></div><div class="pipeline-stem"></div></div>
+      <div class="pipeline-card">
+        <div class="pipeline-card-title">21. OOV Detection &amp; Forgiveness</div>
+        <div class="pipeline-card-desc">
+          Part 1a: phonetic forgiveness for OOV subs/struggles (threshold 0.6) &middot;
+          Part 1b: <code>&lt;unknown&gt;</code> reassignment (scan radius &plusmn;3 ref positions) &middot;
+          Part 2: omission recovery via <code>&lt;unknown&gt;</code> tokens in temporal window &middot;
+          Part 2b: catch reassigned subs &middot;
+          OOV time credit: deducts time spent on OOV clusters from elapsed seconds
+        </div>
+        <div class="pipeline-card-file">js/app.js:1721&ndash;2040</div>
+      </div>
+    </div>
+    <div class="pipeline-step">
+      <div class="pipeline-line"><div class="pipeline-dot dot-red"></div><div class="pipeline-stem"></div></div>
+      <div class="pipeline-card">
+        <div class="pipeline-card-title">22. Cleanup &amp; Post-Struggle Leniency</div>
+        <div class="pipeline-card-desc">
+          Confirmed insertion cleanup (clear for fillers, self-corrections, artifacts) &middot;
+          single-letter function word forgiveness ("a"/"I" omissions adjacent to struggles) &middot;
+          post-struggle Parakeet leniency (V1 sub promoted to correct if Parakeet confirms &amp; prev ref was error)
+        </div>
+        <div class="pipeline-card-file">js/app.js:2042&ndash;2150</div>
+      </div>
+    </div>
+    <div class="pipeline-step">
+      <div class="pipeline-line"><div class="pipeline-dot dot-green"></div><div class="pipeline-stem"></div></div>
+      <div class="pipeline-card">
+        <div class="pipeline-card-title">23. Metrics Calculation</div>
+        <div class="pipeline-card-desc">WCPM (range: min&ndash;max), accuracy (with confirmed insertion errors), tier breakdown</div>
+        <div class="pipeline-card-file">js/metrics.js</div>
+      </div>
+    </div>
+    <div class="pipeline-step">
+      <div class="pipeline-line"><div class="pipeline-dot dot-purple"></div></div>
+      <div class="pipeline-card">
+        <div class="pipeline-card-title">24. Prosody Metrics</div>
+        <div class="pipeline-card-desc">
+          Phrasing quality &middot; punctuation awareness &middot; pace consistency &middot;
+          word duration outliers (IQR) &middot; word speed tiers (7 tiers) &middot;
+          pause context annotation &middot; function word compression &middot; syntactic alignment
+        </div>
+        <div class="pipeline-card-file">js/diagnostics.js:764&ndash;2114</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════ 10 STRUGGLE ═══════════ -->
+<div class="section" id="struggle">
+  <div class="section-header">
+    <span class="section-num">10</span>
+    <h2 class="section-title">Near-Miss &amp; Struggle System</h2>
+  </div>
+
+  <p>The "struggle" type (<code>substitution+</code>) means the student failed a word with additional evidence
+  of decoding difficulty. It always counts as an error. Three independent pathways can trigger it:</p>
+
+  <div class="paths-grid">
+    <div class="path-card path-1">
+      <h4>Path 1: Hesitation</h4>
+      <p>Substitution + pause &ge;3s before the word + reference word &gt;3 characters.
+      The student stalled, then produced the wrong word. Flagged with <code>_strugglePath: 'hesitation'</code>.</p>
+    </div>
+    <div class="path-card path-2">
+      <h4>Path 2: Decoding</h4>
+      <p>Substitution surrounded by near-miss insertions. The student made multiple attempts (fragments)
+      that sound similar to the target. Flagged with <code>_strugglePath: 'decoding'</code>.</p>
+    </div>
+    <div class="path-card path-3">
+      <h4>Path 3: Abandoned</h4>
+      <p>Substitution + cross-validation "unconfirmed" + <code>isNearMiss(hyp, ref)</code>.
+      Only verbatim STT heard a garbled attempt. Flagged with <code>_strugglePath: 'abandoned'</code>.</p>
+    </div>
+  </div>
+
+  <div class="collapsible">
+    <div class="collapsible-header" onclick="this.parentElement.classList.toggle('open')">
+      <span class="collapsible-arrow">&#9654;</span>
+      <span class="collapsible-tag tag-algorithm">Algorithm</span>
+      <span class="collapsible-title">isNearMiss() Criteria &amp; Fragment Absorption</span>
+    </div>
+    <div class="collapsible-body"><div class="collapsible-content">
+      <p><code>isNearMiss(insertionText, referenceWord)</code> returns true when any of these hold:</p>
+      <ol>
+        <li>Both words &ge; 3 chars AND shared <strong>prefix</strong> &ge; 3 characters</li>
+        <li>Both words &ge; 3 chars AND shared <strong>suffix</strong> &ge; 3 characters</li>
+        <li><strong>Levenshtein ratio</strong> &ge; 0.4</li>
+      </ol>
+
+      <div class="subsection">
+        <div class="subsection-title">Fragment Absorption (Temporal Containment)</div>
+        <p>When Reverb fragments a single utterance (e.g., "platforms" &rarr; "pla" + "for"), alignment creates a
+        struggle for one fragment and an insertion for the other. <code>absorbMispronunciationFragments()</code> uses
+        temporal containment with <strong>&plusmn;150ms tolerance</strong> to absorb orphan insertions:</p>
+        <div class="code-block">
+<span class="cmt">// If insertion's Reverb timestamp falls within Parakeet word window ±150ms</span>
+<span class="kw">if</span> (reverbStartS >= pair.parakeet.startS - <span class="num">0.15</span> &&
+    reverbStartS <= pair.parakeet.endS + <span class="num">0.15</span>) {
+  entry.<span class="var">_partOfStruggle</span> = <span class="kw">true</span>;  <span class="cmt">// Absorb this insertion</span>
+}
+        </div>
+      </div>
+
+      <div class="subsection">
+        <div class="subsection-title">Self-Correction Detection</div>
+        <p>When a near-miss insertion appears <em>before</em> a correct word, it's marked as
+        <code>_isSelfCorrection</code> rather than <code>_partOfStruggle</code>. Both flags exclude the
+        insertion from the unclaimed insertion count.</p>
+      </div>
+    </div></div>
+  </div>
+</div>
+
+<div class="divider"></div>
+
+<!-- ═══════════ 11 SPEED MAP ═══════════ -->
+<div class="section" id="speedmap">
+  <div class="section-header">
+    <span class="section-num">11</span>
+    <h2 class="section-title">Word Speed Map</h2>
+  </div>
+
+  <div class="collapsible open">
+    <div class="collapsible-header" onclick="this.parentElement.classList.toggle('open')">
+      <span class="collapsible-arrow">&#9654;</span>
+      <span class="collapsible-tag tag-metric">Metric</span>
+      <span class="collapsible-title">7-Tier Speed Classification</span>
+    </div>
+    <div class="collapsible-body"><div class="collapsible-content">
+      <p>Each word's reading duration is normalized by phoneme count, then compared to the student's median
+      to produce a speed ratio. Words are classified into tiers:</p>
+
+      <div class="tier-legend">
+        <span class="tier-chip tier-quick">&lt; 0.75x &mdash; Quick</span>
+        <span class="tier-chip tier-steady">0.75&ndash;1.25x &mdash; Steady</span>
+        <span class="tier-chip tier-slow">1.25&ndash;2.00x &mdash; Slow</span>
+        <span class="tier-chip tier-struggling">2.00&ndash;4.00x &mdash; Struggling</span>
+        <span class="tier-chip tier-stalled">&gt; 4.00x &mdash; Stalled</span>
+        <span class="tier-chip tier-omitted">Omitted</span>
+        <span class="tier-chip tier-nodata">No data</span>
+      </div>
+
+      <div class="callout callout-blue">
+        <strong>Short-word tier removed:</strong> All words are now classified by their ratio to the student's median,
+        regardless of phoneme count. The old &le; 3 phoneme tier was dropped because even short words carry
+        diagnostic value when their duration deviates significantly from the median.
+      </div>
+
+      <div class="formula">
+        <span class="formula-label">atPacePercent:</span>
+        (quick + steady) / (quick + steady + slow + struggling + stalled) &times; 100
+      </div>
+
+      <div class="subsection">
+        <div class="subsection-title">Phoneme Normalization (CMUdict)</div>
+        <p>Duration is normalized by <strong>phoneme count</strong>, not syllable count, because phoneme count captures
+        consonant density: "spreadsheet" has 2 syllables but 8 phonemes vs "baby" with 2 syllables and 4 phonemes.</p>
+        <ul>
+          <li><code>data/cmudict-phoneme-counts.json</code>: 125,940 words &rarr; phoneme count (1.6MB)</li>
+          <li>Fallback for unknown words: <code>syllables &times; 2.5837</code> (empirical ratio)</li>
+          <li>Short-word threshold: phonemes &le; 3 (catches function words like "a", "the", "cat")</li>
+        </ul>
+      </div>
+
+      <div class="subsection">
+        <div class="subsection-title">Outlier Detection</div>
+        <p>IQR-based: Q1/Q3 = 25th/75th percentile of normalized durations. IQR floored to 50ms minimum.
+        Upper fence = Q3 + 1.5 &times; IQR. Words with normalized duration &gt; fence AND phonemes &gt; 3 are flagged.</p>
+      </div>
+
+      <p><code>js/diagnostics.js:1704&ndash;1999</code> &middot; <code>js/phoneme-counter.js</code></p>
+    </div></div>
+  </div>
+</div>
+
+<!-- ═══════════ 12 METRICS ═══════════ -->
+<div class="section" id="metrics">
+  <div class="section-header">
+    <span class="section-num">12</span>
+    <h2 class="section-title">Metrics Calculation</h2>
+  </div>
+
+  <div class="collapsible">
+    <div class="collapsible-header" onclick="this.parentElement.classList.toggle('open')">
+      <span class="collapsible-arrow">&#9654;</span>
+      <span class="collapsible-tag tag-metric">Metric</span>
+      <span class="collapsible-title">WCPM, Accuracy &amp; Proper Noun Forgiveness</span>
+    </div>
+    <div class="collapsible-body"><div class="collapsible-content">
+      <div class="formula">
+        <span class="formula-label">WCPM:</span>
+        (correct words / elapsed seconds) &times; 60
+      </div>
+      <div class="formula">
+        <span class="formula-label">Accuracy:</span>
+        (totalRefWords - totalErrors) / totalRefWords
+      </div>
+
+      <div class="callout callout-green">
+        <strong>ORF Standard:</strong> Regular insertions are NOT counted as errors. However, <strong>confirmed insertions</strong>
+        (all available engines independently heard the same extra word at the same boundary) ARE counted
+        as errors via <code>insertionErrors</code>. Forgiven substitutions and omissions count as correct.
+        <code>totalErrors = wordErrors + omissions + longPauseErrors + insertionErrors</code>.
+      </div>
+
+      <p><strong>WCPM Range:</strong> minimum (excludes disfluent words) to maximum (all correct words).
+      Conservative value is primary per clinical guidelines.</p>
+
+      <div class="subsection">
+        <div class="subsection-title">Proper Noun Forgiveness</div>
+        <p>Three-stage guard against false errors on names:</p>
+        <ol>
+          <li><strong>NL API detection:</strong> Google Natural Language API identifies proper nouns (<code>isProperViaNL</code>)</li>
+          <li><strong>Dictionary guard:</strong> Free Dictionary API check &mdash; 200 = common word (skip forgiveness), 404 = exotic name (allow forgiveness)</li>
+          <li><strong>Phonetic similarity:</strong> <code>levenshteinRatio &ge; 0.4</code> between student's attempt and reference</li>
+        </ol>
+        <p>Forgiven words display with a green dashed border and &#10003; badge in the UI.</p>
+      </div>
+
+      <p><code>js/metrics.js</code> &middot; <code>js/nl-api.js</code></p>
+    </div></div>
+  </div>
+</div>
+
+<!-- ═══════════ 13 UI ═══════════ -->
+<div class="section" id="ui">
+  <div class="section-header">
+    <span class="section-num">13</span>
+    <h2 class="section-title">UI Rendering</h2>
+  </div>
+
+  <div class="collapsible open">
+    <div class="collapsible-header" onclick="this.parentElement.classList.toggle('open')">
+      <span class="collapsible-arrow">&#9654;</span>
+      <span class="collapsible-tag tag-ui">UI</span>
+      <span class="collapsible-title">Bucket-Based Classification System</span>
+    </div>
+    <div class="collapsible-body"><div class="collapsible-content">
+      <p><code>renderNewAnalyzedWords()</code> is the primary rendering function. Each alignment entry is routed through
+      <code>classifyWord()</code> into one of 9 semantic buckets that separate scoring logic (metrics.js) from display logic (ui.js).
+      The legacy word-by-word rendering was removed (archived in <code>docs/legacy/legacy-word-miscue-ui.md</code>).</p>
+
+      <table class="data-table">
+        <tr><th>Bucket</th><th>Background</th><th>Text</th><th>Description</th></tr>
+        <tr><td><span class="hw hw-correct">correct</span></td><td>#c8e6c9</td><td>#2e7d32</td><td>Word read correctly, confirmed by engines</td></tr>
+        <tr><td><span style="background:#c8e6c9;color:#4caf50;padding:0.1em 0.35em;border-radius:3px;font-weight:600;font-size:0.85em;border:1px dashed #4caf50">oov-excluded</span></td><td>#c8e6c9</td><td>#4caf50</td><td>Out-of-vocabulary word excluded from assessment (phonetic forgiveness or &lt;unknown&gt; recovery)</td></tr>
+        <tr><td><span style="background:#c8e6c9;color:#4caf50;padding:0.1em 0.35em;border-radius:3px;font-weight:600;font-size:0.85em;border:1px dashed #4caf50">function-word-forgiven</span></td><td>#c8e6c9</td><td>#4caf50</td><td>Single-letter function word ("a", "I") omission adjacent to struggle &mdash; forgiven as collateral damage</td></tr>
+        <tr><td><span style="background:#dcedc8;color:#558b2f;padding:0.1em 0.35em;border-radius:3px;font-weight:600;font-size:0.85em;border:1px dashed #558b2f">struggle-correct</span></td><td>#dcedc8</td><td>#558b2f</td><td>V1 compound (multi-token) but confirmed correct by another engine; or recovered/post-struggle leniency word</td></tr>
+        <tr><td><span class="hw hw-omission">omitted</span></td><td>#e0e0e0</td><td>#757575</td><td>Student skipped the word (strikethrough)</td></tr>
+        <tr><td><span style="background:#ffe0b2;color:#e65100;padding:0.1em 0.35em;border-radius:3px;font-weight:600;font-size:0.85em">attempted-struggled</span></td><td>#ffe0b2</td><td>#e65100</td><td>Student attempted but produced wrong word with decoding difficulty</td></tr>
+        <tr><td><span style="background:#ffcdd2;color:#c62828;padding:0.1em 0.35em;border-radius:3px;font-weight:600;font-size:0.85em">definite-struggle</span></td><td>#ffcdd2</td><td>#c62828</td><td>Clear substitution error, confirmed by multiple engines</td></tr>
+        <tr><td><span style="background:#bbdefb;color:#1565c0;padding:0.1em 0.35em;border-radius:3px;font-weight:600;font-size:0.85em">confirmed-substitution</span></td><td>#bbdefb</td><td>#1565c0</td><td>Substitution with engine consensus on the wrong word</td></tr>
+        <tr><td><span style="background:#e1bee7;color:#6a1b9a;padding:0.1em 0.35em;border-radius:3px;font-weight:600;font-size:0.85em;font-weight:700">confirmed-insertion</span></td><td>#e1bee7</td><td>#6a1b9a</td><td>Extra word confirmed by all engines (counts as error, "+" prefix)</td></tr>
+      </table>
+
+      <div class="callout callout-blue">
+        <strong>Legacy removed:</strong> The old word-by-word rendering with <code>.word-correct</code>, <code>.word-substitution</code>,
+        <code>.word-omission</code>, etc. CSS classes was removed. The new bucket system uses <code>.word-bucket-*</code> classes
+        and cleanly separates what-to-display from how-it-scores.
+      </div>
+
+      <div class="subsection">
+        <div class="subsection-title">Interactive Features</div>
+      </div>
+      <ul>
+        <li><strong>Custom tooltips</strong> replace native <code>title</code> for mobile support. Shows diagnostics, timestamps (3 sources), cross-validation status, NL annotations.</li>
+        <li><strong>Click-to-play</strong> word audio using cross-validator timestamps. Shared <code>Audio</code> element with <code>ObjectURL</code> from <code>appState.audioBlob</code>.</li>
+        <li><strong>Collapsible sections:</strong> STT Transcript View, Prosody Metrics &mdash; both follow the same toggle pattern.</li>
+        <li><strong>STT Transcript View:</strong> Shows what each engine detected. Three source rows color-coded: Reverb v1 (blue), Reverb v0 (green), Parakeet (purple). Model disagreements highlighted.</li>
+        <li><strong>Word Speed Map:</strong> Inline passage with tier-colored words + distribution bar + "include preceding pauses" toggle.</li>
+      </ul>
+
+      <p><code>js/ui.js</code> &middot; <code>style.css</code></p>
+    </div></div>
+  </div>
+</div>
+
+<div class="divider"></div>
+
+<!-- ═══════════ 14 OCR ═══════════ -->
+<div class="section" id="ocr">
+  <div class="section-header">
+    <span class="section-num">14</span>
+    <h2 class="section-title">OCR Integration</h2>
+  </div>
+
+  <div class="collapsible open">
+    <div class="collapsible-header" onclick="this.parentElement.classList.toggle('open')">
+      <span class="collapsible-arrow">&#9654;</span>
+      <span class="collapsible-tag tag-pipeline">Pipeline</span>
+      <span class="collapsible-title">Hybrid Cloud Vision + Gemini OCR</span>
+    </div>
+    <div class="collapsible-body"><div class="collapsible-content">
+      <p>Reading passages can be captured from images (camera or file upload) via a hybrid OCR pipeline
+      that combines Google Cloud Vision for character-level accuracy with Gemini AI for reading order
+      assembly and artifact correction.</p>
+
+      <ol>
+        <li><strong>Cloud Vision:</strong> Full paragraph hierarchy extraction with high character accuracy</li>
+        <li><strong>Gemini Assembly:</strong> Fixes multi-column reading order, drops header/footer junk</li>
+        <li><strong>Gemini Correction:</strong> Image-based artifact detection (OCR noise, scanning artifacts)</li>
+        <li><strong>Subset Validation:</strong> Catches Gemini hallucination &mdash; ensures output is a subset of Vision input</li>
+        <li><strong>Edit-Distance Guard:</strong> 85%+ similarity required between Vision and Gemini output</li>
+      </ol>
+
+      <div class="callout callout-orange">
+        <strong>Browser-side only:</strong> OCR runs entirely from the browser using Cloud Vision and Gemini APIs directly.
+        No server-side OCR endpoint &mdash; the Python backend is not involved.
+      </div>
+
+      <p>Image preprocessing: resize to 2048px max, Unicode normalization (NFKC, smart quotes, em-dashes, zero-width chars).</p>
+
+      <p><code>js/ocr-api.js</code> (557 lines) &middot; <code>js/passage-trimmer.js</code> (238 lines)</p>
+    </div></div>
+  </div>
+</div>
+
+<!-- ═══════════ 15 ENGAGEMENT ═══════════ -->
+<div class="section" id="engagement">
+  <div class="section-header">
+    <span class="section-num">15</span>
+    <h2 class="section-title">Engagement &amp; Gamification</h2>
+  </div>
+
+  <div class="collapsible">
+    <div class="collapsible-header" onclick="this.parentElement.classList.toggle('open')">
+      <span class="collapsible-arrow">&#9654;</span>
+      <span class="collapsible-tag tag-ui">UI</span>
+      <span class="collapsible-title">Student-Facing Features</span>
+    </div>
+    <div class="collapsible-body"><div class="collapsible-content">
+      <p>Beyond the core assessment pipeline, PACER includes engagement features designed to motivate students
+      and make the reading practice experience rewarding.</p>
+
+      <table class="data-table">
+        <tr><th>Feature</th><th>File</th><th>Description</th></tr>
+        <tr><td><strong>Future You</strong></td><td class="file-path">js/future-you.js</td><td>Audio stitching of correctly-read segments into seamless karaoke-style playback with word-by-word highlighting</td></tr>
+        <tr><td><strong>Celeration Chart</strong></td><td class="file-path">js/celeration-chart.js</td><td>Reading rate trend visualization over multiple sessions</td></tr>
+        <tr><td><strong>Maze Game</strong></td><td class="file-path">js/maze-game.js + maze-generator.js</td><td>Procedurally generated maze with speech-recognition gates (uses <code>/deepgram-maze</code> endpoint for keyterm boosting)</td></tr>
+        <tr><td><strong>Rhythm Remix</strong></td><td class="file-path">js/rhythm-remix.js</td><td>Music/rhythm game tied to reading content</td></tr>
+        <tr><td><strong>Movie Trailer</strong></td><td class="file-path">js/movie-trailer.js</td><td>Auto-generated narrative clips from passage content</td></tr>
+        <tr><td><strong>Illustrator</strong></td><td class="file-path">js/illustrator.js</td><td>Visual companion generation for passages</td></tr>
+        <tr><td><strong>Student Playback</strong></td><td class="file-path">js/student-playback.js</td><td>Student-mode audio replay with controls</td></tr>
+      </table>
+
+      <p>Supporting modules: <code>js/gamification.js</code> (engagement hooks) &middot;
+      <code>js/effect-engine.js</code> (visual/audio effects) &middot;
+      <code>js/sprite-animator.js</code> (character animation) &middot;
+      <code>js/noun-emoji-map.js</code> (visual noun annotation) &middot;
+      <code>js/lofi-engine.js</code> (reduced-feature mode)</p>
+    </div></div>
+  </div>
+</div>
+
+<div class="divider"></div>
+
+<!-- ═══════════ 16 FILE MAP ═══════════ -->
+<div class="section" id="filemap">
+  <div class="section-header">
+    <span class="section-num">16</span>
+    <h2 class="section-title">File Map</h2>
+  </div>
+
+  <div class="collapsible open">
+    <div class="collapsible-header" onclick="this.parentElement.classList.toggle('open')">
+      <span class="collapsible-arrow">&#9654;</span>
+      <span class="collapsible-tag tag-data">Data</span>
+      <span class="collapsible-title">All Modules &amp; Their Roles</span>
+    </div>
+    <div class="collapsible-body"><div class="collapsible-content">
+
+      <div class="subsection-title">Core Pipeline</div>
+      <table class="data-table">
+        <tr><th>File</th><th>Lines</th><th>Role</th></tr>
+        <tr><td class="file-path">js/app.js</td><td class="line-count">2,987</td><td>Pipeline orchestrator &mdash; entry point for <code>runAnalysis()</code>, 3-way verdict, OOV forgiveness, post-struggle leniency</td></tr>
+        <tr><td class="file-path">js/alignment.js</td><td class="line-count">870</td><td>NW alignment + compound / abbreviation / number / contraction merge + spillover consolidation</td></tr>
+        <tr><td class="file-path">js/diagnostics.js</td><td class="line-count">2,256</td><td>All detectors, near-miss resolution, fragment absorption, prosody, word speed tiers</td></tr>
+        <tr><td class="file-path">js/ui.js</td><td class="line-count">2,801</td><td>Bucket-based rendering (9 buckets), tooltips, click-to-play, word speed map, STT transcript view</td></tr>
+        <tr><td class="file-path">js/kitchen-sink-merger.js</td><td class="line-count">206</td><td>Reverb dual-pass + Parakeet orchestrator with fallback chain</td></tr>
+        <tr><td class="file-path">js/cross-validator.js</td><td class="line-count">95</td><td>Engine-agnostic routing: selects Parakeet or Deepgram</td></tr>
+        <tr><td class="file-path">js/text-normalize.js</td><td class="line-count">75</td><td><code>normalizeText()</code> + <code>DISFLUENCIES</code> set</td></tr>
+        <tr><td class="file-path">js/word-equivalences.js</td><td class="line-count">412</td><td>Canonical form mapping &mdash; 17 equivalence groups (contractions, homophones, numbers, abbreviations, etc.)</td></tr>
+        <tr><td class="file-path">js/number-words.js</td><td class="line-count">150</td><td><code>numberToWordForms()</code> &mdash; generates spoken forms for 0&ndash;9999</td></tr>
+        <tr><td class="file-path">js/nl-api.js</td><td class="line-count">171</td><td>Google NL API + <code>levenshteinRatio()</code> + word tier classification (proper/sight/academic/function)</td></tr>
+        <tr><td class="file-path">js/metrics.js</td><td class="line-count">113</td><td>WCPM + accuracy (with confirmed insertion errors) + WCPM range (conservative/optimistic)</td></tr>
+        <tr><td class="file-path">js/miscue-registry.js</td><td class="line-count">702</td><td>Single source of truth for all miscue/error types, forgiveness rules, detector locations</td></tr>
+      </table>
+
+      <div class="subsection-title">ASR Engine Clients</div>
+      <table class="data-table">
+        <tr><th>File</th><th>Lines</th><th>Role</th></tr>
+        <tr><td class="file-path">js/reverb-api.js</td><td class="line-count">136</td><td>Reverb client (health check + ensemble call)</td></tr>
+        <tr><td class="file-path">js/deepgram-api.js</td><td class="line-count">86</td><td>Deepgram Nova-3 client</td></tr>
+        <tr><td class="file-path">js/parakeet-api.js</td><td class="line-count">76</td><td>Parakeet TDT client</td></tr>
+        <tr><td class="file-path">js/stt-api.js</td><td class="line-count">218</td><td>STT engine abstraction layer</td></tr>
+        <tr><td class="file-path">js/ocr-api.js</td><td class="line-count">557</td><td>Hybrid OCR &mdash; Cloud Vision + Gemini assembly/correction with hallucination guards</td></tr>
+      </table>
+
+      <div class="subsection-title">Audio &amp; Recording</div>
+      <table class="data-table">
+        <tr><th>File</th><th>Lines</th><th>Role</th></tr>
+        <tr><td class="file-path">js/audio-padding.js</td><td class="line-count">133</td><td>1s silence padding + WAV encoding</td></tr>
+        <tr><td class="file-path">js/audio-playback.js</td><td class="line-count">360</td><td>Audio playback controls and utilities</td></tr>
+        <tr><td class="file-path">js/audio-store.js</td><td class="line-count">63</td><td>Audio blob persistence abstraction</td></tr>
+        <tr><td class="file-path">js/recorder.js</td><td class="line-count">72</td><td>Browser audio recording via MediaRecorder API</td></tr>
+        <tr><td class="file-path">js/student-playback.js</td><td class="line-count">381</td><td>Student-mode audio replay with controls</td></tr>
+      </table>
+
+      <div class="subsection-title">Analysis Support</div>
+      <table class="data-table">
+        <tr><th>File</th><th>Lines</th><th>Role</th></tr>
+        <tr><td class="file-path">js/phoneme-counter.js</td><td class="line-count">93</td><td>CMUdict lookup + syllable-based fallback</td></tr>
+        <tr><td class="file-path">js/syllable-counter.js</td><td class="line-count">711</td><td>Heuristic syllable counter (fallback when CMUdict misses)</td></tr>
+        <tr><td class="file-path">js/passage-trimmer.js</td><td class="line-count">238</td><td>Reference text trimming to match attempted words (Levenshtein-aware)</td></tr>
+        <tr><td class="file-path">js/vad-processor.js</td><td class="line-count">269</td><td>Silero VAD integration for ghost word detection</td></tr>
+        <tr><td class="file-path">js/vad-gap-analyzer.js</td><td class="line-count">289</td><td>VAD acoustic analysis of diagnosed pauses and hesitations</td></tr>
+      </table>
+
+      <div class="subsection-title">Engagement &amp; Gamification</div>
+      <table class="data-table">
+        <tr><th>File</th><th>Lines</th><th>Role</th></tr>
+        <tr><td class="file-path">js/future-you.js</td><td class="line-count">383</td><td>Karaoke playback &mdash; stitches correct segments with word highlighting</td></tr>
+        <tr><td class="file-path">js/celeration-chart.js</td><td class="line-count">819</td><td>Reading rate trend visualization over time</td></tr>
+        <tr><td class="file-path">js/maze-game.js</td><td class="line-count">713</td><td>Interactive maze with speech-recognition gates</td></tr>
+        <tr><td class="file-path">js/maze-generator.js</td><td class="line-count">675</td><td>Procedural maze generation</td></tr>
+        <tr><td class="file-path">js/rhythm-remix.js</td><td class="line-count">1,113</td><td>Music/rhythm engagement game</td></tr>
+        <tr><td class="file-path">js/movie-trailer.js</td><td class="line-count">410</td><td>Auto-generated narrative clips</td></tr>
+        <tr><td class="file-path">js/illustrator.js</td><td class="line-count">503</td><td>Visual companion generation for passages</td></tr>
+        <tr><td class="file-path">js/gamification.js</td><td class="line-count">49</td><td>Engagement hooks and scoring</td></tr>
+        <tr><td class="file-path">js/effect-engine.js</td><td class="line-count">259</td><td>Visual/audio effect rendering</td></tr>
+        <tr><td class="file-path">js/sprite-animator.js</td><td class="line-count">168</td><td>Character sprite animation</td></tr>
+        <tr><td class="file-path">js/noun-emoji-map.js</td><td class="line-count">113</td><td>Visual noun &rarr; emoji annotation mapping</td></tr>
+        <tr><td class="file-path">js/lofi-engine.js</td><td class="line-count">834</td><td>Reduced-feature mode for low-bandwidth environments</td></tr>
+      </table>
+
+      <div class="subsection-title">Infrastructure</div>
+      <table class="data-table">
+        <tr><th>File</th><th>Lines</th><th>Role</th></tr>
+        <tr><td class="file-path">js/backend-config.js</td><td class="line-count">58</td><td>Backend URL + auth header construction</td></tr>
+        <tr><td class="file-path">js/storage.js</td><td class="line-count">166</td><td>LocalStorage/sessionStorage persistence abstraction</td></tr>
+        <tr><td class="file-path">js/dashboard.js</td><td class="line-count">39</td><td>Dashboard summary view scaffolding</td></tr>
+        <tr><td class="file-path">js/debug-logger.js</td><td class="line-count">102</td><td>Debug logging and downloadable JSON export</td></tr>
+        <tr><td class="file-path">js/file-handler.js</td><td class="line-count">19</td><td>File I/O utilities</td></tr>
+        <tr><td class="file-path">js/benchmarks.js</td><td class="line-count">50</td><td>Performance measurement</td></tr>
+        <tr style="border-top:2px solid var(--border-light)">
+          <td class="file-path">services/reverb/server.py</td><td class="line-count">582</td><td>FastAPI server &mdash; Reverb, Deepgram proxy, Parakeet, maze endpoint</td></tr>
+        <tr><td class="file-path">data/cmudict-phoneme-counts.json</td><td class="line-count">125K entries</td><td>CMUdict word &rarr; phoneme count lookup (1.6MB)</td></tr>
+      </table>
+    </div></div>
+  </div>
+</div>
+
+</div><!-- /content -->
+</div><!-- /main -->
+
+<script>
+// Close mobile sidebar on nav click
+document.querySelectorAll('.nav-link').forEach(link => {
+  link.addEventListener('click', () => {
+    document.querySelector('.sidebar').classList.remove('mobile-open');
+  });
+});
+
+// Highlight active nav link on scroll
+const sections = document.querySelectorAll('.section');
+const navLinks = document.querySelectorAll('.nav-link');
+
+const observer = new IntersectionObserver((entries) => {
+  entries.forEach(entry => {
+    if (entry.isIntersecting) {
+      const id = entry.target.id;
+      navLinks.forEach(link => {
+        link.style.borderLeftColor = link.getAttribute('href') === '#' + id ? 'var(--accent-blue)' : 'transparent';
+        link.style.color = link.getAttribute('href') === '#' + id ? '#fff' : '';
+      });
+    }
+  });
+}, { rootMargin: '-10% 0px -80% 0px' });
+
+sections.forEach(s => observer.observe(s));
+</script>
+</body>
+</html>

@@ -1,0 +1,1853 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Pacer — Pitch Deck</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&family=DM+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg-deep: #060c1a;
+  --bg-primary: #0f172a;
+  --bg-secondary: #1e293b;
+  --bg-card: #162032;
+  --accent-1: #0891b2;
+  --accent-2: #0ea5e9;
+  --accent-glow: rgba(14, 165, 233, 0.15);
+  --text-primary: #f1f5f9;
+  --text-secondary: #94a3b8;
+  --text-muted: #64748b;
+  --red: #ef4444;
+  --orange: #f97316;
+  --green: #22c55e;
+  --purple: #a855f7;
+  --teal: #14b8a6;
+  --blue: #3b82f6;
+  --gray: #6b7280;
+  --pink: #ec4899;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+html, body {
+  width: 100%; height: 100%;
+  overflow: hidden;
+  background: var(--bg-deep);
+  color: var(--text-primary);
+  font-family: 'DM Sans', sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* --- NOISE TEXTURE OVERLAY --- */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  pointer-events: none;
+  opacity: 0.03;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  background-size: 256px 256px;
+}
+
+/* --- SLIDE CONTAINER --- */
+.deck {
+  width: 100%; height: 100%;
+  position: relative;
+}
+
+.slide {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 60px 100px;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.6s cubic-bezier(0.4, 0, 0.2, 1), visibility 0.6s;
+  background: var(--bg-primary);
+  overflow: hidden;
+}
+
+.slide.active {
+  opacity: 1;
+  visibility: visible;
+}
+
+.slide.active .anim-item {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.anim-item {
+  opacity: 0;
+  transform: translateY(24px);
+  transition: opacity 0.7s cubic-bezier(0.4, 0, 0.2, 1), transform 0.7s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.anim-item:nth-child(1) { transition-delay: 0.1s; }
+.anim-item:nth-child(2) { transition-delay: 0.22s; }
+.anim-item:nth-child(3) { transition-delay: 0.34s; }
+.anim-item:nth-child(4) { transition-delay: 0.46s; }
+.anim-item:nth-child(5) { transition-delay: 0.58s; }
+.anim-item:nth-child(6) { transition-delay: 0.7s; }
+.anim-item:nth-child(7) { transition-delay: 0.82s; }
+
+/* --- TYPOGRAPHY --- */
+h1 {
+  font-family: 'Outfit', sans-serif;
+  font-weight: 800;
+  font-size: 3.2rem;
+  line-height: 1.1;
+  letter-spacing: -0.03em;
+  color: var(--text-primary);
+  margin-bottom: 28px;
+}
+
+h1 .gradient {
+  background: linear-gradient(135deg, var(--accent-1), var(--accent-2));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+h2 {
+  font-family: 'Outfit', sans-serif;
+  font-weight: 700;
+  font-size: 1.5rem;
+  color: var(--accent-2);
+  letter-spacing: -0.02em;
+  margin-bottom: 16px;
+}
+
+h3 {
+  font-family: 'Outfit', sans-serif;
+  font-weight: 600;
+  font-size: 1.15rem;
+  color: var(--text-primary);
+  margin-bottom: 8px;
+}
+
+p, li {
+  font-size: 1.1rem;
+  line-height: 1.65;
+  color: var(--text-secondary);
+}
+
+.stat-number {
+  font-family: 'IBM Plex Mono', monospace;
+  font-weight: 600;
+  color: var(--accent-2);
+}
+
+.label {
+  font-family: 'Outfit', sans-serif;
+  font-weight: 600;
+  font-size: 0.75rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--accent-1);
+}
+
+strong { color: var(--text-primary); font-weight: 600; }
+
+/* --- PROGRESS BAR --- */
+.progress-bar {
+  position: fixed;
+  bottom: 0; left: 0;
+  height: 3px;
+  background: linear-gradient(90deg, var(--accent-1), var(--accent-2));
+  transition: width 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+  z-index: 100;
+}
+
+/* --- SLIDE COUNTER --- */
+.slide-counter {
+  position: fixed;
+  bottom: 20px; right: 40px;
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  z-index: 100;
+  letter-spacing: 0.05em;
+}
+
+/* --- NAV ARROWS --- */
+.nav-arrows {
+  position: fixed;
+  bottom: 20px; left: 40px;
+  display: flex; gap: 8px;
+  z-index: 100;
+}
+.nav-arrows button {
+  width: 36px; height: 36px;
+  border: 1px solid var(--bg-secondary);
+  background: rgba(15,23,42,0.8);
+  color: var(--text-muted);
+  border-radius: 8px;
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  transition: all 0.2s;
+  font-size: 1rem;
+  backdrop-filter: blur(8px);
+}
+.nav-arrows button:hover {
+  border-color: var(--accent-1);
+  color: var(--accent-2);
+  background: rgba(8,145,178,0.1);
+}
+
+/* --- DOT GRID BACKGROUND PATTERN --- */
+.slide::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image: radial-gradient(circle, rgba(148,163,184,0.06) 1px, transparent 1px);
+  background-size: 32px 32px;
+  pointer-events: none;
+}
+
+/* === SLIDE 1 - HERO === */
+.slide-1 {
+  justify-content: flex-start;
+  align-items: stretch;
+  padding: 0 !important;
+  background: var(--bg-primary);
+  overflow: hidden;
+}
+.slide-1::before { display: none; }
+.slide-1 .hero-layout {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  height: 100%;
+  width: 100%;
+}
+.slide-1 .hero-left {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 60px 70px;
+  position: relative;
+  z-index: 2;
+}
+.slide-1 .hero-right {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(160deg, rgba(8,145,178,0.06) 0%, rgba(14,165,233,0.02) 100%);
+  border-left: 1px solid rgba(148,163,184,0.06);
+  overflow: hidden;
+}
+.slide-1 .hero-right::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image: radial-gradient(circle, rgba(148,163,184,0.04) 1px, transparent 1px);
+  background-size: 24px 24px;
+}
+.slide-1 .logo-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 28px;
+}
+.slide-1 .logo-row .logo-wordmark {
+  font-family: 'Outfit', sans-serif;
+  font-weight: 800;
+  font-size: 1.6rem;
+  letter-spacing: -0.02em;
+  background: linear-gradient(135deg, var(--accent-1), var(--accent-2));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+.slide-1 h1 {
+  font-size: 3.6rem;
+  line-height: 1.08;
+  margin-bottom: 24px;
+}
+.slide-1 .hero-desc {
+  font-size: 1.2rem;
+  color: var(--text-secondary);
+  line-height: 1.7;
+  max-width: 520px;
+  margin-bottom: 36px;
+}
+.slide-1 .hero-pills {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.slide-1 .hero-pill {
+  padding: 8px 18px;
+  border-radius: 100px;
+  font-family: 'Outfit', sans-serif;
+  font-weight: 600;
+  font-size: 0.82rem;
+  border: 1px solid rgba(148,163,184,0.12);
+  background: var(--bg-card);
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+.slide-1 .hero-pill .pill-dot {
+  width: 7px; height: 7px;
+  border-radius: 50%;
+}
+
+/* --- LIVE DEMO PANEL --- */
+.demo-panel {
+  width: 88%;
+  max-width: 540px;
+  position: relative;
+  z-index: 2;
+}
+.demo-window {
+  background: var(--bg-deep);
+  border: 1px solid rgba(148,163,184,0.1);
+  border-radius: 14px;
+  overflow: hidden;
+  box-shadow: 0 25px 60px rgba(0,0,0,0.4), 0 0 80px rgba(8,145,178,0.08);
+}
+.demo-titlebar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px;
+  background: rgba(30,41,59,0.6);
+  border-bottom: 1px solid rgba(148,163,184,0.06);
+}
+.demo-dot {
+  width: 10px; height: 10px;
+  border-radius: 50%;
+}
+.demo-dot.r { background: #ef4444; }
+.demo-dot.y { background: #eab308; }
+.demo-dot.g { background: #22c55e; }
+.demo-titlebar span {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  margin-left: 8px;
+}
+.demo-body {
+  padding: 28px 24px;
+}
+.demo-label {
+  font-family: 'Outfit', sans-serif;
+  font-weight: 600;
+  font-size: 0.7rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: 14px;
+}
+.demo-words {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 8px;
+  line-height: 2.2;
+  margin-bottom: 20px;
+}
+.demo-word {
+  font-family: 'DM Sans', sans-serif;
+  font-size: 1.05rem;
+  padding: 3px 0;
+  position: relative;
+  color: var(--text-primary);
+}
+.demo-word.correct { color: rgba(241,245,249,0.7); }
+.demo-word.omission {
+  color: var(--red);
+  text-decoration: line-through;
+  text-decoration-color: rgba(239,68,68,0.5);
+  opacity: 0.7;
+}
+.demo-word.substitution {
+  color: var(--orange);
+  border-bottom: 2px solid rgba(249,115,22,0.5);
+}
+.demo-word.substitution .sub-original {
+  font-size: 0.65rem;
+  color: rgba(249,115,22,0.6);
+  position: absolute;
+  top: -14px;
+  left: 0;
+  white-space: nowrap;
+  font-family: 'IBM Plex Mono', monospace;
+}
+.demo-word.struggle {
+  color: var(--teal);
+  border-bottom: 2px dotted rgba(20,184,166,0.6);
+}
+.demo-word.struggle .struggle-indicator {
+  font-size: 0.6rem;
+  color: var(--teal);
+  position: absolute;
+  top: -13px;
+  left: 0;
+  font-family: 'IBM Plex Mono', monospace;
+  white-space: nowrap;
+}
+.demo-word.hesitation {
+  color: var(--orange);
+  opacity: 0.8;
+}
+.demo-word.hesitation .hes-bar {
+  position: absolute;
+  bottom: -2px;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: repeating-linear-gradient(90deg, var(--orange) 0 3px, transparent 3px 6px);
+}
+.demo-word.selfcorr {
+  color: var(--purple);
+}
+.demo-word.selfcorr .sc-label {
+  font-size: 0.6rem;
+  color: rgba(168,85,247,0.7);
+  position: absolute;
+  top: -13px;
+  left: 0;
+  font-family: 'IBM Plex Mono', monospace;
+  white-space: nowrap;
+}
+.demo-word.pause {
+  color: var(--gray);
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 0.75rem;
+  padding: 2px 8px;
+  background: rgba(107,114,128,0.1);
+  border-radius: 4px;
+  border: 1px solid rgba(107,114,128,0.2);
+}
+
+/* Demo metrics row */
+.demo-metrics {
+  display: flex;
+  gap: 16px;
+  padding-top: 16px;
+  border-top: 1px solid rgba(148,163,184,0.06);
+}
+.demo-metric {
+  text-align: center;
+}
+.demo-metric .dm-val {
+  font-family: 'IBM Plex Mono', monospace;
+  font-weight: 600;
+  font-size: 1.3rem;
+  color: var(--accent-2);
+  line-height: 1;
+}
+.demo-metric .dm-label {
+  font-size: 0.65rem;
+  color: var(--text-muted);
+  margin-top: 4px;
+  font-family: 'Outfit', sans-serif;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+/* Animated cursor scanning effect */
+@keyframes scanline {
+  0% { left: -2px; opacity: 0; }
+  10% { opacity: 1; }
+  90% { opacity: 1; }
+  100% { left: calc(100% + 2px); opacity: 0; }
+}
+.demo-words::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -2px;
+  width: 2px;
+  height: 100%;
+  background: var(--accent-2);
+  box-shadow: 0 0 8px var(--accent-2);
+  border-radius: 1px;
+  animation: scanline 4s ease-in-out infinite;
+  pointer-events: none;
+}
+.demo-words { position: relative; }
+
+/* === SLIDE 2 - PROBLEM === */
+.slide-2 .problem-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 32px;
+  margin: 32px 0;
+}
+.problem-card {
+  background: var(--bg-card);
+  border: 1px solid rgba(148,163,184,0.08);
+  border-radius: 16px;
+  padding: 32px 28px;
+  position: relative;
+  overflow: hidden;
+}
+.problem-card::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, var(--red), transparent);
+}
+.problem-card .icon {
+  font-size: 2rem;
+  margin-bottom: 16px;
+  display: block;
+}
+.problem-card h3 { color: var(--text-primary); margin-bottom: 10px; }
+.problem-card p { font-size: 0.95rem; color: var(--text-secondary); line-height: 1.6; }
+
+.funnel {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0;
+  margin-top: 36px;
+}
+.funnel-stage {
+  padding: 16px 32px;
+  text-align: center;
+  border-radius: 12px;
+  position: relative;
+}
+.funnel-stage.ok {
+  background: rgba(34,197,94,0.08);
+  border: 1px solid rgba(34,197,94,0.2);
+}
+.funnel-stage.broken {
+  background: rgba(239,68,68,0.08);
+  border: 1px solid rgba(239,68,68,0.3);
+  box-shadow: 0 0 30px rgba(239,68,68,0.08);
+}
+.funnel-stage.late {
+  background: rgba(107,114,128,0.08);
+  border: 1px solid rgba(107,114,128,0.2);
+}
+.funnel-stage .stage-label {
+  font-family: 'Outfit', sans-serif;
+  font-weight: 700;
+  font-size: 0.9rem;
+  margin-bottom: 4px;
+}
+.funnel-stage .stage-sub {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+}
+.funnel-arrow {
+  font-size: 1.4rem;
+  color: var(--text-muted);
+  margin: 0 12px;
+}
+
+/* === SLIDE 3 - WHY NOW === */
+.slide-3 {
+  background: linear-gradient(160deg, var(--bg-primary) 0%, rgba(8,145,178,0.05) 100%);
+}
+.slide-3 .two-col {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 60px;
+  align-items: center;
+  margin-top: 24px;
+}
+.slide-3 .points { list-style: none; }
+.slide-3 .points li {
+  padding: 12px 0;
+  padding-left: 24px;
+  position: relative;
+  font-size: 1.02rem;
+  border-bottom: 1px solid rgba(148,163,184,0.06);
+}
+.slide-3 .points li::before {
+  content: '';
+  position: absolute;
+  left: 0; top: 18px;
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: var(--accent-1);
+}
+.gap-chart {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+.gap-bar {
+  position: relative;
+}
+.gap-bar .bar-label {
+  font-family: 'Outfit', sans-serif;
+  font-weight: 600;
+  font-size: 0.85rem;
+  margin-bottom: 8px;
+  display: flex;
+  justify-content: space-between;
+}
+.gap-bar .bar-track {
+  height: 36px;
+  background: var(--bg-card);
+  border-radius: 8px;
+  overflow: hidden;
+  border: 1px solid rgba(148,163,184,0.06);
+}
+.gap-bar .bar-fill {
+  height: 100%;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  padding-left: 14px;
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: white;
+  transition: width 1s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.bar-fill.high {
+  background: linear-gradient(90deg, var(--accent-1), var(--accent-2));
+  width: 92%;
+}
+.bar-fill.low {
+  background: linear-gradient(90deg, var(--red), var(--orange));
+  width: 34%;
+}
+.gap-label {
+  text-align: center;
+  margin-top: 12px;
+  padding: 10px 20px;
+  background: rgba(14,165,233,0.08);
+  border: 1px dashed rgba(14,165,233,0.3);
+  border-radius: 10px;
+  font-family: 'Outfit', sans-serif;
+  font-weight: 700;
+  font-size: 1.05rem;
+  color: var(--accent-2);
+}
+
+/* === SLIDE 4 - SOLUTION === */
+.slide-4 .solution-flow {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  margin: 36px 0 28px;
+}
+.flow-step {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 24px 28px;
+  background: var(--bg-card);
+  border: 1px solid rgba(148,163,184,0.08);
+  border-radius: 16px;
+  min-width: 180px;
+  text-align: center;
+}
+.flow-step .flow-icon { font-size: 2.2rem; }
+.flow-step h3 { font-size: 1rem; margin-bottom: 0; }
+.flow-step p { font-size: 0.82rem; color: var(--text-muted); }
+.flow-arrow { font-size: 1.5rem; color: var(--accent-1); }
+.quote-box {
+  background: linear-gradient(135deg, rgba(8,145,178,0.1), rgba(14,165,233,0.05));
+  border-left: 3px solid var(--accent-1);
+  padding: 20px 28px;
+  border-radius: 0 12px 12px 0;
+  margin-top: 8px;
+}
+.quote-box p {
+  font-style: italic;
+  font-size: 1.1rem;
+  color: var(--text-primary);
+}
+.slide-4 .feature-row {
+  display: flex;
+  gap: 24px;
+  margin-top: 24px;
+}
+.feature-chip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  background: var(--bg-card);
+  border: 1px solid rgba(148,163,184,0.08);
+  border-radius: 100px;
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+}
+.feature-chip .dot {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: var(--accent-1);
+}
+
+/* === SLIDE 5 - HOW IT WORKS === */
+.slide-5 { padding: 48px 80px; }
+.pipeline {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0;
+  margin: 24px 0 32px;
+}
+.pipe-step {
+  padding: 14px 20px;
+  background: var(--bg-card);
+  border: 1px solid rgba(148,163,184,0.1);
+  text-align: center;
+  font-family: 'Outfit', sans-serif;
+  font-weight: 600;
+  font-size: 0.82rem;
+  color: var(--text-primary);
+  position: relative;
+  border-radius: 10px;
+}
+.pipe-step.accent {
+  background: linear-gradient(135deg, rgba(8,145,178,0.15), rgba(14,165,233,0.1));
+  border-color: rgba(14,165,233,0.3);
+  color: var(--accent-2);
+}
+.pipe-arrow {
+  color: var(--accent-1);
+  font-size: 1.2rem;
+  margin: 0 6px;
+  flex-shrink: 0;
+}
+.miscue-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+}
+.miscue-section h3 {
+  font-size: 0.72rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: 10px;
+  font-family: 'Outfit', sans-serif;
+}
+.miscue-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.miscue-tag {
+  padding: 5px 12px;
+  border-radius: 6px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  font-family: 'Outfit', sans-serif;
+  border: 1px solid;
+}
+.miscue-tag.red { background: rgba(239,68,68,0.1); border-color: rgba(239,68,68,0.3); color: var(--red); }
+.miscue-tag.orange { background: rgba(249,115,22,0.1); border-color: rgba(249,115,22,0.3); color: var(--orange); }
+.miscue-tag.teal { background: rgba(20,184,166,0.1); border-color: rgba(20,184,166,0.3); color: var(--teal); }
+.miscue-tag.gray { background: rgba(107,114,128,0.1); border-color: rgba(107,114,128,0.3); color: var(--gray); }
+.miscue-tag.blue { background: rgba(59,130,246,0.1); border-color: rgba(59,130,246,0.3); color: var(--blue); }
+.miscue-tag.purple { background: rgba(168,85,247,0.1); border-color: rgba(168,85,247,0.3); color: var(--purple); }
+.miscue-tag.green { background: rgba(34,197,94,0.1); border-color: rgba(34,197,94,0.3); color: var(--green); }
+.miscue-tag.pink { background: rgba(236,72,153,0.1); border-color: rgba(236,72,153,0.3); color: var(--pink); }
+.engine-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 20px;
+  padding: 10px 20px;
+  background: linear-gradient(135deg, rgba(8,145,178,0.12), rgba(14,165,233,0.06));
+  border: 1px solid rgba(14,165,233,0.25);
+  border-radius: 100px;
+  font-family: 'Outfit', sans-serif;
+  font-weight: 600;
+  font-size: 0.85rem;
+  color: var(--accent-2);
+}
+
+/* === SLIDE 6 - MARKET === */
+.slide-6 .market-layout {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 60px;
+  align-items: center;
+  margin-top: 24px;
+}
+.concentric {
+  position: relative;
+  width: 340px; height: 340px;
+  margin: 0 auto;
+}
+.ring {
+  position: absolute;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  font-family: 'Outfit', sans-serif;
+  font-weight: 600;
+}
+.ring.outer {
+  inset: 0;
+  border: 1px solid rgba(148,163,184,0.12);
+  background: rgba(148,163,184,0.03);
+}
+.ring.outer .ring-label {
+  position: absolute;
+  top: 18px;
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.ring.mid {
+  top: 55px; left: 55px; right: 55px; bottom: 55px;
+  border: 1px solid rgba(14,165,233,0.2);
+  background: rgba(14,165,233,0.04);
+}
+.ring.mid .ring-label {
+  position: absolute;
+  top: 16px;
+  font-size: 0.72rem;
+  color: var(--accent-2);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.ring.core {
+  top: 110px; left: 110px; right: 110px; bottom: 110px;
+  border: 2px solid var(--accent-1);
+  background: rgba(8,145,178,0.1);
+  box-shadow: 0 0 40px rgba(8,145,178,0.15);
+}
+.ring.core .ring-label {
+  font-size: 0.78rem;
+  color: var(--text-primary);
+  line-height: 1.4;
+}
+.market-points { list-style: none; }
+.market-points li {
+  padding: 14px 0;
+  border-bottom: 1px solid rgba(148,163,184,0.06);
+  font-size: 1rem;
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+}
+.market-points .mp-icon { font-size: 1.1rem; flex-shrink: 0; margin-top: 2px; }
+
+/* === SLIDE 7 - COMPETITION === */
+.matrix-container {
+  max-width: 700px;
+  margin: 24px auto 0;
+  position: relative;
+}
+.matrix {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: 1fr 1fr;
+  gap: 3px;
+  aspect-ratio: 1.6;
+  background: rgba(148,163,184,0.08);
+  border-radius: 16px;
+  overflow: hidden;
+}
+.matrix-cell {
+  background: var(--bg-card);
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  text-align: center;
+  position: relative;
+}
+.matrix-cell.highlight {
+  background: radial-gradient(circle at center, rgba(8,145,178,0.15), var(--bg-card));
+  box-shadow: inset 0 0 60px rgba(14,165,233,0.08);
+}
+.matrix-cell .competitor {
+  font-family: 'Outfit', sans-serif;
+  font-weight: 600;
+  font-size: 0.9rem;
+  color: var(--text-secondary);
+  margin: 4px 0;
+}
+.matrix-cell .competitor small {
+  font-weight: 400;
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  display: block;
+}
+.matrix-cell .pacer-badge {
+  font-family: 'Outfit', sans-serif;
+  font-weight: 800;
+  font-size: 1.6rem;
+  color: var(--accent-2);
+  text-shadow: 0 0 30px rgba(14,165,233,0.5);
+  letter-spacing: -0.02em;
+}
+.matrix-cell .pacer-badge small {
+  display: block;
+  font-weight: 500;
+  font-size: 0.75rem;
+  color: var(--accent-1);
+  text-shadow: none;
+  margin-top: 4px;
+}
+.matrix-cell .empty-label {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  font-style: italic;
+}
+.axis-label {
+  position: absolute;
+  font-family: 'Outfit', sans-serif;
+  font-weight: 600;
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+.axis-x {
+  bottom: -28px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  white-space: nowrap;
+}
+.axis-y {
+  left: -44px;
+  top: 50%;
+  transform: translateY(-50%) rotate(-90deg);
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  white-space: nowrap;
+}
+.axis-arrow { color: var(--accent-1); }
+
+/* === SLIDE 8 - TRACTION === */
+.timeline {
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 0;
+  margin: 36px 0 32px;
+  position: relative;
+}
+.timeline::before {
+  content: '';
+  position: absolute;
+  top: 20px;
+  left: 10%;
+  right: 10%;
+  height: 2px;
+  background: var(--bg-secondary);
+}
+.tl-step {
+  flex: 1;
+  text-align: center;
+  position: relative;
+  max-width: 200px;
+}
+.tl-dot {
+  width: 40px; height: 40px;
+  border-radius: 50%;
+  background: var(--bg-card);
+  border: 2px solid var(--bg-secondary);
+  margin: 0 auto 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.9rem;
+  position: relative;
+  z-index: 2;
+}
+.tl-step.active .tl-dot {
+  border-color: var(--accent-1);
+  background: rgba(8,145,178,0.15);
+  box-shadow: 0 0 20px rgba(8,145,178,0.3);
+}
+.tl-step h3 { font-size: 0.88rem; margin-bottom: 4px; }
+.tl-step p { font-size: 0.78rem; color: var(--text-muted); }
+.traction-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 20px;
+}
+.traction-item {
+  display: flex;
+  gap: 14px;
+  align-items: flex-start;
+  padding: 16px 20px;
+  background: var(--bg-card);
+  border-radius: 12px;
+  border: 1px solid rgba(148,163,184,0.06);
+}
+.traction-item .ti-icon {
+  width: 36px; height: 36px;
+  border-radius: 10px;
+  background: rgba(8,145,178,0.1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  font-size: 1rem;
+}
+.traction-item p { font-size: 0.9rem; }
+
+/* === SLIDE 9 - TEAM === */
+.team-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 32px;
+  margin: 28px 0;
+}
+.team-card {
+  padding: 32px;
+  background: var(--bg-card);
+  border: 1px solid rgba(148,163,184,0.08);
+  border-radius: 16px;
+  position: relative;
+  overflow: hidden;
+}
+.team-card::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 3px;
+  background: linear-gradient(90deg, var(--accent-1), var(--accent-2));
+}
+.team-card .role {
+  font-family: 'Outfit', sans-serif;
+  font-weight: 700;
+  font-size: 1.3rem;
+  color: var(--text-primary);
+  margin-bottom: 16px;
+}
+.team-card .creds {
+  list-style: none;
+}
+.team-card .creds li {
+  padding: 6px 0;
+  font-size: 0.92rem;
+  color: var(--text-secondary);
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+.team-card .creds li::before {
+  content: '';
+  width: 5px; height: 5px;
+  border-radius: 50%;
+  background: var(--accent-1);
+  flex-shrink: 0;
+}
+.network-bar {
+  display: flex;
+  gap: 20px;
+  margin-top: 8px;
+}
+.network-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 20px;
+  background: var(--bg-card);
+  border: 1px solid rgba(148,163,184,0.08);
+  border-radius: 12px;
+  flex: 1;
+}
+.network-item .ni-icon { font-size: 1.2rem; }
+.network-item h3 { font-size: 0.88rem; margin-bottom: 2px; }
+.network-item p { font-size: 0.78rem; color: var(--text-muted); }
+
+/* === SLIDE 10 - BUSINESS MODEL === */
+.bm-stages {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 24px;
+  margin: 32px 0 24px;
+}
+.bm-stage {
+  padding: 28px 24px;
+  background: var(--bg-card);
+  border: 1px solid rgba(148,163,184,0.08);
+  border-radius: 16px;
+  text-align: center;
+  position: relative;
+}
+.bm-stage .stage-num {
+  font-family: 'IBM Plex Mono', monospace;
+  font-weight: 600;
+  font-size: 0.75rem;
+  color: var(--accent-1);
+  margin-bottom: 12px;
+}
+.bm-stage h3 { font-size: 1.2rem; margin-bottom: 8px; }
+.bm-stage p { font-size: 0.88rem; }
+.bm-stage.primary {
+  border-color: rgba(14,165,233,0.3);
+  background: linear-gradient(180deg, rgba(8,145,178,0.08), var(--bg-card));
+}
+.callout {
+  background: rgba(239,68,68,0.05);
+  border: 1px solid rgba(239,68,68,0.15);
+  border-radius: 12px;
+  padding: 18px 24px;
+  display: flex;
+  gap: 14px;
+  align-items: flex-start;
+}
+.callout .callout-icon { font-size: 1.3rem; flex-shrink: 0; }
+.callout p { font-size: 0.92rem; color: var(--text-secondary); }
+
+/* === SLIDE 11 - ASK === */
+.slide-11 {
+  background: linear-gradient(160deg, var(--bg-primary) 0%, rgba(8,145,178,0.06) 100%);
+}
+.ask-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 24px;
+  margin: 32px 0;
+}
+.ask-card {
+  padding: 28px 24px;
+  background: var(--bg-card);
+  border: 1px solid rgba(148,163,184,0.08);
+  border-radius: 16px;
+  text-align: center;
+}
+.ask-card .ask-icon { font-size: 2rem; margin-bottom: 12px; }
+.ask-card h3 { margin-bottom: 6px; }
+.ask-card p { font-size: 0.88rem; }
+.milestones {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 40px;
+  margin-top: 8px;
+  padding: 20px 32px;
+  background: var(--bg-card);
+  border: 1px solid rgba(148,163,184,0.08);
+  border-radius: 16px;
+}
+.milestone {
+  text-align: center;
+}
+.milestone .m-num {
+  font-family: 'IBM Plex Mono', monospace;
+  font-weight: 600;
+  font-size: 1.8rem;
+  color: var(--accent-2);
+  line-height: 1;
+}
+.milestone .m-label {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  margin-top: 6px;
+}
+.milestones .m-sep {
+  width: 40px; height: 1px;
+  background: var(--bg-secondary);
+}
+
+/* === SLIDE 12 - CLOSING === */
+.slide-12 {
+  justify-content: center;
+  align-items: center;
+  text-align: center;
+  background: radial-gradient(ellipse at 50% 50%, rgba(8,145,178,0.1) 0%, var(--bg-primary) 65%);
+}
+.slide-12 h1 {
+  font-size: 4rem;
+  margin-bottom: 8px;
+}
+.slide-12 .closing-sub {
+  font-family: 'Outfit', sans-serif;
+  font-weight: 300;
+  font-size: 2rem;
+  color: var(--text-secondary);
+  margin-bottom: 48px;
+}
+.slide-12 .brand {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+.slide-12 .brand span {
+  font-family: 'Outfit', sans-serif;
+  font-weight: 600;
+  color: var(--text-muted);
+  font-size: 0.95rem;
+}
+.slide-12 .contact {
+  font-size: 0.9rem;
+  color: var(--text-muted);
+}
+
+/* === WAVEFORM LOGO SVG === */
+.waveform-logo {
+  display: inline-block;
+}
+
+/* === RESPONSIVE === */
+@media (max-width: 1024px) {
+  .slide { padding: 40px 48px; }
+  h1 { font-size: 2.4rem; }
+  .slide-1 h1 { font-size: 3.2rem; }
+  .problem-grid { grid-template-columns: 1fr; gap: 16px; }
+  .slide-3 .two-col { grid-template-columns: 1fr; gap: 32px; }
+  .team-grid { grid-template-columns: 1fr; }
+  .bm-stages { grid-template-columns: 1fr; }
+  .ask-grid { grid-template-columns: 1fr; }
+}
+</style>
+</head>
+<body>
+
+<div class="deck">
+
+<!-- ===================== SLIDE 1 - HERO ===================== -->
+<section class="slide slide-1 active" data-slide="1">
+  <div class="hero-layout">
+    <!-- LEFT: Brand + Value Prop -->
+    <div class="hero-left">
+      <div class="logo-row anim-item">
+        <svg width="38" height="38" viewBox="0 0 32 32" fill="none">
+          <defs>
+            <linearGradient id="wg" x1="0" y1="0" x2="32" y2="32">
+              <stop offset="0%" stop-color="#0891b2"/>
+              <stop offset="100%" stop-color="#0ea5e9"/>
+            </linearGradient>
+          </defs>
+          <rect x="2" y="12" width="3" height="8" rx="1.5" fill="url(#wg)" opacity="0.5"/>
+          <rect x="7" y="8" width="3" height="16" rx="1.5" fill="url(#wg)" opacity="0.7"/>
+          <rect x="12" y="4" width="3" height="24" rx="1.5" fill="url(#wg)"/>
+          <rect x="17" y="9" width="3" height="14" rx="1.5" fill="url(#wg)" opacity="0.8"/>
+          <rect x="22" y="11" width="3" height="10" rx="1.5" fill="url(#wg)" opacity="0.6"/>
+          <path d="M26 16 L30 12 L30 20 Z" fill="url(#wg)" opacity="0.9"/>
+        </svg>
+        <span class="logo-wordmark">PACER</span>
+      </div>
+      <h1 class="anim-item">
+        AI that hears<br>
+        <span class="gradient">how students<br>struggle</span> to read
+      </h1>
+      <p class="hero-desc anim-item">
+        Students read aloud from real books. Pacer listens, detects every moment of struggle, and returns rich diagnostic data to teachers &mdash; with zero prep.
+      </p>
+      <div class="hero-pills anim-item">
+        <div class="hero-pill">
+          <span class="pill-dot" style="background:var(--accent-1)"></span>
+          Middle School RTI
+        </div>
+        <div class="hero-pill">
+          <span class="pill-dot" style="background:var(--green)"></span>
+          13 Miscue Types
+        </div>
+        <div class="hero-pill">
+          <span class="pill-dot" style="background:var(--purple)"></span>
+          3-Engine ASR
+        </div>
+        <div class="hero-pill">
+          <span class="pill-dot" style="background:var(--orange)"></span>
+          Real Books, Not Screens
+        </div>
+      </div>
+    </div>
+
+    <!-- RIGHT: Live Demo Panel -->
+    <div class="hero-right">
+      <div class="demo-panel anim-item">
+        <div class="demo-window">
+          <div class="demo-titlebar">
+            <div class="demo-dot r"></div>
+            <div class="demo-dot y"></div>
+            <div class="demo-dot g"></div>
+            <span>pacer &mdash; assessment results</span>
+          </div>
+          <div class="demo-body">
+            <div class="demo-label">Student Reading &mdash; Passage Analysis</div>
+            <div class="demo-words">
+              <span class="demo-word correct">The</span>
+              <span class="demo-word correct">boy</span>
+              <span class="demo-word hesitation">walked<span class="hes-bar"></span></span>
+              <span class="demo-word correct">slowly</span>
+              <span class="demo-word correct">to</span>
+              <span class="demo-word correct">the</span>
+              <span class="demo-word struggle">
+                <span class="struggle-indicator">3.2s &bull; decoding</span>
+                gro&ndash;groc&ndash;grocery
+              </span>
+              <span class="demo-word correct">store</span>
+              <span class="demo-word correct">and</span>
+              <span class="demo-word substitution">
+                <span class="sub-original">bought &rarr;</span>
+                bringed
+              </span>
+              <span class="demo-word correct">some</span>
+              <span class="demo-word pause">&#8943; 4.1s</span>
+              <span class="demo-word selfcorr">
+                <span class="sc-label">self-corrected</span>
+                milk
+              </span>
+              <span class="demo-word correct">for</span>
+              <span class="demo-word correct">his</span>
+              <span class="demo-word omission">grandmother</span>
+              <span class="demo-word correct">who</span>
+              <span class="demo-word correct">lived</span>
+              <span class="demo-word substitution">
+                <span class="sub-original">across &rarr;</span>
+                around
+              </span>
+              <span class="demo-word correct">the</span>
+              <span class="demo-word correct">street.</span>
+            </div>
+            <div class="demo-metrics">
+              <div class="demo-metric">
+                <div class="dm-val">62</div>
+                <div class="dm-label">WCPM</div>
+              </div>
+              <div class="demo-metric">
+                <div class="dm-val">78%</div>
+                <div class="dm-label">Accuracy</div>
+              </div>
+              <div class="demo-metric">
+                <div class="dm-val" style="color:var(--orange)">4</div>
+                <div class="dm-label">Errors</div>
+              </div>
+              <div class="demo-metric">
+                <div class="dm-val" style="color:var(--teal)">1</div>
+                <div class="dm-label">Struggle</div>
+              </div>
+              <div class="demo-metric">
+                <div class="dm-val" style="color:var(--purple)">1</div>
+                <div class="dm-label">Self-Corr</div>
+              </div>
+              <div class="demo-metric">
+                <div class="dm-val" style="color:var(--red)">1</div>
+                <div class="dm-label">Omission</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===================== SLIDE 2 - PROBLEM ===================== -->
+<section class="slide slide-2" data-slide="2">
+  <h1 class="anim-item">Reading Fluency Assessment<br>Is <span class="gradient">Broken</span></h1>
+  <div class="problem-grid">
+    <div class="problem-card anim-item">
+      <span class="icon">👩‍🏫</span>
+      <h3>Overwhelmed Teachers</h3>
+      <p>120+ students per teacher. Trained to teach content, not diagnose reading struggle. They need help, not more dashboards.</p>
+    </div>
+    <div class="problem-card anim-item">
+      <span class="icon">📊</span>
+      <h3>Blunt Metrics</h3>
+      <p>Current tools measure words-correct-per-minute &mdash; like diagnosing heart disease by taking someone's temperature. They miss <em>how</em> a student struggles.</p>
+    </div>
+    <div class="problem-card anim-item">
+      <span class="icon">⏳</span>
+      <h3>Closing Window</h3>
+      <p>Middle school is the last realistic intervention window. After 8th grade, outcomes calcify. Without identification, there is no intervention.</p>
+    </div>
+  </div>
+  <div class="funnel anim-item">
+    <div class="funnel-stage ok">
+      <div class="stage-label" style="color:var(--green)">Elementary</div>
+      <div class="stage-sub">Some screening</div>
+    </div>
+    <span class="funnel-arrow">→</span>
+    <div class="funnel-stage broken">
+      <div class="stage-label" style="color:var(--red)">Middle School</div>
+      <div class="stage-sub">⚠ Gap &mdash; almost nothing</div>
+    </div>
+    <span class="funnel-arrow">→</span>
+    <div class="funnel-stage late">
+      <div class="stage-label">High School</div>
+      <div class="stage-sub">Too late</div>
+    </div>
+  </div>
+</section>
+
+<!-- ===================== SLIDE 3 - WHY NOW ===================== -->
+<section class="slide slide-3" data-slide="3">
+  <h1 class="anim-item">A <span class="gradient">LeNet Moment</span><br>for Speech Recognition</h1>
+  <div class="two-col">
+    <ul class="points anim-item">
+      <li>ASR has reached a tipping point &mdash; but models are trained on <strong>adult, fluent speech</strong></li>
+      <li>Accurate ASR for <strong>disfluent populations</strong> (children, struggling readers, dialect speakers) is the next frontier</li>
+      <li><strong>Edge compute</strong> now makes COPPA/FERPA-compliant classroom deployment practical</li>
+      <li><strong>RTI</strong> is mandated but under-resourced &mdash; schools need tools, not more theory</li>
+    </ul>
+    <div class="gap-chart anim-item">
+      <div class="gap-bar">
+        <div class="bar-label">
+          <span>Adult Fluent Speech</span>
+          <span class="stat-number">~95%</span>
+        </div>
+        <div class="bar-track">
+          <div class="bar-fill high">Accurate</div>
+        </div>
+      </div>
+      <div class="gap-bar">
+        <div class="bar-label">
+          <span>Child Disfluent Speech</span>
+          <span class="stat-number">~35%</span>
+        </div>
+        <div class="bar-track">
+          <div class="bar-fill low">Unreliable</div>
+        </div>
+      </div>
+      <div class="gap-label">↕ This gap is the entire opportunity</div>
+    </div>
+  </div>
+</section>
+
+<!-- ===================== SLIDE 4 - SOLUTION ===================== -->
+<section class="slide slide-4" data-slide="4">
+  <h1 class="anim-item">A <span class="gradient">Struggle Detector</span>,<br>Not a Score Generator</h1>
+  <div class="solution-flow anim-item">
+    <div class="flow-step">
+      <span class="flow-icon">📖</span>
+      <h3>Real Books</h3>
+      <p>Student reads from a physical book</p>
+    </div>
+    <span class="flow-arrow">→</span>
+    <div class="flow-step">
+      <span class="flow-icon">🎙️</span>
+      <h3>Pacer Listens</h3>
+      <p>Classroom device captures audio</p>
+    </div>
+    <span class="flow-arrow">→</span>
+    <div class="flow-step">
+      <span class="flow-icon">🧠</span>
+      <h3>AI Analyzes</h3>
+      <p>Multi-engine struggle classification</p>
+    </div>
+    <span class="flow-arrow">→</span>
+    <div class="flow-step">
+      <span class="flow-icon">📋</span>
+      <h3>Teacher Sees</h3>
+      <p>Rich data, zero prep required</p>
+    </div>
+  </div>
+  <div class="quote-box anim-item">
+    <p>"A blood pressure cuff for reading &mdash; installed in the classroom, reliable, unobtrusive, always on."</p>
+  </div>
+  <div class="feature-row anim-item">
+    <div class="feature-chip"><span class="dot"></span>Hesitations</div>
+    <div class="feature-chip"><span class="dot"></span>Substitutions</div>
+    <div class="feature-chip"><span class="dot"></span>Repetitions</div>
+    <div class="feature-chip"><span class="dot"></span>Omissions</div>
+    <div class="feature-chip"><span class="dot"></span>Self-corrections</div>
+    <div class="feature-chip"><span class="dot"></span>Prosody breakdowns</div>
+    <div class="feature-chip"><span class="dot"></span>Longitudinal trends</div>
+  </div>
+</section>
+
+<!-- ===================== SLIDE 5 - HOW IT WORKS ===================== -->
+<section class="slide slide-5" data-slide="5">
+  <h1 class="anim-item"><span class="gradient">13-Point</span> Miscue Classification</h1>
+  <div class="pipeline anim-item">
+    <div class="pipe-step">🎤 Audio</div>
+    <span class="pipe-arrow">→</span>
+    <div class="pipe-step accent">Multi-Engine ASR<br><small style="font-weight:400;font-size:0.7rem;color:var(--text-muted)">3 engines</small></div>
+    <span class="pipe-arrow">→</span>
+    <div class="pipe-step">Forced Alignment</div>
+    <span class="pipe-arrow">→</span>
+    <div class="pipe-step accent">Disfluency Detection</div>
+    <span class="pipe-arrow">→</span>
+    <div class="pipe-step">Struggle Classification</div>
+    <span class="pipe-arrow">→</span>
+    <div class="pipe-step accent">📊 Dashboard</div>
+  </div>
+  <div class="miscue-grid anim-item">
+    <div class="miscue-section">
+      <h3>Counted as Errors</h3>
+      <div class="miscue-tags">
+        <span class="miscue-tag red">Omission</span>
+        <span class="miscue-tag orange">Substitution</span>
+        <span class="miscue-tag teal">Struggle</span>
+        <span class="miscue-tag orange">Morphological</span>
+        <span class="miscue-tag gray">Long Pause</span>
+      </div>
+    </div>
+    <div class="miscue-section">
+      <h3>Diagnostic (Shown, Not Scored)</h3>
+      <div class="miscue-tags">
+        <span class="miscue-tag blue">Insertion</span>
+        <span class="miscue-tag orange">Hesitation</span>
+        <span class="miscue-tag purple">Self-Correction</span>
+        <span class="miscue-tag pink">Fragments</span>
+        <span class="miscue-tag pink">Repetitions</span>
+        <span class="miscue-tag purple">Fillers</span>
+      </div>
+    </div>
+    <div class="miscue-section">
+      <h3>Forgiveness Rules</h3>
+      <div class="miscue-tags">
+        <span class="miscue-tag green">Proper Noun</span>
+      </div>
+      <div style="margin-top:16px;">
+        <div class="engine-badge">
+          ⚡ 3-Engine Cross-Validation: Reverb &bull; Google STT &bull; Deepgram Nova-3
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===================== SLIDE 6 - MARKET ===================== -->
+<section class="slide slide-6" data-slide="6">
+  <h1 class="anim-item"><span class="gradient">$2.4B</span> Market &mdash;<br>Massive Gap in the Middle</h1>
+  <div class="market-layout">
+    <div class="concentric anim-item">
+      <div class="ring outer">
+        <span class="ring-label">Expansion: SLP, Private, Homeschool</span>
+      </div>
+      <div class="ring mid">
+        <span class="ring-label">Adjacent: K-5, High School</span>
+      </div>
+      <div class="ring core">
+        <span class="ring-label">Core:<br>Middle School<br>RTI Screening</span>
+      </div>
+    </div>
+    <ul class="market-points anim-item">
+      <li>
+        <span class="mp-icon">🎯</span>
+        <div><strong>Middle school</strong> is drastically underserved &mdash; less money, more complex issues, fewer competitors</div>
+      </li>
+      <li>
+        <span class="mp-icon">🏫</span>
+        <div><strong>B2B entry:</strong> school districts via RTI/MTSS mandates (existing budget line items)</div>
+      </li>
+      <li>
+        <span class="mp-icon">👨‍👩‍👦</span>
+        <div><strong>B2C expansion:</strong> SLPs, private schools, homeschool families</div>
+      </li>
+      <li>
+        <span class="mp-icon">🗄️</span>
+        <div><strong>Data moat:</strong> every session = proprietary disfluent children's speech data &mdash; the scarcest, most valuable dataset in edtech ASR</div>
+      </li>
+    </ul>
+  </div>
+</section>
+
+<!-- ===================== SLIDE 7 - COMPETITION ===================== -->
+<section class="slide" data-slide="7">
+  <h1 class="anim-item">Positioned Where<br><span class="gradient">No One Else Is Playing</span></h1>
+  <div class="matrix-container anim-item">
+    <div class="axis-label axis-x">Score-level <span class="axis-arrow">→</span> Struggle-level granularity</div>
+    <div class="axis-label axis-y">Screen-based <span class="axis-arrow">→</span> Physical books</div>
+    <div class="matrix">
+      <div class="matrix-cell">
+        <div class="competitor">Amira Learning<small>~$40M raised &bull; AI tutoring</small></div>
+        <div class="competitor" style="margin-top:8px;">Ello<small>Reed Hastings, YC &bull; K-2 books</small></div>
+      </div>
+      <div class="matrix-cell" style="opacity:0.5;">
+        <div class="empty-label">&mdash;</div>
+      </div>
+      <div class="matrix-cell">
+        <div class="competitor">NWEA MAP<small>Legacy &bull; Standardized scores</small></div>
+        <div class="competitor" style="margin-top:8px;">iStation<small>Legacy &bull; WCPM only</small></div>
+      </div>
+      <div class="matrix-cell highlight">
+        <div class="pacer-badge">
+          PACER
+          <small>Alone in this quadrant</small>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===================== SLIDE 8 - TRACTION ===================== -->
+<section class="slide" data-slide="8">
+  <h1 class="anim-item"><span class="gradient">Already</span> in Classrooms</h1>
+  <div class="timeline anim-item">
+    <div class="tl-step">
+      <div class="tl-dot">✓</div>
+      <h3>Built MVP</h3>
+      <p>Full AI pipeline live</p>
+    </div>
+    <div class="tl-step active">
+      <div class="tl-dot">◉</div>
+      <h3>Morningside Pilot</h3>
+      <p>Active &mdash; real students</p>
+    </div>
+    <div class="tl-step">
+      <div class="tl-dot">3-5</div>
+      <h3>School Expansion</h3>
+      <p>Precision teaching network</p>
+    </div>
+    <div class="tl-step">
+      <div class="tl-dot">⟶</div>
+      <h3>District Partners</h3>
+      <p>Paid pilots</p>
+    </div>
+  </div>
+  <div class="traction-grid anim-item">
+    <div class="traction-item">
+      <div class="ti-icon">🏫</div>
+      <div><p><strong>Morningside Academy</strong> &mdash; live pilot, real students generating real data, zero bureaucratic friction</p></div>
+    </div>
+    <div class="traction-item">
+      <div class="ti-icon">🔗</div>
+      <div><p><strong>Andrew Kieta</strong> &mdash; precision teaching network opens doors to schools already committed to data-driven reading</p></div>
+    </div>
+    <div class="traction-item">
+      <div class="ti-icon">⚙️</div>
+      <div><p><strong>Product functional today</strong> &mdash; Word Speed Map, disfluency detection, multi-miscue engine all live</p></div>
+    </div>
+    <div class="traction-item">
+      <div class="ti-icon">🔒</div>
+      <div><p><strong>COPPA/FERPA compliant</strong> architecture from day one &mdash; edge compute, no cloud-stored student audio</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- ===================== SLIDE 9 - TEAM ===================== -->
+<section class="slide" data-slide="9">
+  <h1 class="anim-item"><span class="gradient">Built</span> for This Problem</h1>
+  <div class="team-grid">
+    <div class="team-card anim-item">
+      <div class="role">Emma</div>
+      <ul class="creds">
+        <li>PhD from <strong>Vanderbilt</strong> &mdash; #1 Special Education program</li>
+        <li>Mentored by <strong>Doug Fuchs</strong> (creator of PALs system)</li>
+        <li>Dual expertise: <strong>Linguistics + Special Education</strong></li>
+        <li>Decade of classroom teaching experience</li>
+        <li>Currently runs the <strong>Wing Institute</strong></li>
+      </ul>
+    </div>
+    <div class="team-card anim-item">
+      <div class="role">Founder</div>
+      <ul class="creds">
+        <li><strong>10+ years</strong> as entrepreneur</li>
+        <li>Built Pacer's <strong>entire AI pipeline</strong> solo</li>
+        <li>All-in: <strong>12+ hour days</strong>, 7 days/week</li>
+        <li>Deep technical background &mdash; AI/ML, edge compute, audio processing</li>
+        <li>Former Amazon seller &mdash; understands <strong>product-market fit</strong></li>
+      </ul>
+    </div>
+  </div>
+  <div class="network-bar anim-item">
+    <div class="network-item">
+      <span class="ni-icon">🏫</span>
+      <div>
+        <h3>Morningside Academy</h3>
+        <p>Free classroom access &bull; Pilot partner &bull; Network gateway</p>
+      </div>
+    </div>
+    <div class="network-item">
+      <span class="ni-icon">💻</span>
+      <div>
+        <h3>Nvidia Connection</h3>
+        <p>Connor &mdash; Distinguished Engineer &bull; GPU/inference expertise</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===================== SLIDE 10 - BUSINESS MODEL ===================== -->
+<section class="slide" data-slide="10">
+  <h1 class="anim-item">Land with Screening,<br><span class="gradient">Expand with Data</span></h1>
+  <div class="bm-stages anim-item">
+    <div class="bm-stage primary">
+      <div class="stage-num">01 / LAND</div>
+      <h3>RTI Screening</h3>
+      <p>Per-school SaaS subscription. Aligns with existing budget line items and mandates.</p>
+    </div>
+    <div class="bm-stage">
+      <div class="stage-num">02 / EXPAND</div>
+      <h3>District Analytics</h3>
+      <p>Progress monitoring, longitudinal dashboards, tier 2/3 intervention tracking.</p>
+    </div>
+    <div class="bm-stage">
+      <div class="stage-num">03 / DEFEND</div>
+      <h3>Data Moat</h3>
+      <p>Proprietary disfluent speech data. License fine-tuned model weights to other platforms.</p>
+    </div>
+  </div>
+  <div class="callout anim-item">
+    <span class="callout-icon">💡</span>
+    <p><strong>Soapbox Labs</strong> was acquired by Curriculum Associates for an estimated <strong>$100M+</strong> &mdash; for the children's speech data. First thing they did: closed the API to competitors. Our data will be richer because we capture <em>disfluency</em>, not just correct speech.</p>
+  </div>
+</section>
+
+<!-- ===================== SLIDE 11 - THE ASK ===================== -->
+<section class="slide slide-11" data-slide="11">
+  <h1 class="anim-item">Accelerate Pacer into<br><span class="gradient">50 Classrooms</span></h1>
+  <div class="anim-item" style="margin-bottom:12px;">
+    <h2 style="text-align:center; color:var(--text-secondary); font-weight:400;">Seeking Launch.co Partnership</h2>
+  </div>
+  <div class="ask-grid anim-item">
+    <div class="ask-card">
+      <div class="ask-icon">🧑‍💻</div>
+      <h3>Hire</h3>
+      <p>First ML engineer to accelerate model development</p>
+    </div>
+    <div class="ask-card">
+      <div class="ask-icon">🖥️</div>
+      <h3>Deploy</h3>
+      <p>Edge hardware in classrooms for on-device inference</p>
+    </div>
+    <div class="ask-card">
+      <div class="ask-icon">📝</div>
+      <h3>Validate</h3>
+      <p>3 paid district pilots to prove sales motion</p>
+    </div>
+  </div>
+  <div class="milestones anim-item">
+    <div class="milestone">
+      <div class="m-num">50</div>
+      <div class="m-label">Classrooms</div>
+    </div>
+    <div class="m-sep"></div>
+    <div class="milestone">
+      <div class="m-num">3</div>
+      <div class="m-label">District LOIs</div>
+    </div>
+    <div class="m-sep"></div>
+    <div class="milestone">
+      <div class="m-num">1</div>
+      <div class="m-label">Validation Study</div>
+    </div>
+    <div class="m-sep"></div>
+    <div class="milestone" style="opacity:0.7;">
+      <div class="m-num" style="font-size:1rem;">12 mo</div>
+      <div class="m-label">Timeline</div>
+    </div>
+  </div>
+</section>
+
+<!-- ===================== SLIDE 12 - CLOSING ===================== -->
+<section class="slide slide-12" data-slide="12">
+  <div class="anim-item brand">
+    <svg class="waveform-logo" width="36" height="36" viewBox="0 0 32 32" fill="none">
+      <defs>
+        <linearGradient id="wg2" x1="0" y1="0" x2="32" y2="32">
+          <stop offset="0%" stop-color="#0891b2"/>
+          <stop offset="100%" stop-color="#0ea5e9"/>
+        </linearGradient>
+      </defs>
+      <rect x="2" y="12" width="3" height="8" rx="1.5" fill="url(#wg2)" opacity="0.5"/>
+      <rect x="7" y="8" width="3" height="16" rx="1.5" fill="url(#wg2)" opacity="0.7"/>
+      <rect x="12" y="4" width="3" height="24" rx="1.5" fill="url(#wg2)"/>
+      <rect x="17" y="9" width="3" height="14" rx="1.5" fill="url(#wg2)" opacity="0.8"/>
+      <rect x="22" y="11" width="3" height="10" rx="1.5" fill="url(#wg2)" opacity="0.6"/>
+      <path d="M26 16 L30 12 L30 20 Z" fill="url(#wg2)" opacity="0.9"/>
+    </svg>
+    <span>Pacer</span>
+  </div>
+  <h1 class="anim-item">Every Struggling Reader <span class="gradient">Found</span>.</h1>
+  <div class="closing-sub anim-item">None Left Behind.</div>
+  <p class="contact anim-item" style="margin-top: 12px;">
+    <!-- Replace with your actual contact info -->
+    yourname@email.com &bull; yourwebsite.com
+  </p>
+</section>
+
+</div><!-- /deck -->
+
+<!-- UI CONTROLS -->
+<div class="progress-bar" id="progressBar"></div>
+<div class="slide-counter" id="slideCounter">1 / 12</div>
+<div class="nav-arrows">
+  <button onclick="prev()" aria-label="Previous slide">←</button>
+  <button onclick="next()" aria-label="Next slide">→</button>
+</div>
+
+<script>
+(function() {
+  const slides = document.querySelectorAll('.slide');
+  const total = slides.length;
+  let current = 0;
+
+  function go(index) {
+    if (index < 0 || index >= total) return;
+    slides[current].classList.remove('active');
+    // Reset animations for re-entry
+    slides[current].querySelectorAll('.anim-item').forEach(el => {
+      el.style.opacity = '0';
+      el.style.transform = 'translateY(24px)';
+    });
+    current = index;
+    slides[current].classList.add('active');
+    // Trigger animations
+    requestAnimationFrame(() => {
+      slides[current].querySelectorAll('.anim-item').forEach(el => {
+        el.style.opacity = '';
+        el.style.transform = '';
+      });
+    });
+    document.getElementById('progressBar').style.width = ((current + 1) / total * 100) + '%';
+    document.getElementById('slideCounter').textContent = (current + 1) + ' / ' + total;
+  }
+
+  window.next = function() { go(current + 1); };
+  window.prev = function() { go(current - 1); };
+
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'ArrowRight' || e.key === 'ArrowDown' || e.key === ' ') {
+      e.preventDefault();
+      next();
+    } else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
+      e.preventDefault();
+      prev();
+    } else if (e.key === 'Home') {
+      e.preventDefault();
+      go(0);
+    } else if (e.key === 'End') {
+      e.preventDefault();
+      go(total - 1);
+    }
+  });
+
+  // Touch support
+  let touchStartX = 0;
+  document.addEventListener('touchstart', function(e) {
+    touchStartX = e.touches[0].clientX;
+  }, { passive: true });
+  document.addEventListener('touchend', function(e) {
+    const diff = touchStartX - e.changedTouches[0].clientX;
+    if (Math.abs(diff) > 50) {
+      diff > 0 ? next() : prev();
+    }
+  }, { passive: true });
+
+  // Click to advance (right half next, left half prev)
+  document.querySelector('.deck').addEventListener('click', function(e) {
+    if (e.target.closest('.nav-arrows') || e.target.closest('button') || e.target.closest('a')) return;
+    if (e.clientX > window.innerWidth * 0.5) {
+      next();
+    } else {
+      prev();
+    }
+  });
+
+  // Initialize first slide
+  go(0);
+})();
+</script>
+
+</body>
+</html>

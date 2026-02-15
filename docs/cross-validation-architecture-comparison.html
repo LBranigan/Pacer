@@ -1,0 +1,502 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Cross-Validation Architecture: NW Alignment vs Temporal Containment</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Segoe UI', system-ui, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.6; padding: 2rem; }
+  h1 { color: #58a6ff; font-size: 1.8rem; margin-bottom: 0.5rem; }
+  h2 { color: #79c0ff; font-size: 1.3rem; margin: 2rem 0 1rem; border-bottom: 1px solid #30363d; padding-bottom: 0.5rem; }
+  h3 { color: #d2a8ff; font-size: 1.1rem; margin: 1.5rem 0 0.75rem; }
+  .subtitle { color: #8b949e; margin-bottom: 2rem; }
+  .container { max-width: 1200px; margin: 0 auto; }
+
+  /* Pipeline diagrams */
+  .pipeline { display: flex; flex-direction: column; gap: 0.5rem; margin: 1rem 0; }
+  .stage { display: flex; align-items: center; gap: 0.75rem; padding: 0.75rem 1rem; border-radius: 8px; font-size: 0.9rem; }
+  .stage-num { font-weight: 700; font-size: 0.8rem; min-width: 2rem; text-align: center; padding: 2px 6px; border-radius: 4px; }
+  .stage-name { font-weight: 600; min-width: 200px; }
+  .stage-desc { color: #8b949e; flex: 1; }
+  .stage-method { font-size: 0.75rem; padding: 2px 8px; border-radius: 10px; font-weight: 600; white-space: nowrap; }
+
+  /* Method badges */
+  .method-nw { background: #b62324; color: #fff; }
+  .method-temporal { background: #1f6feb; color: #fff; }
+  .method-text { background: #238636; color: #fff; }
+  .method-heuristic { background: #9e6a03; color: #fff; }
+
+  /* Current pipeline */
+  .current .stage { background: #161b22; border: 1px solid #30363d; }
+  .current .stage-num { background: #b62324; color: #fff; }
+  .current .stage.is-problem { border-color: #f85149; background: #1c1210; }
+  .current .stage.is-patch { border-color: #d29922; background: #1c1a10; }
+
+  /* Proposed pipeline */
+  .proposed .stage { background: #0d1f2d; border: 1px solid #1f4a6e; }
+  .proposed .stage-num { background: #1f6feb; color: #fff; }
+  .proposed .stage.is-eliminated { opacity: 0.35; text-decoration: line-through; border-style: dashed; }
+  .proposed .stage.is-new { border-color: #3fb950; background: #0d1f12; }
+
+  /* Arrow between stages */
+  .arrow { text-align: center; color: #484f58; font-size: 1.2rem; margin: -0.25rem 0; }
+
+  /* Side by side comparison */
+  .comparison { display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; margin: 1.5rem 0; }
+  @media (max-width: 900px) { .comparison { grid-template-columns: 1fr; } }
+  .compare-box { background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 1.25rem; }
+  .compare-box h3 { margin-top: 0; }
+  .compare-box.bad { border-color: #f85149; }
+  .compare-box.good { border-color: #3fb950; }
+  .compare-box .label { font-size: 0.75rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.5rem; }
+  .compare-box.bad .label { color: #f85149; }
+  .compare-box.good .label { color: #3fb950; }
+
+  /* Timeline visualization */
+  .timeline-box { background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 1.25rem; margin: 1rem 0; overflow-x: auto; }
+  .timeline { position: relative; height: 200px; min-width: 800px; }
+  .timeline-row { position: absolute; left: 0; right: 0; height: 40px; }
+  .timeline-row.parakeet { top: 10px; }
+  .timeline-row.reverb { top: 70px; }
+  .timeline-row.nw-pairs { top: 130px; }
+  .timeline-label { position: absolute; left: -5px; font-size: 0.7rem; font-weight: 700; color: #8b949e; top: -14px; }
+  .tword { position: absolute; height: 32px; border-radius: 4px; display: flex; align-items: center; justify-content: center; font-size: 0.75rem; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 0 4px; }
+  .tword.pk { background: #1f6feb33; border: 2px solid #1f6feb; color: #79c0ff; }
+  .tword.rv { background: #b6232433; border: 2px solid #b62324; color: #f47067; }
+  .tword.rv.garbled { border-style: dashed; background: #b6232411; }
+  .nw-line { position: absolute; border-left: 1px dashed #484f58; }
+  .nw-pair-label { position: absolute; font-size: 0.65rem; color: #8b949e; text-align: center; }
+
+  /* Edge case table */
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0; font-size: 0.85rem; }
+  th { background: #161b22; color: #79c0ff; text-align: left; padding: 0.75rem; border: 1px solid #30363d; }
+  td { padding: 0.75rem; border: 1px solid #30363d; vertical-align: top; }
+  tr:nth-child(even) td { background: #161b2288; }
+  .verdict { font-weight: 700; font-size: 0.8rem; padding: 2px 8px; border-radius: 4px; display: inline-block; }
+  .verdict.better { background: #238636; color: #fff; }
+  .verdict.same { background: #30363d; color: #c9d1d9; }
+  .verdict.worse { background: #b62324; color: #fff; }
+
+  /* Key insight boxes */
+  .insight { background: #161b22; border-left: 4px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0; border-radius: 0 8px 8px 0; }
+  .insight.warn { border-left-color: #d29922; }
+  .insight.good { border-left-color: #3fb950; }
+  .insight strong { color: #58a6ff; }
+  .insight.warn strong { color: #d29922; }
+  .insight.good strong { color: #3fb950; }
+
+  code { background: #30363d; padding: 0.15em 0.4em; border-radius: 3px; font-size: 0.85em; font-family: 'Cascadia Code', 'Fira Code', monospace; }
+  pre { background: #0d1117; border: 1px solid #30363d; border-radius: 8px; padding: 1rem; overflow-x: auto; font-size: 0.8rem; margin: 0.5rem 0; }
+
+  .tag { display: inline-block; font-size: 0.7rem; padding: 1px 6px; border-radius: 3px; font-weight: 600; margin-right: 4px; }
+  .tag.nw { background: #b6232444; color: #f47067; border: 1px solid #b62324; }
+  .tag.tc { background: #1f6feb44; color: #79c0ff; border: 1px solid #1f6feb; }
+</style>
+</head>
+<body>
+<div class="container">
+
+<h1>Cross-Validation Architecture Comparison</h1>
+<p class="subtitle">NW Sequential Alignment vs Temporal Containment — with real bug trace</p>
+
+<!-- ============================================================ -->
+<h2>The Bug That Triggered This Analysis</h2>
+
+<p>Reference text: <code>...the volume of content you will be creating, you may also want...</code></p>
+
+<div class="timeline-box">
+<div class="timeline">
+  <!-- Parakeet row -->
+  <div class="timeline-row parakeet">
+    <div class="timeline-label">PARAKEET</div>
+    <div class="tword pk" style="left: 0%; width: 11%;">content<br><span style="font-size:0.6rem;opacity:0.7">15.2-15.7s</span></div>
+    <div class="tword pk" style="left: 13%; width: 4%;">you<br><span style="font-size:0.6rem;opacity:0.7">15.7-15.8s</span></div>
+    <div class="tword pk" style="left: 19%; width: 6%;">will<br><span style="font-size:0.6rem;opacity:0.7">15.8-16.1s</span></div>
+    <div class="tword pk" style="left: 27%; width: 6%;">be<br><span style="font-size:0.6rem;opacity:0.7">16.1-16.3s</span></div>
+    <div class="tword pk" style="left: 70%; width: 20%;">creating<br><span style="font-size:0.6rem;opacity:0.7">18.8-19.7s</span></div>
+  </div>
+  <!-- Reverb row -->
+  <div class="timeline-row reverb">
+    <div class="timeline-label">REVERB V=1</div>
+    <div class="tword rv" style="left: 0%; width: 3%;">content<br><span style="font-size:0.6rem;opacity:0.7">15.1s</span></div>
+    <div class="tword rv" style="left: 5%; width: 8%;">you'll<br><span style="font-size:0.6rem;opacity:0.7">15.4-15.7s</span></div>
+    <div class="tword rv" style="left: 14%; width: 2%;">be<br><span style="font-size:0.6rem;opacity:0.7">15.7s</span></div>
+    <div class="tword rv garbled" style="left: 22%; width: 40%;">crere<br><span style="font-size:0.6rem;opacity:0.7">16.1-17.9s ⚠️ CTC artifact</span></div>
+    <div class="tword rv" style="left: 73%; width: 7%;">creating<br><span style="font-size:0.6rem;opacity:0.7">19.0-19.2s</span></div>
+  </div>
+  <!-- NW pairing row -->
+  <div class="timeline-row nw-pairs">
+    <div class="timeline-label">NW CROSS-VAL PAIRING (current)</div>
+    <div style="position:absolute;left:5%;font-size:0.7rem;color:#f47067;top:5px;">you'll ↔ you <span class="tag nw">disagreed</span></div>
+    <div style="position:absolute;left:27%;font-size:0.7rem;color:#f47067;top:5px;">be ↔ will <span class="tag nw">disagreed</span></div>
+    <div style="position:absolute;left:49%;font-size:0.7rem;color:#f47067;top:5px;">crere ↔ be <span class="tag nw">disagreed</span></div>
+    <div style="position:absolute;left:5%;font-size:0.65rem;color:#d29922;top:28px;">⚠ All 3 disagreed → fragment merge concatenates → "you'llbecrere" → 2 omissions</div>
+  </div>
+</div>
+</div>
+
+<div class="insight warn">
+  <strong>Root cause:</strong> NW alignment forces 1:1 sequential pairing. When Reverb has 3 words in a time span where Parakeet has 3 <em>different</em> words, NW pairs them positionally: <code>you'll↔you</code>, <code>be↔will</code>, <code>crere↔be</code>. This is semantically wrong — it doesn't reflect what happened acoustically. Then the fragment merge heuristic tried to fix the damage and made it worse.
+</div>
+
+<!-- ============================================================ -->
+<h2>Current Pipeline: 3 NW Alignments + Patch Stack</h2>
+
+<div class="pipeline current">
+  <div class="stage">
+    <span class="stage-num">1</span>
+    <span class="stage-name">Reverb Dual-Pass</span>
+    <span class="stage-desc">V=1.0 (verbatim) + V=0.0 (clean) transcription</span>
+    <span class="stage-method method-text">ASR</span>
+  </div>
+  <div class="arrow">↓</div>
+  <div class="stage">
+    <span class="stage-num">2</span>
+    <span class="stage-name">Disfluency Alignment</span>
+    <span class="stage-desc">NW align V=1 vs V=0 → insertions = disfluencies</span>
+    <span class="stage-method method-nw">NW #1</span>
+  </div>
+  <div class="arrow">↓</div>
+  <div class="stage is-problem">
+    <span class="stage-num">3</span>
+    <span class="stage-name">Cross-Validation Alignment</span>
+    <span class="stage-desc">NW align Reverb words vs Parakeet words → confirmed/disagreed/unconfirmed</span>
+    <span class="stage-method method-nw">NW #2 ← THE PROBLEM</span>
+  </div>
+  <div class="arrow">↓</div>
+  <div class="stage is-patch">
+    <span class="stage-num">4</span>
+    <span class="stage-name">Pre-Alignment Fragment Merge</span>
+    <span class="stage-desc">Heuristic to rejoin BPE splits broken by NW #2 — caused the "you'llbecrere" bug</span>
+    <span class="stage-method method-heuristic">PATCH for #3</span>
+  </div>
+  <div class="arrow">↓</div>
+  <div class="stage">
+    <span class="stage-num">5</span>
+    <span class="stage-name">Ref-vs-Hyp Alignment</span>
+    <span class="stage-desc">NW align reference text vs hypothesis words → scoring</span>
+    <span class="stage-method method-nw">NW #3</span>
+  </div>
+  <div class="arrow">↓</div>
+  <div class="stage is-patch">
+    <span class="stage-num">6</span>
+    <span class="stage-name">Post-Alignment Merges</span>
+    <span class="stage-desc">mergeCompoundWords + mergeAbbreviationExpansions + mergeContractions</span>
+    <span class="stage-method method-text">PATCHES for #5</span>
+  </div>
+  <div class="arrow">↓</div>
+  <div class="stage">
+    <span class="stage-num">7</span>
+    <span class="stage-name">Omission Recovery</span>
+    <span class="stage-desc">Unconsumed Parakeet words fill omission gaps</span>
+    <span class="stage-method method-text">TEXT MATCH</span>
+  </div>
+  <div class="arrow">↓</div>
+  <div class="stage">
+    <span class="stage-num">8</span>
+    <span class="stage-name">Near-Miss / Struggle Detection</span>
+    <span class="stage-desc">Decoding struggles, self-corrections, hesitations</span>
+    <span class="stage-method method-text">DIAGNOSTICS</span>
+  </div>
+  <div class="arrow">↓</div>
+  <div class="stage is-patch">
+    <span class="stage-num">9</span>
+    <span class="stage-name">Absorb Struggle Fragments</span>
+    <span class="stage-desc">Maps orphan BPE fragments into struggle time windows</span>
+    <span class="stage-method method-temporal">TEMPORAL ±150ms</span>
+  </div>
+</div>
+
+<div class="insight warn">
+  <strong>Pattern:</strong> Steps 4, 6, and 9 are all patches to fix problems created by the NW alignments in steps 3 and 5. Step 9 already uses temporal containment — and it works well. The question is: should step 3 also use temporal containment?
+</div>
+
+<!-- ============================================================ -->
+<h2>Proposed Pipeline: Temporal Containment for Cross-Validation</h2>
+
+<div class="pipeline proposed">
+  <div class="stage">
+    <span class="stage-num">1</span>
+    <span class="stage-name">Reverb Dual-Pass</span>
+    <span class="stage-desc">V=1.0 (verbatim) + V=0.0 (clean) — unchanged</span>
+    <span class="stage-method method-text">ASR</span>
+  </div>
+  <div class="arrow">↓</div>
+  <div class="stage">
+    <span class="stage-num">2</span>
+    <span class="stage-name">Disfluency Alignment</span>
+    <span class="stage-desc">NW align V=1 vs V=0 — unchanged (this NW is correct for this job)</span>
+    <span class="stage-method method-nw">NW #1</span>
+  </div>
+  <div class="arrow">↓</div>
+  <div class="stage is-new">
+    <span class="stage-num">3</span>
+    <span class="stage-name">Temporal Cross-Validation</span>
+    <span class="stage-desc">For each Reverb word, find Parakeet word with max temporal overlap → confirmed/disagreed/unconfirmed. Multiple fragments naturally map to same Parakeet word.</span>
+    <span class="stage-method method-temporal">TEMPORAL + TEXT</span>
+  </div>
+  <div class="arrow">↓</div>
+  <div class="stage is-eliminated">
+    <span class="stage-num">—</span>
+    <span class="stage-name">Pre-Alignment Fragment Merge</span>
+    <span class="stage-desc">ELIMINATED — temporal mapping handles BPE fragments naturally</span>
+    <span class="stage-method method-heuristic">REMOVED</span>
+  </div>
+  <div class="arrow">↓</div>
+  <div class="stage">
+    <span class="stage-num">4</span>
+    <span class="stage-name">Ref-vs-Hyp Alignment</span>
+    <span class="stage-desc">NW align reference text vs hypothesis words — unchanged</span>
+    <span class="stage-method method-nw">NW #2</span>
+  </div>
+  <div class="arrow">↓</div>
+  <div class="stage">
+    <span class="stage-num">5</span>
+    <span class="stage-name">Post-Alignment Merges</span>
+    <span class="stage-desc">Compound + abbreviation + contraction merges — unchanged</span>
+    <span class="stage-method method-text">TEXT</span>
+  </div>
+  <div class="arrow">↓</div>
+  <div class="stage">
+    <span class="stage-num">6</span>
+    <span class="stage-name">Omission Recovery</span>
+    <span class="stage-desc">Unmapped Parakeet words (no overlapping Reverb) fill omission gaps — same logic</span>
+    <span class="stage-method method-text">TEXT MATCH</span>
+  </div>
+  <div class="arrow">↓</div>
+  <div class="stage">
+    <span class="stage-num">7</span>
+    <span class="stage-name">Diagnostics + Struggle Absorption</span>
+    <span class="stage-desc">Near-miss resolution, struggle detection — unchanged (temporal absorption may be less needed)</span>
+    <span class="stage-method method-temporal">TEMPORAL + TEXT</span>
+  </div>
+</div>
+
+<div class="insight good">
+  <strong>Key change:</strong> Replace NW #2 (cross-validation) with temporal mapping. This eliminates the fragment merge entirely because multiple Reverb fragments naturally map to the same Parakeet word. The ref-vs-hyp alignment (NW #3→#2) stays — it's the right tool for comparing sequences of different words.
+</div>
+
+<!-- ============================================================ -->
+<h2>How Temporal Cross-Validation Would Work</h2>
+
+<pre>
+function temporalCrossValidate(reverbWords, parakeetWords) {
+  const result = [];
+  const unmappedPk = new Set(parakeetWords.map((_, i) => i));
+
+  for (const rvWord of reverbWords) {
+    const rvStart = parseT(rvWord.startTime);
+    const rvEnd = parseT(rvWord.endTime);
+    const rvMid = (rvStart + rvEnd) / 2;
+
+    // Find Parakeet word with maximum temporal overlap
+    let bestPk = null, bestOverlap = 0;
+    for (const pkWord of parakeetWords) {
+      const pkStart = parseT(pkWord.startTime);
+      const pkEnd = parseT(pkWord.endTime);
+      const overlap = Math.min(rvEnd, pkEnd) - Math.max(rvStart, pkStart);
+      if (overlap > bestOverlap) { bestOverlap = overlap; bestPk = pkWord; }
+    }
+
+    // Fallback: if no overlap, try nearest Parakeet word within 300ms
+    if (!bestPk) {
+      for (const pkWord of parakeetWords) {
+        const dist = Math.abs(rvMid - (parseT(pkWord.startTime) + parseT(pkWord.endTime)) / 2);
+        if (dist < 0.3 && (!bestPk || dist < bestDist)) { bestPk = pkWord; bestDist = dist; }
+      }
+    }
+
+    if (bestPk) {
+      unmappedPk.delete(parakeetWords.indexOf(bestPk));
+      const sim = levenshteinRatio(normalize(rvWord.word), normalize(bestPk.word));
+      result.push({
+        ...rvWord,
+        crossValidation: sim >= 0.8 ? 'confirmed' : 'disagreed',
+        startTime: bestPk.startTime,    // Parakeet timestamps as primary
+        endTime: bestPk.endTime,
+        _xvalWord: bestPk.word,
+        _xvalStartTime: bestPk.startTime,
+        _xvalEndTime: bestPk.endTime,
+        _reverbStartTime: rvWord.startTime,
+        _reverbEndTime: rvWord.endTime,
+      });
+    } else {
+      result.push({ ...rvWord, crossValidation: 'unconfirmed', _xvalWord: null });
+    }
+  }
+
+  // Unmapped Parakeet words → unconsumedXval (for omission recovery)
+  const unconsumed = [...unmappedPk].map(i => parakeetWords[i]);
+  return { words: result, unconsumedXval: unconsumed };
+}
+</pre>
+
+<!-- ============================================================ -->
+<h2>How The Bug Would Be Handled</h2>
+
+<div class="comparison">
+  <div class="compare-box bad">
+    <div class="label">Current: NW Sequential Pairing</div>
+    <pre>
+Reverb:   you'll  be    crere   creating
+Parakeet: you     will  be      creating
+
+NW pairs (mismatch=0 prefers pairing):
+  you'll ↔ you      → disagreed
+  be     ↔ will     → disagreed  ← WRONG
+  crere  ↔ be       → disagreed  ← WRONG
+  creating ↔ creating → confirmed
+
+Fragment merge sees 3 consecutive disagreed,
+glues them: "you'llbecrere"
+
+Result: ref "will" → OMISSION
+        ref "be"   → OMISSION
+        2 false errors</pre>
+  </div>
+  <div class="compare-box good">
+    <div class="label">Proposed: Temporal Overlap</div>
+    <pre>
+Reverb:   you'll(15.4-15.7) be(15.7) crere(16.1-17.9) creating(19.0)
+Parakeet: you(15.7-15.8)  will(15.8-16.1)  be(16.1-16.3)  creating(18.8-19.7)
+
+Max overlap mapping:
+  you'll → you (15ms overlap)  → disagreed
+  be     → will (40ms overlap) → disagreed
+  crere  → be (200ms overlap)  → disagreed
+  creating → creating          → confirmed
+
+No fragment merge needed.
+Each Reverb word maps to the Parakeet
+word it actually overlaps with temporally.
+
+Result: same statuses, but CORRECT pairings.
+        No concatenation. No false omissions.</pre>
+  </div>
+</div>
+
+<!-- ============================================================ -->
+<h2>Edge Case Analysis: Honest Comparison</h2>
+
+<p>The proposal only changes the <strong>pairing mechanism</strong> (how you decide which Reverb word goes with which Parakeet word). Text similarity checks, disfluency detection, and all post-alignment merges remain unchanged.</p>
+
+<table>
+  <tr>
+    <th>Edge Case</th>
+    <th>Current (NW)</th>
+    <th>Proposed (Temporal)</th>
+    <th>Verdict</th>
+  </tr>
+  <tr>
+    <td><strong>BPE Fragmentation</strong><br><code>"pla" + "for" = platforms</code></td>
+    <td>NW pairs each fragment 1:1 with different Parakeet words. Requires fragment merge heuristic to rejoin. Heuristic is fragile (caused the bug).</td>
+    <td>Both fragments overlap with the same Parakeet word "platforms" → both map to it naturally. Multiple-to-one mapping is built-in. No heuristic needed.</td>
+    <td><span class="verdict better">BETTER</span></td>
+  </tr>
+  <tr>
+    <td><strong>Words Parakeet Misses</strong><br>Reverb hears "um", Parakeet doesn't</td>
+    <td>NW marks as <code>insertion</code> → <code>unconfirmed</code></td>
+    <td>No Parakeet word overlaps → <code>unconfirmed</code>. Same outcome.</td>
+    <td><span class="verdict same">SAME</span></td>
+  </tr>
+  <tr>
+    <td><strong>Words Reverb Misses</strong><br>Parakeet hears "may", Reverb doesn't</td>
+    <td>NW marks as <code>deletion</code> → goes to <code>unconsumedXval</code> → omission recovery</td>
+    <td>Parakeet word has no overlapping Reverb word → goes to <code>unconsumedXval</code> → same recovery path.</td>
+    <td><span class="verdict same">SAME</span></td>
+  </tr>
+  <tr>
+    <td><strong>Disfluencies</strong><br>Reverb V=1 has "um" between words</td>
+    <td>Disfluency already tagged before cross-validation. NW pairs it with some Parakeet word (mismatch) or leaves it as insertion.</td>
+    <td>Disfluency already tagged. If "um" falls in a gap between Parakeet words → unconfirmed. If overlaps a word → disagreed. Either way, <code>isDisfluency: true</code> preserves the signal.</td>
+    <td><span class="verdict same">SAME</span></td>
+  </tr>
+  <tr>
+    <td><strong>Contractions</strong><br>Reverb: "you'll" / Parakeet: "you" + "will"</td>
+    <td>NW pairs "you'll" ↔ "you" (mismatch). "will" may be unconsumed or paired with next word. <code>mergeContractions()</code> fixes it post-alignment.</td>
+    <td>"you'll" has max overlap with "you" → maps there. "will" has no overlapping Reverb → unconsumed. <code>mergeContractions()</code> still runs post-alignment to handle ref "you will" vs hyp "you'll".</td>
+    <td><span class="verdict same">SAME</span></td>
+  </tr>
+  <tr>
+    <td><strong>100ms Reverb Timestamps</strong><br>Single-BPE-token words always 100ms</td>
+    <td>NW ignores timestamps entirely (sequence only). But this means it can't use temporal information to disambiguate.</td>
+    <td>100ms window may have little/no overlap with Parakeet word if offset > 100ms. Mitigated by: (a) using midpoint fallback, (b) 300ms nearest-neighbor search when no overlap found.</td>
+    <td><span class="verdict same">SAME</span><br><small style="color:#8b949e">with fallback</small></td>
+  </tr>
+  <tr>
+    <td><strong>Timestamp Offset Between Engines</strong><br>Reverb and Parakeet disagree on timing</td>
+    <td>NW doesn't use timestamps → not affected by offset. But produces wrong pairings when word counts differ.</td>
+    <td>Sensitive to offset. Reverb is typically 100-300ms early. Mitigated by max-overlap (not strict containment) + nearest-neighbor fallback.</td>
+    <td><span class="verdict same">SAME</span><br><small style="color:#8b949e">tradeoff</small></td>
+  </tr>
+</table>
+
+<!-- ============================================================ -->
+<h2>What's Really Being Compared</h2>
+
+<div class="comparison">
+  <div class="compare-box">
+    <h3>NW Sequential Alignment</h3>
+    <p><strong>Assumption:</strong> Both engines produce words in the same order, so match them left-to-right.</p>
+    <p><strong>Strength:</strong> Doesn't depend on timestamp accuracy.</p>
+    <p><strong>Weakness:</strong> Forces 1:1 pairing. When Reverb has 3 fragments for 1 Parakeet word, NW pairs each with a different Parakeet word. Creates cascading misalignment. Requires fragment merge heuristic to fix.</p>
+    <p><strong>Failure mode:</strong> Heuristic patches that interact badly (fragment merge ate real words).</p>
+  </div>
+  <div class="compare-box">
+    <h3>Temporal Max-Overlap</h3>
+    <p><strong>Assumption:</strong> Words that overlap in time refer to the same speech event.</p>
+    <p><strong>Strength:</strong> Many-to-one mapping is natural. BPE fragments handled for free. No heuristic patches needed.</p>
+    <p><strong>Weakness:</strong> Depends on timestamp accuracy. When both engines have 100-300ms offset, overlap is small or zero for short words.</p>
+    <p><strong>Failure mode:</strong> Short words with quantized 100ms Reverb timestamps might not overlap. Mitigated by nearest-neighbor fallback.</p>
+  </div>
+</div>
+
+<div class="insight good">
+  <strong>Key observation:</strong> <code>absorbStruggleFragments()</code> in diagnostics.js already uses temporal containment (±150ms) to map fragments to struggle words — and it works reliably. The proposed change extends this proven pattern to the cross-validation step.
+</div>
+
+<!-- ============================================================ -->
+<h2>What Would Change in the Codebase</h2>
+
+<table>
+  <tr><th>File</th><th>Change</th><th>Risk</th></tr>
+  <tr>
+    <td><code>js/cross-validator.js</code></td>
+    <td>Replace <code>crossValidateTranscripts()</code> NW alignment with temporal max-overlap mapping. Keep the same output format (words array + unconsumedXval). Keep Levenshtein similarity tiers for confirmed/disagreed.</td>
+    <td style="color:#d29922;">Medium — core logic change, but output format identical</td>
+  </tr>
+  <tr>
+    <td><code>js/app.js</code></td>
+    <td>Remove the entire pre-alignment fragment merge block (~80 lines). Remove hyphen-split block if no longer needed.</td>
+    <td style="color:#3fb950;">Low — removing code, not adding</td>
+  </tr>
+  <tr>
+    <td><code>js/kitchen-sink-merger.js</code></td>
+    <td>No change — still calls <code>crossValidateTranscripts()</code>, just with different internals</td>
+    <td style="color:#3fb950;">None</td>
+  </tr>
+  <tr>
+    <td><code>js/alignment.js</code></td>
+    <td>No change — post-alignment merges still needed for ref-vs-hyp alignment</td>
+    <td style="color:#3fb950;">None</td>
+  </tr>
+  <tr>
+    <td><code>js/diagnostics.js</code></td>
+    <td>No change — <code>absorbStruggleFragments()</code> may fire less often since fragments are already handled</td>
+    <td style="color:#3fb950;">None</td>
+  </tr>
+</table>
+
+<!-- ============================================================ -->
+<h2>Verdict</h2>
+
+<div class="insight good">
+  <strong>The temporal approach is superior for the cross-validation step.</strong> It handles BPE fragmentation naturally (the main source of bugs), eliminates the fragile fragment merge heuristic, and produces the same outputs for all other edge cases. The NW disfluency alignment (V=1 vs V=0) and NW ref-vs-hyp alignment remain unchanged — they're solving different problems where sequence alignment IS the right tool.
+</div>
+
+<p style="margin-top:1rem;color:#8b949e;font-size:0.85rem;">The one tradeoff: temporal mapping is sensitive to timestamp offsets between engines. But the 300ms nearest-neighbor fallback handles this, and the alternative (NW) doesn't use timestamps at all, which means it can't distinguish "these 3 fragments are one word" from "these are 3 separate words" — exactly the failure mode we saw.</p>
+
+</div>
+</body>
+</html>
