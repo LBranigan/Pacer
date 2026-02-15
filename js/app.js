@@ -1882,7 +1882,15 @@ async function runAnalysis() {
         logEntry.forgiven = true;
 
         // Clean up fragments: adjacent insertions that were part of ASR's split
+        // Scan both forward AND backward — ASR may place fragments on either side
+        // (e.g., V1 "jay"+"bar" for ref "jaiberos" → "jay" is insertion BEFORE)
         for (let j = i + 1; j < alignment.length && alignment[j].type === 'insertion'; j++) {
+          const ins = alignment[j];
+          if (ins._confirmedInsertion) delete ins._confirmedInsertion;
+          ins._partOfOOVForgiven = true;
+          if (ins._partOfStruggle) delete ins._partOfStruggle;
+        }
+        for (let j = i - 1; j >= 0 && alignment[j].type === 'insertion'; j--) {
           const ins = alignment[j];
           if (ins._confirmedInsertion) delete ins._confirmedInsertion;
           ins._partOfOOVForgiven = true;
