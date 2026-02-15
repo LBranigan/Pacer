@@ -1371,20 +1371,23 @@ async function runAnalysis() {
   const diagnostics = runDiagnostics(transcriptWords, alignment, referenceText, xvalRawWords);
 
   // ── Syllable Coverage Annotation ─────────────────────────────────
-  // After all struggle paths have been set (decoding from resolveNearMissClusters,
-  // hesitation/abandoned from detectStruggleWords), annotate each struggle entry
-  // with syllable-level coverage data. This grounds AI-layer claims like
-  // "decoded 2 of 3 syllables" in actual syllable boundary analysis.
+  // Annotate every non-correct entry (substitutions, struggles, omissions)
+  // with syllable-level coverage data so the AI layer can make grounded
+  // claims like "decoded 2 of 3 syllables."
   for (const entry of alignment) {
-    if (entry.type !== 'struggle' || !entry._strugglePath) continue;
+    if (entry.type === 'correct' || entry.type === 'insertion') continue;
+    if (entry.forgiven || entry._oovRecoveredViaUnknown) continue;
     const ref = (entry.ref || '').toLowerCase().replace(/[^a-z]/g, '');
     if (ref.length < 4) continue; // skip short words — syllable analysis not meaningful
 
     if (entry._nearMissEvidence && entry._nearMissEvidence.length > 0) {
-      // Path 2 (decoding): fragments available from near-miss resolution
+      // Decoding struggle: fragments available from near-miss resolution
       entry._syllableCoverage = analyzeFragmentsCoverage(entry._nearMissEvidence, ref);
+    } else if (entry.type === 'omission') {
+      // Omission: no attempt — record ref syllable count only (0 covered)
+      entry._syllableCoverage = analyzeSyllableCoverage('', ref);
     } else {
-      // Path 1 (hesitation) / Path 3 (abandoned): the hyp itself is the attempt
+      // Substitution / struggle: the hyp itself is the attempt
       entry._syllableCoverage = analyzeSyllableCoverage(entry.hyp || '', ref);
     }
   }

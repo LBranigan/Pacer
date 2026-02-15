@@ -366,11 +366,6 @@ function buildEnhancedTooltip(item, sttWord, extras) {
       const attempts = [item.hyp, ...item._nearMissEvidence];
       lines.push(`Attempts: ${attempts.join(', ')}`);
     }
-    if (item._syllableCoverage && item._syllableCoverage.totalSyllables > 1) {
-      const sc = item._syllableCoverage;
-      const partial = sc.partialNext ? '+' : '';
-      lines.push(`Syllables: ${sc.syllablesCovered}${partial}/${sc.totalSyllables} (${sc.position}, [${sc.refSyllables.join('|')}])`);
-    }
   } else if (item.type === 'omission') {
     if (item.forgiven && item._forgivenEvidenceSource) {
       const ratioText = item.phoneticRatio ? ` (${item.phoneticRatio}% similar)` : '';
@@ -391,6 +386,13 @@ function buildEnhancedTooltip(item, sttWord, extras) {
 
   if (sttWord?.isDisfluency && item.type !== 'struggle') {
     lines.push('Disfluency \u2014 not an error');
+  }
+
+  // Syllable coverage (for any non-correct multisyllabic word)
+  if (item._syllableCoverage && item._syllableCoverage.totalSyllables > 1) {
+    const sc = item._syllableCoverage;
+    const partial = sc.partialNext ? '+' : '';
+    lines.push(`Syllables: ${sc.syllablesCovered}${partial}/${sc.totalSyllables} (${sc.position}, [${sc.refSyllables.join('|')}])`);
   }
 
   // Cross-validation verdict
