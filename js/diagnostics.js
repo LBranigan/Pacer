@@ -330,7 +330,6 @@ export function resolveNearMissClusters(alignment) {
     if (entry._nearMissEvidence && entry._nearMissEvidence.length > 0 && entry.type !== 'struggle') {
       entry._originalType = entry.type;
       entry.type = 'struggle';
-      entry._strugglePath = 'decoding';
     }
   }
 }
@@ -2197,7 +2196,6 @@ export function detectStruggleWords(transcriptWords, referenceText, alignment) {
         if (entry.type === 'substitution') {
           entry._originalType = 'substitution';
           entry.type = 'struggle';
-          entry._strugglePath = 'hesitation';
           entry._hesitationGap = gap;
         } else {
           entry._hasHesitation = true;
@@ -2208,8 +2206,7 @@ export function detectStruggleWords(transcriptWords, referenceText, alignment) {
           hypIndex: effectiveHyp,
           word: entry.ref,
           hyp: entry.hyp,
-          gap: Math.round(gap * 1000) / 1000,
-          path: entry._strugglePath || 'hesitation'
+          gap: Math.round(gap * 1000) / 1000
         });
       }
 
@@ -2220,7 +2217,6 @@ export function detectStruggleWords(transcriptWords, referenceText, alignment) {
         if (entry.type === 'substitution') {
           entry._originalType = 'substitution';
           entry.type = 'struggle';
-          entry._strugglePath = 'abandoned';
           entry._abandonedAttempt = true;
         } else {
           entry._abandonedAttempt = true;
@@ -2230,8 +2226,7 @@ export function detectStruggleWords(transcriptWords, referenceText, alignment) {
           hypIndex: effectiveHyp,
           word: entry.ref,
           hyp: entry.hyp,
-          crossValidation: 'unconfirmed',
-          path: 'abandoned'
+          crossValidation: 'unconfirmed'
         });
       }
     }

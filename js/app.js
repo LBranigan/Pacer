@@ -802,7 +802,6 @@ async function runAnalysis() {
       if (entry.type === 'correct' && entry.compound && entry.parts && entry.parts.length >= 2
           && !entry._abbreviationExpansion && !entry._numberExpansion) {
         entry.type = 'struggle';
-        entry._strugglePath = 'compound_fragments';
         entry._nearMissEvidence = entry.parts;
         compoundStruggles.push({ ref: entry.ref, hyp: entry.hyp, parts: entry.parts });
       }
@@ -1342,7 +1341,7 @@ async function runAnalysis() {
   // self-correction anchors (e.g., ins(epi-) → recovered correct(epiphany))
   resolveNearMissClusters(alignment);
 
-  const nearMissStruggles = alignment.filter(a => a.type === 'struggle' && a._strugglePath === 'decoding');
+  const nearMissStruggles = alignment.filter(a => a.type === 'struggle' && a._nearMissEvidence?.length > 0);
   const nearMissSelfCorrections = alignment.filter(a => a._isSelfCorrection);
   if (nearMissStruggles.length > 0 || nearMissSelfCorrections.length > 0) {
     addStage('near_miss_resolution', {
@@ -1397,6 +1396,46 @@ async function runAnalysis() {
       entry._syllableCoverage = analyzeFragmentsCoverage(entry._nearMissEvidence, ref);
     } else {
       entry._syllableCoverage = analyzeSyllableCoverage(entry.hyp || '', ref);
+    }
+  }
+
+  // ── Possible Struggle Flag ─────────────────────────────────────────
+  // Blanket boolean for any word showing signs of struggle. Covers olive
+  // (struggle-correct), orange (attempted-struggled), and red (definite-struggle)
+  // buckets. Excludes: correct (dark green), forgiven (light green), omissions,
+  // confirmed insertions, and confirmed substitutions (all engines agree on
+  // same wrong word with no near-miss). Backend-only — no scoring impact.
+  const _norm = s => (s || '').toLowerCase().replace(/[^a-z]/g, '');
+  for (const entry of alignment) {
+    entry._possibleStruggle = false;
+    if (entry.type === 'insertion' || entry.type === 'omission') continue;
+    if (entry.forgiven || entry._oovRecoveredViaUnknown) continue;
+
+    // Substitutions and (legacy) struggles: always possible struggle
+    // UNLESS it's a confirmed substitution (all engines agree, not near-miss)
+    if (entry.type === 'substitution' || entry.type === 'struggle') {
+      if (entry.type === 'substitution') {
+        const refN = _norm(entry.ref);
+        const hypN = _norm(entry.hyp);
+        const v0N = entry._v0Word ? _norm(entry._v0Word) : null;
+        const pkN = entry._xvalWord ? _norm(entry._xvalWord) : null;
+        const anyCorrect = v0N === refN || pkN === refN;
+        const enginesAgree = (!v0N || v0N === hypN) && (!pkN || pkN === hypN);
+        if (!anyCorrect && enginesAgree && !isNearMiss(entry.hyp, entry.ref)) {
+          continue; // Confirmed substitution — clean error, not a struggle
+        }
+      }
+      entry._possibleStruggle = true;
+      continue;
+    }
+
+    // Correct words with difficulty signals
+    if (entry.type === 'correct') {
+      if (entry._postStruggleLeniency || entry._recovered ||
+          (entry.compound && entry.parts?.length >= 2) ||
+          entry._v0Type === 'substitution' || entry._pkType === 'omission') {
+        entry._possibleStruggle = true;
+      }
     }
   }
 
@@ -2304,7 +2343,7 @@ async function runAnalysis() {
       _xvalWord: a._xvalWord || null,
       forgiven: a.forgiven,
       partOfForgiven: a.partOfForgiven,
-      _strugglePath: a._strugglePath || null,
+      _possibleStruggle: a._possibleStruggle || false,
       _v0Word: a._v0Word || null,
       _v0Type: a._v0Type || null,
       _nearMissEvidence: a._nearMissEvidence || null,
@@ -2505,7 +2544,7 @@ async function runAnalysis() {
     words: alignment.filter(e => e.type !== 'insertion').map(a => ({
       ref: a.ref, hyp: a.hyp, type: a.type, bucket: a._uiBucket || null,
       compound: a.compound || false, _recovered: a._recovered || false,
-      _strugglePath: a._strugglePath || null, _concatAttempt: a._concatAttempt || null,
+      _possibleStruggle: a._possibleStruggle || false, _concatAttempt: a._concatAttempt || null,
       crossValidation: a.crossValidation || null
     }))
   });
