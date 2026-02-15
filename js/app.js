@@ -22,6 +22,7 @@ import { enrichDiagnosticsWithVAD, computeVADGapSummary, adjustGapsWithVADOverha
 import { canRunMaze } from './maze-generator.js';
 import { loadPhonemeData, getPhonemeCount, getPhonemeCountWithFallback } from './phoneme-counter.js';
 import { generateMovieTrailer } from './movie-trailer.js';
+import { analyzeSyllableCoverage, analyzeFragmentsCoverage } from './syllable-analysis.js';
 
 // Code version for cache verification
 const CODE_VERSION = 'v39-2026-02-07';
@@ -1368,6 +1369,25 @@ async function runAnalysis() {
 
   // Run diagnostics (includes Path 1: pause struggle via modified detectStruggleWords)
   const diagnostics = runDiagnostics(transcriptWords, alignment, referenceText, xvalRawWords);
+
+  // ── Syllable Coverage Annotation ─────────────────────────────────
+  // After all struggle paths have been set (decoding from resolveNearMissClusters,
+  // hesitation/abandoned from detectStruggleWords), annotate each struggle entry
+  // with syllable-level coverage data. This grounds AI-layer claims like
+  // "decoded 2 of 3 syllables" in actual syllable boundary analysis.
+  for (const entry of alignment) {
+    if (entry.type !== 'struggle' || !entry._strugglePath) continue;
+    const ref = (entry.ref || '').toLowerCase().replace(/[^a-z]/g, '');
+    if (ref.length < 4) continue; // skip short words — syllable analysis not meaningful
+
+    if (entry._nearMissEvidence && entry._nearMissEvidence.length > 0) {
+      // Path 2 (decoding): fragments available from near-miss resolution
+      entry._syllableCoverage = analyzeFragmentsCoverage(entry._nearMissEvidence, ref);
+    } else {
+      // Path 1 (hesitation) / Path 3 (abandoned): the hyp itself is the attempt
+      entry._syllableCoverage = analyzeSyllableCoverage(entry.hyp || '', ref);
+    }
+  }
 
   addStage('diagnostics', {
     longPauses: diagnostics.longPauses?.length || 0,
