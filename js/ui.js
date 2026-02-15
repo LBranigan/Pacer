@@ -76,7 +76,7 @@ let _highlightedSpans = [];
 
 function clearHighlightOverlay() {
   for (const s of _highlightedSpans) {
-    s.classList.remove('word-highlight-insertion', 'word-highlight-self-correction');
+    s.classList.remove('word-highlight-insertion');
   }
   _highlightedSpans = [];
 }
@@ -653,7 +653,7 @@ function renderNewAnalyzedWords(container, alignment, sttLookup, diagnostics, tr
       'Rules:\n' +
       '\u2022 All available engines (V1 + V0 + Parakeet) independently heard the same\n' +
       '  extra word at the same position in the passage\n' +
-      '\u2022 Not a filler (um, uh), self-correction, or struggle fragment\n' +
+      '\u2022 Not a filler (um, uh) or struggle fragment\n' +
       '\u2022 Example: Reference "the dog" \u2192 Student says "the big dog" \u2192\n' +
       '  all 3 engines hear "big" \u2192 confirmed insertion\n' +
       '\u2022 Counts as an ERROR',
@@ -766,7 +766,6 @@ function renderNewAnalyzedWords(container, alignment, sttLookup, diagnostics, tr
     const fragTs = getWordTs(ins.hypIndex);
     frag.dataset.tooltip = `Fragment: "${ins.hyp}"` +
       (ins._partOfStruggle ? ' (part of struggle)' : '') +
-      (ins._isSelfCorrection ? ' (self-correction)' : '') +
       (fragTs ? '\n' + fragTs : '');
     frag.style.cursor = 'pointer';
     const playFn = makePlayFn(ins.hypIndex);
@@ -1789,7 +1788,6 @@ export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, di
             let label = 'insertion';
             if (ins._confirmedInsertion) label = 'confirmed insertion \u2717';
             else if (ins._partOfStruggle) label = 'struggle fragment';
-            else if (ins._isSelfCorrection) label = 'self-correction';
             else if (tw?.isDisfluency) label = 'filler';
             tdV.textContent = label;
             tr.appendChild(tdV);
@@ -2004,7 +2002,7 @@ export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, di
     // ── STEP 3: Post-Processing ──
     {
       const { step, body } = makeStep(3, 'Post-Processing',
-        'omission recovery, compound merges, self-corrections, near-miss clusters, CTC artifacts');
+        'omission recovery, compound merges, near-miss clusters, CTC artifacts');
 
       const lists = [];
 
@@ -2032,15 +2030,6 @@ export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, di
           label: 'Confirmed Insertions (' + confIns.length + ')',
           cls: 'pipeline-pp-confinsertion',
           items: confIns.map(e => '"' + e.hyp + '" \u2014 all ' + (e._insertionEngines || 'available') + ' engines heard this extra word (counts as error)')
-        });
-      }
-
-      const selfCorrs = alignment.filter(e => e.type === 'self-correction' || e._isSelfCorrection);
-      if (selfCorrs.length > 0) {
-        lists.push({
-          label: 'Self-Corrections (' + selfCorrs.length + ')',
-          cls: 'pipeline-pp-selfcorr',
-          items: selfCorrs.map(e => '"' + e.hyp + '" (near "' + (e.ref || e._selfCorrectionTarget || '?') + '")')
         });
       }
 
@@ -2189,7 +2178,6 @@ export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, di
         tdNotes.className = 'pipeline-td-reason';
         const notes = [];
         if (item._recovered) notes.push('recovered');
-        if (item._isSelfCorrection) notes.push('self-correction');
         if (item._partOfStruggle) notes.push('part of struggle');
         if (item._nearMissEvidence && item._nearMissEvidence.length > 0) notes.push('near-miss: ' + item._nearMissEvidence.join(', '));
         if (item._confirmedInsertion) notes.push('confirmed insertion (error)');

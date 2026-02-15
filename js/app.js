@@ -1337,22 +1337,16 @@ async function runAnalysis() {
   }
 
   // Resolve near-miss clusters — Path 2: decoding struggle (single pass)
-  // Runs AFTER omission recovery so recovered 'correct' words can serve as
-  // self-correction anchors (e.g., ins(epi-) → recovered correct(epiphany))
+  // Runs AFTER omission recovery so recovered 'correct' words can serve as anchors.
   resolveNearMissClusters(alignment);
 
   const nearMissStruggles = alignment.filter(a => a.type === 'struggle' && a._nearMissEvidence?.length > 0);
-  const nearMissSelfCorrections = alignment.filter(a => a._isSelfCorrection);
-  if (nearMissStruggles.length > 0 || nearMissSelfCorrections.length > 0) {
+  if (nearMissStruggles.length > 0) {
     addStage('near_miss_resolution', {
       struggles: nearMissStruggles.map(a => ({
         ref: a.ref,
         hyp: a.hyp,
         evidence: a._nearMissEvidence
-      })),
-      selfCorrections: nearMissSelfCorrections.map(a => ({
-        hyp: a.hyp,
-        target: a._nearMissTarget
       }))
     });
   }
@@ -1453,8 +1447,7 @@ async function runAnalysis() {
       word: d.word,
       gap: d.gap,
       threshold: d.threshold
-    })) || [],
-    selfCorrections: diagnostics.selfCorrections?.length || 0
+    })) || []
   });
 
   // VAD Gap Analysis - enrich diagnostics with acoustic context (Phase 18)
@@ -1506,42 +1499,6 @@ async function runAnalysis() {
         label: p._vadAnalysis.label
       })) || []
     });
-  }
-
-  // Reclassify alignment entries that are part of self-corrections
-  // (e.g. repeated "ran" should not count as an insertion)
-  if (diagnostics.selfCorrections && diagnostics.selfCorrections.length > 0) {
-    // Collect all STT hyp indices that are repeat extras
-    const scHypIndices = new Set();
-    for (const sc of diagnostics.selfCorrections) {
-      // startIndex is the first occurrence in STT; repeats are startIndex+1..startIndex+count-1
-      // For word-repeat of count 2: index startIndex+1 is the extra
-      // For phrase-repeat of count 2: indices startIndex+2, startIndex+3 are extras
-      if (sc.type === 'word-repeat') {
-        for (let k = sc.startIndex + 1; k < sc.startIndex + sc.count; k++) {
-          scHypIndices.add(k);
-        }
-      } else if (sc.type === 'phrase-repeat') {
-        // phrase has 2 words repeated, extras start at startIndex + 2
-        scHypIndices.add(sc.startIndex + 2);
-        scHypIndices.add(sc.startIndex + 3);
-      }
-    }
-
-    // Walk alignment to map each entry to its hyp index, reclassify matches
-    let hypIdx = 0;
-    for (const entry of alignment) {
-      if (entry.type === 'insertion') {
-        if (!entry._isSelfCorrection && !entry._partOfStruggle && scHypIndices.has(hypIdx)) {
-          entry.type = 'self-correction';
-        }
-        hypIdx++;
-      } else if (entry.type === 'omission') {
-        // no hyp word consumed
-      } else {
-        hypIdx++;
-      }
-    }
   }
 
   // Map NL annotations onto alignment entries
@@ -1629,7 +1586,7 @@ async function runAnalysis() {
     // hyphens ("smooth-on-skin" → ["smooth","on","skin"]). Offset-based matching handles all these.
     let ri = 0;
     for (const entry of alignment) {
-      if (entry.type === 'insertion') continue;
+      if (!entry.ref) continue; // skip insertions — no ref word
       if (ri < refPositions.length) {
         const range = refPositions[ri];
         const matching = nlAnnotations.filter(a => a.offset >= range.start && a.offset < range.end);
@@ -1689,7 +1646,7 @@ async function runAnalysis() {
     let refIdx = 0;
     for (let i = 0; i < alignment.length; i++) {
       const entry = alignment[i];
-      if (entry.type === 'insertion') continue;
+      if (!entry.ref) continue; // skip insertions — no ref word
 
       if (entry.type === 'substitution') {
         const refWordOriginal = refIdx < refPositions.length
@@ -2204,11 +2161,11 @@ async function runAnalysis() {
     });
   }
 
-  // Clear _confirmedInsertion on excluded insertions (fillers, self-corrections, etc.)
+  // Clear _confirmedInsertion on excluded insertions (fillers, struggle fragments, etc.)
   // These are already classified — they shouldn't count as confirmed insertion errors.
   for (const entry of alignment) {
     if (entry.type !== 'insertion' || !entry._confirmedInsertion) continue;
-    if (entry._partOfStruggle || entry._isSelfCorrection) {
+    if (entry._partOfStruggle) {
       delete entry._confirmedInsertion;
       continue;
     }
@@ -2231,7 +2188,7 @@ async function runAnalysis() {
     let refIdx = 0;
     for (let i = 0; i < alignment.length; i++) {
       const entry = alignment[i];
-      if (entry.type === 'insertion') continue;
+      if (!entry.ref) continue; // skip insertions — no ref word
       // Track refIdx for _threeWay lookup (same pattern as post-struggle leniency)
       const currentRefIdx = refIdx;
       refIdx++;
@@ -2348,7 +2305,6 @@ async function runAnalysis() {
       _v0Type: a._v0Type || null,
       _nearMissEvidence: a._nearMissEvidence || null,
       _abandonedAttempt: a._abandonedAttempt || false,
-      _isSelfCorrection: a._isSelfCorrection || false,
       _partOfStruggle: a._partOfStruggle || false,
       _confirmedInsertion: a._confirmedInsertion || false,
       _isOOV: a._isOOV || false,

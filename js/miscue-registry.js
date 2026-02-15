@@ -51,7 +51,7 @@ const ALIGNMENT_MISCUES = {
   insertion: {
     description: 'Student added a word not in the reference text',
     detector: 'alignment.js → alignWords()',
-    countsAsError: false, // Regular insertions don't count; confirmed insertions do (see below)
+    countsAsError: false, // Per ORF standard, insertions never count as errors
     config: null,
     example: {
       reference: 'the dog',
@@ -64,10 +64,10 @@ const ALIGNMENT_MISCUES = {
   confirmed_insertion: {
     description: 'Student added a word not in the reference passage, confirmed by all available ASR engines (V1 + V0 + Parakeet). Strong evidence the student actually said an extra word.',
     detector: 'app.js → 3-way insertion cross-validation (after alignment, grouped by ref-word boundary)',
-    countsAsError: true, // All engines agree — this is a real reading error
+    countsAsError: false, // Per ORF standard, insertions never count as errors (still tracked/displayed)
     config: {
       requirement: 'All available engines must hear the same normalized word at the same ref-word boundary position',
-      exclusions: 'Fillers (isDisfluency), self-corrections (_isSelfCorrection), struggle fragments (_partOfStruggle), CTC artifacts (_ctcArtifact) are excluded'
+      exclusions: 'Fillers (isDisfluency), struggle fragments (_partOfStruggle), CTC artifacts (_ctcArtifact) are excluded'
     },
     example: {
       reference: 'the dog',
@@ -143,19 +143,6 @@ const DIAGNOSTIC_MISCUES = {
     uiClass: 'pause-indicator'
   },
 
-  selfCorrection: {
-    description: 'Student repeated a word/phrase or made a near-miss attempt before producing the word correctly',
-    detector: 'diagnostics.js → detectSelfCorrections() (DIAG-03: word/phrase repeats) + resolveNearMissClusters() (near-miss insertion before correct word)',
-    countsAsError: false, // Shows effort to correct, not penalized
-    config: null,
-    example: {
-      spoken: '"epi-" then "epiphany" — near-miss insertion before correct word',
-      result: 'Insertion "epi-" flagged as self-correction (near-miss for following correct "epiphany")'
-    },
-    uiClass: 'word-self-correction',
-    note: 'Two detection paths: DIAG-03 detects word/phrase repeats in transcript; resolveNearMissClusters detects near-miss insertions (shared prefix/suffix/Levenshtein) before a correct word.'
-  },
-
   morphological: {
     description: 'Wrong ending or wrong beginning - same root but different affix',
     detector: 'diagnostics.js → detectMorphologicalErrors()',
@@ -222,11 +209,11 @@ const DIAGNOSTIC_MISCUES = {
       detector: 'diagnostics.js → absorbMispronunciationFragments()',
       mechanism: 'If an insertion\'s hypIndex falls within ±1 of a nearby substitution/struggle entry and its Reverb timestamp is within the substitution\'s xval time window (±150ms), it is flagged _partOfStruggle and excluded from insertion count.',
       tolerance: '150ms on xval timestamp window edges',
-      guards: ['Insertion must not already be _isSelfCorrection', 'Uses hypIndex for direct timestamp lookup from transcriptWords', 'Absorbs orphan BPE fragments into parent mispronunciation'],
+      guards: ['Uses hypIndex for direct timestamp lookup from transcriptWords', 'Absorbs orphan BPE fragments into parent mispronunciation'],
       concatenatedFragments: {
         description: 'When individual insertions fail isNearMiss (e.g., "var" vs "overall" = 0.286 < 0.4), concatenation of consecutive unclaimed insertions + the substitution hyp is tried (e.g., "var"+"all" = "varall" vs "overall" passes shared suffix "all" >= 3 chars). Runs as second pass in resolveNearMissClusters after individual checks.',
         detector: 'diagnostics.js → resolveNearMissClusters() (concatenation pass)',
-        guards: ['Max 3 insertions concatenated', 'Each insertion >= 2 chars', 'Combined length <= 2× ref length', 'Skips already-claimed insertions (_partOfStruggle, _isSelfCorrection)'],
+        guards: ['Max 3 insertions concatenated', 'Each insertion >= 2 chars', 'Combined length <= 2× ref length', 'Skips already-claimed insertions (_partOfStruggle)'],
         fields: '_concatAttempt on the substitution entry stores the combined form for tooltip enrichment'
       }
     },
@@ -696,16 +683,15 @@ export function getDetectorLocation(type) {
  * ERRORS (affect accuracy):
  * - omission: Skipped a word
  * - substitution: Wrong word
- * - confirmed_insertion: Extra word confirmed by all engines (V1 + V0 + Parakeet all heard it)
  * - struggle: Substitution+ with decoding difficulty evidence (hesitation / near-miss fragments / abandoned attempt)
  * - morphological: Wrong word ending
  * - reverbCtcFailure: Reverb CTC failure (<unknown>) — substitution with (!) weak-evidence badge
  *
  * NOT ERRORS (diagnostic only):
  * - insertion: Extra word (single/dual-engine — per ORF standards)
+ * - confirmed_insertion: Extra word confirmed by all engines (tracked/displayed, not scored per ORF)
  * - longPause: 3+ second gap (visual indicator only)
  * - hesitation: Brief pause (< 3s)
- * - selfCorrection: Repeated word/phrase or near-miss attempt before correct word
  * - postStruggleLeniency: Parakeet correct after preceding error — Reverb off-track (one word leniency)
  * - properNounForgiveness: Close attempt at name
  * - reverb_filler: Filler word (um, uh) via FILLER_WORDS set

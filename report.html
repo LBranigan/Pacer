@@ -264,7 +264,7 @@ document.addEventListener('DOMContentLoaded', () => {
     patternsArea.innerHTML = '<p class="benchmark-note">No assessments available.</p>';
   } else {
     const patterns = [];
-    let morphCount = 0, pauseCount = 0, selfCorrCount = 0, onsetCount = 0;
+    let morphCount = 0, pauseCount = 0, onsetCount = 0;
     let totalAssessments = sorted.length;
     const subWords = {};
     const omitWords = {};
@@ -274,7 +274,7 @@ document.addEventListener('DOMContentLoaded', () => {
       if (a.diagnostics) {
         if (a.diagnostics.morphologicalErrors && a.diagnostics.morphologicalErrors.length > 0) morphCount++;
         if (a.diagnostics.longPauses && a.diagnostics.longPauses.length > 0) pauseCount++;
-        if (a.diagnostics.selfCorrections && a.diagnostics.selfCorrections.length > 0) selfCorrCount++;
+
         if (a.diagnostics.onsetDelays && a.diagnostics.onsetDelays.length > 0) onsetCount++;
       }
       // Error word frequency
@@ -298,10 +298,6 @@ document.addEventListener('DOMContentLoaded', () => {
     if (pauseCount > 0) {
       const pct = Math.round((pauseCount / totalAssessments) * 100);
       patterns.push('Long pauses (3s+) present in ' + pauseCount + '/' + totalAssessments + ' assessments (' + pct + '%) — may indicate decoding difficulty or comprehension delays');
-    }
-    if (selfCorrCount > 0) {
-      const pct = Math.round((selfCorrCount / totalAssessments) * 100);
-      patterns.push('Self-corrections observed in ' + selfCorrCount + '/' + totalAssessments + ' assessments (' + pct + '%) — positive sign of monitoring');
     }
     if (onsetCount > 0) {
       const pct = Math.round((onsetCount / totalAssessments) * 100);

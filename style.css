@@ -43,7 +43,6 @@ button { padding: 0.6rem 1.4rem; border: none; border-radius: 4px; font-size: 1r
 /* Diagnostic overlays */
 .word-hesitation { border-left: 3px solid #ff9800; padding-left: 4px; }
 .pause-indicator { color: #999; font-size: 0.75rem; margin: 0 2px; font-style: italic; }
-/* Legacy .word-self-correction removed — see docs/legacy/ */
 .word-morphological { text-decoration: underline wavy #e65100; text-underline-offset: 3px; }
 
 #analyzeBtn { background: #d32f2f; color: #fff; font-size: 1.1rem; padding: 0.7rem 2rem; }
@@ -595,7 +594,6 @@ body.dev-mode .dev-mode-toggle {
 .pipeline-td-type-omission { color: #999; }
 .pipeline-td-type-insertion { color: #1565c0; }
 .pipeline-td-type-struggle { color: #d84315; }
-.pipeline-td-type-self-correction { color: #6a1b9a; }
 
 .pipeline-td-reason {
   color: #888;
@@ -619,7 +617,6 @@ body.dev-mode .dev-mode-toggle {
 .pipeline-final-omission { background: #fafafa; }
 .pipeline-final-insertion { background: #f5f8ff; }
 .pipeline-final-struggle { background: #fff5f0; }
-.pipeline-final-self-correction { background: #faf5ff; }
 
 /* Step 0: Raw Engine Output — anchor-aligned table */
 .pipeline-raw-table td { font-family: 'SF Mono', 'Consolas', 'Monaco', monospace; font-size: 0.76rem; }
@@ -655,7 +652,6 @@ body.dev-mode .dev-mode-toggle {
 
 .pipeline-pp-recovered .pipeline-pp-label { color: #1565c0; }
 .pipeline-pp-compound .pipeline-pp-label { color: #2e7d32; }
-.pipeline-pp-selfcorr .pipeline-pp-label { color: #6a1b9a; }
 .pipeline-pp-struggle .pipeline-pp-label { color: #d84315; }
 .pipeline-pp-absorbed .pipeline-pp-label { color: #e65100; }
 .pipeline-pp-artifact .pipeline-pp-label { color: #999; }
@@ -1026,16 +1022,10 @@ body.dev-mode .dev-mode-toggle {
   border-radius: 3px;
 }
 
-/* Insertion & self-correction highlight overlay */
+/* Insertion highlight overlay */
 .word-highlight-insertion {
   box-shadow: 0 0 0 3px rgba(21, 101, 192, 0.4);
   outline: 2px solid #1565c0;
-  outline-offset: 2px;
-}
-
-.word-highlight-self-correction {
-  box-shadow: 0 0 0 3px rgba(106, 27, 154, 0.3);
-  outline: 2px solid #6a1b9a;
   outline-offset: 2px;
 }
 

@@ -330,18 +330,6 @@ body::before {
   opacity: 0.5;
 }
 
-/* Self-corrected: green with return arrow */
-.word-span.self-corrected {
-  color: var(--rm-correct);
-  opacity: 1;
-}
-
-.word-span.self-corrected::after {
-  content: '\21A9';
-  font-size: 0.7em;
-  margin-left: 2px;
-  opacity: 0.6;
-  vertical-align: super;
 }
 
 /* ============================================================

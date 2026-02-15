@@ -188,9 +188,7 @@ export function isNearMiss(insertionText, referenceWord) {
  * Single-pass cluster resolution: detect near-miss insertions around substitutions
  * and upgrade substitutions to 'struggle' (Path 2: decoding struggle).
  *
- * Also detects near-miss self-corrections (insertion before a correct word).
- *
- * Must run AFTER omission recovery so recovered words can serve as self-correction anchors.
+ * Must run AFTER omission recovery so recovered words can serve as anchors.
  *
  * @param {Array} alignment - Alignment entries (mutated in place)
  */
@@ -222,16 +220,7 @@ export function resolveNearMissClusters(alignment) {
       }
     }
 
-    // PRIORITY 1 — Self-correction (look ahead for success)
-    if (nextEntry && nextEntry.type === 'correct' &&
-        clean(nextEntry.ref).length >= 3 &&
-        isNearMiss(entry.hyp, nextEntry.ref)) {
-      entry._isSelfCorrection = true;
-      entry._nearMissTarget = nextEntry.ref;
-      continue;
-    }
-
-    // PRIORITY 2 — Pre-struggle (look ahead for failure)
+    // PRIORITY 1 — Pre-struggle (look ahead for failure)
     if (nextEntry && (nextEntry.type === 'substitution' || nextEntry.type === 'struggle') &&
         clean(nextEntry.ref).length >= 3 &&
         isNearMiss(entry.hyp, nextEntry.ref)) {
@@ -258,8 +247,6 @@ export function resolveNearMissClusters(alignment) {
   // For insertions not claimed by the individual pass above, try concatenating
   // runs of consecutive insertions around a substitution/struggle and check
   // isNearMiss on the combined form (e.g., "var"+"all" vs "overall").
-  // Also handles self-correction: fragments before a correct word where the
-  // combined insertion form is near-miss of the ref (student fragmented then got it right).
   for (let i = 0; i < alignment.length; i++) {
     const entry = alignment[i];
     const isSub = entry.type === 'substitution' || entry.type === 'struggle';
@@ -273,7 +260,7 @@ export function resolveNearMissClusters(alignment) {
     for (let j = i - 1; j >= 0; j--) {
       const e = alignment[j];
       if (e.type !== 'insertion') break;
-      if (e._partOfStruggle || e._isSelfCorrection) break;
+      if (e._partOfStruggle) break;
       const ch = clean(e.hyp);
       if (ch.length < 2) break;
       beforeIns.unshift(e);
@@ -281,13 +268,12 @@ export function resolveNearMissClusters(alignment) {
     }
 
     // Collect unclaimed consecutive insertions immediately after this entry
-    // (only for substitution/struggle — self-corrections are about fragments *before* the correct word)
     const afterIns = [];
     if (isSub) {
       for (let j = i + 1; j < alignment.length; j++) {
         const e = alignment[j];
         if (e.type !== 'insertion') break;
-        if (e._partOfStruggle || e._isSelfCorrection) break;
+        if (e._partOfStruggle) break;
         const ch = clean(e.hyp);
         if (ch.length < 2) break;
         afterIns.push(e);
@@ -309,17 +295,6 @@ export function resolveNearMissClusters(alignment) {
           entry._nearMissEvidence.push(ins.hyp);
         }
         entry._concatAttempt = combined;
-      }
-    } else {
-      // Self-correction: combine insertions only (correct word already matches ref)
-      const combined = beforeIns.map(e => clean(e.hyp)).join('');
-      if (combined.length > refClean.length * 2) continue;
-      if (isNearMiss(combined, entry.ref)) {
-        for (const ins of beforeIns) {
-          ins._isSelfCorrection = true;
-          ins._nearMissTarget = entry.ref;
-          ins._concatSelfCorrection = combined;
-        }
       }
     }
   }
@@ -371,7 +346,7 @@ export function absorbMispronunciationFragments(alignment, transcriptWords) {
   // Check each insertion: if it's a short fragment temporally inside a substitution's window, absorb it
   for (const entry of alignment) {
     if (entry.type !== 'insertion') continue;
-    if (entry._partOfStruggle || entry._isSelfCorrection) continue;
+    if (entry._partOfStruggle) continue;
     const hyp = entry.hyp || '';
     if (hyp.replace(/[^a-zA-Z]/g, '').length > MAX_FRAG_LEN) continue;
 
@@ -556,90 +531,6 @@ export function detectLongPauses(transcriptWords) {
   return results;
 }
 
-// ── DIAG-03: Self-Corrections ───────────────────────────────────────
-
-/**
- * Detect repeated consecutive words/phrases that indicate self-corrections.
- * Excludes repetitions that are legitimate per reference text.
- * Returns array of { type, startIndex, words, count }.
- */
-export function detectSelfCorrections(transcriptWords, alignment) {
-  const results = [];
-  const hypToRef = buildHypToRefMap(alignment);
-  const words = transcriptWords.map(w => (w.word || '').toLowerCase());
-
-  // Build set of ref indices where ref legitimately repeats
-  // We need the alignment ops to get ref words
-  const refWords = [];
-  for (const op of alignment) {
-    const type = op.type || op.operation;
-    if (type !== 'insertion') {
-      refWords.push((op.ref || op.reference || '').toLowerCase());
-    }
-  }
-
-  const used = new Set(); // track indices already captured
-
-  // 2-word phrase repeats first (greedy)
-  for (let i = 0; i < words.length - 3; i++) {
-    if (used.has(i)) continue;
-    if (words[i] === words[i + 2] && words[i + 1] === words[i + 3]) {
-      // Check if reference legitimately repeats at this position
-      const r0 = hypToRef.get(i);
-      const r2 = hypToRef.get(i + 2);
-      if (r0 !== undefined && r2 !== undefined &&
-          refWords[r0] === refWords[r2] &&
-          r2 === r0 + 2) {
-        // Check the second word too
-        const r1 = hypToRef.get(i + 1);
-        const r3 = hypToRef.get(i + 3);
-        if (r1 !== undefined && r3 !== undefined &&
-            refWords[r1] === refWords[r3]) {
-          continue; // legitimate repeat in reference
-        }
-      }
-      results.push({
-        type: 'phrase-repeat',
-        startIndex: i,
-        words: `${words[i]} ${words[i + 1]}`,
-        count: 2
-      });
-      used.add(i).add(i + 1).add(i + 2).add(i + 3);
-    }
-  }
-
-  // Single word repeats
-  for (let i = 0; i < words.length - 1; i++) {
-    if (used.has(i)) continue;
-    if (words[i] === words[i + 1]) {
-      // Check if reference legitimately repeats
-      const r0 = hypToRef.get(i);
-      const r1 = hypToRef.get(i + 1);
-      if (r0 !== undefined && r1 !== undefined &&
-          refWords[r0] === refWords[r1] &&
-          r1 === r0 + 1) {
-        continue; // legitimate
-      }
-      // Count consecutive repeats
-      let count = 1;
-      let j = i + 1;
-      while (j < words.length && words[j] === words[i] && !used.has(j)) {
-        count++;
-        j++;
-      }
-      results.push({
-        type: 'word-repeat',
-        startIndex: i,
-        words: words[i],
-        count
-      });
-      for (let k = i; k < j; k++) used.add(k);
-    }
-  }
-
-  return results;
-}
-
 // ── DIAG-04: Morphological Errors ───────────────────────────────────
 
 /**
@@ -773,7 +664,6 @@ export function computePhrasingQuality(diagnostics, transcriptWords, referenceTe
     const eHyp = (entry.hypIndex != null && entry.hypIndex >= 0) ? entry.hypIndex : hypIdx;
     if (entry.type === 'insertion') {
       if (transcriptWords[eHyp] && transcriptWords[eHyp].isDisfluency) excludeFromCount.add(eHyp);
-      if (entry._isSelfCorrection) excludeFromCount.add(eHyp);
       if (entry._partOfStruggle) excludeFromCount.add(eHyp);
       if (entry._partOfOOVForgiven) excludeFromCount.add(eHyp);
     }
@@ -987,14 +877,13 @@ export function computePhrasingQuality(diagnostics, transcriptWords, referenceTe
   const mean = arr => arr.length === 0 ? null : arr.reduce((a, b) => a + b, 0) / arr.length;
 
   // ── Exclusion stats ──
-  let disfluencyCount = 0, selfCorrCount = 0, strugglePartCount = 0, unconfirmedCount = 0;
+  let disfluencyCount = 0, strugglePartCount = 0, unconfirmedCount = 0;
   hypIdx = 0;
   for (const entry of alignment) {
     if (entry.type === 'omission' || entry.type === 'deletion') continue;
     const eHyp = (entry.hypIndex != null && entry.hypIndex >= 0) ? entry.hypIndex : hypIdx;
     if (excludeFromCount.has(eHyp)) {
       if (entry.type === 'insertion' && transcriptWords[eHyp] && transcriptWords[eHyp].isDisfluency) disfluencyCount++;
-      else if (entry._isSelfCorrection) selfCorrCount++;
       else if (entry._partOfStruggle) strugglePartCount++;
       else if (transcriptWords[eHyp] && transcriptWords[eHyp].crossValidation === 'unconfirmed') unconfirmedCount++;
     }
@@ -1046,7 +935,6 @@ export function computePhrasingQuality(diagnostics, transcriptWords, referenceTe
     },
     excludedFromCount: {
       disfluencies: disfluencyCount,
-      selfCorrections: selfCorrCount,
       struggleParts: strugglePartCount,
       unconfirmed: unconfirmedCount,
       totalExcluded: excludeFromCount.size
@@ -1511,10 +1399,9 @@ export function computeWordDurationOutliers(transcriptWords, alignment) {
     // Use entry.hypIndex when available to prevent drift from shared-hypIndex entries
     const effectiveHyp = (entry.hypIndex != null && entry.hypIndex >= 0) ? entry.hypIndex : hypIndex;
 
-    // Skip disfluency insertions, self-corrections, struggle parts
+    // Skip disfluency insertions, struggle parts
     if (entry.type === 'insertion') {
       if (transcriptWords[effectiveHyp] && transcriptWords[effectiveHyp].isDisfluency) { hypIndex = effectiveHyp + partsCount; continue; }
-      if (entry._isSelfCorrection) { hypIndex = effectiveHyp + partsCount; continue; }
       if (entry._partOfStruggle) { hypIndex = effectiveHyp + partsCount; continue; }
     }
 
@@ -2246,7 +2133,6 @@ export function runDiagnostics(transcriptWords, alignment, referenceText, xvalRa
   return {
     onsetDelays: detectOnsetDelays(transcriptWords, referenceText, alignment, xvalRawWords),
     longPauses: detectLongPauses(transcriptWords),
-    selfCorrections: detectSelfCorrections(transcriptWords, alignment),
     morphologicalErrors: detectMorphologicalErrors(alignment, transcriptWords),
     struggleWords: detectStruggleWords(transcriptWords, referenceText, alignment)
   };

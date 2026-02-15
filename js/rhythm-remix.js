@@ -27,7 +27,6 @@ const WORD_COLORS = {
   substitution:   '#e8a87c', // warm amber
   omission:       '#c4b5d4', // muted purple
   struggle:       '#e8a87c', // amber (same family)
-  selfCorrection: '#d4e8a8', // lime-green
   default:        '#e8a87c', // amber fallback
 };
 
@@ -51,7 +50,7 @@ const prefersReducedMotion =
 
 // ── State ────────────────────────────────────────────────────────────────────
 
-let wordSequence = [];   // { text, type, startTime, endTime, el, isStruggle, isOmission, isSelfCorrection, forgiven }
+let wordSequence = [];   // { text, type, startTime, endTime, el, isStruggle, isOmission, forgiven }
 let wordRects = [];      // cached positions relative to ball-canvas
 let currentWordIdx = -1;
 let previousWordIdx = -1;
@@ -313,10 +312,7 @@ function onWordChange(fromIdx, toIdx) {
   if (!rect) return;
 
   // Determine ball color based on word type
-  if (w.isSelfCorrection) {
-    ball.color = WORD_COLORS.selfCorrection;
-    ball.glowColor = WORD_COLORS.selfCorrection;
-  } else if (w.isOmission) {
+  if (w.isOmission) {
     ball.color = WORD_COLORS.omission;
     ball.glowColor = WORD_COLORS.omission;
   } else if (w.isStruggle) {
@@ -416,8 +412,6 @@ function updateBallPhysics(dt) {
     if (!prefersReducedMotion && w) {
       if (w.type === 'correct' || w.forgiven) {
         spawnParticles(ball.x, ball.y, WORD_COLORS.correct, 4, { vy: -50, spread: 30, life: 0.5, size: 2.5 });
-      } else if (w.isSelfCorrection) {
-        spawnParticles(ball.x, ball.y, WORD_COLORS.selfCorrection, 3, { vy: -40, spread: 20, life: 0.7, size: 2 });
       } else if (w.isStruggle || w.type === 'substitution') {
         spawnParticles(ball.x, ball.y, WORD_COLORS.struggle, 2, { vy: -30, spread: 15, life: 0.4, size: 2 });
       }
@@ -491,7 +485,7 @@ function updateWordClasses(idx) {
 
     el.classList.remove(
       'active', 'done-correct', 'done-error', 'done-struggle',
-      'done-omission', 'self-corrected', 'upcoming'
+      'done-omission', 'upcoming'
     );
 
     if (i < idx) {
@@ -499,7 +493,6 @@ function updateWordClasses(idx) {
       if (w.type === 'correct' || w.forgiven) el.classList.add('done-correct');
       else if (w.isOmission) el.classList.add('done-omission');
       else if (w.isStruggle) el.classList.add('done-struggle');
-      else if (w.isSelfCorrection) el.classList.add('self-corrected');
       else el.classList.add('done-error');
     } else if (i === idx) {
       el.classList.add('active');
@@ -825,7 +818,6 @@ function onAudioEnded() {
     if (w.type === 'correct' || w.forgiven) w.el.classList.add('done-correct');
     else if (w.isOmission) w.el.classList.add('done-omission');
     else if (w.isStruggle) w.el.classList.add('done-struggle');
-    else if (w.isSelfCorrection) w.el.classList.add('self-corrected');
     else w.el.classList.add('done-error');
   }
 
@@ -851,7 +843,7 @@ function onAudioEnded() {
           if (w.el) {
             w.el.classList.remove(
               'active', 'done-correct', 'done-error', 'done-struggle',
-              'done-omission', 'self-corrected'
+              'done-omission'
             );
             w.el.classList.add('upcoming');
           }
@@ -995,7 +987,6 @@ function buildWordSequence(alignment, sttWords) {
       startTime,
       endTime,
       el: span,
-      isSelfCorrection: !!entry._isSelfCorrection,
       isStruggle: type === 'struggle',
       isOmission: type === 'omission',
       forgiven: !!entry.forgiven,

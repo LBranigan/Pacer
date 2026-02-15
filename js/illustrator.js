@@ -52,7 +52,7 @@ function extractNounEvents(assessment) {
   const events = [];
   for (let i = 0; i < alignment.length; i++) {
     const entry = alignment[i];
-    if (entry.type === 'insertion') continue;
+    if (!entry.ref) continue; // skip insertions — no ref word
     if (!entry.nl || entry.nl.pos !== 'NOUN') continue;
     if (entry.nl.isProperNoun) continue;
 

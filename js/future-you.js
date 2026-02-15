@@ -125,7 +125,7 @@ async function buildStitchedAudio(alignment, sttWords, audioBlob) {
 
   for (let i = 0; i < alignment.length; i++) {
     const entry = alignment[i];
-    if (entry.type === 'insertion') continue; // skip insertions
+    if (!entry.ref) continue; // skip insertions — no ref word
 
     if (isSpokenCorrect(entry)) {
       const ts = getTimestamps(entry, sttWords);
@@ -244,7 +244,7 @@ async function init() {
   const wordSpans = [];
   for (let i = 0; i < alignment.length; i++) {
     const entry = alignment[i];
-    if (entry.type === 'insertion') continue;
+    if (!entry.ref) continue; // skip insertions — no ref word
 
     const span = document.createElement('span');
     span.className = 'word';
