@@ -3138,15 +3138,15 @@ function determineFate(word) {
   if (!norm) return { fate: 'Dropped', stage: 'assembly' };
   // Check final text (exact or hyphen-split match)
   if (finalWordSet.has(norm)) return { fate: 'Kept', stage: '' };
-  // Fuzzy check final (threshold 0.8 to avoid false matches like twenty→plenty)
+  // Fuzzy check final
   for (const fw of finalWordsLower) {
-    if (levenshteinSimilarity(norm, fw) >= 0.8) return { fate: 'Changed', to: fw, stage: assembledWordSet.has(fw) ? 'correction' : 'assembly' };
+    if (levenshteinSimilarity(norm, fw) >= 0.6) return { fate: 'Changed', to: fw, stage: assembledWordSet.has(fw) ? 'correction' : 'assembly' };
   }
   // In assembled but not final?
   if (assembledWordSet.has(norm)) return { fate: 'Dropped', stage: 'correction' };
   // Fuzzy check assembled
   for (const aw of assembledWordsLower) {
-    if (levenshteinSimilarity(norm, aw) >= 0.8) return { fate: 'Changed', to: aw, stage: 'assembly' };
+    if (levenshteinSimilarity(norm, aw) >= 0.6) return { fate: 'Changed', to: aw, stage: 'assembly' };
   }
   return { fate: 'Dropped', stage: 'assembly' };
 }
