@@ -490,6 +490,36 @@ function extractLowConfidenceWords(annotation, threshold = 0.85) {
   return Array.from(seen.values()).sort((a, b) => a.confidence - b.confidence);
 }
 
+/**
+ * Extract ALL words from Cloud Vision's annotation hierarchy (no confidence threshold).
+ * Preserves document order for full-picture OCR diagnostic.
+ * Returns [{ word, confidence, boundingBox, index }].
+ */
+function extractAllWords(annotation) {
+  const words = [];
+  if (!annotation || !annotation.pages) return words;
+
+  let idx = 0;
+  for (const page of annotation.pages) {
+    for (const block of (page.blocks || [])) {
+      if (block.blockType && block.blockType !== 'TEXT') continue;
+      for (const para of (block.paragraphs || [])) {
+        for (const word of (para.words || [])) {
+          const text = (word.symbols || []).map(s => s.text).join('');
+          if (!text) continue;
+          words.push({
+            word: text,
+            confidence: word.confidence !== undefined ? Math.round(word.confidence * 100) : null,
+            boundingBox: word.boundingBox,
+            index: idx++
+          });
+        }
+      }
+    }
+  }
+  return words;
+}
+
 // ─── Main hybrid entry point ───
 
 /**
@@ -522,14 +552,14 @@ export async function extractTextHybrid(file, visionKey, geminiKey) {
   const pageHeight = annotation?.pages?.[0]?.height;
 
   if (!flatText) {
-    return { text: '', engine: 'vision (empty)', lowConfidenceWords: [], imageBase64: base64, imageMimeType: mimeType, pageWidth, pageHeight };
+    return { text: '', engine: 'vision (empty)', lowConfidenceWords: [], allWords: [], flatText: '', assembled: '', imageBase64: base64, imageMimeType: mimeType, pageWidth, pageHeight };
   }
 
   // Step 2: Extract all fragments from hierarchy
   const paragraphs = extractParagraphs(annotation);
 
   if (paragraphs.length <= 1) {
-    return { text: flatText, engine: 'vision (single paragraph)', lowConfidenceWords, imageBase64: base64, imageMimeType: mimeType, pageWidth, pageHeight };
+    return { text: flatText, engine: 'vision (single paragraph)', lowConfidenceWords, allWords: extractAllWords(annotation), flatText, assembled: flatText, imageBase64: base64, imageMimeType: mimeType, pageWidth, pageHeight };
   }
 
   // Step 3: Gemini assembles fragments into correct reading order
@@ -538,7 +568,7 @@ export async function extractTextHybrid(file, visionKey, geminiKey) {
     assembled = await assembleWithGemini(base64, mimeType, paragraphs, geminiKey);
   } catch (err) {
     console.warn('[OCR Hybrid] Gemini assembly failed, using Cloud Vision ordering:', err.message);
-    return { text: flatText, engine: `vision fallback (${err.message})`, lowConfidenceWords, imageBase64: base64, imageMimeType: mimeType, pageWidth, pageHeight };
+    return { text: flatText, engine: `vision fallback (${err.message})`, lowConfidenceWords, allWords: extractAllWords(annotation), flatText, assembled: flatText, imageBase64: base64, imageMimeType: mimeType, pageWidth, pageHeight };
   }
 
   // Step 4: Gemini corrects OCR artifacts by comparing assembled text against the image
@@ -556,6 +586,9 @@ export async function extractTextHybrid(file, visionKey, geminiKey) {
     text: finalText,
     engine: `hybrid (${paragraphs.length} fragments${finalText !== assembled ? ' + corrected' : ''})`,
     lowConfidenceWords,
+    allWords: extractAllWords(annotation),
+    flatText,
+    assembled,
     imageBase64: base64,
     imageMimeType: mimeType,
     pageWidth,

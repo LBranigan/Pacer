@@ -2819,6 +2819,7 @@ if (imageInput) {
         }
         ocrStatus.textContent = 'Extracting text (Cloud Vision + Gemini assembly + cleanup)...';
         const result = await extractTextHybrid(file, visionKey, geminiKey);
+        console.log('[OCR Diag] allWords:', (result.allWords || []).length, 'flatText:', (result.flatText || '').length, 'assembled:', (result.assembled || '').length);
         text = result.text;
         engineInfo = result.engine;
         lowConfWords = result.lowConfidenceWords || [];
@@ -2826,8 +2827,12 @@ if (imageInput) {
           imageBase64: result.imageBase64,
           imageMimeType: result.imageMimeType,
           lowConfidenceWords: lowConfWords,
+          allWords: result.allWords || [],
+          flatText: result.flatText || '',
+          assembled: result.assembled || '',
           pageWidth: result.pageWidth,
-          pageHeight: result.pageHeight
+          pageHeight: result.pageHeight,
+          finalText: text
         };
       } else {
         const apiKey = document.getElementById('apiKey').value.trim();
@@ -2874,61 +2879,319 @@ function openOcrDiagnosticView(diag) {
   const w = window.open('', '_blank');
   if (!w) return;
 
-  const words = diag.lowConfidenceWords || [];
+  const allWords = diag.allWords || [];
+  const lowConfWords = diag.lowConfidenceWords || [];
+  const flatText = diag.flatText || '';
+  const assembled = diag.assembled || '';
+  const finalText = diag.finalText || '';
   const dataUri = `data:${diag.imageMimeType || 'image/jpeg'};base64,${diag.imageBase64}`;
 
-  // Build word list rows
-  const rowsHtml = words.map((item, i) => {
-    const pct = item.confidence;
-    const hue = Math.round((pct / 85) * 60); // 0=red at 0%, 60=yellow at threshold
-    return `<tr data-idx="${i}" style="cursor:pointer;" onclick="flashBox(${i})">
-      <td>${item.word}</td>
-      <td><div style="display:flex;align-items:center;gap:6px;">
-        <div style="width:60px;height:14px;background:#eee;border-radius:3px;overflow:hidden;">
-          <div style="width:${pct}%;height:100%;background:hsl(${hue},80%,50%);"></div>
-        </div>
-        <span>${pct}%</span>
-      </div></td>
-    </tr>`;
-  }).join('');
+  // Word counts for pipeline summary
+  const flatWC = (flatText.match(/\S+/g) || []).length;
+  const asmWC = (assembled.match(/\S+/g) || []).length;
+  const finalWC = (finalText.match(/\S+/g) || []).length;
+  const asmSame = assembled === flatText;
+  const corrSame = finalText === assembled;
 
-  // Serialize bounding boxes for the script
-  const boxesJson = JSON.stringify(words.map(item => ({
+  // Pre-compute fate for all Vision words
+  const finalWordsArr = (finalText).toLowerCase().replace(/[^\w\s'-]/g, ' ').split(/\s+/).filter(Boolean);
+  const assembledWordsArr = (assembled).toLowerCase().replace(/[^\w\s'-]/g, ' ').split(/\s+/).filter(Boolean);
+  const finalWordSet = new Set(finalWordsArr);
+  const assembledWordSet = new Set(assembledWordsArr);
+
+  // Serialize data for the diagnostic page script
+  const allWordsJson = JSON.stringify(allWords.map(item => ({
+    word: item.word,
     confidence: item.confidence,
     vertices: item.boundingBox?.vertices || item.boundingBox?.normalizedVertices || []
   })));
 
+  // HTML-escape helper
+  const esc = s => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+
   w.document.write(`<!DOCTYPE html>
 <html><head><title>OCR Diagnostic View</title>
 <style>
-  body { font-family: -apple-system, system-ui, sans-serif; margin: 1rem; background: #f5f5f5; }
-  h2 { margin: 0 0 0.5rem; }
-  .img-container { position: relative; display: inline-block; margin-bottom: 1rem; }
-  .img-container img { display: block; max-width: 100%; }
-  .img-container canvas { position: absolute; top: 0; left: 0; pointer-events: none; }
-  table { border-collapse: collapse; width: auto; min-width: 300px; }
-  th, td { padding: 6px 12px; border-bottom: 1px solid #ddd; text-align: left; font-size: 0.9rem; }
-  th { background: #eee; font-weight: 600; }
+  * { box-sizing: border-box; }
+  body { font-family: -apple-system, system-ui, sans-serif; margin: 0; padding: 1rem; background: #f5f5f5; color: #333; }
+  h2 { margin: 0 0 0.5rem; font-size: 1.3rem; }
+  h3 { margin: 1.2rem 0 0.5rem; font-size: 1.1rem; border-bottom: 1px solid #ddd; padding-bottom: 4px; }
+
+  /* Section A: Pipeline summary */
+  .pipeline-summary {
+    background: #fff; border: 1px solid #ddd; border-radius: 6px; padding: 10px 16px;
+    margin-bottom: 1rem; font-size: 0.9rem; display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  }
+  .pipeline-stage { background: #e8eaf6; border-radius: 4px; padding: 3px 10px; font-weight: 500; }
+  .pipeline-arrow { color: #999; font-size: 1.1rem; }
+  .pipeline-detail { color: #666; font-size: 0.82rem; }
+
+  /* Section B: Three-stage text panels */
+  .text-panels { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; margin-bottom: 1rem; }
+  .text-panel { background: #fff; border: 1px solid #ddd; border-radius: 6px; overflow: hidden; }
+  .text-panel-header { background: #eee; padding: 6px 12px; font-weight: 600; font-size: 0.85rem; border-bottom: 1px solid #ddd; }
+  .text-panel-body { padding: 10px 12px; font-size: 0.82rem; line-height: 1.5; max-height: 250px; overflow-y: auto; white-space: pre-wrap; font-family: 'Menlo', 'Consolas', monospace; }
+
+  /* Section C: Diff */
+  .diff-container { background: #fff; border: 1px solid #ddd; border-radius: 6px; padding: 12px 16px; margin-bottom: 1rem; font-size: 0.85rem; line-height: 1.7; }
+  .diff-del { background: #ffcdd2; color: #b71c1c; text-decoration: line-through; padding: 1px 3px; border-radius: 2px; }
+  .diff-add { background: #c8e6c9; color: #1b5e20; font-weight: 600; padding: 1px 3px; border-radius: 2px; }
+
+  /* Section D: Word table + image */
+  .table-image-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 1rem; }
+  @media (max-width: 900px) { .table-image-row { grid-template-columns: 1fr; } .text-panels { grid-template-columns: 1fr; } }
+  .word-table-wrap { max-height: 500px; overflow-y: auto; background: #fff; border: 1px solid #ddd; border-radius: 6px; }
+  table { border-collapse: collapse; width: 100%; }
+  th, td { padding: 5px 10px; border-bottom: 1px solid #eee; text-align: left; font-size: 0.82rem; }
+  th { background: #f5f5f5; font-weight: 600; position: sticky; top: 0; z-index: 1; }
   tr:hover { background: #e3f2fd; }
-  .flash-highlight { outline: 3px solid #ff1744; outline-offset: 2px; }
+  tr.row-hidden { display: none; }
+  .conf-bar { width: 50px; height: 12px; background: #eee; border-radius: 3px; overflow: hidden; display: inline-block; vertical-align: middle; margin-right: 4px; }
+  .conf-fill { height: 100%; border-radius: 3px; }
+  .fate-kept { background: #c8e6c9; color: #2e7d32; }
+  .fate-changed { background: #fff3e0; color: #e65100; }
+  .fate-dropped { background: #ffcdd2; color: #c62828; text-decoration: line-through; }
+  .fate-badge { padding: 2px 8px; border-radius: 3px; font-size: 0.78rem; white-space: nowrap; }
+  .filter-bar { display: flex; gap: 6px; margin-bottom: 8px; }
+  .filter-btn { padding: 4px 12px; border: 1px solid #ccc; border-radius: 4px; background: #fff; cursor: pointer; font-size: 0.8rem; }
+  .filter-btn.active { background: #1976d2; color: #fff; border-color: #1976d2; }
+
+  /* Image overlay */
+  .img-container { position: relative; display: inline-block; }
+  .img-container img { display: block; max-width: 100%; border-radius: 6px; }
+  .img-container canvas { position: absolute; top: 0; left: 0; pointer-events: none; }
+
+  /* Section E: Interactive editor */
+  .editor-section { background: #fff; border: 1px solid #ddd; border-radius: 6px; padding: 16px; margin-bottom: 1rem; }
+  .editor-words { line-height: 2; font-size: 1rem; }
+  .editor-word { cursor: pointer; padding: 2px 4px; border-radius: 3px; transition: all 0.15s; }
+  .editor-word:hover { background: #e3f2fd; }
+  .editor-word.excluded { text-decoration: line-through; opacity: 0.35; background: #ffcdd2; }
+  .editor-word.suspicious { border-bottom: 2px dotted #ff8f00; }
+  .editor-word.newline-after { margin-right: 0; }
+  .editor-newline { display: block; height: 0.6em; }
+  .editor-buttons { margin-top: 12px; display: flex; gap: 8px; }
+  .editor-buttons button { padding: 6px 16px; border-radius: 4px; border: 1px solid #ccc; cursor: pointer; font-size: 0.85rem; }
+  .btn-apply { background: #1976d2; color: #fff; border-color: #1976d2; }
+  .btn-apply:hover { background: #1565c0; }
+  .btn-reset { background: #fff; }
+  .btn-reset:hover { background: #f5f5f5; }
+  .editor-status { font-size: 0.82rem; color: #666; margin-top: 8px; }
 </style>
 </head><body>
-<h2>OCR Diagnostic — Low-Confidence Words (${words.length})</h2>
-<p style="color:#666;font-size:0.85rem;">Page dimensions: ${diag.pageWidth || '?'} × ${diag.pageHeight || '?'} px. Bounding boxes shown for words below 85% confidence.</p>
-<div class="img-container" id="imgContainer">
-  <img id="ocrImg" src="${dataUri}" onload="drawBoxes()">
-  <canvas id="overlay"></canvas>
+
+<h2>OCR Full Diagnostic</h2>
+
+<!-- Section A: Pipeline Summary -->
+<div class="pipeline-summary">
+  <span class="pipeline-stage">Cloud Vision</span>
+  <span class="pipeline-detail">(${flatWC} words)</span>
+  <span class="pipeline-arrow">&rarr;</span>
+  <span class="pipeline-stage">Assembly</span>
+  <span class="pipeline-detail">(${asmSame ? 'skipped' : asmWC + ' words, ' + (flatWC - asmWC) + ' dropped'})</span>
+  <span class="pipeline-arrow">&rarr;</span>
+  <span class="pipeline-stage">Correction</span>
+  <span class="pipeline-detail">(${corrSame ? 'no changes' : 'applied'})</span>
+  <span class="pipeline-arrow">&rarr;</span>
+  <span class="pipeline-stage">Final: ${finalWC} words</span>
 </div>
-<h3>All Low-Confidence Words</h3>
-<table>
-  <thead><tr><th>Word</th><th>Confidence</th></tr></thead>
-  <tbody>${rowsHtml}</tbody>
-</table>
+
+<!-- Section B: Three-Stage Text Panels -->
+<h3>Pipeline Stages</h3>
+<div class="text-panels">
+  <div class="text-panel">
+    <div class="text-panel-header">Cloud Vision Raw (${flatWC} words)</div>
+    <div class="text-panel-body">${esc(flatText) || '<em>empty</em>'}</div>
+  </div>
+  <div class="text-panel">
+    <div class="text-panel-header">Gemini Assembled (${asmSame ? 'same as raw' : asmWC + ' words'})</div>
+    <div class="text-panel-body">${asmSame ? '<em>(same as raw)</em>' : esc(assembled)}</div>
+  </div>
+  <div class="text-panel">
+    <div class="text-panel-header">Final Corrected (${corrSame ? 'no corrections' : finalWC + ' words'})</div>
+    <div class="text-panel-body">${corrSame ? '<em>(no corrections)</em>' : esc(finalText)}</div>
+  </div>
+</div>
+
+<!-- Section C: Correction Diff -->
+<h3>Correction Diff (Assembled &rarr; Final)</h3>
+<div class="diff-container" id="diffContainer"></div>
+
+<!-- Section D: Word Table + Image -->
+<h3>All Vision Words (${allWords.length})</h3>
+<div class="filter-bar">
+  <button class="filter-btn active" data-filter="interesting" onclick="applyFilter('interesting')">Interesting</button>
+  <button class="filter-btn" data-filter="all" onclick="applyFilter('all')">All</button>
+  <button class="filter-btn" data-filter="dropped" onclick="applyFilter('dropped')">Dropped</button>
+  <button class="filter-btn" data-filter="changed" onclick="applyFilter('changed')">Changed</button>
+</div>
+<div class="table-image-row">
+  <div class="word-table-wrap">
+    <table>
+      <thead><tr><th>#</th><th>Word</th><th>Confidence</th><th>Fate</th><th>Stage</th></tr></thead>
+      <tbody id="wordTableBody"></tbody>
+    </table>
+  </div>
+  <div>
+    <div class="img-container" id="imgContainer">
+      <img id="ocrImg" src="${dataUri}" onload="drawBoxes()">
+      <canvas id="overlay"></canvas>
+    </div>
+  </div>
+</div>
+
+<!-- Section E: Interactive Final Text Editor -->
+<h3>Interactive Editor</h3>
+<p style="font-size:0.82rem;color:#666;margin-top:0;">Click words to exclude them. <span class="editor-word suspicious" style="font-size:0.82rem;">Dotted underline</span> = suspicious (number, low-confidence, or corrected).</p>
+<div class="editor-section">
+  <div class="editor-words" id="editorWords"></div>
+  <div class="editor-buttons">
+    <button class="btn-apply" onclick="applyEdits()">Apply to Reference</button>
+    <button class="btn-reset" onclick="resetEditor()">Reset</button>
+  </div>
+  <div class="editor-status" id="editorStatus"></div>
+</div>
+
 <script>
-const boxes = ${boxesJson};
+// ─── Data ───
+const allWordsData = ${allWordsJson};
 const pageW = ${diag.pageWidth || 0};
 const pageH = ${diag.pageHeight || 0};
+const assembledText = ${JSON.stringify(assembled)};
+const finalTextStr = ${JSON.stringify(finalText)};
+const assembledSame = ${asmSame};
+const correctionSame = ${corrSame};
 
+// ─── Helpers ───
+function esc(s) {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+function levenshteinSimilarity(a, b) {
+  if (a === b) return 1;
+  const la = a.length, lb = b.length;
+  if (!la || !lb) return 0;
+  const d = Array.from({length: la + 1}, (_, i) => { const r = new Array(lb + 1); r[0] = i; return r; });
+  for (let j = 1; j <= lb; j++) d[0][j] = j;
+  for (let i = 1; i <= la; i++)
+    for (let j = 1; j <= lb; j++)
+      d[i][j] = Math.min(d[i-1][j] + 1, d[i][j-1] + 1, d[i-1][j-1] + (a[i-1] !== b[j-1] ? 1 : 0));
+  return 1 - d[la][lb] / Math.max(la, lb);
+}
+
+// ─── Word-level diff via LCS ───
+function wordDiff(oldText, newText) {
+  const a = oldText.split(/\s+/).filter(Boolean);
+  const b = newText.split(/\s+/).filter(Boolean);
+  const m = a.length, n = b.length;
+  // LCS table
+  const dp = Array.from({length: m + 1}, () => new Array(n + 1).fill(0));
+  for (let i = 1; i <= m; i++)
+    for (let j = 1; j <= n; j++)
+      dp[i][j] = a[i-1] === b[j-1] ? dp[i-1][j-1] + 1 : Math.max(dp[i-1][j], dp[i][j-1]);
+  // Backtrack
+  const result = [];
+  let i = m, j = n;
+  while (i > 0 || j > 0) {
+    if (i > 0 && j > 0 && a[i-1] === b[j-1]) {
+      result.push({ type: 'equal', word: a[i-1] });
+      i--; j--;
+    } else if (j > 0 && (i === 0 || dp[i][j-1] >= dp[i-1][j])) {
+      result.push({ type: 'add', word: b[j-1] });
+      j--;
+    } else {
+      result.push({ type: 'del', word: a[i-1] });
+      i--;
+    }
+  }
+  return result.reverse();
+}
+
+// ─── Section C: Render correction diff ───
+(function renderDiff() {
+  const container = document.getElementById('diffContainer');
+  if (correctionSame) {
+    container.innerHTML = '<em style="color:#999;">No corrections were made.</em>';
+    return;
+  }
+  const diff = wordDiff(assembledText, finalTextStr);
+  container.innerHTML = diff.map(d => {
+    if (d.type === 'equal') return esc(d.word);
+    if (d.type === 'del') return '<span class="diff-del">' + esc(d.word) + '</span>';
+    return '<span class="diff-add">' + esc(d.word) + '</span>';
+  }).join(' ');
+})();
+
+// ─── Section D: Word table ───
+const finalWordsLower = finalTextStr.toLowerCase().replace(/[^\\w\\s'-]/g, ' ').split(/\\s+/).filter(Boolean);
+const assembledWordsLower = assembledText.toLowerCase().replace(/[^\\w\\s'-]/g, ' ').split(/\\s+/).filter(Boolean);
+const finalWordSet = new Set(finalWordsLower);
+const assembledWordSet = new Set(assembledWordsLower);
+
+function determineFate(word) {
+  const norm = word.toLowerCase().replace(/[^\\w'-]/g, '');
+  if (!norm) return { fate: 'Dropped', stage: 'assembly' };
+  // Check final text
+  if (finalWordSet.has(norm)) return { fate: 'Kept', stage: '' };
+  // Fuzzy check final
+  for (const fw of finalWordsLower) {
+    if (levenshteinSimilarity(norm, fw) >= 0.6) return { fate: 'Changed', to: fw, stage: assembledWordSet.has(fw) ? 'correction' : 'assembly' };
+  }
+  // In assembled but not final?
+  if (assembledWordSet.has(norm)) return { fate: 'Dropped', stage: 'correction' };
+  // Fuzzy check assembled
+  for (const aw of assembledWordsLower) {
+    if (levenshteinSimilarity(norm, aw) >= 0.6) return { fate: 'Changed', to: aw, stage: 'assembly' };
+  }
+  return { fate: 'Dropped', stage: 'assembly' };
+}
+
+const fates = allWordsData.map(item => determineFate(item.word));
+
+function buildTable() {
+  const tbody = document.getElementById('wordTableBody');
+  let html = '';
+  for (let i = 0; i < allWordsData.length; i++) {
+    const item = allWordsData[i];
+    const f = fates[i];
+    const pct = item.confidence !== null ? item.confidence : '?';
+    const hue = pct !== '?' ? Math.round((pct / 100) * 120) : 0;
+    const confBar = pct !== '?'
+      ? '<div class="conf-bar"><div class="conf-fill" style="width:' + pct + '%;background:hsl(' + hue + ',70%,50%);"></div></div>' + pct + '%'
+      : '?';
+    let fateBadge;
+    if (f.fate === 'Kept') fateBadge = '<span class="fate-badge fate-kept">Kept</span>';
+    else if (f.fate === 'Changed') fateBadge = '<span class="fate-badge fate-changed">Changed &rarr; ' + esc(f.to) + '</span>';
+    else fateBadge = '<span class="fate-badge fate-dropped">Dropped</span>';
+    const stageText = f.stage || '';
+    const isInteresting = (pct !== '?' && pct < 85) || f.fate !== 'Kept';
+    html += '<tr data-idx="' + i + '" data-fate="' + f.fate.toLowerCase() + '" data-interesting="' + (isInteresting ? '1' : '0') + '" style="cursor:pointer;" onclick="flashBox(' + i + ')">'
+      + '<td>' + (i + 1) + '</td>'
+      + '<td>' + esc(item.word) + '</td>'
+      + '<td>' + confBar + '</td>'
+      + '<td>' + fateBadge + '</td>'
+      + '<td style="font-size:0.78rem;color:#999;">' + stageText + '</td>'
+      + '</tr>';
+  }
+  tbody.innerHTML = html;
+}
+buildTable();
+
+let currentFilter = 'interesting';
+function applyFilter(filter) {
+  currentFilter = filter;
+  document.querySelectorAll('.filter-btn').forEach(b => b.classList.toggle('active', b.dataset.filter === filter));
+  const rows = document.querySelectorAll('#wordTableBody tr');
+  rows.forEach(row => {
+    if (filter === 'all') { row.classList.remove('row-hidden'); return; }
+    if (filter === 'interesting') { row.classList.toggle('row-hidden', row.dataset.interesting !== '1'); return; }
+    if (filter === 'dropped') { row.classList.toggle('row-hidden', row.dataset.fate !== 'dropped'); return; }
+    if (filter === 'changed') { row.classList.toggle('row-hidden', row.dataset.fate !== 'changed'); return; }
+  });
+}
+applyFilter('interesting');
+
+// ─── Section D: Image overlay ───
 function drawBoxes() {
   const img = document.getElementById('ocrImg');
   const canvas = document.getElementById('overlay');
@@ -2940,23 +3203,27 @@ function drawBoxes() {
   const scaleX = pageW ? img.naturalWidth / pageW : 1;
   const scaleY = pageH ? img.naturalHeight / pageH : 1;
 
-  for (let i = 0; i < boxes.length; i++) {
-    const v = boxes[i].vertices;
+  // Draw boxes only for visible (non-hidden) table rows or all interesting by default
+  const visibleIdxs = new Set();
+  document.querySelectorAll('#wordTableBody tr:not(.row-hidden)').forEach(row => {
+    visibleIdxs.add(parseInt(row.dataset.idx));
+  });
+
+  for (let i = 0; i < allWordsData.length; i++) {
+    if (!visibleIdxs.has(i)) continue;
+    const v = allWordsData[i].vertices;
     if (!v || v.length < 4) continue;
-    const pct = boxes[i].confidence;
-    const hue = Math.round((pct / 85) * 60);
-    ctx.strokeStyle = 'hsl(' + hue + ',80%,50%)';
+    const pct = allWordsData[i].confidence || 0;
+    const hue = Math.round((pct / 100) * 120);
+    ctx.strokeStyle = 'hsl(' + hue + ',70%,50%)';
     ctx.lineWidth = 2;
-    ctx.fillStyle = 'hsla(' + hue + ',80%,50%,0.15)';
+    ctx.fillStyle = 'hsla(' + hue + ',70%,50%,0.12)';
     const x0 = (v[0].x || 0) * scaleX, y0 = (v[0].y || 0) * scaleY;
     const x1 = (v[1].x || 0) * scaleX, y1 = (v[1].y || 0) * scaleY;
     const x2 = (v[2].x || 0) * scaleX, y2 = (v[2].y || 0) * scaleY;
     const x3 = (v[3].x || 0) * scaleX, y3 = (v[3].y || 0) * scaleY;
     ctx.beginPath();
-    ctx.moveTo(x0, y0);
-    ctx.lineTo(x1, y1);
-    ctx.lineTo(x2, y2);
-    ctx.lineTo(x3, y3);
+    ctx.moveTo(x0, y0); ctx.lineTo(x1, y1); ctx.lineTo(x2, y2); ctx.lineTo(x3, y3);
     ctx.closePath();
     ctx.fill();
     ctx.stroke();
@@ -2966,20 +3233,14 @@ function drawBoxes() {
 function flashBox(idx) {
   const canvas = document.getElementById('overlay');
   const img = document.getElementById('ocrImg');
-  const v = boxes[idx]?.vertices;
+  const v = allWordsData[idx]?.vertices;
   if (!v || v.length < 4) return;
   const scaleX = pageW ? img.naturalWidth / pageW : 1;
   const scaleY = pageH ? img.naturalHeight / pageH : 1;
-  const displayScaleX = img.clientWidth / img.naturalWidth;
-  const displayScaleY = img.clientHeight / img.naturalHeight;
-  const x = (v[0].x || 0) * scaleX * displayScaleX;
-  const y = (v[0].y || 0) * scaleY * displayScaleY;
 
-  // Scroll into view
   const container = document.getElementById('imgContainer');
   container.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 
-  // Flash overlay
   const ctx = canvas.getContext('2d');
   const x0 = (v[0].x || 0) * scaleX, y0 = (v[0].y || 0) * scaleY;
   const x2 = (v[2].x || 0) * scaleX, y2 = (v[2].y || 0) * scaleY;
@@ -2999,13 +3260,147 @@ function flashBox(idx) {
   }, 250);
 }
 
-// Resize canvas on window resize
+// Redraw boxes when filter changes
+const origApplyFilter = applyFilter;
+applyFilter = function(filter) {
+  origApplyFilter(filter);
+  const img = document.getElementById('ocrImg');
+  if (img.complete) drawBoxes();
+};
+applyFilter('interesting');
+
 window.addEventListener('resize', () => {
   const img = document.getElementById('ocrImg');
   const canvas = document.getElementById('overlay');
-  canvas.style.width = img.clientWidth + 'px';
-  canvas.style.height = img.clientHeight + 'px';
+  if (img && canvas) {
+    canvas.style.width = img.clientWidth + 'px';
+    canvas.style.height = img.clientHeight + 'px';
+  }
 });
+
+// ─── Section E: Interactive editor ───
+// Build per-word suspicious set
+const assembledNorms = new Set(assembledWordsLower);
+const correctionDiff = correctionSame ? new Set() : (function() {
+  const d = wordDiff(assembledText, finalTextStr);
+  const changed = new Set();
+  d.forEach(item => { if (item.type === 'add') changed.add(item.word.toLowerCase()); });
+  return changed;
+})();
+
+// Confidence lookup for final words (by norm match to allWordsData)
+const confByNorm = new Map();
+allWordsData.forEach(item => {
+  const norm = item.word.toLowerCase().replace(/[^\\w'-]/g, '');
+  if (norm && item.confidence !== null && (!confByNorm.has(norm) || confByNorm.get(norm) > item.confidence)) {
+    confByNorm.set(norm, item.confidence);
+  }
+});
+
+// Parse final text into words preserving paragraph breaks
+const editorTokens = []; // {text, isNewline, idx}
+let editorIdx = 0;
+const finalLines = finalTextStr.split('\\n');
+for (let li = 0; li < finalLines.length; li++) {
+  const lineWords = finalLines[li].split(/\\s+/).filter(Boolean);
+  for (const tw of lineWords) {
+    editorTokens.push({ text: tw, isNewline: false, idx: editorIdx++ });
+  }
+  if (li < finalLines.length - 1) {
+    editorTokens.push({ text: '', isNewline: true, idx: -1 });
+  }
+}
+
+const excluded = new Set();
+
+function isSuspicious(word) {
+  const norm = word.toLowerCase().replace(/[^\\w'-]/g, '');
+  // Numbers that appear in both assembled and final (potential line numbers)
+  if (/^\\d+$/.test(norm) && assembledNorms.has(norm)) return true;
+  // Low-confidence words Gemini kept
+  const conf = confByNorm.get(norm);
+  if (conf !== undefined && conf < 70) return true;
+  // Words that correction changed
+  if (correctionDiff.has(norm)) return true;
+  return false;
+}
+
+function renderEditor() {
+  const container = document.getElementById('editorWords');
+  let html = '';
+  for (const tok of editorTokens) {
+    if (tok.isNewline) {
+      html += '<span class="editor-newline"></span>';
+      continue;
+    }
+    const cls = ['editor-word'];
+    if (excluded.has(tok.idx)) cls.push('excluded');
+    if (isSuspicious(tok.text)) cls.push('suspicious');
+    html += '<span class="' + cls.join(' ') + '" data-idx="' + tok.idx + '" onclick="toggleWord(' + tok.idx + ')">' + esc(tok.text) + '</span> ';
+  }
+  container.innerHTML = html;
+  updateEditorStatus();
+}
+
+function toggleWord(idx) {
+  if (excluded.has(idx)) excluded.delete(idx);
+  else excluded.add(idx);
+  // Toggle class directly for speed
+  const span = document.querySelector('.editor-word[data-idx="' + idx + '"]');
+  if (span) span.classList.toggle('excluded');
+  updateEditorStatus();
+}
+
+function updateEditorStatus() {
+  const total = editorTokens.filter(t => !t.isNewline).length;
+  const excl = excluded.size;
+  const status = document.getElementById('editorStatus');
+  status.textContent = excl > 0 ? excl + ' of ' + total + ' words excluded' : total + ' words';
+}
+
+function resetEditor() {
+  excluded.clear();
+  renderEditor();
+}
+
+function applyEdits() {
+  // Rebuild text preserving paragraph structure, minus excluded words
+  const lines = finalTextStr.split('\\n');
+  let globalIdx = 0;
+  const newLines = [];
+  for (const line of lines) {
+    const words = line.split(/\\s+/).filter(Boolean);
+    const kept = [];
+    for (const w of words) {
+      if (!excluded.has(globalIdx)) kept.push(w);
+      globalIdx++;
+    }
+    newLines.push(kept.join(' '));
+  }
+  const editedText = newLines.join('\\n').replace(/\\n{3,}/g, '\\n\\n').trim();
+  // Send back to parent
+  if (window.opener) {
+    try {
+      const textarea = window.opener.document.getElementById('ocrText');
+      if (textarea) {
+        textarea.value = editedText;
+        document.getElementById('editorStatus').textContent = 'Applied! ' + (editorTokens.filter(t => !t.isNewline).length - excluded.size) + ' words sent to parent.';
+        document.getElementById('editorStatus').style.color = '#2e7d32';
+      } else {
+        document.getElementById('editorStatus').textContent = 'Error: Could not find OCR textarea in parent window.';
+        document.getElementById('editorStatus').style.color = '#c62828';
+      }
+    } catch (e) {
+      document.getElementById('editorStatus').textContent = 'Error: ' + e.message;
+      document.getElementById('editorStatus').style.color = '#c62828';
+    }
+  } else {
+    document.getElementById('editorStatus').textContent = 'No parent window found.';
+    document.getElementById('editorStatus').style.color = '#c62828';
+  }
+}
+
+renderEditor();
 <\/script>
 </body></html>`);
   w.document.close();
