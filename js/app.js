@@ -2819,7 +2819,6 @@ if (imageInput) {
         }
         ocrStatus.textContent = 'Extracting text (Cloud Vision + Gemini assembly + cleanup)...';
         const result = await extractTextHybrid(file, visionKey, geminiKey);
-        console.log('[OCR Diag] allWords:', (result.allWords || []).length, 'flatText:', (result.flatText || '').length, 'assembled:', (result.assembled || '').length);
         text = result.text;
         engineInfo = result.engine;
         lowConfWords = result.lowConfidenceWords || [];

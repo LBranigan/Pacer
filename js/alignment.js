@@ -349,9 +349,12 @@ function mergeNumberExpansions(alignment) {
   while (i < alignment.length) {
     const current = alignment[i];
 
-    // Pattern A: substitution(ref=DIGITS) followed by insertions matching a spoken form
-    if (current.type === 'substitution' && current.ref && current.hyp && /^\d+$/.test(current.ref)) {
-      const expansions = window.numberToWordForms(current.ref);
+    // Pattern A: substitution(ref=DIGITS or DECIMAL) followed by insertions matching a spoken form
+    if (current.type === 'substitution' && current.ref && current.hyp && /^\d+(\.\d+)?$/.test(current.ref)) {
+      const isDecimal = current.ref.includes('.');
+      const expansions = isDecimal
+        ? (window.decimalToWordForms ? window.decimalToWordForms(current.ref) : [])
+        : window.numberToWordForms(current.ref);
 
       if (expansions.length > 0) {
         let matched = false;
@@ -409,8 +412,11 @@ function mergeNumberExpansions(alignment) {
 
       const subIdx = i + insertionCount;
       if (subIdx < alignment.length && alignment[subIdx].type === 'substitution' &&
-          alignment[subIdx].ref && /^\d+$/.test(alignment[subIdx].ref)) {
-        const expansions = window.numberToWordForms(alignment[subIdx].ref);
+          alignment[subIdx].ref && /^\d+(\.\d+)?$/.test(alignment[subIdx].ref)) {
+        const isDecimal = alignment[subIdx].ref.includes('.');
+        const expansions = isDecimal
+          ? (window.decimalToWordForms ? window.decimalToWordForms(alignment[subIdx].ref) : [])
+          : window.numberToWordForms(alignment[subIdx].ref);
 
         if (expansions.length > 0) {
           let matched = false;

@@ -23,7 +23,8 @@ export function normalizeText(text) {
     .toLowerCase()
     .split(/\s+/)
     .map(w => w.replace(/^[^\w'-]+|[^\w'-]+$/g, ''))
-    .map(w => w.replace(/\./g, ''))   // Strip internal periods (abbreviations: i.e. → ie, U.S.A. → usa)
+    .map(w => w.replace(/(\d),(?=\d)/g, '$1'))  // Strip commas between digits: "58,000" → "58000"
+    .map(w => /^\d[\d.]*\d$/.test(w) ? w : w.replace(/\./g, ''))  // Strip periods except in decimal numbers (3.3 stays, i.e. → ie)
     .map(w => w.replace(/['\u2018\u2019\u201B`]/g, ''))  // Strip apostrophes/smart quotes (content's → contents, don't → dont)
     .filter(w => w.length > 0);
 
