@@ -2968,6 +2968,7 @@ function openOcrDiagnosticView(diag) {
   .editor-word:hover { background: #e3f2fd; }
   .editor-word.excluded { text-decoration: line-through; opacity: 0.35; background: #ffcdd2; }
   .editor-word.suspicious { border-bottom: 2px dotted #ff8f00; }
+  .editor-word.highly-suspicious { background: #fff3e0; border: 2px solid #e65100; border-radius: 3px; }
   .editor-word.newline-after { margin-right: 0; }
   .editor-newline { display: block; height: 0.6em; }
   .editor-buttons { margin-top: 12px; display: flex; gap: 8px; }
@@ -3042,7 +3043,7 @@ function openOcrDiagnosticView(diag) {
 
 <!-- Section E: Interactive Final Text Editor -->
 <h3>Interactive Editor</h3>
-<p style="font-size:0.82rem;color:#666;margin-top:0;">Click words to exclude them. <span class="editor-word suspicious" style="font-size:0.82rem;">Dotted underline</span> = suspicious (number, low-confidence, or corrected).</p>
+<p style="font-size:0.82rem;color:#666;margin-top:0;">Click words to exclude them. <span class="editor-word highly-suspicious" style="font-size:0.82rem;display:inline-block;">Orange box</span> = likely line number. <span class="editor-word suspicious" style="font-size:0.82rem;display:inline-block;">Dotted underline</span> = low-confidence or corrected.</p>
 <div class="editor-section">
   <div class="editor-words" id="editorWords"></div>
   <div class="editor-buttons">
@@ -3123,25 +3124,29 @@ function wordDiff(oldText, newText) {
 })();
 
 // ─── Section D: Word table ───
-const finalWordsLower = finalTextStr.toLowerCase().replace(/[^\\w\\s'-]/g, ' ').split(/\\s+/).filter(Boolean);
-const assembledWordsLower = assembledText.toLowerCase().replace(/[^\\w\\s'-]/g, ' ').split(/\\s+/).filter(Boolean);
+// Split hyphens so "twenty-four" → ["twenty", "four"] both appear in word sets
+function splitWords(text) {
+  return text.toLowerCase().replace(/[^\\w\\s'-]/g, ' ').replace(/-/g, ' ').split(/\\s+/).filter(Boolean);
+}
+const finalWordsLower = splitWords(finalTextStr);
+const assembledWordsLower = splitWords(assembledText);
 const finalWordSet = new Set(finalWordsLower);
 const assembledWordSet = new Set(assembledWordsLower);
 
 function determineFate(word) {
   const norm = word.toLowerCase().replace(/[^\\w'-]/g, '');
   if (!norm) return { fate: 'Dropped', stage: 'assembly' };
-  // Check final text
+  // Check final text (exact or hyphen-split match)
   if (finalWordSet.has(norm)) return { fate: 'Kept', stage: '' };
-  // Fuzzy check final
+  // Fuzzy check final (threshold 0.8 to avoid false matches like twenty→plenty)
   for (const fw of finalWordsLower) {
-    if (levenshteinSimilarity(norm, fw) >= 0.6) return { fate: 'Changed', to: fw, stage: assembledWordSet.has(fw) ? 'correction' : 'assembly' };
+    if (levenshteinSimilarity(norm, fw) >= 0.8) return { fate: 'Changed', to: fw, stage: assembledWordSet.has(fw) ? 'correction' : 'assembly' };
   }
   // In assembled but not final?
   if (assembledWordSet.has(norm)) return { fate: 'Dropped', stage: 'correction' };
   // Fuzzy check assembled
   for (const aw of assembledWordsLower) {
-    if (levenshteinSimilarity(norm, aw) >= 0.6) return { fate: 'Changed', to: aw, stage: 'assembly' };
+    if (levenshteinSimilarity(norm, aw) >= 0.8) return { fate: 'Changed', to: aw, stage: 'assembly' };
   }
   return { fate: 'Dropped', stage: 'assembly' };
 }
@@ -3313,15 +3318,16 @@ for (let li = 0; li < finalLines.length; li++) {
 
 const excluded = new Set();
 
-function isSuspicious(word) {
+// Returns false, 'suspicious', or 'highly-suspicious'
+function getSuspicionLevel(word) {
   const norm = word.toLowerCase().replace(/[^\\w'-]/g, '');
-  // Numbers that appear in both assembled and final (potential line numbers)
-  if (/^\\d+$/.test(norm) && assembledNorms.has(norm)) return true;
+  // Standalone numbers are highly suspicious (likely line numbers Gemini kept)
+  if (/^\\d+$/.test(norm)) return 'highly-suspicious';
   // Low-confidence words Gemini kept
   const conf = confByNorm.get(norm);
-  if (conf !== undefined && conf < 70) return true;
+  if (conf !== undefined && conf < 70) return 'suspicious';
   // Words that correction changed
-  if (correctionDiff.has(norm)) return true;
+  if (correctionDiff.has(norm)) return 'suspicious';
   return false;
 }
 
@@ -3335,7 +3341,8 @@ function renderEditor() {
     }
     const cls = ['editor-word'];
     if (excluded.has(tok.idx)) cls.push('excluded');
-    if (isSuspicious(tok.text)) cls.push('suspicious');
+    const suspicion = getSuspicionLevel(tok.text);
+    if (suspicion) cls.push(suspicion);
     html += '<span class="' + cls.join(' ') + '" data-idx="' + tok.idx + '" onclick="toggleWord(' + tok.idx + ')">' + esc(tok.text) + '</span> ';
   }
   container.innerHTML = html;
