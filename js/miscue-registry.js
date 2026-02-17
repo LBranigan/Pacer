@@ -143,6 +143,32 @@ const DIAGNOSTIC_MISCUES = {
     uiClass: 'pause-indicator'
   },
 
+  selfCorrection: {
+    description: 'Student made a false start or repetition then produced the correct word — indicates error awareness and monitoring.',
+    detector: 'app.js → Self-Correction Detection pass (after fragment absorption)',
+    countsAsError: false,
+    config: {
+      conditions: [
+        '(a) Forgiven substitution with _nearMissEvidence (failed attempt + override)',
+        '(b) Forgiven substitution with _fullAttempt.length > 1 (multiple fragments → correct)',
+        '(c) Correct/forgiven entry + adjacent insertion exactly matches ref (repetition)',
+        '(d) Correct/forgiven entry + adjacent insertion is isNearMiss() of ref (false start)'
+      ],
+      filters: 'Fillers excluded (uh, um, ah, er, hm, mm). Both words must be >= 2 chars.'
+    },
+    example: {
+      reference: 'faced / again',
+      spoken: '"fact faced" / "again again"',
+      result: 'SC badge — false start "fact" before "faced", or repetition "again"'
+    },
+    flags: {
+      _selfCorrected: 'true on the alignment entry',
+      _selfCorrectionEvidence: 'Array of evidence words (e.g., ["fact"])',
+      _selfCorrectionReason: '"repetition" | "near-miss-insertion" | "near-miss-evidence" | "full-attempt"'
+    },
+    uiClass: 'word-sc'
+  },
+
   morphological: {
     description: 'Wrong ending or wrong beginning - same root but different affix',
     detector: 'diagnostics.js → detectMorphologicalErrors()',
@@ -769,6 +795,7 @@ export function getDetectorLocation(type) {
  * - spilloverConsolidation: Struggle fragments reassigned from wrong ref slots back to anchor word
  * - oovOmissionRecovery: OOV omission forgiven when <unknown> CTC tokens exist in time window
  * - oovPhoneticForgiveness: Foreign/rare OOV words forgiven via phonetic-normalized Levenshtein (≥60%)
+ * - selfCorrection: False start or repetition before correct word — SC badge (informational)
  *
  * INFRASTRUCTURE FIXES:
  * - sttLookup keys use raw normalized words (not getCanonical) to match alignment hyp values

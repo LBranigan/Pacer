@@ -1487,6 +1487,87 @@ async function runAnalysis() {
     }
   }
 
+  // ── Self-Correction Detection ──────────────────────────────────────
+  // Flag words where the student made a false start or repetition before
+  // producing the correct word. Four conditions:
+  // (a) Forgiven substitution with _nearMissEvidence (failed attempt + Pk/trust override)
+  // (b) Forgiven substitution with _fullAttempt.length > 1 (multiple fragments → correct)
+  // (c) Correct/forgiven entry + adjacent insertion exactly matches ref (repetition)
+  // (d) Correct/forgiven entry + adjacent insertion is near-miss of ref (false start)
+  {
+    const scNorm = s => (s || '').toLowerCase().replace(/[^a-z]/g, '');
+    const scLog = [];
+    for (let i = 0; i < alignment.length; i++) {
+      const entry = alignment[i];
+      if (entry.type === 'insertion' || entry.type === 'omission') continue;
+      const refN = scNorm(entry.ref);
+      if (!refN || refN.length < 2) continue;
+
+      // Only flag words that resolved as correct or forgiven
+      const isCorrectish = entry.type === 'correct' ||
+        (entry.type === 'substitution' && (entry.forgiven || entry._v0Type === 'correct'));
+      if (!isCorrectish) continue;
+
+      let evidence = null;
+      let reason = null;
+
+      // (a) Forgiven sub with near-miss evidence from struggle pipeline
+      if (entry._nearMissEvidence && entry._nearMissEvidence.length > 0) {
+        evidence = entry._nearMissEvidence;
+        reason = 'near-miss-evidence';
+      }
+      // (b) Forgiven sub with multi-part full attempt
+      else if (entry._fullAttempt && entry._fullAttempt.length > 1) {
+        evidence = entry._fullAttempt;
+        reason = 'full-attempt';
+      }
+      // (c)+(d) Scan adjacent insertions for exact match or near-miss of ref
+      else {
+        // Look backward for insertions immediately before this entry
+        const before = [];
+        for (let j = i - 1; j >= 0; j--) {
+          if (alignment[j].type !== 'insertion') break;
+          before.unshift(alignment[j]);
+        }
+        // Look forward for insertions immediately after this entry
+        const after = [];
+        for (let j = i + 1; j < alignment.length; j++) {
+          if (alignment[j].type !== 'insertion') break;
+          after.push(alignment[j]);
+        }
+
+        for (const ins of [...before, ...after]) {
+          const insN = scNorm(ins.hyp);
+          if (!insN || insN.length < 2) continue;
+          // Skip fillers
+          if (['uh', 'um', 'ah', 'er', 'hm', 'mm'].includes(insN)) continue;
+          // (c) Exact repetition
+          if (insN === refN) {
+            evidence = [ins.hyp];
+            reason = 'repetition';
+            break;
+          }
+          // (d) Near-miss (false start before correct word)
+          if (isNearMiss(ins.hyp, entry.ref)) {
+            evidence = [ins.hyp];
+            reason = 'near-miss-insertion';
+            break;
+          }
+        }
+      }
+
+      if (evidence) {
+        entry._selfCorrected = true;
+        entry._selfCorrectionEvidence = evidence;
+        entry._selfCorrectionReason = reason;
+        scLog.push({ ref: entry.ref, hyp: entry.hyp || '(correct)', evidence, reason });
+      }
+    }
+    if (scLog.length > 0) {
+      addStage('self_correction_detection', { count: scLog.length, details: scLog });
+    }
+  }
+
   addStage('diagnostics', {
     longPauses: diagnostics.longPauses?.length || 0,
     longPauseDetails: diagnostics.longPauses?.map(p => ({
@@ -2496,7 +2577,10 @@ async function runAnalysis() {
       _oovCollateralOmission: a._oovCollateralOmission || false,
       _functionWordCollateral: a._functionWordCollateral || false,
       _partOfOOVForgiven: a._partOfOOVForgiven || false,
-      _syllableCoverage: a._syllableCoverage || null
+      _syllableCoverage: a._syllableCoverage || null,
+      _selfCorrected: a._selfCorrected || false,
+      _selfCorrectionEvidence: a._selfCorrectionEvidence || null,
+      _selfCorrectionReason: a._selfCorrectionReason || null
     }))
   });
 

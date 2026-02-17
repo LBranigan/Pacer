@@ -708,7 +708,16 @@ function renderNewAnalyzedWords(container, alignment, sttLookup, diagnostics, tr
       '  (e.g., "pla"+"forms" for "platforms")\n\n' +
       'Rules:\n' +
       '\u2022 Fragments are grouped with their target word\n' +
-      '\u2022 Does NOT count as a separate error'
+      '\u2022 Does NOT count as a separate error',
+
+    'sc': 'SELF-CORRECTION (SC badge)\n' +
+      'Student made a false start or repetition, then produced\n' +
+      'the correct word. Indicates error awareness.\n\n' +
+      'Triggers:\n' +
+      '\u2022 Repetition: student said the word twice ("again again")\n' +
+      '\u2022 False start: student said a similar wrong word first ("fact" \u2192 "faced")\n' +
+      '\u2022 Near-miss fragment before the correct word\n\n' +
+      'Does NOT change the word score \u2014 purely informational.'
   };
 
   const scoringItems = Object.entries(BUCKET).map(([k, { label }]) =>
@@ -726,6 +735,7 @@ function renderNewAnalyzedWords(container, alignment, sttLookup, diagnostics, tr
       `<span class="word word-morph-root" style="background:#ffe0b2;color:#e65100;" title="${LEGEND_TIPS['morph-root'].replace(/"/g, '&quot;')}">Morph. Root</span>` +
       `<span class="word word-hesitation" title="${LEGEND_TIPS['hesitation'].replace(/"/g, '&quot;')}">Hesit.</span>` +
       `<span class="word-fragment" title="${LEGEND_TIPS['fragment'].replace(/"/g, '&quot;')}">fragment</span>` +
+      `<span class="word word-sc" style="background:#e0f2f1;color:#00897b;" title="${LEGEND_TIPS['sc'].replace(/"/g, '&quot;')}">SC</span>` +
     '</div>';
   container.appendChild(legend);
 
@@ -845,6 +855,8 @@ function renderNewAnalyzedWords(container, alignment, sttLookup, diagnostics, tr
       const hasRoot = (w) => w.length >= 3 && w !== refN && refN.startsWith(w);
       if (hasRoot(hypN) || hasRoot(v0N)) span.classList.add('word-morph-root');
     }
+    // Self-correction badge
+    if (entry._selfCorrected) span.classList.add('word-sc');
     // Build per-engine evidence strings from raw attempt snapshots
     // _v1RawAttempt/_v0Attempt/_xvalAttempt capture full attempt (insertions + hyp)
     // before any downstream mutations. Fall back to single-word fields when no fragments.
@@ -926,6 +938,10 @@ function renderNewAnalyzedWords(container, alignment, sttLookup, diagnostics, tr
     if (entry._inflectionalVariant) {
       const dir = entry._inflectionalDirection === 'dropped' ? 'dropped' : 'added';
       tip.push(`Inflectional variant: "${entry.hyp}" for "${entry.ref}" (${dir} -${entry._inflectionalSuffix})`);
+    }
+    if (entry._selfCorrected) {
+      const scReason = entry._selfCorrectionReason === 'repetition' ? 'Repetition' : 'False start';
+      tip.push(`Self-correction (${scReason}): ${entry._selfCorrectionEvidence.join(' + ')} \u2192 "${entry._displayRef || entry.ref}"`);
     }
     if (entry._fullAttempt) {
       const parts = entry._fullAttempt.join(' + ');
@@ -1112,6 +1128,10 @@ export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, di
   }
   if (accuracy.insertionErrors > 0) {
     errParts.push(accuracy.insertionErrors + ' confirmed insertion' + (accuracy.insertionErrors !== 1 ? 's' : ''));
+  }
+  const scCount = alignment.filter(e => e._selfCorrected).length;
+  if (scCount > 0) {
+    errParts.push(scCount + ' self-correction' + (scCount !== 1 ? 's' : ''));
   }
   errBox.innerHTML = '<span class="metric-label">' + (errParts.length > 0 ? errParts.join(', ') : 'No errors') + '</span>';
   metricsBar.appendChild(errBox);

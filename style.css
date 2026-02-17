@@ -1094,3 +1094,19 @@ body.dev-mode .dev-mode-toggle {
   margin: 0 1px 0 0;
 }
 
+/* Self-correction badge — teal "SC" superscript before the word */
+.word-sc { position: relative; }
+.word-sc::before {
+  content: 'SC';
+  position: absolute;
+  top: -8px;
+  left: -6px;
+  font-size: 0.55rem;
+  font-weight: bold;
+  color: #00897b;
+  background: #e0f2f1;
+  border-radius: 3px;
+  padding: 0 2px;
+  line-height: 1.2;
+}
+
