@@ -493,6 +493,30 @@ const FORGIVENESS_RULES = {
     note: 'Reverb CTC fragments non-English words into meaningless tokens. Parakeet (or fragment concatenation) provides evidence the child actually attempted the word. Sets _forgivenEvidence and _forgivenEvidenceSource on the entry.'
   },
 
+  inflectionalForgiveness: {
+    description: 'Substitution where ref and hyp differ by only an inflectional suffix — student decoded the base word correctly. Forgiven as meaning-preserving.',
+    detector: 'app.js → Phase 1.5 inflectional forgiveness loop',
+    countsAsError: false,
+    config: {
+      suffixes: ['s', 'es', 'ed', 'd', 'ing', 'er', 'est', 'ly'],
+      min_base_length: 3,       // shorter word must be >= 3 chars
+      match_rule: 'longer.startsWith(shorter) && suffix in list',
+    },
+    example: {
+      reference: 'schools',
+      spoken: 'school',
+      result: '"school" for "schools" — dropped -s suffix → forgiven (_inflectionalVariant: true)'
+    },
+    guards: [
+      'One word must start with the other (pure suffix difference)',
+      'Remaining suffix must be in the inflectional suffix whitelist',
+      'Shorter word (base) must be >= 3 characters',
+      'Not already forgiven by another mechanism (proper noun, OOV)',
+    ],
+    uiClass: 'word-forgiven',
+    note: 'Justified by Florida FAIR precedent (inflectional endings not errors), AAE dialect fairness (rule-governed suffix dropping), ASR unreliability on word-final morphemes, and miscue analysis research (morphological variants preserve meaning). Bidirectional: forgives both dropped suffixes ("school" for "schools") and added suffixes ("schools" for "school").'
+  },
+
   oovOmissionRecovery: {
     description: 'Out-of-vocabulary reference word scored as omission, but <unknown> CTC tokens exist in the temporal window — student vocalized something but ASR could not decode it because the word is not in its vocabulary. Excluded from assessment (neither correct nor error).',
     detector: 'app.js → OOV omission recovery loop (inside OOV forgiveness block, after phonetic forgiveness)',
@@ -734,6 +758,7 @@ export function getDetectorLocation(type) {
  * - hesitation: Brief pause (< 3s)
  * - postStruggleLeniency: Parakeet correct after preceding error — Reverb off-track (one word leniency)
  * - properNounForgiveness: Close attempt at name
+ * - inflectionalForgiveness: Base word correct, suffix differs ("school" for "schools")
  * - reverb_filler: Filler word (um, uh) via FILLER_WORDS set
  * - abbreviationCompoundMerge: i.e./e.g./U.S. read letter-by-letter → compound merged
  * - abbreviationExpansionMerge: i.e. read as "that is" → expansion merged

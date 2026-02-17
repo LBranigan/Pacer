@@ -12,7 +12,10 @@ export function computeWCPM(alignmentResult, elapsedSeconds) {
   if (!elapsedSeconds || elapsedSeconds <= 0) {
     return { wcpm: 0, correctCount: 0, elapsedSeconds: elapsedSeconds || 0 };
   }
-  const correctCount = alignmentResult.filter(w => w.type === 'correct').length;
+  const correctCount = alignmentResult.filter(w =>
+    w.type === 'correct' ||
+    (w.type === 'substitution' && (w.forgiven || w._v0Type === 'correct'))
+  ).length;
   const wcpm = Math.round((correctCount / elapsedSeconds) * 60 * 10) / 10;
   return { wcpm, correctCount, elapsedSeconds };
 }
@@ -42,8 +45,8 @@ export function computeAccuracy(alignmentResult, options = {}) {
         if (w.forgiven) {
           correctCount++;
           forgiven++;
-        } else if (w._pkType === 'correct' && w._v0Type === 'correct') {
-          // Both cross-validators heard correct — V1 outvoted, not an error
+        } else if (w._v0Type === 'correct') {
+          // V0 (clean pass) heard correct — V1 verbatim decode diverged, not an error
           correctCount++;
         } else {
           wordErrors++;
@@ -94,7 +97,11 @@ export function computeWCPMRange(alignmentResult, elapsedSeconds) {
   }
 
   // Count correct words (exclude compound struggles — type 'correct' but _isStruggle)
-  const correctWords = alignmentResult.filter(w => w.type === 'correct' && !w._isStruggle);
+  // Also include forgiven substitutions and V0-correct substitutions
+  const correctWords = alignmentResult.filter(w =>
+    (w.type === 'correct' && !w._isStruggle) ||
+    (w.type === 'substitution' && (w.forgiven || w._v0Type === 'correct'))
+  );
   const correctCount = correctWords.length;
 
   // Standard WCPM (max) - all correct words

@@ -470,6 +470,7 @@ function renderNewAnalyzedWords(container, alignment, sttLookup, diagnostics, tr
       if (entry._oovExcluded) return 'oov-excluded';
       if (entry._functionWordCollateral) return 'function-word-forgiven';
       if (entry._pkTrustOverride) return 'pk-trust-forgiven';
+      if (entry._inflectionalVariant) return 'inflectional-forgiven';
       return 'correct';  // proper noun, OOV phonetic match → still "correct"
     }
     if (entry.type === 'omission') return 'omitted';
@@ -512,10 +513,10 @@ function renderNewAnalyzedWords(container, alignment, sttLookup, diagnostics, tr
       // Did the cross-validators hear the correct word?
       const xvalCorrect = norm(entry._xvalWord) === refN;
       const v0Correct = norm(entry._v0Word) === refN;
-      // Both V0 and Parakeet correct → V1 outvoted, student said it right
-      if (xvalCorrect && v0Correct) return 'struggle-correct';
-      // Only one cross-validator correct → attempted but struggled
-      if (xvalCorrect || v0Correct) return 'attempted-struggled';
+      // V0 heard correct → V1's verbatimicity decode diverged, student said it right
+      if (v0Correct) return 'struggle-correct';
+      // Only Parakeet correct → attempted but struggled
+      if (xvalCorrect) return 'attempted-struggled';
       // Is any engine's word a near-miss (morphological/phonetic)?
       if (entry.ref && (
           (entry.hyp && isNearMiss(entry.hyp, entry.ref)) ||
@@ -542,6 +543,7 @@ function renderNewAnalyzedWords(container, alignment, sttLookup, diagnostics, tr
     'pk-trust-forgiven':       { label: 'Pk Trust',                  color: '#4caf50' },
     'oov-excluded':            { label: 'OOV Excluded',              color: '#4caf50' },
     'function-word-forgiven':  { label: 'Forgiven',                  color: '#4caf50' },
+    'inflectional-forgiven':   { label: 'Inflectional Variant',       color: '#4caf50' },
     'struggle-correct':        { label: 'Struggle but Correct',      color: '#558b2f' },
     'omitted':                 { label: 'Omitted',                   color: '#757575' },
     'attempted-struggled':     { label: 'Attempted but Struggled',   color: '#e65100' },
@@ -570,6 +572,7 @@ function renderNewAnalyzedWords(container, alignment, sttLookup, diagnostics, tr
       '\u2022 Parakeet did not omit it\n' +
       '\u2022 Not a recovered word (at least V1 or V0 heard it)\n' +
       '\u2022 OR: word was forgiven (proper noun with dictionary guard)\n' +
+      '\u2022 OR: inflectional variant forgiven (suffix -s/-ed/-ing etc.)\n' +
       '\u2022 Does NOT count as an error',
 
     'pk-trust-forgiven': 'PK TRUST\n' +
@@ -593,6 +596,15 @@ function renderNewAnalyzedWords(container, alignment, sttLookup, diagnostics, tr
       'All three engines missed this word, and it is adjacent to a\n' +
       'struggle or OOV word. Too short for ASR to capture reliably\n' +
       'when the student was struggling with a nearby word.\n\n' +
+      'Does NOT count as an error.',
+
+    'inflectional-forgiven': 'INFLECTIONAL VARIANT\n' +
+      'Student produced the correct base word but with a different\n' +
+      'inflectional ending (-s, -es, -ed, -d, -ing, -er, -est, -ly).\n\n' +
+      'Examples: "school" for "schools", "walk" for "walked"\n\n' +
+      'The student decoded the word correctly \u2014 the suffix\n' +
+      'difference may reflect dialect, connected speech, or ASR\n' +
+      'unreliability on word-final morphemes.\n\n' +
       'Does NOT count as an error.',
 
     'struggle-correct': 'STRUGGLE BUT CORRECT\n' +
@@ -850,6 +862,7 @@ function renderNewAnalyzedWords(container, alignment, sttLookup, diagnostics, tr
     const tip = [];
     const bucketLabel = entry.forgiven && entry._pkTrustOverride ? 'Forgiven (Pk trust)'
       : entry.forgiven && entry.properNounSource ? 'Forgiven (proper noun)'
+      : entry.forgiven && entry._inflectionalVariant ? 'Forgiven (inflectional)'
       : (BUCKET[bucket]?.label || bucket);
     tip.push(`"${displayText}" \u2014 ${bucketLabel}`);
     if (isConfIns) {
@@ -909,6 +922,10 @@ function renderNewAnalyzedWords(container, alignment, sttLookup, diagnostics, tr
       } else {
         tip.push(`Proper noun forgiven${ratioText}: "${entry.hyp}" \u2248 "${entry.ref}"`);
       }
+    }
+    if (entry._inflectionalVariant) {
+      const dir = entry._inflectionalDirection === 'dropped' ? 'dropped' : 'added';
+      tip.push(`Inflectional variant: "${entry.hyp}" for "${entry.ref}" (${dir} -${entry._inflectionalSuffix})`);
     }
     if (entry._fullAttempt) {
       const parts = entry._fullAttempt.join(' + ');
@@ -2090,17 +2107,29 @@ export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, di
         });
       }
 
-      const forgiven = alignment.filter(e => e.forgiven);
-      if (forgiven.length > 0) {
+      const forgivenProper = alignment.filter(e => e.forgiven && e.properNounSource);
+      if (forgivenProper.length > 0) {
         lists.push({
-          label: 'Forgiven Proper Nouns (' + forgiven.length + ')',
+          label: 'Forgiven Proper Nouns (' + forgivenProper.length + ')',
           cls: 'pipeline-pp-forgiven',
-          items: forgiven.map(e => {
+          items: forgivenProper.map(e => {
             if (e.type === 'omission' && e._forgivenEvidence) {
               const src = e._forgivenEvidenceSource === 'parakeet' ? 'Parakeet heard' : 'fragments';
               return '"' + e.ref + '" \u2014 ' + src + ' "' + e._forgivenEvidence + '" (' + (e.phoneticRatio || '?') + '% similar)';
             }
             return '"' + e.ref + '" \u2014 said "' + e.hyp + '" (' + (e.phoneticRatio || '?') + '% similar)';
+          })
+        });
+      }
+
+      const forgivenInflectional = alignment.filter(e => e._inflectionalVariant);
+      if (forgivenInflectional.length > 0) {
+        lists.push({
+          label: 'Inflectional Variants Forgiven (' + forgivenInflectional.length + ')',
+          cls: 'pipeline-pp-forgiven',
+          items: forgivenInflectional.map(e => {
+            const dir = e._inflectionalDirection === 'dropped' ? 'dropped' : 'added';
+            return '"' + e.hyp + '" for "' + e.ref + '" (' + dir + ' -' + e._inflectionalSuffix + ')';
           })
         });
       }
