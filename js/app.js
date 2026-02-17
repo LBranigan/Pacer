@@ -928,6 +928,7 @@ async function runAnalysis() {
     if (v0Entry) {
       v1Entry._v0Word = v0Entry.hyp;
       v1Entry._v0Type = v0Type;
+      if (v0Entry.compound) v1Entry._v0Compound = true;
       if (v0Ts) {
         v1Entry._v0StartTime = v0Ts.startTime;
         v1Entry._v0EndTime = v0Ts.endTime;

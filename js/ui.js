@@ -492,6 +492,8 @@ function renderNewAnalyzedWords(container, alignment, sttLookup, diagnostics, tr
       if (entry._v0Type === 'substitution') return 'struggle-correct';
       // Parakeet omitted this word — audio was unclear enough that the cross-validator missed it entirely
       if (entry._pkType === 'omission') return 'struggle-correct';
+      // V0 fragmented this word (compound merge reconstructed it) — Reverb couldn't produce it cleanly
+      if (entry._v0Compound) return 'struggle-correct';
       return 'correct';
     }
 
