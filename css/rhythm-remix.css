@@ -226,7 +226,8 @@ body::before {
   border-radius: 2px 0 0 2px;
 }
 
-.vinyl-arm.dropped {
+.vinyl-arm.dropped,
+.vinyl-arm.playing {
   transform: rotate(5deg);
 }
 
@@ -633,6 +634,13 @@ body::before {
   color: var(--rm-muted);
 }
 
+/* Extra toggles row */
+.toggles-row {
+  flex-wrap: wrap;
+  gap: 0.6rem 1.2rem;
+  justify-content: center;
+}
+
 /* ============================================================
    STATUS / FEEDBACK
    ============================================================ */
@@ -755,6 +763,12 @@ body::before {
   .control-row.options {
     flex-direction: column;
     gap: 0.6rem;
+  }
+
+  .toggles-row {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.5rem;
   }
 
   .remix-select {

@@ -14,7 +14,7 @@
     <div class="vinyl-container" id="vinylContainer">
       <div class="vinyl-record" id="vinylRecord">
         <div class="vinyl-label">
-          <div class="vinyl-title">Rhythm Remix</div>
+          <div class="vinyl-title" id="vinylTitle">Rhythm Remix</div>
           <div class="vinyl-subtitle" id="vinylSubtitle">Your Reading Beat</div>
         </div>
         <div class="vinyl-groove"></div>
@@ -67,6 +67,10 @@
         <option value="lofi">Lo-Fi Chill</option>
         <option value="jazzhop">Jazz Hop</option>
         <option value="ambient">Ambient</option>
+        <option value="bossa">Bossa Nova</option>
+        <option value="chiptune">Chiptune 8-Bit</option>
+        <option value="classical">Classical Piano</option>
+        <option value="trap">Trap</option>
       </select>
       <select id="speedSelect" class="remix-select">
         <option value="0.75">0.75x</option>
@@ -77,6 +81,24 @@
         <input type="checkbox" id="sentenceToggle">
         <span class="toggle-slider"></span>
         <span class="toggle-text">Sentence Chords</span>
+      </label>
+    </div>
+
+    <div class="control-row options toggles-row">
+      <label class="remix-toggle">
+        <input type="checkbox" id="celebrationsToggle">
+        <span class="toggle-slider"></span>
+        <span class="toggle-text">Celebrations</span>
+      </label>
+      <label class="remix-toggle">
+        <input type="checkbox" id="melodyToggle">
+        <span class="toggle-slider"></span>
+        <span class="toggle-text">Melody</span>
+      </label>
+      <label class="remix-toggle">
+        <input type="checkbox" id="harmonyToggle">
+        <span class="toggle-slider"></span>
+        <span class="toggle-text">Adaptive Harmony</span>
       </label>
     </div>
   </div>

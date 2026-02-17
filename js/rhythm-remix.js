@@ -9,7 +9,7 @@
 
 import { LofiEngine } from './lofi-engine.js';
 import { getAudioBlob } from './audio-store.js';
-import { getAssessment } from './storage.js';
+import { getAssessment, getStudents } from './storage.js';
 import { getPunctuationPositions } from './diagnostics.js';
 
 // ── Constants ────────────────────────────────────────────────────────────────
@@ -82,6 +82,25 @@ let savedDensity = 'normal'; // density to restore after pause ends
 
 /** Sentence-aligned chord toggle state. */
 let sentenceAlignedEnabled = false;
+
+/** Toggle states for new features. */
+let celebrationsEnabled = false;
+let melodyEnabled = false;
+let adaptiveHarmonyEnabled = false;
+
+/** Adaptive harmony: rolling fluency window. */
+const HARMONY_WINDOW = 12;
+let harmonyHistory = []; // recent word results: true = correct, false = error
+
+/** Study Beats FM — DJ intro state. */
+const GEMINI_TTS_MODEL = 'gemini-2.5-flash-preview-tts';
+const GEMINI_TTS_URL = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_TTS_MODEL}:generateContent`;
+const DJ_VOICE = 'Sulafat'; // "Warm" — smooth, late-night DJ vibe
+let djIntroBuffer = null; // decoded AudioBuffer from Gemini TTS
+let djIntroLoading = false;
+let djIntroPlayed = false;
+let djSourceNode = null;
+let djGainNode = null;
 
 // ── Ball state ───────────────────────────────────────────────────────────────
 
@@ -186,6 +205,193 @@ function wcpmToBpm(wcpm) {
   return Math.max(55, Math.min(100, raw));
 }
 
+// ── Study Beats FM — DJ Intro via Gemini TTS ────────────────────────────────
+
+function buildDJPrompt(studentName, passagePreview) {
+  const name = studentName || 'our next reader';
+  const passage = passagePreview
+    ? passagePreview.replace(/\.{3}$/, '').trim()
+    : 'a great story';
+  return (
+    `Say the following in a smooth, warm, late-night radio DJ voice. ` +
+    `Relaxed and chill, like a lo-fi hip-hop study beats radio host. ` +
+    `Keep it short and natural — no more than two sentences. ` +
+    `Speak slowly with a warm smile in your voice.\n\n` +
+    `"You're listening to Study Beats FM. Next up, here's ${name} with '${passage}'."`
+  );
+}
+
+async function fetchDJIntro(studentName, passagePreview) {
+  const apiKey = localStorage.getItem('orf_gemini_key') || '';
+  if (!apiKey) {
+    console.log('[StudyBeatsFM] No Gemini API key — skipping DJ intro');
+    return null;
+  }
+
+  const text = buildDJPrompt(studentName, passagePreview);
+  console.log('[StudyBeatsFM] Generating DJ intro:', text);
+
+  const body = JSON.stringify({
+    contents: [{ parts: [{ text }] }],
+    generationConfig: {
+      responseModalities: ['AUDIO'],
+      speechConfig: {
+        voiceConfig: {
+          prebuiltVoiceConfig: { voiceName: DJ_VOICE }
+        }
+      }
+    }
+  });
+
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    try {
+      const resp = await fetch(GEMINI_TTS_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-goog-api-key': apiKey,
+        },
+        body,
+      });
+
+      if (!resp.ok) {
+        if (resp.status === 429) {
+          console.warn('[StudyBeatsFM] Quota exceeded — skipping DJ intro');
+          return null;
+        }
+        if ((resp.status === 500 || resp.status === 503) && attempt < 2) {
+          await new Promise(r => setTimeout(r, 2000));
+          continue;
+        }
+        console.warn('[StudyBeatsFM] TTS error:', resp.status);
+        return null;
+      }
+
+      const data = await resp.json();
+      if (data.promptFeedback?.blockReason) return null;
+
+      const audioPart = data.candidates?.[0]?.content?.parts?.find(p => p.inlineData);
+      if (!audioPart) return null;
+
+      // Decode base64 L16 PCM → WAV ArrayBuffer
+      const b64 = audioPart.inlineData.data;
+      const binary = atob(b64);
+      const pcmBytes = new Uint8Array(binary.length);
+      for (let i = 0; i < binary.length; i++) pcmBytes[i] = binary.charCodeAt(i);
+
+      const sampleRate = 24000;
+      const dataSize = pcmBytes.length;
+      const wavBuf = new ArrayBuffer(44 + dataSize);
+      const view = new DataView(wavBuf);
+      const wr = (off, s) => { for (let ci = 0; ci < s.length; ci++) view.setUint8(off + ci, s.charCodeAt(ci)); };
+      wr(0, 'RIFF');
+      view.setUint32(4, 36 + dataSize, true);
+      wr(8, 'WAVE');
+      wr(12, 'fmt ');
+      view.setUint32(16, 16, true);
+      view.setUint16(20, 1, true);
+      view.setUint16(22, 1, true);
+      view.setUint32(24, sampleRate, true);
+      view.setUint32(28, sampleRate * 2, true);
+      view.setUint16(32, 2, true);
+      view.setUint16(34, 16, true);
+      wr(36, 'data');
+      view.setUint32(40, dataSize, true);
+      new Uint8Array(wavBuf, 44).set(pcmBytes);
+
+      return wavBuf;
+    } catch (err) {
+      console.warn('[StudyBeatsFM] fetch error:', err);
+      if (attempt < 2) continue;
+      return null;
+    }
+  }
+  return null;
+}
+
+/**
+ * Play the DJ intro over the lo-fi beat, then start the student audio.
+ */
+function playDJIntroThenReading() {
+  if (!djIntroBuffer || !audioCtx || djIntroPlayed) {
+    // No DJ intro available or already played — start reading immediately
+    startReadingPlayback();
+    return;
+  }
+
+  djIntroPlayed = true;
+
+  // Decode the WAV buffer
+  audioCtx.decodeAudioData(djIntroBuffer.slice(0)).then(decoded => {
+    // Play DJ voice through a dedicated gain node
+    djSourceNode = audioCtx.createBufferSource();
+    djSourceNode.buffer = decoded;
+    djGainNode = audioCtx.createGain();
+    djGainNode.gain.value = 1.2; // DJ voice slightly louder than student
+    djSourceNode.connect(djGainNode);
+    djGainNode.connect(audioCtx.destination);
+
+    // Also feed DJ voice into analyser for visualizer
+    djGainNode.connect(analyser);
+
+    // Duck the beat volume during DJ intro
+    if (beatGain) {
+      beatGain.gain.setValueAtTime(0.25, audioCtx.currentTime);
+      beatGain.gain.linearRampToValueAtTime(0.5, audioCtx.currentTime + decoded.duration + 0.3);
+    }
+
+    // Update status
+    const status = document.getElementById('remix-status');
+    if (status) status.textContent = 'Study Beats FM';
+
+    djSourceNode.start(audioCtx.currentTime);
+
+    // Run visualizer during DJ intro
+    let djVizId = null;
+    function djVizLoop() {
+      drawVisualizer();
+      updateChordBadge();
+      djVizId = requestAnimationFrame(djVizLoop);
+    }
+    djVizId = requestAnimationFrame(djVizLoop);
+
+    // When DJ intro ends, start the student reading
+    djSourceNode.onended = () => {
+      djSourceNode = null;
+      if (djVizId) cancelAnimationFrame(djVizId);
+      if (status) status.textContent = '';
+      // Small pause after DJ intro
+      setTimeout(() => {
+        startReadingPlayback();
+      }, 400);
+    };
+  }).catch(err => {
+    console.warn('[StudyBeatsFM] Failed to decode DJ audio:', err);
+    startReadingPlayback();
+  });
+}
+
+/**
+ * Start the actual student reading playback (audio + animation loop).
+ */
+function startReadingPlayback() {
+  if (!audioEl) return;
+  audioEl.play().then(() => {
+    isPlaying = true;
+    setVinylPlaying(true);
+    const playIcon = document.getElementById('playIcon');
+    const pauseIcon = document.getElementById('pauseIcon');
+    if (playIcon) playIcon.style.display = 'none';
+    if (pauseIcon) pauseIcon.style.display = '';
+
+    cacheWordRects();
+    lastFrameTime = 0;
+    if (!animFrameId) animFrameId = requestAnimationFrame(animationLoop);
+  }).catch(err => {
+    console.warn('Playback failed:', err);
+  });
+}
+
 // ── Word rect caching ────────────────────────────────────────────────────────
 
 function cacheWordRects() {
@@ -249,8 +455,9 @@ function setupAudio() {
   lofi.output.connect(beatGain);
 
   // Set style from localStorage preference
+  const validStyles = ['lofi', 'jazzhop', 'ambient', 'bossa', 'chiptune', 'classical', 'trap'];
   const savedStyle = localStorage.getItem('orf_remix_style');
-  if (savedStyle && ['lofi', 'jazzhop', 'ambient'].includes(savedStyle)) {
+  if (savedStyle && validStyles.includes(savedStyle)) {
     lofi.setStyle(savedStyle);
     const sel = document.getElementById('styleSelect');
     if (sel) sel.value = savedStyle;
@@ -307,8 +514,67 @@ function onWordChange(fromIdx, toIdx) {
     const prev = wordSequence[fromIdx];
     if (prev && prev.sentenceFinal) {
       lofi.advanceChord();
+      // Celebration: sentence end
+      if (lofi) lofi.notifyWordEvent('sentence-end');
     }
   }
+
+  // ── Reactive crackle: always on ──
+  if (lofi) {
+    const isError = w.isOmission || w.isStruggle || (w.type === 'substitution' && !w.forgiven);
+    if (w.isStruggle) {
+      lofi.setCrackleIntensity('heavy');
+      lofi.playRecordSkip();
+    } else if (isError) {
+      lofi.setCrackleIntensity('medium');
+    } else {
+      lofi.setCrackleIntensity('light');
+    }
+  }
+
+  // ── Micro-celebrations ──
+  if (lofi) {
+    const isCorrect = (w.type === 'correct' || w.forgiven) && !w.isOmission;
+    if (w.isOmission) {
+      lofi.notifyWordEvent('omission');
+    } else if (w.isStruggle || (w.type === 'substitution' && !w.forgiven)) {
+      lofi.notifyWordEvent('error');
+    } else if (isCorrect) {
+      lofi.notifyWordEvent('correct');
+    }
+    // Self-correction detection: forgiven word that was originally a substitution
+    if (w.forgiven && w.type === 'substitution') {
+      lofi.notifyWordEvent('self-correction');
+    }
+  }
+
+  // ── Melodic contour: map word to pitch ──
+  if (lofi && melodyEnabled) {
+    const isError = w.isOmission || w.isStruggle || (w.type === 'substitution' && !w.forgiven);
+    // Estimate speed tier from gap and duration
+    let tier = 'steady';
+    if (!w.isOmission && w.startTime > 0 && w.endTime > 0) {
+      const dur = w.endTime - w.startTime;
+      if (dur < 0.2) tier = 'quick';
+      else if (dur < 0.4) tier = 'steady';
+      else if (dur < 0.8) tier = 'slow';
+      else if (dur < 1.5) tier = 'struggling';
+      else tier = 'stalled';
+    }
+    if (!w.isOmission) {
+      lofi.playMelodicPing(tier, isError);
+    }
+  }
+
+  // ── Adaptive harmony: update fluency window ──
+  if (lofi && adaptiveHarmonyEnabled) {
+    const isCorrect = (w.type === 'correct' || w.forgiven) && !w.isOmission;
+    harmonyHistory.push(isCorrect);
+    if (harmonyHistory.length > HARMONY_WINDOW) harmonyHistory.shift();
+    const fluency = harmonyHistory.filter(Boolean).length / harmonyHistory.length;
+    lofi.setHarmonyMood(fluency);
+  }
+
   if (!rect) return;
 
   // Determine ball color based on word type
@@ -689,10 +955,14 @@ function animationLoop(timestamp) {
 
   // 2. If word changed, trigger transition
   if (newIdx !== currentWordIdx && newIdx >= 0) {
-    // Leaving a pause — restore density
+    // Leaving a pause — restore density + needle drop
     if (inPause) {
       inPause = false;
-      if (lofi) lofi.setDensity(savedDensity);
+      if (lofi) {
+        lofi.setDensity(savedDensity);
+        lofi.playNeedleDrop();
+        lofi.setCrackleIntensity('light');
+      }
     }
     onWordChange(currentWordIdx, newIdx);
     currentWordIdx = newIdx;
@@ -711,6 +981,8 @@ function animationLoop(timestamp) {
           // Save current error-rate density before overriding
           savedDensity = lastDensity;
           inPause = true;
+          // Needle-lift effect: reduce crackle during pause
+          if (lofi) lofi.setCrackleIntensity(gapTotal > 1.5 ? 'light' : 'medium');
         }
         lofi.setDensity(gapTotal > 1.5 ? 'whisper' : 'sparse');
       }
@@ -755,10 +1027,15 @@ function togglePlayPause() {
   const playIcon = document.getElementById('playIcon');
   const pauseIcon = document.getElementById('pauseIcon');
 
-  if (isPlaying) {
+  if (isPlaying || djSourceNode) {
     // Pause
     audioEl.pause();
     if (lofi) lofi.pause();
+    // Stop DJ intro if playing
+    if (djSourceNode) {
+      try { djSourceNode.stop(0); } catch (_) { /* ok */ }
+      djSourceNode = null;
+    }
     isPlaying = false;
     setVinylPlaying(false);
     if (playIcon) playIcon.style.display = '';
@@ -772,24 +1049,22 @@ function togglePlayPause() {
     setupAudio();
     audioCtx.resume();
 
-    audioEl.play().then(() => {
-      isPlaying = true;
-      if (lofi) {
-        if (lofi.isPlaying) lofi.resume();
-        else lofi.start();
-      }
-      setVinylPlaying(true);
+    // Start the lo-fi beat
+    if (lofi) {
+      if (lofi.isPlaying) lofi.resume();
+      else lofi.start();
+    }
+    setVinylPlaying(true);
+
+    // First play: DJ intro then reading. Subsequent: just play reading.
+    if (!djIntroPlayed && djIntroBuffer) {
+      // Hide play icon during DJ intro
       if (playIcon) playIcon.style.display = 'none';
       if (pauseIcon) pauseIcon.style.display = '';
-
-      // Recache word rects (layout may have shifted)
-      cacheWordRects();
-
-      lastFrameTime = 0;
-      if (!animFrameId) animFrameId = requestAnimationFrame(animationLoop);
-    }).catch(err => {
-      console.warn('Playback failed:', err);
-    });
+      playDJIntroThenReading();
+    } else {
+      startReadingPlayback();
+    }
   }
 }
 
@@ -909,6 +1184,34 @@ function wireControls() {
       if (lofi) lofi.setSentenceAligned(sentenceAlignedEnabled);
     });
   }
+
+  // Micro-celebrations toggle
+  const celebToggle = document.getElementById('celebrationsToggle');
+  if (celebToggle) {
+    celebToggle.addEventListener('change', () => {
+      celebrationsEnabled = celebToggle.checked;
+      if (lofi) lofi.setCelebrations(celebrationsEnabled);
+    });
+  }
+
+  // Melodic contour toggle
+  const melodyToggle = document.getElementById('melodyToggle');
+  if (melodyToggle) {
+    melodyToggle.addEventListener('change', () => {
+      melodyEnabled = melodyToggle.checked;
+      if (lofi) lofi.setMelody(melodyEnabled);
+    });
+  }
+
+  // Adaptive harmony toggle
+  const harmonyToggle = document.getElementById('harmonyToggle');
+  if (harmonyToggle) {
+    harmonyToggle.addEventListener('change', () => {
+      adaptiveHarmonyEnabled = harmonyToggle.checked;
+      if (lofi) lofi.setAdaptiveHarmony(adaptiveHarmonyEnabled);
+      if (!adaptiveHarmonyEnabled) harmonyHistory = [];
+    });
+  }
 }
 
 // ── Load audio blob ──────────────────────────────────────────────────────────
@@ -1014,6 +1317,10 @@ function cleanup() {
     cancelAnimationFrame(animFrameId);
     animFrameId = null;
   }
+  if (djSourceNode) {
+    try { djSourceNode.stop(0); } catch (_) { /* ok */ }
+    djSourceNode = null;
+  }
   if (lofi) {
     lofi.dispose();
     lofi = null;
@@ -1061,11 +1368,36 @@ function initRhythmRemix() {
     return;
   }
 
+  // Look up student name
+  const students = getStudents();
+  const student = students.find(s => s.id === studentId);
+  const studentName = student ? student.name : null;
+
   // Populate vinyl subtitle with passage preview
   const subtitle = document.getElementById('vinylSubtitle');
   if (subtitle && assessment.passagePreview) {
     subtitle.textContent = assessment.passagePreview.slice(0, 30) + '...';
   }
+
+  // Update vinyl title to show "Study Beats FM"
+  const vinylTitle = document.getElementById('vinylTitle');
+  if (vinylTitle) vinylTitle.textContent = 'Study Beats FM';
+
+  // Fetch DJ intro in background (non-blocking)
+  const passagePreview = assessment.passagePreview || '';
+  djIntroLoading = true;
+  fetchDJIntro(studentName, passagePreview).then(wavBuf => {
+    djIntroBuffer = wavBuf;
+    djIntroLoading = false;
+    if (wavBuf) {
+      console.log('[StudyBeatsFM] DJ intro ready');
+      // Show a subtle indicator that radio mode is available
+      const status = document.getElementById('remix-status');
+      if (status && !isPlaying) status.textContent = 'Study Beats FM ready';
+    }
+  }).catch(() => {
+    djIntroLoading = false;
+  });
 
   // Build word sequence
   wordSequence = buildWordSequence(alignment, sttWords);
@@ -1090,10 +1422,10 @@ function initRhythmRemix() {
   wireControls();
 
   // Restore style preference
-  const savedStyle = localStorage.getItem('orf_remix_style');
-  const styleSelect = document.getElementById('styleSelect');
-  if (savedStyle && styleSelect) {
-    styleSelect.value = savedStyle;
+  const savedStyleInit = localStorage.getItem('orf_remix_style');
+  const styleSelectInit = document.getElementById('styleSelect');
+  if (savedStyleInit && styleSelectInit) {
+    styleSelectInit.value = savedStyleInit;
   }
 
   // Cleanup on unload

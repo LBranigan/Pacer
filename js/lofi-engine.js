@@ -12,8 +12,10 @@
 const NOTE = {
   A1: 55, C2: 65.41, D2: 73.42, G2: 98.00, A2: 110.00,
   C3: 130.81, D3: 146.83, E3: 164.81, F3: 174.61, G3: 196.00,
-  A3: 220.00, B3: 246.94, C4: 261.63, D4: 293.66, F4: 349.23,
-  B2: 123.47, G4: 392.00, E4: 329.63, A4: 440.00
+  A3: 220.00, Bb3: 233.08, B3: 246.94, C4: 261.63, Db4: 277.18,
+  D4: 293.66, Eb4: 311.13, E4: 329.63, F4: 349.23, Gb4: 369.99,
+  G4: 392.00, Ab4: 415.30, A4: 440.00, Bb4: 466.16, B4: 493.88,
+  B2: 123.47, C5: 523.25, D5: 554.37
 };
 
 // ─── Chord definitions ──────────────────────────────────────────────────────
@@ -21,28 +23,137 @@ const CHORD_SETS = {
   lofi: {
     // ii-V-I-vi in C major: Dm7 → G7 → Cmaj7 → Am7
     chords: [
-      { name: 'Dm7',   notes: [NOTE.D3, NOTE.F3, NOTE.A3, NOTE.C4], root: NOTE.D2 },
-      { name: 'G7',    notes: [NOTE.G3, NOTE.B3, NOTE.D4, NOTE.F4], root: NOTE.G2 },
-      { name: 'Cmaj7', notes: [NOTE.C3, NOTE.E3, NOTE.G3, NOTE.B3], root: NOTE.C2 },
-      { name: 'Am7',   notes: [NOTE.A2, NOTE.C3, NOTE.E3, NOTE.G3], root: NOTE.A1 },
+      { name: 'Dm7',   notes: [NOTE.D3, NOTE.F3, NOTE.A3, NOTE.C4], root: NOTE.D2,
+        scale: [NOTE.D4, NOTE.E4, NOTE.F4, NOTE.G4, NOTE.A4, NOTE.C5] },
+      { name: 'G7',    notes: [NOTE.G3, NOTE.B3, NOTE.D4, NOTE.F4], root: NOTE.G2,
+        scale: [NOTE.G4, NOTE.A4, NOTE.B4, NOTE.D5, NOTE.F4, NOTE.E4] },
+      { name: 'Cmaj7', notes: [NOTE.C3, NOTE.E3, NOTE.G3, NOTE.B3], root: NOTE.C2,
+        scale: [NOTE.C4, NOTE.D4, NOTE.E4, NOTE.G4, NOTE.A4, NOTE.B4] },
+      { name: 'Am7',   notes: [NOTE.A2, NOTE.C3, NOTE.E3, NOTE.G3], root: NOTE.A1,
+        scale: [NOTE.A3, NOTE.B3, NOTE.C4, NOTE.D4, NOTE.E4, NOTE.G4] },
     ]
   },
   jazzhop: {
     // Add 9ths for richer jazz voicings: Dm9 → G13 → Cmaj9 → Am9
     chords: [
-      { name: 'Dm9',   notes: [NOTE.D3, NOTE.F3, NOTE.A3, NOTE.C4, NOTE.E4], root: NOTE.D2 },
-      { name: 'G13',   notes: [NOTE.G3, NOTE.B3, NOTE.D4, NOTE.F4, NOTE.E4], root: NOTE.G2 },
-      { name: 'Cmaj9', notes: [NOTE.C3, NOTE.E3, NOTE.G3, NOTE.B3, NOTE.D4], root: NOTE.C2 },
-      { name: 'Am9',   notes: [NOTE.A2, NOTE.C3, NOTE.E3, NOTE.G3, NOTE.B3], root: NOTE.A1 },
+      { name: 'Dm9',   notes: [NOTE.D3, NOTE.F3, NOTE.A3, NOTE.C4, NOTE.E4], root: NOTE.D2,
+        scale: [NOTE.D4, NOTE.E4, NOTE.F4, NOTE.G4, NOTE.A4, NOTE.C5] },
+      { name: 'G13',   notes: [NOTE.G3, NOTE.B3, NOTE.D4, NOTE.F4, NOTE.E4], root: NOTE.G2,
+        scale: [NOTE.G4, NOTE.A4, NOTE.B4, NOTE.D5, NOTE.F4, NOTE.E4] },
+      { name: 'Cmaj9', notes: [NOTE.C3, NOTE.E3, NOTE.G3, NOTE.B3, NOTE.D4], root: NOTE.C2,
+        scale: [NOTE.C4, NOTE.D4, NOTE.E4, NOTE.G4, NOTE.A4, NOTE.B4] },
+      { name: 'Am9',   notes: [NOTE.A2, NOTE.C3, NOTE.E3, NOTE.G3, NOTE.B3], root: NOTE.A1,
+        scale: [NOTE.A3, NOTE.B3, NOTE.C4, NOTE.D4, NOTE.E4, NOTE.G4] },
     ]
   },
   ambient: {
     // Same chords but we'll use longer envelopes and no drums
     chords: [
-      { name: 'Dm7',   notes: [NOTE.D3, NOTE.F3, NOTE.A3, NOTE.C4], root: NOTE.D2 },
-      { name: 'G7',    notes: [NOTE.G3, NOTE.B3, NOTE.D4, NOTE.F4], root: NOTE.G2 },
-      { name: 'Cmaj7', notes: [NOTE.C3, NOTE.E3, NOTE.G3, NOTE.B3], root: NOTE.C2 },
-      { name: 'Am7',   notes: [NOTE.A2, NOTE.C3, NOTE.E3, NOTE.G3], root: NOTE.A1 },
+      { name: 'Dm7',   notes: [NOTE.D3, NOTE.F3, NOTE.A3, NOTE.C4], root: NOTE.D2,
+        scale: [NOTE.D4, NOTE.E4, NOTE.F4, NOTE.G4, NOTE.A4, NOTE.C5] },
+      { name: 'G7',    notes: [NOTE.G3, NOTE.B3, NOTE.D4, NOTE.F4], root: NOTE.G2,
+        scale: [NOTE.G4, NOTE.A4, NOTE.B4, NOTE.D5, NOTE.F4, NOTE.E4] },
+      { name: 'Cmaj7', notes: [NOTE.C3, NOTE.E3, NOTE.G3, NOTE.B3], root: NOTE.C2,
+        scale: [NOTE.C4, NOTE.D4, NOTE.E4, NOTE.G4, NOTE.A4, NOTE.B4] },
+      { name: 'Am7',   notes: [NOTE.A2, NOTE.C3, NOTE.E3, NOTE.G3], root: NOTE.A1,
+        scale: [NOTE.A3, NOTE.B3, NOTE.C4, NOTE.D4, NOTE.E4, NOTE.G4] },
+    ]
+  },
+  bossa: {
+    // Bossa Nova: gentle Brazilian jazz — Dm9 → G7 → Cmaj9 → A7
+    chords: [
+      { name: 'Dm9',   notes: [NOTE.D3, NOTE.F3, NOTE.A3, NOTE.C4, NOTE.E4], root: NOTE.D2,
+        scale: [NOTE.D4, NOTE.E4, NOTE.F4, NOTE.G4, NOTE.A4, NOTE.C5] },
+      { name: 'G7',    notes: [NOTE.G3, NOTE.B3, NOTE.D4, NOTE.F4], root: NOTE.G2,
+        scale: [NOTE.G4, NOTE.A4, NOTE.B4, NOTE.D5, NOTE.F4, NOTE.E4] },
+      { name: 'Cmaj9', notes: [NOTE.C3, NOTE.E3, NOTE.G3, NOTE.B3, NOTE.D4], root: NOTE.C2,
+        scale: [NOTE.C4, NOTE.D4, NOTE.E4, NOTE.G4, NOTE.A4, NOTE.B4] },
+      { name: 'A7',    notes: [NOTE.A2, NOTE.Db4, NOTE.E3, NOTE.G3], root: NOTE.A1,
+        scale: [NOTE.A3, NOTE.B3, NOTE.Db4, NOTE.D4, NOTE.E4, NOTE.G4] },
+    ]
+  },
+  chiptune: {
+    // 8-bit: simple triads, bright and playful
+    chords: [
+      { name: 'Dm',    notes: [NOTE.D3, NOTE.F3, NOTE.A3], root: NOTE.D2,
+        scale: [NOTE.D4, NOTE.E4, NOTE.F4, NOTE.G4, NOTE.A4, NOTE.C5] },
+      { name: 'G',     notes: [NOTE.G3, NOTE.B3, NOTE.D4], root: NOTE.G2,
+        scale: [NOTE.G4, NOTE.A4, NOTE.B4, NOTE.C5, NOTE.D5] },
+      { name: 'C',     notes: [NOTE.C3, NOTE.E3, NOTE.G3], root: NOTE.C2,
+        scale: [NOTE.C4, NOTE.D4, NOTE.E4, NOTE.G4, NOTE.A4, NOTE.B4] },
+      { name: 'Am',    notes: [NOTE.A2, NOTE.C3, NOTE.E3], root: NOTE.A1,
+        scale: [NOTE.A3, NOTE.B3, NOTE.C4, NOTE.D4, NOTE.E4, NOTE.G4] },
+    ]
+  },
+  classical: {
+    // Classical Piano: gentle arpeggiated chords, Satie-inspired
+    chords: [
+      { name: 'Dm7',   notes: [NOTE.D3, NOTE.F3, NOTE.A3, NOTE.C4], root: NOTE.D2,
+        scale: [NOTE.D4, NOTE.E4, NOTE.F4, NOTE.G4, NOTE.A4, NOTE.C5] },
+      { name: 'G7',    notes: [NOTE.G3, NOTE.B3, NOTE.D4, NOTE.F4], root: NOTE.G2,
+        scale: [NOTE.G4, NOTE.A4, NOTE.B4, NOTE.D5, NOTE.F4, NOTE.E4] },
+      { name: 'Cmaj7', notes: [NOTE.C3, NOTE.E3, NOTE.G3, NOTE.B3], root: NOTE.C2,
+        scale: [NOTE.C4, NOTE.D4, NOTE.E4, NOTE.G4, NOTE.A4, NOTE.B4] },
+      { name: 'Am7',   notes: [NOTE.A2, NOTE.C3, NOTE.E3, NOTE.G3], root: NOTE.A1,
+        scale: [NOTE.A3, NOTE.B3, NOTE.C4, NOTE.D4, NOTE.E4, NOTE.G4] },
+    ]
+  },
+  trap: {
+    // Trap: heavy 808s, rolling hats — darker voicings
+    chords: [
+      { name: 'Dm7',   notes: [NOTE.D3, NOTE.F3, NOTE.A3, NOTE.C4], root: NOTE.D2,
+        scale: [NOTE.D4, NOTE.E4, NOTE.F4, NOTE.G4, NOTE.A4, NOTE.C5] },
+      { name: 'Gm7',   notes: [NOTE.G3, NOTE.Bb3, NOTE.D4, NOTE.F4], root: NOTE.G2,
+        scale: [NOTE.G4, NOTE.A4, NOTE.Bb4, NOTE.C5, NOTE.D5, NOTE.F4] },
+      { name: 'Cm7',   notes: [NOTE.C3, NOTE.Eb4, NOTE.G3, NOTE.Bb3], root: NOTE.C2,
+        scale: [NOTE.C4, NOTE.D4, NOTE.Eb4, NOTE.F4, NOTE.G4, NOTE.Bb4] },
+      { name: 'Am7',   notes: [NOTE.A2, NOTE.C3, NOTE.E3, NOTE.G3], root: NOTE.A1,
+        scale: [NOTE.A3, NOTE.B3, NOTE.C4, NOTE.D4, NOTE.E4, NOTE.G4] },
+    ]
+  }
+};
+
+// ─── Adaptive harmony chord quality sets ────────────────────────────────────
+// Used when adaptive harmony is enabled: chord quality shifts with reading fluency.
+// Each set has the same progression shape (ii-V-I-vi) but in different qualities.
+const HARMONY_MOODS = {
+  bright: {
+    // Major 7ths — smooth, confident reading
+    chords: [
+      { name: 'Dm7',   notes: [NOTE.D3, NOTE.F3, NOTE.A3, NOTE.C4], root: NOTE.D2,
+        scale: [NOTE.D4, NOTE.E4, NOTE.F4, NOTE.G4, NOTE.A4, NOTE.C5] },
+      { name: 'G7',    notes: [NOTE.G3, NOTE.B3, NOTE.D4, NOTE.F4], root: NOTE.G2,
+        scale: [NOTE.G4, NOTE.A4, NOTE.B4, NOTE.D5, NOTE.F4, NOTE.E4] },
+      { name: 'Cmaj7', notes: [NOTE.C3, NOTE.E3, NOTE.G3, NOTE.B3], root: NOTE.C2,
+        scale: [NOTE.C4, NOTE.D4, NOTE.E4, NOTE.G4, NOTE.A4, NOTE.B4] },
+      { name: 'Am7',   notes: [NOTE.A2, NOTE.C3, NOTE.E3, NOTE.G3], root: NOTE.A1,
+        scale: [NOTE.A3, NOTE.B3, NOTE.C4, NOTE.D4, NOTE.E4, NOTE.G4] },
+    ]
+  },
+  warm: {
+    // Minor 7ths — moderate difficulty, empathetic
+    chords: [
+      { name: 'Dm7',   notes: [NOTE.D3, NOTE.F3, NOTE.A3, NOTE.C4], root: NOTE.D2,
+        scale: [NOTE.D4, NOTE.E4, NOTE.F4, NOTE.G4, NOTE.A4, NOTE.C5] },
+      { name: 'Gm7',   notes: [NOTE.G3, NOTE.Bb3, NOTE.D4, NOTE.F4], root: NOTE.G2,
+        scale: [NOTE.G4, NOTE.A4, NOTE.Bb4, NOTE.C5, NOTE.D5, NOTE.F4] },
+      { name: 'Cm7',   notes: [NOTE.C3, NOTE.Eb4, NOTE.G3, NOTE.Bb3], root: NOTE.C2,
+        scale: [NOTE.C4, NOTE.D4, NOTE.Eb4, NOTE.F4, NOTE.G4, NOTE.Bb4] },
+      { name: 'Am7',   notes: [NOTE.A2, NOTE.C3, NOTE.E3, NOTE.G3], root: NOTE.A1,
+        scale: [NOTE.A3, NOTE.B3, NOTE.C4, NOTE.D4, NOTE.E4, NOTE.G4] },
+    ]
+  },
+  tender: {
+    // Suspended / half-dim — struggling, but gentle (never harsh)
+    chords: [
+      { name: 'Dsus4', notes: [NOTE.D3, NOTE.G3, NOTE.A3, NOTE.C4], root: NOTE.D2,
+        scale: [NOTE.D4, NOTE.F4, NOTE.G4, NOTE.A4, NOTE.C5] },
+      { name: 'Gsus4', notes: [NOTE.G3, NOTE.C4, NOTE.D4, NOTE.F4], root: NOTE.G2,
+        scale: [NOTE.G4, NOTE.Bb4, NOTE.C5, NOTE.D5, NOTE.F4] },
+      { name: 'Csus2', notes: [NOTE.C3, NOTE.D3, NOTE.G3, NOTE.Bb3], root: NOTE.C2,
+        scale: [NOTE.C4, NOTE.D4, NOTE.F4, NOTE.G4, NOTE.Bb4] },
+      { name: 'Asus4', notes: [NOTE.A2, NOTE.D3, NOTE.E3, NOTE.G3], root: NOTE.A1,
+        scale: [NOTE.A3, NOTE.C4, NOTE.D4, NOTE.E4, NOTE.G4] },
     ]
   }
 };
@@ -72,14 +183,46 @@ const DRUM_PATTERNS = {
     snare:   new Array(32).fill(0),
     hatC:    new Array(32).fill(0),
     hatO:    new Array(32).fill(0),
+  },
+  bossa: {
+    // Bossa nova pattern: syncopated kick, rim clicks (via snare), gentle hats
+    kick:    [1,0,0,0, 0,0,1,0, 0,0,0,0, 0,0,1,0, 1,0,0,0, 0,0,1,0, 0,0,0,0, 0,0,1,0],
+    snare:   [0,0,1,0, 0,1,0,0, 0,0,1,0, 0,1,0,0, 0,0,1,0, 0,1,0,0, 0,0,1,0, 0,1,0,0],
+    hatC:    [1,0,1,0, 1,0,1,0, 1,0,1,0, 1,0,1,0, 1,0,1,0, 1,0,1,0, 1,0,1,0, 1,0,1,0],
+    hatO:    new Array(32).fill(0),
+  },
+  chiptune: {
+    // 8-bit: punchy, simple, upbeat
+    kick:    [1,0,0,0, 1,0,0,0, 1,0,0,0, 1,0,0,0, 1,0,0,0, 1,0,0,0, 1,0,0,0, 1,0,0,0],
+    snare:   [0,0,1,0, 0,0,1,0, 0,0,1,0, 0,0,1,1, 0,0,1,0, 0,0,1,0, 0,0,1,0, 0,0,1,1],
+    hatC:    [1,1,1,1, 1,1,1,1, 1,1,1,1, 1,1,1,1, 1,1,1,1, 1,1,1,1, 1,1,1,1, 1,1,1,1],
+    hatO:    [0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,1],
+  },
+  classical: {
+    // No drums — pure piano
+    kick:    new Array(32).fill(0),
+    snare:   new Array(32).fill(0),
+    hatC:    new Array(32).fill(0),
+    hatO:    new Array(32).fill(0),
+  },
+  trap: {
+    // Trap: heavy kick, snare on 3, rolling hi-hats
+    kick:    [1,0,0,0, 0,0,0,1, 1,0,0,0, 0,0,0,1, 1,0,0,0, 0,0,0,1, 1,0,0,0, 0,0,0,1],
+    snare:   [0,0,0,0, 1,0,0,0, 0,0,0,0, 1,0,0,0, 0,0,0,0, 1,0,0,0, 0,0,0,0, 1,0,0,0],
+    hatC:    [1,1,1,1, 1,1,1,1, 1,1,1,1, 1,1,1,1, 1,1,1,1, 1,1,1,1, 1,1,1,1, 1,1,1,1],
+    hatO:    [0,0,0,1, 0,0,1,0, 0,0,0,1, 0,0,1,0, 0,0,0,1, 0,0,1,0, 0,0,0,1, 0,0,1,0],
   }
 };
 
 // Bass patterns (beat index → play root note). Per-style.
 const BASS_PATTERNS = {
-  lofi:    [1,0,1,0, 1,0,1,0, 1,0,1,0, 1,0,1,0, 1,0,1,0, 1,0,1,0, 1,0,1,0, 1,0,1,0],
-  jazzhop: [1,0,0,1, 1,0,0,1, 1,0,0,1, 1,0,0,1, 1,0,0,1, 1,0,0,1, 1,0,0,1, 1,0,0,1],
-  ambient: [1,0,0,0, 0,0,0,0, 1,0,0,0, 0,0,0,0, 1,0,0,0, 0,0,0,0, 1,0,0,0, 0,0,0,0],
+  lofi:      [1,0,1,0, 1,0,1,0, 1,0,1,0, 1,0,1,0, 1,0,1,0, 1,0,1,0, 1,0,1,0, 1,0,1,0],
+  jazzhop:   [1,0,0,1, 1,0,0,1, 1,0,0,1, 1,0,0,1, 1,0,0,1, 1,0,0,1, 1,0,0,1, 1,0,0,1],
+  ambient:   [1,0,0,0, 0,0,0,0, 1,0,0,0, 0,0,0,0, 1,0,0,0, 0,0,0,0, 1,0,0,0, 0,0,0,0],
+  bossa:     [1,0,0,0, 0,0,1,0, 0,0,1,0, 0,0,0,0, 1,0,0,0, 0,0,1,0, 0,0,1,0, 0,0,0,0],
+  chiptune:  [1,0,1,0, 1,0,1,0, 1,0,1,0, 1,0,1,0, 1,0,1,0, 1,0,1,0, 1,0,1,0, 1,0,1,0],
+  classical: [1,0,0,0, 1,0,0,0, 1,0,0,0, 1,0,0,0, 1,0,0,0, 1,0,0,0, 1,0,0,0, 1,0,0,0],
+  trap:      [1,0,0,0, 0,0,0,1, 1,0,0,0, 0,0,0,1, 1,0,0,0, 0,0,0,1, 1,0,0,0, 0,0,0,1],
 };
 
 
@@ -165,7 +308,23 @@ export class LofiEngine {
     this._nodes = {};
     this._activeSources = new Set(); // track oscillators/noise for cleanup
 
+    // Reactive crackle state
+    this._crackleIntensity = 'light'; // light | medium | heavy
+    this._crackleBufs = {};           // pre-rendered buffers per intensity
+
+    // Micro-celebration state
+    this._celebrationsEnabled = false;
+    this._correctStreak = 0;
+
+    // Melodic contour state
+    this._melodyEnabled = false;
+
+    // Adaptive harmony state
+    this._adaptiveHarmonyEnabled = false;
+    this._harmonyMood = 'bright'; // bright | warm | tender
+
     this._buildGraph();
+    this._buildCrackleBuffers();
   }
 
   // ─── Public API ─────────────────────────────────────────────────────────
@@ -204,7 +363,7 @@ export class LofiEngine {
 
   /**
    * Set the musical style.
-   * @param {'lofi'|'jazzhop'|'ambient'} name
+   * @param {'lofi'|'jazzhop'|'ambient'|'bossa'|'chiptune'|'classical'|'trap'} name
    */
   setStyle(name) {
     if (!CHORD_SETS[name]) return;
@@ -242,6 +401,178 @@ export class LofiEngine {
     const chordSet = CHORD_SETS[this._style];
     this._chordOverrideIdx = ((this._chordOverrideIdx || 0) + 1) % chordSet.chords.length;
     this._pendingChordChange = true;
+  }
+
+  // ─── Reactive Crackle ──────────────────────────────────────────────────
+
+  /**
+   * Set crackle intensity based on reading performance.
+   * @param {'light'|'medium'|'heavy'} intensity
+   */
+  setCrackleIntensity(intensity) {
+    if (!['light', 'medium', 'heavy'].includes(intensity)) return;
+    if (intensity === this._crackleIntensity) return;
+    this._crackleIntensity = intensity;
+    // Hot-swap the crackle buffer if currently playing
+    if (this._crackleSource && this._crackleBufs[intensity]) {
+      this._stopCrackle();
+      this._startCrackle();
+    }
+  }
+
+  /**
+   * Play a brief record-skip stutter (for struggle words).
+   */
+  playRecordSkip() {
+    if (this._disposed || !this._playing) return;
+    const ctx = this._ctx;
+    const time = ctx.currentTime;
+
+    // Brief burst of dense crackle + volume dip
+    const skipBuf = ctx.createBuffer(1, ctx.sampleRate * 0.08, ctx.sampleRate);
+    const data = skipBuf.getChannelData(0);
+    for (let i = 0; i < data.length; i++) {
+      if (Math.random() < 200 / ctx.sampleRate) {
+        data[i] = (Math.random() * 2 - 1) * 0.8;
+        if (i + 1 < data.length) data[i + 1] = data[i] * -0.6;
+      }
+    }
+    const src = ctx.createBufferSource();
+    src.buffer = skipBuf;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.06, time);
+    g.gain.exponentialRampToValueAtTime(0.001, time + 0.08);
+    src.connect(g);
+    g.connect(this._nodes.crackleFilter);
+    src.start(time);
+    this._trackSource(src, time + 0.1);
+  }
+
+  /**
+   * Play a needle-drop thump (for recovery after pause).
+   */
+  playNeedleDrop() {
+    if (this._disposed || !this._playing) return;
+    const ctx = this._ctx;
+    const time = ctx.currentTime;
+
+    // Low thump + crackle burst
+    const osc = ctx.createOscillator();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(80, time);
+    osc.frequency.exponentialRampToValueAtTime(30, time + 0.15);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.15, time);
+    g.gain.exponentialRampToValueAtTime(0.001, time + 0.2);
+    osc.connect(g);
+    g.connect(this._nodes.crackleBus);
+    osc.start(time);
+    osc.stop(time + 0.25);
+    this._trackSource(osc, time + 0.3);
+  }
+
+  // ─── Micro-Celebrations ────────────────────────────────────────────────
+
+  /**
+   * Enable/disable micro-celebration sounds.
+   * @param {boolean} enabled
+   */
+  setCelebrations(enabled) {
+    this._celebrationsEnabled = !!enabled;
+    if (!enabled) this._correctStreak = 0;
+  }
+
+  /**
+   * Notify the engine of a word event (for streak tracking & celebrations).
+   * @param {'correct'|'error'|'omission'|'self-correction'|'sentence-end'} event
+   */
+  notifyWordEvent(event) {
+    if (!this._celebrationsEnabled || this._disposed || !this._playing) return;
+    const ctx = this._ctx;
+    const time = ctx.currentTime;
+    const chord = this._getCurrentChord();
+
+    if (event === 'correct') {
+      this._correctStreak++;
+      if (this._correctStreak === 5) {
+        this._playStreakChime(time, chord);
+      } else if (this._correctStreak > 5 && this._correctStreak % 3 === 0) {
+        // Additional chimes every 3 words after initial streak
+        this._playStreakChime(time, chord);
+      }
+    } else if (event === 'error' || event === 'omission') {
+      this._correctStreak = 0;
+    } else if (event === 'self-correction') {
+      this._playResolutionPing(time, chord);
+    } else if (event === 'sentence-end') {
+      this._playSentenceSwell(time);
+    }
+  }
+
+  // ─── Melodic Contour ──────────────────────────────────────────────────
+
+  /**
+   * Enable/disable melodic contour (word-to-pitch mapping).
+   * @param {boolean} enabled
+   */
+  setMelody(enabled) {
+    this._melodyEnabled = !!enabled;
+  }
+
+  /**
+   * Play a melodic ping for a word based on its speed tier.
+   * @param {'quick'|'steady'|'slow'|'struggling'|'stalled'} tier - word speed tier
+   * @param {boolean} isError - whether the word is an error
+   */
+  playMelodicPing(tier, isError) {
+    if (!this._melodyEnabled || this._disposed || !this._playing) return;
+    const ctx = this._ctx;
+    const chord = this._getCurrentChord();
+    if (!chord.scale || !chord.scale.length) return;
+
+    const time = ctx.currentTime;
+    const scale = chord.scale;
+
+    // Map tier to scale degree (high = fast, low = slow)
+    let noteIdx;
+    if (tier === 'quick') noteIdx = scale.length - 1;       // highest
+    else if (tier === 'steady') noteIdx = Math.floor(scale.length * 0.6);
+    else if (tier === 'slow') noteIdx = Math.floor(scale.length * 0.3);
+    else if (tier === 'struggling') noteIdx = 1;
+    else noteIdx = 0;                                         // stalled = lowest
+
+    let freq = scale[Math.min(noteIdx, scale.length - 1)];
+
+    // Errors get a chromatic neighbor (half-step up) for dissonance
+    if (isError) {
+      freq = freq * Math.pow(2, 1 / 12); // semitone up
+    }
+
+    this._playMelodyNote(time, freq, isError ? 0.2 : 0.3, isError ? 0.08 : 0.12);
+  }
+
+  // ─── Adaptive Harmony ─────────────────────────────────────────────────
+
+  /**
+   * Enable/disable adaptive harmony (chord quality shifts with fluency).
+   * @param {boolean} enabled
+   */
+  setAdaptiveHarmony(enabled) {
+    this._adaptiveHarmonyEnabled = !!enabled;
+    if (!enabled) this._harmonyMood = 'bright';
+  }
+
+  /**
+   * Update the harmony mood based on rolling fluency score.
+   * @param {number} fluencyScore - 0.0 (all errors) to 1.0 (all correct)
+   */
+  setHarmonyMood(fluencyScore) {
+    if (!this._adaptiveHarmonyEnabled) return;
+    let mood;
+    if (fluencyScore >= 0.7) mood = 'bright';
+    else if (fluencyScore >= 0.4) mood = 'warm';
+    else mood = 'tender';
+    this._harmonyMood = mood;
   }
 
   /**
@@ -455,14 +786,38 @@ export class LofiEngine {
   }
 
   /**
+   * Get the currently active chord (respects adaptive harmony).
+   */
+  _getCurrentChord() {
+    const activeSet = this._getActiveChordSet();
+    let chordIndex;
+    if (this._sentenceAligned) {
+      chordIndex = (this._chordOverrideIdx || 0) % activeSet.chords.length;
+    } else {
+      chordIndex = Math.floor(this._currentBeat / 8) % activeSet.chords.length;
+    }
+    return activeSet.chords[chordIndex];
+  }
+
+  /**
+   * Get the active chord set (adaptive harmony overrides base style chords).
+   */
+  _getActiveChordSet() {
+    if (this._adaptiveHarmonyEnabled && HARMONY_MOODS[this._harmonyMood]) {
+      return HARMONY_MOODS[this._harmonyMood];
+    }
+    return CHORD_SETS[this._style];
+  }
+
+  /**
    * Schedule all instruments for a single beat at the given audio time.
    */
   _scheduleBeatsAt(time, beat) {
     const style = this._style;
     const density = this._density;
-    const drumPat = DRUM_PATTERNS[style];
-    const bassPat = BASS_PATTERNS[style];
-    const chordSet = CHORD_SETS[style];
+    const drumPat = DRUM_PATTERNS[style] || DRUM_PATTERNS.lofi;
+    const bassPat = BASS_PATTERNS[style] || BASS_PATTERNS.lofi;
+    const chordSet = this._getActiveChordSet();
     const secondsPerBeat = 60.0 / this._bpm;
 
     // Determine which chord we're on
@@ -474,14 +829,16 @@ export class LofiEngine {
     }
     const chord = chordSet.chords[chordIndex];
 
-    // Swing offset for jazzhop hi-hats: delay every odd beat by 30%
-    const swingOffset = (style === 'jazzhop' && beat % 2 === 1) ? secondsPerBeat * 0.3 : 0;
+    // Swing offset for jazzhop/bossa hi-hats: delay every odd beat by 30%
+    const swingOffset = ((style === 'jazzhop' || style === 'bossa') && beat % 2 === 1)
+      ? secondsPerBeat * 0.3 : 0;
 
     // ── Drums (whisper = no drums at all) ──
-    if (style !== 'ambient' && density !== 'whisper') {
+    if (style !== 'ambient' && style !== 'classical' && density !== 'whisper') {
       // Kick: always plays in normal/full; plays in sparse too
       if (drumPat.kick[beat]) {
-        this._playKick(time);
+        if (style === 'trap') this._playTrapKick(time);
+        else this._playKick(time);
       }
 
       // Snare: not in sparse
@@ -516,16 +873,32 @@ export class LofiEngine {
     if (triggerPad) {
       const padDuration = 8 * secondsPerBeat; // lasts 2 bars
       const padVol = density === 'whisper' ? 0.25 : density === 'sparse' ? 0.5 : density === 'normal' ? 0.75 : 1.0;
-      const attackTime = style === 'ambient' ? 0.6 : 0.2;
-      const releaseTime = style === 'ambient' ? 1.5 : 0.5;
-      this._playChordPad(time, chord.notes, padDuration, padVol, attackTime, releaseTime);
+      const attackTime = (style === 'ambient' || style === 'classical') ? 0.6 : 0.2;
+      const releaseTime = (style === 'ambient' || style === 'classical') ? 1.5 : 0.5;
+
+      if (style === 'chiptune') {
+        this._playChipPad(time, chord.notes, padDuration, padVol);
+      } else if (style === 'classical') {
+        this._playArpeggio(time, chord.notes, padDuration, padVol, secondsPerBeat);
+      } else {
+        this._playChordPad(time, chord.notes, padDuration, padVol, attackTime, releaseTime);
+      }
     }
 
     // ── Bass (skip in whisper) ──
     if (density !== 'whisper' && bassPat[beat]) {
-      const bassVol = style === 'ambient' ? 0.3 : (density === 'full' ? 0.9 : 0.65);
-      const bassDur = style === 'ambient' ? secondsPerBeat * 3.5 : secondsPerBeat * 0.8;
-      this._playBass(time, chord.root, bassDur, bassVol);
+      const bassVol = (style === 'ambient' || style === 'classical') ? 0.3
+        : style === 'trap' ? 1.0
+        : style === 'bossa' ? 0.45
+        : (density === 'full' ? 0.9 : 0.65);
+      const bassDur = (style === 'ambient' || style === 'classical') ? secondsPerBeat * 3.5
+        : style === 'trap' ? secondsPerBeat * 1.5
+        : secondsPerBeat * 0.8;
+      if (style === 'chiptune') {
+        this._playChipBass(time, chord.root, secondsPerBeat * 0.6);
+      } else {
+        this._playBass(time, chord.root, bassDur, bassVol);
+      }
     }
   }
 
@@ -779,28 +1152,318 @@ export class LofiEngine {
     this._trackSource(osc2, time + duration + 0.1);
   }
 
+  // ─── Style-Specific Synthesis ───────────────────────────────────────────
+
+  /**
+   * Heavy 808 trap kick — longer sustain, deeper sub.
+   */
+  _playTrapKick(time) {
+    const ctx = this._ctx;
+
+    const osc = ctx.createOscillator();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(160, time);
+    osc.frequency.exponentialRampToValueAtTime(35, time + 0.15);
+
+    const gain = ctx.createGain();
+    gain.gain.setValueAtTime(1.0, time);
+    gain.gain.setValueAtTime(0.6, time + 0.1);
+    gain.gain.exponentialRampToValueAtTime(0.001, time + 0.5);
+
+    // Distortion for punch
+    const dist = ctx.createWaveShaper();
+    dist.curve = createSaturationCurve(2.0, 1024);
+
+    osc.connect(dist);
+    dist.connect(gain);
+    gain.connect(this._nodes.drumBus);
+
+    osc.start(time);
+    osc.stop(time + 0.55);
+    this._trackSource(osc, time + 0.6);
+  }
+
+  /**
+   * Chiptune pad — square wave chords, 8-bit feel.
+   */
+  _playChipPad(time, noteFreqs, duration, volumeScale) {
+    const ctx = this._ctx;
+    const endTime = time + duration;
+
+    for (const freq of noteFreqs) {
+      const osc = ctx.createOscillator();
+      osc.type = 'square';
+      osc.frequency.value = freq;
+
+      // Pulse width via two detuned squares (pseudo-PWM)
+      const osc2 = ctx.createOscillator();
+      osc2.type = 'square';
+      osc2.frequency.value = freq;
+      osc2.detune.value = 7; // slight detune for width
+
+      const gain = ctx.createGain();
+      gain.gain.setValueAtTime(0.0001, time);
+      gain.gain.linearRampToValueAtTime(volumeScale * 0.06 / noteFreqs.length, time + 0.01);
+      gain.gain.setValueAtTime(volumeScale * 0.06 / noteFreqs.length, endTime - 0.1);
+      gain.gain.linearRampToValueAtTime(0.0001, endTime);
+
+      osc.connect(gain);
+      osc2.connect(gain);
+      gain.connect(this._nodes.padFilter);
+
+      osc.start(time);
+      osc2.start(time);
+      osc.stop(endTime + 0.02);
+      osc2.stop(endTime + 0.02);
+      this._trackSource(osc, endTime + 0.05);
+      this._trackSource(osc2, endTime + 0.05);
+    }
+  }
+
+  /**
+   * Chiptune bass — square wave, short and punchy.
+   */
+  _playChipBass(time, freq, duration) {
+    const ctx = this._ctx;
+    const osc = ctx.createOscillator();
+    osc.type = 'square';
+    osc.frequency.value = freq;
+
+    const gain = ctx.createGain();
+    gain.gain.setValueAtTime(0.0001, time);
+    gain.gain.linearRampToValueAtTime(0.3, time + 0.01);
+    gain.gain.exponentialRampToValueAtTime(0.001, time + duration);
+
+    const lp = ctx.createBiquadFilter();
+    lp.type = 'lowpass';
+    lp.frequency.value = 600;
+
+    osc.connect(lp);
+    lp.connect(gain);
+    gain.connect(this._nodes.bassBus);
+
+    osc.start(time);
+    osc.stop(time + duration + 0.02);
+    this._trackSource(osc, time + duration + 0.05);
+  }
+
+  /**
+   * Classical arpeggio — notes played in sequence, Satie-style.
+   */
+  _playArpeggio(time, noteFreqs, duration, volumeScale, secondsPerBeat) {
+    const ctx = this._ctx;
+    const noteSpacing = secondsPerBeat * 0.5; // half-beat between arpeggio notes
+    const noteDur = secondsPerBeat * 2; // each note rings for 2 beats
+
+    for (let i = 0; i < noteFreqs.length; i++) {
+      const noteTime = time + i * noteSpacing;
+      const noteEnd = noteTime + noteDur;
+      if (noteTime > time + duration) break;
+
+      const osc = ctx.createOscillator();
+      osc.type = 'sine';
+      osc.frequency.value = noteFreqs[i];
+
+      // Add a gentle triangle overtone
+      const osc2 = ctx.createOscillator();
+      osc2.type = 'triangle';
+      osc2.frequency.value = noteFreqs[i] * 2;
+
+      const gain = ctx.createGain();
+      gain.gain.setValueAtTime(0.0001, noteTime);
+      gain.gain.linearRampToValueAtTime(volumeScale * 0.15 / noteFreqs.length, noteTime + 0.05);
+      gain.gain.exponentialRampToValueAtTime(0.001, noteEnd);
+
+      const gain2 = ctx.createGain();
+      gain2.gain.value = 0.1;
+
+      osc.connect(gain);
+      osc2.connect(gain2);
+      gain2.connect(gain);
+      gain.connect(this._nodes.padFilter);
+
+      osc.start(noteTime);
+      osc2.start(noteTime);
+      osc.stop(noteEnd + 0.05);
+      osc2.stop(noteEnd + 0.05);
+      this._trackSource(osc, noteEnd + 0.1);
+      this._trackSource(osc2, noteEnd + 0.1);
+    }
+  }
+
+  // ─── Celebration Synthesis ────────────────────────────────────────────
+
+  /**
+   * Rising pentatonic arpeggio for correct word streaks.
+   */
+  _playStreakChime(time, chord) {
+    const ctx = this._ctx;
+    const scale = chord.scale || [NOTE.C4, NOTE.D4, NOTE.E4, NOTE.G4, NOTE.A4];
+    // Play 3 ascending notes from the chord scale
+    for (let i = 0; i < 3; i++) {
+      const noteTime = time + i * 0.08;
+      const freq = scale[Math.min(i + 2, scale.length - 1)]; // start from 3rd scale degree
+
+      const osc = ctx.createOscillator();
+      osc.type = 'sine';
+      osc.frequency.value = freq;
+
+      const gain = ctx.createGain();
+      gain.gain.setValueAtTime(0.0001, noteTime);
+      gain.gain.linearRampToValueAtTime(0.12, noteTime + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.001, noteTime + 0.4);
+
+      osc.connect(gain);
+      gain.connect(this._nodes.padBus);
+      osc.start(noteTime);
+      osc.stop(noteTime + 0.45);
+      this._trackSource(osc, noteTime + 0.5);
+    }
+  }
+
+  /**
+   * Dissonance-to-consonance ping for self-corrections.
+   */
+  _playResolutionPing(time, chord) {
+    const ctx = this._ctx;
+    const root = chord.scale ? chord.scale[0] : NOTE.C4;
+
+    // Dissonant note (tritone above root)
+    const osc1 = ctx.createOscillator();
+    osc1.type = 'sine';
+    osc1.frequency.value = root * Math.pow(2, 6 / 12); // tritone
+
+    const g1 = ctx.createGain();
+    g1.gain.setValueAtTime(0.0001, time);
+    g1.gain.linearRampToValueAtTime(0.08, time + 0.02);
+    g1.gain.exponentialRampToValueAtTime(0.001, time + 0.2);
+
+    // Resolution note (root, slight delay)
+    const osc2 = ctx.createOscillator();
+    osc2.type = 'sine';
+    osc2.frequency.value = root;
+
+    const g2 = ctx.createGain();
+    g2.gain.setValueAtTime(0.0001, time + 0.1);
+    g2.gain.linearRampToValueAtTime(0.1, time + 0.12);
+    g2.gain.exponentialRampToValueAtTime(0.001, time + 0.5);
+
+    osc1.connect(g1);
+    g1.connect(this._nodes.padBus);
+    osc2.connect(g2);
+    g2.connect(this._nodes.padBus);
+
+    osc1.start(time);
+    osc1.stop(time + 0.25);
+    osc2.start(time + 0.1);
+    osc2.stop(time + 0.55);
+    this._trackSource(osc1, time + 0.3);
+    this._trackSource(osc2, time + 0.6);
+  }
+
+  /**
+   * Soft cymbal swell for sentence completion.
+   */
+  _playSentenceSwell(time) {
+    const ctx = this._ctx;
+    const dur = 0.6;
+    const buf = ctx.createBuffer(1, ctx.sampleRate * dur, ctx.sampleRate);
+    const data = buf.getChannelData(0);
+
+    // Filtered noise swell (cymbal-like)
+    for (let i = 0; i < data.length; i++) {
+      const env = Math.sin((i / data.length) * Math.PI); // bell curve
+      data[i] = (Math.random() * 2 - 1) * env;
+    }
+
+    const src = ctx.createBufferSource();
+    src.buffer = buf;
+
+    const hp = ctx.createBiquadFilter();
+    hp.type = 'highpass';
+    hp.frequency.value = 6000;
+
+    const gain = ctx.createGain();
+    gain.gain.value = 0.06;
+
+    src.connect(hp);
+    hp.connect(gain);
+    gain.connect(this._nodes.drumBus);
+
+    src.start(time);
+    this._trackSource(src, time + dur + 0.1);
+  }
+
+  // ─── Melody Note Synthesis ────────────────────────────────────────────
+
+  /**
+   * Play a single melodic ping (sine + quiet overtone).
+   */
+  _playMelodyNote(time, freq, duration, volume) {
+    const ctx = this._ctx;
+
+    const osc = ctx.createOscillator();
+    osc.type = 'sine';
+    osc.frequency.value = freq;
+
+    // Quiet triangle overtone for warmth
+    const osc2 = ctx.createOscillator();
+    osc2.type = 'triangle';
+    osc2.frequency.value = freq * 2;
+
+    const gain = ctx.createGain();
+    gain.gain.setValueAtTime(0.0001, time);
+    gain.gain.linearRampToValueAtTime(volume, time + 0.015);
+    gain.gain.exponentialRampToValueAtTime(0.001, time + duration);
+
+    const gain2 = ctx.createGain();
+    gain2.gain.value = 0.15;
+
+    osc.connect(gain);
+    osc2.connect(gain2);
+    gain2.connect(gain);
+    gain.connect(this._nodes.padBus);
+
+    osc.start(time);
+    osc2.start(time);
+    osc.stop(time + duration + 0.02);
+    osc2.stop(time + duration + 0.02);
+    this._trackSource(osc, time + duration + 0.05);
+    this._trackSource(osc2, time + duration + 0.05);
+  }
+
   // ─── Vinyl Crackle ──────────────────────────────────────────────────────
+
+  /**
+   * Pre-render crackle buffers at three intensity levels.
+   */
+  _buildCrackleBuffers() {
+    const ctx = this._ctx;
+    const dur = 4;
+    const rate = ctx.sampleRate;
+
+    for (const [intensity, impulseRate] of [['light', 20], ['medium', 60], ['heavy', 150]]) {
+      const buf = ctx.createBuffer(1, rate * dur, rate);
+      const data = buf.getChannelData(0);
+      for (let i = 0; i < data.length; i++) {
+        if (Math.random() < impulseRate / rate) {
+          const amp = intensity === 'heavy' ? (0.5 + Math.random() * 0.5) : (0.3 + Math.random() * 0.7);
+          data[i] = (Math.random() * 2 - 1) * amp;
+          if (i + 1 < data.length) data[i + 1] = data[i] * -0.5;
+          if (i + 2 < data.length) data[i + 2] = data[i] * 0.2;
+        }
+      }
+      this._crackleBufs[intensity] = buf;
+    }
+  }
 
   _startCrackle() {
     if (this._crackleSource) return;
     const ctx = this._ctx;
 
-    // Generate a long buffer of sparse random impulses
-    const dur = 4; // 4 seconds, will loop
-    const rate = ctx.sampleRate;
-    const buf = ctx.createBuffer(1, rate * dur, rate);
-    const data = buf.getChannelData(0);
-
-    // Sparse crackle: about 30 impulses per second on average
-    for (let i = 0; i < data.length; i++) {
-      if (Math.random() < 30 / rate) {
-        // Random impulse with variable amplitude
-        data[i] = (Math.random() * 2 - 1) * (0.3 + Math.random() * 0.7);
-        // Make it a tiny burst (2-3 samples)
-        if (i + 1 < data.length) data[i + 1] = data[i] * -0.5;
-        if (i + 2 < data.length) data[i + 2] = data[i] * 0.2;
-      }
-    }
+    // Use pre-rendered intensity-based buffer
+    const buf = this._crackleBufs[this._crackleIntensity];
+    if (!buf) return;
 
     const src = ctx.createBufferSource();
     src.buffer = buf;
