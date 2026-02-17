@@ -8,6 +8,7 @@
  */
 
 import { LofiEngine } from './lofi-engine.js';
+import { MountainRange } from './mountain-range.js';
 import { getAudioBlob } from './audio-store.js';
 import { getAssessment, getStudents } from './storage.js';
 import { getPunctuationPositions } from './diagnostics.js';
@@ -72,6 +73,9 @@ let ballCanvas = null;
 let ballCtx = null;
 let vizCanvas = null;
 let vizCtx = null;
+
+/** Mountain range visualization. */
+let mountainRange = null;
 
 /** Assessment data loaded at init. */
 let assessment = null;
@@ -575,6 +579,11 @@ function onWordChange(fromIdx, toIdx) {
     lofi.setHarmonyMood(fluency);
   }
 
+  // ── Mountain range: reveal peak ──
+  if (mountainRange) {
+    mountainRange.revealPeak(toIdx, w);
+  }
+
   if (!rect) return;
 
   // Determine ball color based on word type
@@ -1004,7 +1013,13 @@ function animationLoop(timestamp) {
   // 7. Draw visualizer
   drawVisualizer();
 
-  // 8. Update chord badge
+  // 8. Update mountain range
+  if (mountainRange) {
+    const beatPhase = lofi ? lofi.getBeatPhase() : 0;
+    mountainRange.update(dt, beatPhase);
+  }
+
+  // 9. Update chord badge
   updateChordBadge();
 
   animFrameId = requestAnimationFrame(animationLoop);
@@ -1102,6 +1117,9 @@ function onAudioEnded() {
   particles = [];
   if (ballCtx) ballCtx.clearRect(0, 0, ballCanvas.width, ballCanvas.height);
 
+  // Mountain range finale
+  if (mountainRange) mountainRange.drawFinale();
+
   // Show replay message
   const status = document.getElementById('remix-status');
   if (status) {
@@ -1113,6 +1131,14 @@ function onAudioEnded() {
         audioEl.currentTime = 0;
         currentWordIdx = -1;
         previousWordIdx = -1;
+        // Reset mountain range
+        if (mountainRange) {
+          mountainRange.dispose();
+          const mtCanvas = document.getElementById('mountain-canvas');
+          if (mtCanvas) {
+            mountainRange = new MountainRange(mtCanvas, wordSequence.length);
+          }
+        }
         // Reset word classes
         for (const w of wordSequence) {
           if (w.el) {
@@ -1321,6 +1347,10 @@ function cleanup() {
     try { djSourceNode.stop(0); } catch (_) { /* ok */ }
     djSourceNode = null;
   }
+  if (mountainRange) {
+    mountainRange.dispose();
+    mountainRange = null;
+  }
   if (lofi) {
     lofi.dispose();
     lofi = null;
@@ -1401,6 +1431,12 @@ function initRhythmRemix() {
 
   // Build word sequence
   wordSequence = buildWordSequence(alignment, sttWords);
+
+  // Mountain range visualization
+  const mtCanvas = document.getElementById('mountain-canvas');
+  if (mtCanvas && wordSequence.length > 0) {
+    mountainRange = new MountainRange(mtCanvas, wordSequence.length);
+  }
 
   // Setup canvases
   if (ballCanvas) ballCtx = ballCanvas.getContext('2d');

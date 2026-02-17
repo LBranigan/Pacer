@@ -354,6 +354,16 @@ export class LofiEngine {
   }
 
   /**
+   * Position within the current beat (0–1).
+   * @returns {number}
+   */
+  getBeatPhase() {
+    if (!this._ctx || !this._playing) return 0;
+    const beatDur = 60 / this._bpm;
+    return (this._ctx.currentTime % beatDur) / beatDur;
+  }
+
+  /**
    * Set the beat tempo.
    * @param {number} bpm - Beats per minute (typically 60-90 for lo-fi).
    */
