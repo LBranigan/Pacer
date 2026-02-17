@@ -1,4 +1,5 @@
 import { recomputeWordSpeedWithPauses, isNearMiss } from './diagnostics.js';
+import { splitReferenceForDisplay } from './text-normalize.js';
 
 export function setStatus(msg) {
   document.getElementById('status').textContent = msg;
@@ -452,31 +453,10 @@ function renderNewAnalyzedWords(container, alignment, sttLookup, diagnostics, tr
     }
   }
 
-  // Cosmetic punctuation map (mirrors normalizeText's trailing-hyphen merge + hyphen split)
+  // Cosmetic punctuation map (uses shared splitReferenceForDisplay for index sync)
   const punctMap = new Map();
   if (referenceText) {
-    const rawTokens = referenceText.trim().split(/\s+/);
-    const merged = [];
-    for (let i = 0; i < rawTokens.length; i++) {
-      const s = rawTokens[i].replace(/^[^\w'-]+|[^\w'-]+$/g, '');
-      if (!s.length) continue;
-      if (s.endsWith('-') && i + 1 < rawTokens.length) { merged.push(rawTokens[i + 1]); i++; }
-      else merged.push(rawTokens[i]);
-    }
-    const split = [];
-    for (const token of merged) {
-      const s = token.replace(/^[^\w'-]+|[^\w'-]+$/g, '');
-      if (s.includes('-')) {
-        const parts = s.split('-').filter(p => p.length > 0);
-        if (parts.length >= 2 && parts[0].length === 1) {
-          // Single-letter prefix (e-mail) → keep as one token
-          split.push(token);
-        } else {
-          for (let j = 0; j < parts.length - 1; j++) split.push(parts[j]);
-          split.push(token);
-        }
-      } else split.push(token);
-    }
+    const split = splitReferenceForDisplay(referenceText);
     for (let i = 0; i < split.length; i++) {
       const m = split[i].match(/([.!?,;:\u2014\u2013\u2012\u2015]+["'\u201C\u201D\u2018\u2019)}\]]*|["'\u201C\u201D\u2018\u2019)}\]]+)$/);
       if (m) punctMap.set(i, m[0]);

@@ -3,6 +3,7 @@
 import { levenshteinRatio } from './nl-api.js';
 import { countSyllables } from './syllable-counter.js';
 import { getPhonemeCountWithFallback, PHONEMES_PER_SYLLABLE_RATIO } from './phoneme-counter.js';
+import { splitReferenceForDisplay } from './text-normalize.js';
 
 // Minimum effective phoneme count for duration normalization.
 // Words with fewer phonemes (e.g., "a"=1, "is"=2) have a fixed articulatory
@@ -66,40 +67,8 @@ function longestSilenceInGap(gapStart, gapEnd, skippedWords) {
  * Returns Map<refWordIndex, 'period'|'comma'>.
  */
 export function getPunctuationPositions(referenceText) {
-  // Mirror normalizeText's trailing-hyphen merge AND internal-hyphen split so indices
-  // align with alignment entries. Without this, OCR artifacts and hyphenated words
-  // create index offsets that shift all subsequent punctuation positions.
-  const rawTokens = referenceText.trim().split(/\s+/);
-  const merged = [];
-  for (let i = 0; i < rawTokens.length; i++) {
-    const clean = rawTokens[i].replace(/^[^\w'-]+|[^\w'-]+$/g, '');
-    if (clean.length === 0) continue;
-    if (clean.endsWith('-') && i + 1 < rawTokens.length) {
-      merged.push(rawTokens[i + 1]); // second part may carry trailing punct
-      i++;
-    } else {
-      merged.push(rawTokens[i]);
-    }
-  }
-  // Split internal-hyphen tokens: "smooth-on-skin." → ["smooth", "on", "smooth-on-skin."]
-  // Last part keeps original token so trailing punctuation is preserved for the regex.
-  // Exception: single-letter prefix joins instead (e-mail → email).
-  const words = [];
-  for (const token of merged) {
-    const stripped = token.replace(/^[^\w'-]+|[^\w'-]+$/g, '');
-    if (stripped.includes('-')) {
-      const parts = stripped.split('-').filter(p => p.length > 0);
-      if (parts.length >= 2 && parts[0].length === 1) {
-        // Single-letter prefix (e-mail) → keep as one token (use original for punct)
-        words.push(token);
-      } else {
-        for (let j = 0; j < parts.length - 1; j++) words.push(parts[j]);
-        words.push(token); // last part: original token preserves trailing punct
-      }
-    } else {
-      words.push(token);
-    }
-  }
+  // Uses shared splitReferenceForDisplay so indices stay in sync with normalizeText.
+  const words = splitReferenceForDisplay(referenceText);
   const map = new Map();
   for (let i = 0; i < words.length; i++) {
     const w = words[i];
@@ -1153,37 +1122,8 @@ export function computePauseAtPunctuation(transcriptWords, referenceText, alignm
   const uncoveredMarks = [];
   let totalPunctuationMarks = punctMap.size;
 
-  // Build ref words for uncovered mark details (merged + split to match alignment indices)
-  const rawRefTokens = referenceText.trim().split(/\s+/);
-  const mergedRef = [];
-  for (let i = 0; i < rawRefTokens.length; i++) {
-    const clean = rawRefTokens[i].replace(/^[^\w'-]+|[^\w'-]+$/g, '');
-    if (clean.length === 0) continue;
-    if (clean.endsWith('-') && i + 1 < rawRefTokens.length) {
-      mergedRef.push(clean.slice(0, -1) + rawRefTokens[i + 1].replace(/^[^\w'-]+|[^\w'-]+$/g, ''));
-      i++;
-    } else {
-      mergedRef.push(rawRefTokens[i]);
-    }
-  }
-  // Split internal hyphens to mirror normalizeText (5th location)
-  // Exception: single-letter prefix joins instead (e-mail → email).
-  const refWords = [];
-  for (const token of mergedRef) {
-    const stripped = token.replace(/^[^\w'-]+|[^\w'-]+$/g, '');
-    if (stripped.includes('-')) {
-      const parts = stripped.split('-').filter(p => p.length > 0);
-      if (parts.length >= 2 && parts[0].length === 1) {
-        // Single-letter prefix (e-mail) → keep as one token
-        refWords.push(token);
-      } else {
-        for (let j = 0; j < parts.length - 1; j++) refWords.push(parts[j]);
-        refWords.push(token); // last part keeps original for display
-      }
-    } else {
-      refWords.push(token);
-    }
-  }
+  // Build ref words for uncovered mark details (uses shared splitReferenceForDisplay)
+  const refWords = splitReferenceForDisplay(referenceText);
 
   // Build hyp-index → gap-after-word map for punctuation-aware gap check.
   // Research (Goldman-Eisler 1968, SoapBox Labs): 200ms is the minimum meaningful

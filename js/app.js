@@ -9,6 +9,7 @@ import { setStatus, displayResults, displayAlignmentResults, showAudioPlayback, 
 import { runDiagnostics, computeTierBreakdown, resolveNearMissClusters, absorbMispronunciationFragments, computePhrasingQuality, computePauseAtPunctuation, computePaceConsistency, computeWordDurationOutliers, computeWordSpeedTiers, isNearMiss, annotatePauseContext, computeFunctionWordCompression, computeSyntacticAlignment } from './diagnostics.js';
 import { extractTextFromImage, extractTextHybrid } from './ocr-api.js';
 import { trimPassageToAttempted } from './passage-trimmer.js';
+import { splitHyphenParts } from './text-normalize.js';
 import { analyzePassageText, levenshteinRatio } from './nl-api.js';
 import { getStudents, addStudent, deleteStudent, saveAssessment, getAssessments } from './storage.js';
 import { saveAudioBlob } from './audio-store.js';
@@ -1574,34 +1575,30 @@ async function runAnalysis() {
       }
       // Split internal-hyphen tokens to mirror normalizeText's hyphen split.
       // e.g., "smooth-on-skin" → [{word:"smooth",...}, {word:"on",...}, {word:"skin",...}]
-      // Exception: single-letter prefix joins instead (e-mail → email).
+      // Split via shared splitHyphenParts (single source of truth for the split decision).
       // Without this, refPositions has fewer entries than alignment and _displayRef/NL drift.
       const positions = [];
       for (const pos of merged) {
         const stripped = pos.word.replace(/^[^\w'-]+|[^\w'-]+$/g, '');
-        if (stripped.includes('-')) {
-          const parts = stripped.split('-').filter(p => p.length > 0);
-          if (parts.length >= 2 && parts[0].length === 1) {
-            // Single-letter part (e-mail, e-book) → keep as one token
-            const joinedWord = parts.join('');
-            const trailingPunct = pos.word.match(/[^\w'-]*$/)[0];
-            positions.push({ word: joinedWord + trailingPunct, start: pos.start, end: pos.end });
-          } else {
-            const leadingLen = pos.word.match(/^[^\w'-]*/)[0].length;
-            const trailingPunct = pos.word.match(/[^\w'-]*$/)[0];
-            let cursor = pos.start + leadingLen;
-            for (let j = 0; j < parts.length; j++) {
-              if (j === parts.length - 1) {
-                // Last part keeps trailing punctuation for sentence-end detection
-                positions.push({ word: parts[j] + trailingPunct, start: cursor, end: pos.end });
-              } else {
-                positions.push({ word: parts[j], start: cursor, end: cursor + parts[j].length });
-              }
-              cursor += parts[j].length + 1; // +1 for the hyphen
-            }
-          }
-        } else {
+        const hp = splitHyphenParts(stripped);
+        if (!hp) {
           positions.push(pos);
+        } else if (hp.type === 'join') {
+          const joinedWord = hp.parts.join('');
+          const trailingPunct = pos.word.match(/[^\w'-]*$/)[0];
+          positions.push({ word: joinedWord + trailingPunct, start: pos.start, end: pos.end });
+        } else {
+          const leadingLen = pos.word.match(/^[^\w'-]*/)[0].length;
+          const trailingPunct = pos.word.match(/[^\w'-]*$/)[0];
+          let cursor = pos.start + leadingLen;
+          for (let j = 0; j < hp.parts.length; j++) {
+            if (j === hp.parts.length - 1) {
+              positions.push({ word: hp.parts[j] + trailingPunct, start: cursor, end: pos.end });
+            } else {
+              positions.push({ word: hp.parts[j], start: cursor, end: cursor + hp.parts[j].length });
+            }
+            cursor += hp.parts[j].length + 1; // +1 for the hyphen
+          }
         }
       }
       return positions;
@@ -1662,8 +1659,27 @@ async function runAnalysis() {
       ri++;
     }
 
-    // Dictionary-based common word detection: checks Free Dictionary API
-    // to distinguish exotic names (Mallon, Shanna) from common words (Straight, North).
+    // ═══════════════════════════════════════════════════════════════════════
+    // FORGIVENESS PIPELINE — 8 ordered phases
+    //
+    // Ordering dependencies (each phase may depend on earlier phases' flags):
+    //
+    //   Phase 1: Proper noun forgiveness     — sets entry.forgiven, _forgivenEvidence
+    //   Phase 2: OOV detection               — sets entry._isOOV (CMUdict absence)
+    //   Phase 3: OOV phonetic forgiveness    — requires _isOOV; sets forgiven, _oovForgiven
+    //   Phase 4: OOV <unknown> reassignment  — requires _isOOV; steals <unknown> donors → omissions
+    //   Phase 5: OOV omission recovery       — requires _isOOV + Phase 4 cleanup; sets _oovExcluded
+    //   Phase 6: OOV exclusion               — catches remaining _isOOV subs from Phase 4
+    //   Phase 7: Function word forgiveness   — requires _oovExcluded from Phases 5/6
+    //   Phase 8: Post-struggle leniency      — requires all error flags finalized
+    //
+    // OOV time credit runs between Phase 6 and Phase 7 (needs _oovExcluded set).
+    // Do NOT reorder phases without verifying downstream flag dependencies.
+    // ═══════════════════════════════════════════════════════════════════════
+
+    // ── Phase 1 helper: Dictionary-based common word detection ───────────
+    // Checks Free Dictionary API to distinguish exotic names (Mallon, Shanna)
+    // from common words (Straight, North).
     // Common words get 200 → skip forgiveness; exotic names get 404 → allow forgiveness.
     // Results cached in sessionStorage to avoid re-fetching across runs.
     async function isCommonDictionaryWord(word) {
@@ -1681,8 +1697,9 @@ async function runAnalysis() {
       }
     }
 
+    // ── Phase 1: Proper noun forgiveness ──────────────────────────────────
     // Mark proper noun errors as forgiven if phonetically close
-    // (student decoded correctly but doesn't know accepted pronunciation - vocabulary gap, not decoding failure)
+    // (student decoded correctly but doesn't know accepted pronunciation — vocabulary gap, not decoding failure)
     // Also handles split pronunciations like "her-my-own" for "Hermione"
     const forgivenessLog = [];
     let refIdx = 0;
@@ -1888,7 +1905,7 @@ async function runAnalysis() {
     });
   }
 
-  // ── OOV Detection ─────────────────────────────────────────────────────
+  // ── Phase 2: OOV detection ─────────────────────────────────────────────
   // Flag reference words absent from CMUdict (125K English words).
   // If a word isn't in CMUdict, English ASR models almost certainly can't recognize it.
   await loadPhonemeData();
@@ -1912,7 +1929,7 @@ async function runAnalysis() {
       .replace(/c/g, 'k');
   }
 
-  // ── OOV Phonetic Forgiveness ──────────────────────────────────────────
+  // ── Phase 3: OOV phonetic forgiveness ──────────────────────────────────
   // Foreign/rare words absent from ASR vocabulary get phonetic comparison.
   // If the student's combined engine output is phonetically close, forgive.
   {
@@ -1983,7 +2000,7 @@ async function runAnalysis() {
       oovLog.push(logEntry);
     }
 
-    // ── OOV <unknown> reassignment (Part 1) ────────────────────────────
+    // ── Phase 4: OOV <unknown> reassignment ────────────────────────────
     // After NW alignment, <unknown> tokens may be assigned to wrong ref
     // words (e.g., ref="a" gets hyp="unknown" instead of ref="cayuco").
     // Multiple <unknown> tokens near an OOV word are fragments of the
@@ -2053,9 +2070,10 @@ async function runAnalysis() {
       oovLog.push({ ref: entry.ref, type: 'unknown_reassigned', donorCount: donors.length });
     }
 
-    // OOV omission recovery: if an OOV word is omitted but <unknown> tokens
-    // exist in its temporal window AND Parakeet heard speech there, forgive it —
-    // student vocalized but ASR couldn't decode (word not in vocabulary).
+    // ── Phase 5: OOV omission recovery ─────────────────────────────────
+    // If an OOV word is omitted but <unknown> tokens exist in its temporal
+    // window AND Parakeet heard speech there, forgive it — student vocalized
+    // but ASR couldn't decode (word not in vocabulary).
     // Guard: if Parakeet also has no speech in the window, student genuinely skipped.
     for (let i = 0; i < alignment.length; i++) {
       const entry = alignment[i];
@@ -2123,9 +2141,9 @@ async function runAnalysis() {
     });
   }
 
-  // ── OOV exclusion (Part 2) ───────────────────────────────────────────
-  // Catch OOV substitutions created by Part 1 (reassignment).
-  // Existing path 2 only handles omissions — this handles subs.
+  // ── Phase 6: OOV exclusion ───────────────────────────────────────────
+  // Catch OOV substitutions created by Phase 4 (reassignment).
+  // Phase 5 handles omissions — this handles subs.
   // ASR couldn't decode → can't credit or penalize. Exclude entirely.
   for (const entry of alignment) {
     if (!entry._isOOV) continue;
@@ -2166,7 +2184,7 @@ async function runAnalysis() {
     });
   }
 
-  // ── OOV time credit (Part 2b) ────────────────────────────────────────
+  // ── Phase 6b: OOV time credit ────────────────────────────────────────
   // For OOV-excluded words, credit back the time the student spent
   // struggling with a word the ASR couldn't decode.
   let oovTimeCreditSeconds = 0;
@@ -2233,7 +2251,7 @@ async function runAnalysis() {
     }
   }
 
-  // ── Single-letter function word forgiveness (Part 4) ─────────────────
+  // ── Phase 7: Single-letter function word forgiveness ─────────────────
   // "a" and "I" are too short for ASR to capture when student is
   // struggling with an adjacent word. Forgive if ALL engines missed it.
   {
@@ -2284,7 +2302,7 @@ async function runAnalysis() {
     }
   }
 
-  // ── Post-struggle Parakeet leniency ─────────────────────────────────
+  // ── Phase 8: Post-struggle Parakeet leniency ────────────────────────
   // After a confirmed error, Reverb's CTC decoder often can't recover
   // for the next word. If Parakeet independently heard it correctly,
   // trust Parakeet and give credit (one word of leniency only).
