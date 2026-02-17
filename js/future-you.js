@@ -77,11 +77,8 @@ function encodeWAV(buffer) {
  * Returns true for correct words, forgiven proper nouns, and compound struggles.
  */
 function isSpokenCorrect(entry) {
-  const t = entry.type;
-  if (t === 'correct') return true;
+  if (entry.type === 'correct') return true;  // includes compound struggles (_isStruggle + compound)
   if (entry.forgiven) return true;
-  // Compound struggles where the child got the word right (split into parts)
-  if (t === 'struggle' && entry.compound) return true;
   return false;
 }
 
@@ -253,7 +250,7 @@ async function init() {
     if (!isSpokenCorrect(entry)) {
       span.classList.add('gap');
     }
-    if (entry.type === 'struggle' && entry.compound) {
+    if (entry._isStruggle && entry.compound) {
       span.classList.add('struggle');
     }
 

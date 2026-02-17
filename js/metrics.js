@@ -31,7 +31,12 @@ export function computeAccuracy(alignmentResult, options = {}) {
     if (w._oovExcluded) { forgiven++; continue; }  // excluded from all counts
     switch (w.type) {
       case 'correct':
-        correctCount++;
+        // Compound struggles (type stays 'correct', _isStruggle flag set) count as errors
+        if (w._isStruggle && !w.forgiven) {
+          wordErrors++;
+        } else {
+          correctCount++;
+        }
         break;
       case 'substitution':
         if (w.forgiven) {
@@ -43,10 +48,6 @@ export function computeAccuracy(alignmentResult, options = {}) {
         } else {
           wordErrors++;
         }
-        break;
-      case 'struggle':
-        // Compound fragments — orange bucket
-        wordErrors++;
         break;
       case 'omission':
         if (w.forgiven) {
@@ -92,8 +93,8 @@ export function computeWCPMRange(alignmentResult, elapsedSeconds) {
     return { wcpmMin: 0, wcpmMax: 0, correctCount: 0, elapsedSeconds: elapsedSeconds || 0 };
   }
 
-  // Count correct words
-  const correctWords = alignmentResult.filter(w => w.type === 'correct');
+  // Count correct words (exclude compound struggles — type 'correct' but _isStruggle)
+  const correctWords = alignmentResult.filter(w => w.type === 'correct' && !w._isStruggle);
   const correctCount = correctWords.length;
 
   // Standard WCPM (max) - all correct words

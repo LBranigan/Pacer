@@ -413,7 +413,7 @@ function renderNewAnalyzedWords(container, alignment, sttLookup, diagnostics, tr
         // adjacency: if the previous entry is a sub/struggle, attach there.
         const targetN = norm(ins._nearMissTarget);
         const prevEntry = groups[i - 1].entry;
-        const prevIsSub = prevEntry.type === 'substitution' || prevEntry.type === 'struggle';
+        const prevIsSub = prevEntry.type === 'substitution';
         if (prevIsSub && (targetN === prevRefN || !ins._nearMissTarget)) {
           groups[i - 1].insertionsAfter.push(ins);       // trailing fragment of struggle word
         } else {
@@ -474,14 +474,14 @@ function renderNewAnalyzedWords(container, alignment, sttLookup, diagnostics, tr
     }
     if (entry.type === 'omission') return 'omitted';
 
-    // Correct or compound-struggle (which resolved to correct word)
-    if (entry.type === 'correct' || (entry.type === 'struggle' && entry.compound)) {
+    // Correct (including compound struggles which resolved to correct word)
+    if (entry.type === 'correct') {
       // Post-struggle leniency: Reverb off-track after preceding error, Parakeet heard correct
       if (entry._postStruggleLeniency) return 'struggle-correct';
       // Recovered = only cross-validator heard it (V1/V0 both missed) — not confidently correct
       if (entry._recovered) return 'struggle-correct';
       // Compound fragments (e.g., "own"+"ed" for "owned") = clear mid-word pause → orange
-      if (entry.type === 'struggle' && entry.compound && entry.parts?.length >= 2) return 'attempted-struggled';
+      if (entry._isStruggle && entry.compound && entry.parts?.length >= 2) return 'attempted-struggled';
       const refN = norm(entry.ref);
       const hasRelatedIns = group.insertionsBefore.some(ins => {
         const h = norm(ins.hyp);
@@ -497,17 +497,15 @@ function renderNewAnalyzedWords(container, alignment, sttLookup, diagnostics, tr
       return 'correct';
     }
 
-    // Non-compound struggle (decoding near-miss, hesitation, abandoned attempt)
-    // These were substitutions upgraded by resolveNearMissClusters or detectStruggleWords
-    if (entry.type === 'struggle' && !entry.compound) {
-      const refN = norm(entry.ref);
-      // Did any engine hear the correct word?
-      if (norm(entry._xvalWord) === refN || norm(entry._v0Word) === refN) return 'attempted-struggled';
-      return 'definite-struggle';
-    }
-
-    // Substitution
+    // Substitution (including struggles — near-miss, hesitation, abandoned attempt)
     if (entry.type === 'substitution') {
+      // Struggle: decoding near-miss, hesitation, or abandoned attempt
+      if (entry._isStruggle) {
+        const refN = norm(entry.ref);
+        // Did any engine hear the correct word?
+        if (norm(entry._xvalWord) === refN || norm(entry._v0Word) === refN) return 'attempted-struggled';
+        return 'definite-struggle';
+      }
       // <unknown> CTC token = ASR detected speech but couldn't decode → definite struggle
       if (entry.hyp === 'unknown' && norm(entry.ref) !== 'unknown') return 'definite-struggle';
       const refN = norm(entry.ref);
@@ -1720,7 +1718,7 @@ export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, di
             fTag.className = 'engine-fused-tag';
             fTag.textContent = ' (fused)';
             td.appendChild(fTag);
-          } else if (entry.type === 'correct' || entry.type === 'struggle') {
+          } else if (entry.type === 'correct') {
             td.className = 'engine-correct';
             td.textContent = entry.hyp;
           } else {
@@ -1931,7 +1929,7 @@ export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, di
           if (e.type === 'omission') {
             tdHyp.textContent = '\u2014';
             tdHyp.className = 'pipeline-td-omission';
-          } else if (e.type === 'correct' || (e.type === 'struggle' && e.compound)) {
+          } else if (e.type === 'correct') {
             tdHyp.textContent = e.hyp;
             tdHyp.className = 'pipeline-td-correct';
           } else {
@@ -2050,7 +2048,7 @@ export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, di
         });
       }
 
-      const struggles = alignment.filter(e => e.type === 'struggle');
+      const struggles = alignment.filter(e => e._isStruggle);
       if (struggles.length > 0) {
         lists.push({
           label: 'Struggle Words (' + struggles.length + ')',

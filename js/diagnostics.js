@@ -190,7 +190,7 @@ export function resolveNearMissClusters(alignment) {
     }
 
     // PRIORITY 1 — Pre-struggle (look ahead for failure)
-    if (nextEntry && (nextEntry.type === 'substitution' || nextEntry.type === 'struggle') &&
+    if (nextEntry && nextEntry.type === 'substitution' &&
         clean(nextEntry.ref).length >= 3 &&
         isNearMiss(entry.hyp, nextEntry.ref)) {
       entry._partOfStruggle = true;
@@ -201,7 +201,7 @@ export function resolveNearMissClusters(alignment) {
     }
 
     // PRIORITY 3 — Post-struggle (look behind for failure)
-    if (prevEntry && (prevEntry.type === 'substitution' || prevEntry.type === 'struggle') &&
+    if (prevEntry && prevEntry.type === 'substitution' &&
         clean(prevEntry.ref).length >= 3 &&
         isNearMiss(entry.hyp, prevEntry.ref)) {
       entry._partOfStruggle = true;
@@ -218,7 +218,7 @@ export function resolveNearMissClusters(alignment) {
   // isNearMiss on the combined form (e.g., "var"+"all" vs "overall").
   for (let i = 0; i < alignment.length; i++) {
     const entry = alignment[i];
-    const isSub = entry.type === 'substitution' || entry.type === 'struggle';
+    const isSub = entry.type === 'substitution';
     const isCorrect = entry.type === 'correct';
     if (!isSub && !isCorrect) continue;
     const refClean = clean(entry.ref);
@@ -268,12 +268,10 @@ export function resolveNearMissClusters(alignment) {
     }
   }
 
-  // After the pass — upgrade substitutions with near-miss evidence
-  // Skip entries already classified as struggle (e.g. Path 4 divergence)
+  // After the pass — flag substitutions with near-miss evidence as struggles
   for (const entry of alignment) {
-    if (entry._nearMissEvidence && entry._nearMissEvidence.length > 0 && entry.type !== 'struggle') {
-      entry._originalType = entry.type;
-      entry.type = 'struggle';
+    if (entry._nearMissEvidence && entry._nearMissEvidence.length > 0 && !entry._isStruggle) {
+      entry._isStruggle = true;
     }
   }
 }
@@ -302,7 +300,7 @@ export function absorbMispronunciationFragments(alignment, transcriptWords) {
   const subs = [];
   for (let i = 0; i < alignment.length; i++) {
     const entry = alignment[i];
-    if (entry.type !== 'substitution' && entry.type !== 'struggle') continue;
+    if (entry.type !== 'substitution') continue;
     const tw = (entry.hypIndex != null && entry.hypIndex >= 0) ? transcriptWords[entry.hypIndex] : null;
     const startS = parseTime(entry._xvalStartTime || tw?._reverbStartTime || tw?.startTime);
     const endS = parseTime(entry._xvalEndTime || tw?._reverbEndTime || tw?.endTime);
@@ -533,7 +531,7 @@ export function detectMorphologicalErrors(alignment, transcriptWords) {
       continue;
     }
 
-    if (type === 'substitution' || type === 'struggle') {
+    if (type === 'substitution') {
       const ref = (op.ref || op.reference || '').toLowerCase();
       const hyp = (op.hyp || op.hypothesis || '').toLowerCase();
 
@@ -967,7 +965,7 @@ export function annotatePauseContext(phrasing, alignment) {
     }
 
     // Tally stats
-    if (followEntry && (followEntry.type === 'substitution' || followEntry.type === 'struggle' || followEntry.type === 'omission')) {
+    if (followEntry && (followEntry.type === 'substitution' || followEntry.type === 'omission')) {
       pauseBeforeError++;
     }
     if (brk.followingPhonemeCount != null && brk.followingPhonemeCount >= 7) {
@@ -1950,9 +1948,9 @@ export function computeTierBreakdown(alignment) {
     if (entry.type === 'insertion' || !entry.nl) continue;
     const tier = entry.nl.tier || 'function';
     if (!tiers[tier]) continue;
-    if (entry.type === 'correct') {
+    if (entry.type === 'correct' && !entry._isStruggle) {
       tiers[tier].correct++;
-    } else if (entry.type === 'substitution' || entry.type === 'omission' || entry.type === 'struggle') {
+    } else if (entry.type === 'substitution' || entry.type === 'omission' || entry._isStruggle) {
       tiers[tier].errors++;
     }
   }
@@ -2012,17 +2010,16 @@ export function detectStruggleWords(transcriptWords, referenceText, alignment) {
     const partsCount = entry.compound && entry.parts ? entry.parts.length : 1;
     const effectiveHyp = (entry.hypIndex != null && entry.hypIndex >= 0) ? entry.hypIndex : hypIndex;
 
-    // Only process substitutions and existing struggles (from Path 2)
-    if (entry.type === 'substitution' || entry.type === 'struggle') {
+    // Only process substitutions (struggles are substitutions with _isStruggle flag)
+    if (entry.type === 'substitution') {
       const refClean = (entry.ref || '').toLowerCase().replace(/[^a-z'-]/g, '');
 
       // ── Path 1: Hesitation (pause >= 3s before a substitution) ──
       if (refClean.length > 3 && pauseBeforeIndex.has(effectiveHyp)) {
         const gap = pauseBeforeIndex.get(effectiveHyp);
 
-        if (entry.type === 'substitution') {
-          entry._originalType = 'substitution';
-          entry.type = 'struggle';
+        if (!entry._isStruggle) {
+          entry._isStruggle = true;
           entry._hesitationGap = gap;
         } else {
           entry._hasHesitation = true;
@@ -2041,9 +2038,8 @@ export function detectStruggleWords(transcriptWords, referenceText, alignment) {
       const sttWord = transcriptWords[effectiveHyp];
       if (sttWord && sttWord.crossValidation === 'unconfirmed' &&
           isNearMiss(entry.hyp, entry.ref)) {
-        if (entry.type === 'substitution') {
-          entry._originalType = 'substitution';
-          entry.type = 'struggle';
+        if (!entry._isStruggle) {
+          entry._isStruggle = true;
           entry._abandonedAttempt = true;
         } else {
           entry._abandonedAttempt = true;

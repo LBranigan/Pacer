@@ -664,7 +664,7 @@ export function consolidateSpilloverFragments(aligned, nearMissFn) {
 
   for (let r = 1; r < refEntries.length; r++) {
     const anchor = refEntries[r - 1];
-    if (anchor.entry.type !== 'substitution' && anchor.entry.type !== 'struggle') continue;
+    if (anchor.entry.type !== 'substitution') continue;
 
     // Try progressive chaining: anchor + candidate, anchor + candidate + next, ...
     let concat = anchor.entry.hyp;

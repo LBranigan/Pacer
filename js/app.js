@@ -802,7 +802,7 @@ async function runAnalysis() {
     for (const entry of alignment) {
       if (entry.type === 'correct' && entry.compound && entry.parts && entry.parts.length >= 2
           && !entry._abbreviationExpansion && !entry._numberExpansion) {
-        entry.type = 'struggle';
+        entry._isStruggle = true;
         entry._nearMissEvidence = entry.parts;
         compoundStruggles.push({ ref: entry.ref, hyp: entry.hyp, parts: entry.parts });
       }
@@ -971,8 +971,8 @@ async function runAnalysis() {
 
     // Count how many engines got this word correct
     // V1 compound = student fragmented the word — don't count as clean correct
-    const v1Compound = v1Entry.type === 'struggle' && v1Entry.compound;
-    const v1Correct = v1Entry.type === 'correct' && !v1Entry.compound;
+    const v1Compound = v1Entry._isStruggle && v1Entry.compound;
+    const v1Correct = v1Entry.type === 'correct' && !v1Compound;
     const v0Correct = v0Type === 'correct';
     const pkCorrect = pkType === 'correct';
     const correctCount = (v1Correct ? 1 : 0) + (v0Correct ? 1 : 0) + (pkCorrect ? 1 : 0);
@@ -1368,7 +1368,7 @@ async function runAnalysis() {
   // Runs AFTER omission recovery so recovered 'correct' words can serve as anchors.
   resolveNearMissClusters(alignment);
 
-  const nearMissStruggles = alignment.filter(a => a.type === 'struggle' && a._nearMissEvidence?.length > 0);
+  const nearMissStruggles = alignment.filter(a => a._isStruggle && a._nearMissEvidence?.length > 0);
   if (nearMissStruggles.length > 0) {
     addStage('near_miss_resolution', {
       struggles: nearMissStruggles.map(a => ({
@@ -1409,8 +1409,8 @@ async function runAnalysis() {
       }
       continue;
     }
-    // Substitutions and (legacy) struggles — words where the student said something wrong
-    if (entry.type !== 'substitution' && entry.type !== 'struggle') continue;
+    // Substitutions (including struggles) — words where the student said something wrong
+    if (entry.type !== 'substitution') continue;
     if (entry.forgiven || entry._oovRecoveredViaUnknown) continue;
     const ref = (entry.ref || '').toLowerCase().replace(/[^a-z]/g, '');
     if (ref.length < 4) continue;
@@ -1459,10 +1459,10 @@ async function runAnalysis() {
     if (entry.type === 'insertion' || entry.type === 'omission') continue;
     if (entry.forgiven || entry._oovRecoveredViaUnknown) continue;
 
-    // Substitutions and (legacy) struggles: always possible struggle
+    // Substitutions (including struggles): always possible struggle
     // UNLESS it's a confirmed substitution (all engines agree, not near-miss)
-    if (entry.type === 'substitution' || entry.type === 'struggle') {
-      if (entry.type === 'substitution') {
+    if (entry.type === 'substitution') {
+      if (!entry._isStruggle) {
         const refN = _norm(entry.ref);
         const hypN = _norm(entry.hyp);
         const v0N = entry._v0Word ? _norm(entry._v0Word) : null;
@@ -1948,7 +1948,7 @@ async function runAnalysis() {
     for (let i = 0; i < alignment.length; i++) {
       const entry = alignment[i];
       if (!entry._isOOV) continue;
-      if (entry.type !== 'substitution' && entry.type !== 'struggle') continue;
+      if (entry.type !== 'substitution') continue;
       if (entry.forgiven) continue; // already forgiven by proper noun
 
       // Collect all engine hearings for this ref word
@@ -2292,10 +2292,8 @@ async function runAnalysis() {
         if (alignment[j].type !== 'insertion') { next = alignment[j]; break; }
       }
       const adjacentStruggle =
-        (prev && (prev._isOOV || prev.type === 'struggle' ||
-                  prev.type === 'substitution' || prev._oovExcluded)) ||
-        (next && (next._isOOV || next.type === 'struggle' ||
-                  next.type === 'substitution' || next._oovExcluded));
+        (prev && (prev._isOOV || prev.type === 'substitution' || prev._oovExcluded)) ||
+        (next && (next._isOOV || next.type === 'substitution' || next._oovExcluded));
 
       if (!adjacentStruggle) continue;
 
@@ -2324,7 +2322,7 @@ async function runAnalysis() {
     const pkTrustLog = [];
     for (const entry of alignment) {
       if (!entry.ref) continue;
-      if (entry.type !== 'substitution' && entry.type !== 'struggle') continue;
+      if (entry.type !== 'substitution') continue;
       if (entry.forgiven) continue;
       if (entry.crossValidation !== 'disagreed') continue;
       if (entry._pkType !== 'correct') continue;
@@ -2375,7 +2373,7 @@ async function runAnalysis() {
         // Collateral damage entries (function word / OOV collateral) are transparent —
         // they were caught in the blast radius and shouldn't consume the leniency window.
         if (!entry._functionWordCollateral && !entry._oovCollateralOmission) {
-          prevRefWasError = (entry.type === 'substitution' || entry.type === 'struggle'
+          prevRefWasError = (entry.type === 'substitution'
                              || entry.type === 'omission') && !entry.forgiven;
           // OOV-excluded words also trigger leniency — Reverb was off-track during OOV struggle
           if (entry._oovExcluded) prevRefWasError = true;
@@ -2417,6 +2415,7 @@ async function runAnalysis() {
       _xvalWord: a._xvalWord || null,
       forgiven: a.forgiven,
       partOfForgiven: a.partOfForgiven,
+      _isStruggle: a._isStruggle || false,
       _possibleStruggle: a._possibleStruggle || false,
       _v0Word: a._v0Word || null,
       _v0Type: a._v0Type || null,
@@ -2558,7 +2557,7 @@ async function runAnalysis() {
     let hypIdx = 0;
     for (const entry of alignment) {
       if (entry.type === 'omission') continue; // no hyp word consumed
-      if (entry.type === 'correct' || entry.forgiven || (entry.type === 'struggle' && entry.compound)) {
+      if (entry.type === 'correct' || entry.forgiven) {
         // Walk transcriptWords to find the matching entry by word text
         // The sttLookup queue approach consumed entries in order, so we
         // advance hypIdx through transcriptWords matching hyp values

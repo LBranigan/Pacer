@@ -180,9 +180,9 @@ const DIAGNOSTIC_MISCUES = {
   },
 
   struggle: {
-    description: 'Substitution+ — student failed to produce the word, with additional evidence of decoding difficulty (long pause, near-miss fragments, and/or abandoned attempt). Always an error.',
+    description: 'Substitution+ — student failed to produce the word, with additional evidence of decoding difficulty (long pause, near-miss fragments, and/or abandoned attempt). Always an error. Not a separate type — flagged via _isStruggle on substitution (or correct for compound) entries.',
     detector: 'app.js (3-way compound struggle) + diagnostics.js → resolveNearMissClusters() (Path 2: decoding) + detectStruggleWords() (Path 1: hesitation, Path 3: abandoned attempt)',
-    countsAsError: true, // Struggle = substitution+ = always an error
+    countsAsError: true, // Struggle = substitution+ = always an error (flag: _isStruggle)
     config: {
       // Path 1: substitution + pause >= 3s + ref word > 3 chars
       pause_threshold_s: 3,

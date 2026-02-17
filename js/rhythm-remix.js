@@ -987,7 +987,7 @@ function buildWordSequence(alignment, sttWords) {
       startTime,
       endTime,
       el: span,
-      isStruggle: type === 'struggle',
+      isStruggle: !!entry._isStruggle,
       isOmission: type === 'omission',
       forgiven: !!entry.forgiven,
       sentenceFinal: isSentenceFinal,
