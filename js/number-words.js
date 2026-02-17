@@ -17,6 +17,14 @@ const ONES = ['', 'one', 'two', 'three', 'four', 'five', 'six', 'seven',
 const TENS = ['', '', 'twenty', 'thirty', 'forty', 'fifty', 'sixty',
   'seventy', 'eighty', 'ninety'];
 
+const ORDINAL_ONES = ['', 'first', 'second', 'third', 'fourth', 'fifth',
+  'sixth', 'seventh', 'eighth', 'ninth', 'tenth', 'eleventh',
+  'twelfth', 'thirteenth', 'fourteenth', 'fifteenth', 'sixteenth',
+  'seventeenth', 'eighteenth', 'nineteenth'];
+
+const ORDINAL_TENS = ['', '', 'twentieth', 'thirtieth', 'fortieth', 'fiftieth',
+  'sixtieth', 'seventieth', 'eightieth', 'ninetieth'];
+
 /**
  * Convert a 2-digit number (0–99) to its word form as an array of words.
  * Returns [] for 0, single-element for 1–19, two-element for 21–99.
@@ -255,6 +263,145 @@ function decimalToWordForms(str) {
   return Array.from(forms).map(s => JSON.parse(s));
 }
 
+/**
+ * Convert a 2-digit number (1–99) to its ordinal form as an array of words.
+ * @param {number} n - Integer 1–99
+ * @returns {string[]}
+ */
+function twoDigitOrdinalWords(n) {
+  if (n <= 0 || n >= 100) return [];
+  if (n < 20) return [ORDINAL_ONES[n]];
+  const t = Math.floor(n / 10);
+  const o = n % 10;
+  if (o === 0) return [ORDINAL_TENS[t]];
+  return [TENS[t], ORDINAL_ONES[o]];
+}
+
+/**
+ * Generate ordinal spoken forms for a digit string.
+ *
+ * Only the last word changes from cardinal to ordinal. Everything before stays cardinal.
+ * For example:
+ *   numberToOrdinalForms("4")    → [["fourth"]]
+ *   numberToOrdinalForms("21")   → [["twenty", "first"]]
+ *   numberToOrdinalForms("1975") → [["nineteen", "seventy", "fifth"], ...]
+ *
+ * @param {string} numStr - Pure digit string (e.g., "4", "21", "1975")
+ * @returns {string[][]} Array of valid ordinal spoken forms
+ */
+function numberToOrdinalForms(numStr) {
+  const n = parseInt(numStr, 10);
+  if (isNaN(n) || n <= 0 || n > 999999) return [];
+
+  const forms = new Set();
+  const add = (arr) => {
+    if (arr.length > 0) forms.add(JSON.stringify(arr));
+  };
+
+  // --- 1–99 ---
+  if (n < 100) {
+    add(twoDigitOrdinalWords(n));
+  }
+
+  // --- Hundreds (100–999) ---
+  if (n >= 100 && n <= 999) {
+    const h = Math.floor(n / 100);
+    const rem = n % 100;
+    if (rem === 0) {
+      add([ONES[h], 'hundredth']);
+    } else {
+      const remOrd = twoDigitOrdinalWords(rem);
+      add([ONES[h], 'hundred', ...remOrd]);
+      add([ONES[h], 'hundred', 'and', ...remOrd]);
+    }
+  }
+
+  // --- Thousands (1000–9999) ---
+  if (n >= 1000 && n <= 9999) {
+    const th = Math.floor(n / 1000);
+    const rem = n % 1000;
+
+    if (rem === 0) {
+      add([ONES[th], 'thousandth']);
+    } else if (rem < 100) {
+      const remOrd = twoDigitOrdinalWords(rem);
+      add([ONES[th], 'thousand', ...remOrd]);
+      add([ONES[th], 'thousand', 'and', ...remOrd]);
+    } else {
+      const h = Math.floor(rem / 100);
+      const hRem = rem % 100;
+      if (hRem === 0) {
+        add([ONES[th], 'thousand', ONES[h], 'hundredth']);
+      } else {
+        const hRemOrd = twoDigitOrdinalWords(hRem);
+        add([ONES[th], 'thousand', ONES[h], 'hundred', ...hRemOrd]);
+        add([ONES[th], 'thousand', ONES[h], 'hundred', 'and', ...hRemOrd]);
+      }
+    }
+
+    // Year-style: "nineteen seventy fifth"
+    if (n >= 1000) {
+      const hi = Math.floor(n / 100);
+      const lo = n % 100;
+      if (hi >= 10 && hi <= 99 && lo > 0) {
+        const hiWords = twoDigitWords(hi);
+        const loOrd = twoDigitOrdinalWords(lo);
+        add([...hiWords, ...loOrd]);
+      }
+    }
+  }
+
+  // --- Ten-thousands to hundreds of thousands (10,000–999,999) ---
+  if (n >= 10000 && n <= 999999) {
+    const thPart = Math.floor(n / 1000);
+    const rem = n % 1000;
+
+    const thWordSets = [];
+    if (thPart < 20) {
+      thWordSets.push([ONES[thPart]]);
+    } else if (thPart < 100) {
+      thWordSets.push(twoDigitWords(thPart));
+    } else {
+      const h = Math.floor(thPart / 100);
+      const hRem = thPart % 100;
+      const hRemWords = twoDigitWords(hRem);
+      if (hRem === 0) {
+        thWordSets.push([ONES[h], 'hundred']);
+      } else {
+        thWordSets.push([ONES[h], 'hundred', ...hRemWords]);
+        thWordSets.push([ONES[h], 'hundred', 'and', ...hRemWords]);
+      }
+    }
+
+    for (const thWords of thWordSets) {
+      if (rem === 0) {
+        add([...thWords, 'thousandth']);
+      } else if (rem < 100) {
+        const remOrd = twoDigitOrdinalWords(rem);
+        add([...thWords, 'thousand', ...remOrd]);
+        add([...thWords, 'thousand', 'and', ...remOrd]);
+      } else {
+        const h = Math.floor(rem / 100);
+        const hRem = rem % 100;
+        if (hRem === 0) {
+          add([...thWords, 'thousand', ONES[h], 'hundredth']);
+        } else {
+          const hRemOrd = twoDigitOrdinalWords(hRem);
+          add([...thWords, 'thousand', ONES[h], 'hundred', ...hRemOrd]);
+          add([...thWords, 'thousand', ONES[h], 'hundred', 'and', ...hRemOrd]);
+        }
+      }
+    }
+  }
+
+  const result = [];
+  for (const key of forms) {
+    result.push(JSON.parse(key));
+  }
+  return result;
+}
+
 // Expose globally (non-module script loaded before alignment.js)
 window.numberToWordForms = numberToWordForms;
 window.decimalToWordForms = decimalToWordForms;
+window.numberToOrdinalForms = numberToOrdinalForms;

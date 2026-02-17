@@ -352,9 +352,12 @@ function mergeNumberExpansions(alignment) {
     // Pattern A: substitution(ref=DIGITS or DECIMAL) followed by insertions matching a spoken form
     if (current.type === 'substitution' && current.ref && current.hyp && /^\d+(\.\d+)?$/.test(current.ref)) {
       const isDecimal = current.ref.includes('.');
-      const expansions = isDecimal
+      const cardinals = isDecimal
         ? (window.decimalToWordForms ? window.decimalToWordForms(current.ref) : [])
         : window.numberToWordForms(current.ref);
+      const ordinals = (!isDecimal && window.numberToOrdinalForms)
+        ? window.numberToOrdinalForms(current.ref) : [];
+      const expansions = [...cardinals, ...ordinals];
 
       if (expansions.length > 0) {
         let matched = false;
@@ -414,9 +417,12 @@ function mergeNumberExpansions(alignment) {
       if (subIdx < alignment.length && alignment[subIdx].type === 'substitution' &&
           alignment[subIdx].ref && /^\d+(\.\d+)?$/.test(alignment[subIdx].ref)) {
         const isDecimal = alignment[subIdx].ref.includes('.');
-        const expansions = isDecimal
+        const cardinals = isDecimal
           ? (window.decimalToWordForms ? window.decimalToWordForms(alignment[subIdx].ref) : [])
           : window.numberToWordForms(alignment[subIdx].ref);
+        const ordinals = (!isDecimal && window.numberToOrdinalForms)
+          ? window.numberToOrdinalForms(alignment[subIdx].ref) : [];
+        const expansions = [...cardinals, ...ordinals];
 
         if (expansions.length > 0) {
           let matched = false;
