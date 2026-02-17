@@ -1095,13 +1095,21 @@ body.dev-mode .dev-mode-toggle {
   margin: 0 1px 0 0;
 }
 
-/* Self-correction badge — teal "SC" superscript before the word */
-.word-sc { position: relative; }
-.word-sc::before {
+/* Self-correction bracket — teal underline connecting fragment + word */
+.word-group-sc {
+  border-bottom: 2px solid #00897b;
+  border-left: 2px solid #00897b;
+  border-right: 2px solid #00897b;
+  border-radius: 0 0 4px 4px;
+  padding-bottom: 2px;
+  position: relative;
+}
+.word-group-sc::after {
   content: 'SC';
   position: absolute;
-  top: -8px;
-  left: -6px;
+  bottom: -13px;
+  left: 50%;
+  transform: translateX(-50%);
   font-size: 0.55rem;
   font-weight: bold;
   color: #00897b;

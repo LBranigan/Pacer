@@ -745,7 +745,7 @@ function renderNewAnalyzedWords(container, alignment, sttLookup, diagnostics, tr
       `<span class="word word-morph-root" style="background:#ffe0b2;color:#e65100;" title="${LEGEND_TIPS['morph-root'].replace(/"/g, '&quot;')}">Morph. Root</span>` +
       `<span class="word word-hesitation" title="${LEGEND_TIPS['hesitation'].replace(/"/g, '&quot;')}">Hesit.</span>` +
       `<span class="word-fragment" title="${LEGEND_TIPS['fragment'].replace(/"/g, '&quot;')}">fragment</span>` +
-      `<span class="word word-sc" style="background:#e0f2f1;color:#00897b;" title="${LEGEND_TIPS['sc'].replace(/"/g, '&quot;')}">SC</span>` +
+      `<span class="word-group word-group-sc" style="display:inline-flex;padding:2px 4px;" title="${LEGEND_TIPS['sc'].replace(/"/g, '&quot;')}"><span class="word-fragment" style="margin:0;">frag</span><span class="word" style="margin:0;padding:2px 4px;background:#c8e6c9;color:#2e7d32;">word</span></span>` +
     '</div>';
   container.appendChild(legend);
 
@@ -831,11 +831,13 @@ function renderNewAnalyzedWords(container, alignment, sttLookup, diagnostics, tr
       if (ins.hypIndex >= 0 && transcriptWords?.[ins.hypIndex]?._postWordArtifact) return false;
       return true;
     });
-    // When fragments exist, wrap them + main word in a flex container
-    // so they visually hug each other with no whitespace gap
-    const wordTarget = visibleInsBefore.length > 0 ? (() => {
+    // When fragments exist OR this is a self-correction, wrap them + main word
+    // in a flex container so they visually hug each other with no whitespace gap
+    const needsGroup = visibleInsBefore.length > 0 || entry._selfCorrected;
+    const wordTarget = needsGroup ? (() => {
       const wrap = document.createElement('span');
       wrap.className = 'word-group';
+      if (entry._selfCorrected) wrap.classList.add('word-group-sc');
       wordsDiv.appendChild(wrap);
       for (const ins of visibleInsBefore) renderFragment(wrap, ins);
       return wrap;
@@ -872,8 +874,7 @@ function renderNewAnalyzedWords(container, alignment, sttLookup, diagnostics, tr
       const hasRoot = (w) => w.length >= 3 && w !== refN && refN.startsWith(w);
       if (hasRoot(hypN) || hasRoot(v0N)) span.classList.add('word-morph-root');
     }
-    // Self-correction badge
-    if (entry._selfCorrected) span.classList.add('word-sc');
+    // Self-correction bracket is on the word-group wrapper (see needsGroup above)
     // Build per-engine evidence strings from raw attempt snapshots
     // _v1RawAttempt/_v0Attempt/_xvalAttempt capture full attempt (insertions + hyp)
     // before any downstream mutations. Fall back to single-word fields when no fragments.
