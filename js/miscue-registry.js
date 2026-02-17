@@ -644,6 +644,24 @@ const FORGIVENESS_RULES = {
     uiClass: 'word-forgiven',
     note: 'Foreign words (Spanish "cayuco", French "château") and rare English words absent from CMUdict trigger OOV detection. Phonetic normalization collapses common equivalences (c/k, ph/f, ck/k) before Levenshtein comparison. Adjacent insertion fragments from ASR splitting are cleaned up (_partOfOOVForgiven).'
   },
+  endOfReadingDetection: {
+    description: 'Trailing reference words where no ASR engine produced anything near-miss to the reference, indicating the student had stopped reading and post-reading speech (proctor, environmental) was force-aligned against non-passage reference text.',
+    detector: 'app.js → Phase 8: End-of-reading detection (backward walk from alignment end)',
+    countsAsError: false,
+    config: {
+      comparison: 'isNearMiss(engineWord, refWord) checked for V1, V0, and Parakeet',
+      stopCondition: 'Walk stops at first correct, forgiven, or near-miss entry',
+      omissionPolicy: 'Trailing omissions only marked if a not-attempted substitution exists after them'
+    },
+    example: {
+      reference: '...war always takes. Enter your reading time below.',
+      spoken: 'Reverb: "...takes jacobs hot oh emma we\'re done"',
+      result: '"enter"→"hot", "your"→"oh" etc. — no engine near-miss → _notAttempted: true, excluded from accuracy'
+    },
+    uiClass: 'word-bucket-not-attempted',
+    note: 'Only affects trailing words (backward walk from end). Mid-passage errors are never marked. Requires positive evidence: at least one non-near-miss substitution in the tail before omissions are included.'
+  },
+
   pkTrustOverride: {
     description: 'Disagreed substitution where Parakeet heard the correct word — forgiven when "Trust Pk" toggle is ON. CTC (Reverb) systematically drops suffixes and misrecognizes words that RNNT (Parakeet) captures correctly.',
     detector: 'app.js → Phase 7b: Parakeet trust override (after function word forgiveness, before post-struggle leniency)',
@@ -796,6 +814,7 @@ export function getDetectorLocation(type) {
  * - oovOmissionRecovery: OOV omission forgiven when <unknown> CTC tokens exist in time window
  * - oovPhoneticForgiveness: Foreign/rare OOV words forgiven via phonetic-normalized Levenshtein (≥60%)
  * - selfCorrection: False start or repetition before correct word — SC badge (informational)
+ * - endOfReadingDetection: Trailing words where no engine heard anything near-miss — post-reading speech
  *
  * INFRASTRUCTURE FIXES:
  * - sttLookup keys use raw normalized words (not getCanonical) to match alignment hyp values

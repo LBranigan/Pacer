@@ -2533,6 +2533,64 @@ async function runAnalysis() {
     }
   }
 
+  // ── Phase 8: End-of-reading detection ────────────────────────────────
+  // When reference text includes non-passage content (instructional footers,
+  // page metadata) that survives OCR trimming, the NW aligner forces post-reading
+  // speech (proctor, environmental noise) against these words, producing false errors.
+  // Walk backward from the end of alignment: if NO engine produced anything
+  // near-miss to the ref word, the student was not reading it.
+  {
+    const refEntries = alignment.filter(e => e.type !== 'insertion');
+    let foundNotAttemptedSub = false;
+    const notAttemptedIndices = new Set();
+
+    for (let i = refEntries.length - 1; i >= 0; i--) {
+      const entry = refEntries[i];
+
+      if (entry.type === 'correct' || entry.forgiven) break;
+
+      if (entry.type === 'substitution') {
+        const ref = (entry.ref || '').toLowerCase().replace(/[^a-z'-]/g, '');
+        const engines = [entry.hyp, entry._v0Word, entry._xvalWord].filter(Boolean);
+        const anyNearMiss = engines.some(w => isNearMiss(w, ref));
+        if (anyNearMiss) break;
+        entry._notAttempted = true;
+        foundNotAttemptedSub = true;
+        notAttemptedIndices.add(i);
+      } else if (entry.type === 'omission') {
+        // Only mark omissions if we've already found a not-attempted substitution
+        // (positive evidence of post-reading speech) after this position
+        if (foundNotAttemptedSub) {
+          entry._notAttempted = true;
+          notAttemptedIndices.add(i);
+        } else {
+          break; // Trailing omission without proctor evidence — could be legitimate
+        }
+      }
+    }
+
+    // Also clear _confirmedInsertion on insertions between not-attempted ref entries
+    if (notAttemptedIndices.size > 0) {
+      const minNotAttemptedRef = Math.min(...notAttemptedIndices);
+      let refIdx = 0;
+      for (const entry of alignment) {
+        if (entry.type === 'insertion') {
+          if (refIdx >= minNotAttemptedRef) {
+            entry._confirmedInsertion = false;
+            entry._notAttempted = true;
+          }
+          continue;
+        }
+        refIdx++;
+      }
+      const trimmed = [...notAttemptedIndices].map(idx => {
+        const e = refEntries[idx];
+        return { ref: e.ref, hyp: e.hyp || null, type: e.type };
+      });
+      addStage('end_of_reading_detection', { trimmedCount: notAttemptedIndices.size, trimmed });
+    }
+  }
+
   const wcpm = (effectiveElapsedSeconds != null && effectiveElapsedSeconds > 0)
     ? computeWCPMRange(alignment, effectiveElapsedSeconds)
     : null;
@@ -2553,6 +2611,7 @@ async function runAnalysis() {
     longPauseErrors: accuracy.longPauseErrors,
     insertionErrors: accuracy.insertionErrors,
     forgiven: accuracy.forgiven,
+    notAttempted: accuracy.notAttempted,
     alignmentSummary: alignment.map(a => ({
       ref: a.ref,
       hyp: a.hyp,
@@ -2580,7 +2639,8 @@ async function runAnalysis() {
       _syllableCoverage: a._syllableCoverage || null,
       _selfCorrected: a._selfCorrected || false,
       _selfCorrectionEvidence: a._selfCorrectionEvidence || null,
-      _selfCorrectionReason: a._selfCorrectionReason || null
+      _selfCorrectionReason: a._selfCorrectionReason || null,
+      _notAttempted: a._notAttempted || false
     }))
   });
 
@@ -3038,7 +3098,7 @@ const pkTrustToggle = document.getElementById('pkTrustToggle');
 const pkTrustTrack = document.getElementById('pkTrustTrack');
 const pkTrustThumb = document.getElementById('pkTrustThumb');
 
-const savedPkTrust = localStorage.getItem('orf_trust_pk') || 'false';
+const savedPkTrust = localStorage.getItem('orf_trust_pk') || 'true';
 if (pkTrustToggle) {
   pkTrustToggle.checked = savedPkTrust === 'true';
   updatePkTrustToggleUI();

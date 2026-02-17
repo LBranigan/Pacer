@@ -13,8 +13,9 @@ export function computeWCPM(alignmentResult, elapsedSeconds) {
     return { wcpm: 0, correctCount: 0, elapsedSeconds: elapsedSeconds || 0 };
   }
   const correctCount = alignmentResult.filter(w =>
-    w.type === 'correct' ||
-    (w.type === 'substitution' && (w.forgiven || w._v0Type === 'correct'))
+    !w._notAttempted &&
+    (w.type === 'correct' ||
+    (w.type === 'substitution' && (w.forgiven || w._v0Type === 'correct')))
   ).length;
   const wcpm = Math.round((correctCount / elapsedSeconds) * 60 * 10) / 10;
   return { wcpm, correctCount, elapsedSeconds };
@@ -28,9 +29,10 @@ export function computeWCPM(alignmentResult, elapsedSeconds) {
  * @returns {{ accuracy: number, correctCount: number, totalRefWords: number, substitutions: number, omissions: number, insertions: number }}
  */
 export function computeAccuracy(alignmentResult, options = {}) {
-  let correctCount = 0, wordErrors = 0, omissions = 0, insertionErrors = 0, forgiven = 0;
+  let correctCount = 0, wordErrors = 0, omissions = 0, insertionErrors = 0, forgiven = 0, notAttempted = 0;
   const longPauseErrors = options.longPauseCount || 0;
   for (const w of alignmentResult) {
+    if (w._notAttempted) { notAttempted++; continue; }  // post-reading speech, excluded from all counts
     if (w._oovExcluded) { forgiven++; continue; }  // excluded from all counts
     switch (w.type) {
       case 'correct':
@@ -76,7 +78,7 @@ export function computeAccuracy(alignmentResult, options = {}) {
   const accuracy = totalRefWords === 0
     ? 0
     : Math.round(((totalRefWords - totalErrors) / totalRefWords) * 1000) / 10;
-  return { accuracy, correctCount, totalRefWords, totalErrors, wordErrors, omissions, insertionErrors, forgiven, longPauseErrors, pkTrustCount };
+  return { accuracy, correctCount, totalRefWords, totalErrors, wordErrors, omissions, insertionErrors, forgiven, longPauseErrors, pkTrustCount, notAttempted };
 }
 
 /**
@@ -98,9 +100,11 @@ export function computeWCPMRange(alignmentResult, elapsedSeconds) {
 
   // Count correct words (exclude compound struggles — type 'correct' but _isStruggle)
   // Also include forgiven substitutions and V0-correct substitutions
+  // Exclude _notAttempted (post-reading speech)
   const correctWords = alignmentResult.filter(w =>
-    (w.type === 'correct' && !w._isStruggle) ||
-    (w.type === 'substitution' && (w.forgiven || w._v0Type === 'correct'))
+    !w._notAttempted &&
+    ((w.type === 'correct' && !w._isStruggle) ||
+    (w.type === 'substitution' && (w.forgiven || w._v0Type === 'correct')))
   );
   const correctCount = correctWords.length;
 

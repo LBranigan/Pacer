@@ -1619,6 +1619,22 @@ export function computeWordSpeedTiers(wordOutliers, alignment, xvalRawWords, tra
       continue;
     }
 
+    // Not-attempted: post-reading speech detected by end-of-reading detection
+    if (entry._notAttempted) {
+      words.push({
+        refIndex, refWord: entry.ref,
+        hypIndex: null, word: null,
+        durationMs: null, syllables: null,
+        normalizedMs: null, ratio: null,
+        tier: 'no-data',
+        alignmentType: 'not-attempted',
+        isOutlier: false,
+        sentenceFinal: sentenceFinalSet.has(refIndex)
+      });
+      refIndex++;
+      continue;
+    }
+
     // Omissions: in reference but not spoken — no hypIndex advance, no xval consumption
     // Forgiven omissions (proper noun with Parakeet evidence) → 'no-data' instead of 'omitted'
     if (entry.type === 'omission' || entry.type === 'deletion') {

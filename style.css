@@ -1061,6 +1061,7 @@ body.dev-mode .dev-mode-toggle {
 .word-bucket-correct { background: #c8e6c9; color: #2e7d32; }
 .word-bucket-struggle-correct { background: #dcedc8; color: #558b2f; border-bottom: 2px solid #8bc34a; }
 .word-bucket-omitted { background: #e0e0e0; color: #757575; text-decoration: line-through; }
+.word-bucket-not-attempted { background: #f5f5f5; color: #bdbdbd; font-style: italic; text-decoration: line-through; }
 .word-bucket-attempted-struggled { background: #ffe0b2; color: #e65100; }
 .word-bucket-definite-struggle { background: #ffcdd2; color: #c62828; }
 .word-bucket-confirmed-substitution { background: #bbdefb; color: #1565c0; }

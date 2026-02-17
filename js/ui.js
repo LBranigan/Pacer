@@ -465,6 +465,7 @@ function renderNewAnalyzedWords(container, alignment, sttLookup, diagnostics, tr
 
   // ── 3. Classification ──────────────────────────────────────────────────
   function classifyWord(entry, group, nextGroup) {
+    if (entry._notAttempted) return 'not-attempted';
     if (group._isConfirmedInsertion) return 'confirmed-insertion';
     if (entry.forgiven) {
       if (entry._oovExcluded) return 'oov-excluded';
@@ -546,6 +547,7 @@ function renderNewAnalyzedWords(container, alignment, sttLookup, diagnostics, tr
     'inflectional-forgiven':   { label: 'Inflectional Variant',       color: '#4caf50' },
     'struggle-correct':        { label: 'Struggle but Correct',      color: '#558b2f' },
     'omitted':                 { label: 'Omitted',                   color: '#757575' },
+    'not-attempted':           { label: 'Not Attempted',             color: '#bdbdbd' },
     'attempted-struggled':     { label: 'Attempted but Struggled',   color: '#e65100' },
     'definite-struggle':       { label: 'Definite Struggle',         color: '#c62828' },
     'confirmed-substitution':  { label: 'Confirmed Substitution',    color: '#1565c0' },
@@ -616,6 +618,14 @@ function renderNewAnalyzedWords(container, alignment, sttLookup, diagnostics, tr
       '\u2022 Recovered: only cross-validator (Parakeet) heard it \u2014 V1 and V0 both missed\n' +
       '\u2022 Post-struggle leniency: preceding word was an error, Reverb off-track, Parakeet heard correct\n' +
       '\u2022 Does NOT count as an error',
+
+    'not-attempted': 'NOT ATTEMPTED\n' +
+      'Post-reading speech detected \u2014 student had stopped reading.\n\n' +
+      'Detection:\n' +
+      '\u2022 No engine (V1, V0, Parakeet) produced anything similar to this reference word\n' +
+      '\u2022 Walking backward from passage end, all trailing words failed the near-miss check\n' +
+      '\u2022 Likely proctor/environmental speech force-aligned to non-passage reference text\n\n' +
+      '\u2022 Does NOT count as an error \u2014 excluded from accuracy and WCPM',
 
     'omitted': 'OMITTED\n' +
       'Student skipped this word entirely.\n\n' +
@@ -848,7 +858,7 @@ function renderNewAnalyzedWords(container, alignment, sttLookup, diagnostics, tr
     }
 
     // Morphological root squiggle: word is not correct + V1 or V0 produced a proper prefix of the ref
-    if (bucket !== 'correct' && bucket !== 'struggle-correct' && bucket !== 'omitted' && !isConfIns) {
+    if (bucket !== 'correct' && bucket !== 'struggle-correct' && bucket !== 'omitted' && bucket !== 'not-attempted' && !isConfIns) {
       const refN = norm(entry.ref);
       const hypN = norm(entry.hyp);
       const v0N = norm(entry._v0Word);
@@ -906,6 +916,10 @@ function renderNewAnalyzedWords(container, alignment, sttLookup, diagnostics, tr
       } else {
         tip.push('Root detected, but full word not produced');
       }
+    }
+    if (bucket === 'not-attempted') {
+      tip.push('Post-reading speech \u2014 no engine heard anything similar to this word');
+      tip.push('Excluded from accuracy and WCPM');
     }
     if (bucket === 'definite-struggle') {
       tip.push('No engine produced the correct word');
