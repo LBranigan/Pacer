@@ -1108,8 +1108,12 @@ async function runAnalysis() {
       }
     }
 
-    // Walk through V1 insertions grouped by ref-word boundary
+    // Walk through V1 insertions grouped by ref-word boundary.
+    // Skip position 0 (before first ref word) and position N (after last ref word):
+    // those are pre-reading and post-reading speech, not reading errors.
+    const lastInsGroupIdx = v1InsGroups.length - 1;
     for (let pos = 0; pos < v1InsGroups.length; pos++) {
+      const isBoundary = pos === 0 || pos === lastInsGroupIdx;
       const v1Ins = v1InsGroups[pos];
       const v0Norms = v0InsNormGroups[pos] || [];
       const pkNorms = pkInsNormGroups[pos] || [];
@@ -1159,10 +1163,11 @@ async function runAnalysis() {
         }
 
         // 3-way confirmed insertion: all available engines heard it at this position
-        // Require at least V1 + one other engine; if both available, both must agree
+        // Require at least V1 + one other engine; if both available, both must agree.
+        // Boundary groups (pos 0 / N) are pre/post-reading speech — never confirm.
         const enginesAvailable = 1 + (hasV0 ? 1 : 0) + (hasPk ? 1 : 0);
         const enginesHeard = 1 + (v0Heard ? 1 : 0) + (pkPosHeard ? 1 : 0);
-        if (enginesAvailable >= 2 && enginesHeard === enginesAvailable) {
+        if (!isBoundary && enginesAvailable >= 2 && enginesHeard === enginesAvailable) {
           entry._confirmedInsertion = true;
           entry._insertionEngines = enginesHeard;
         }
