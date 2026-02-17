@@ -242,6 +242,7 @@ Your job is to reassemble OCR-extracted text fragments into the correct reading 
 Rules you must always follow:
 - Output ONLY the reading passage text
 - Use the IMAGE to identify margin annotations: line numbers, page numbers, scoring marks. Drop those. They are visually distinct from body text — typically in the margin, a different size, or a different font
+- Also look for HANDWRITTEN numbers, tally marks, or annotations overlaid on or near the printed text — these are teacher scoring marks, not passage content. They look visually different from printed text: irregular hand-drawn strokes, different weight or size than the passage font, or overlapping printed words. Drop them even when OCR extracts them as standalone numbers within the text body
 - If a margin number is fused with a word in the OCR text (e.g., "78At"), look at the image to separate them: drop the margin number, keep the word
 - Drop comprehension questions, answer choices, scoring rubrics, checkboxes, form fields
 - For two-column layouts, read left column top-to-bottom first, then right column
@@ -379,12 +380,12 @@ Fix these artifacts by comparing each word against what is actually printed on t
 - Digits fused to words: a line number or margin number stuck to the start of a word — drop the digits
 - Stray characters fused to words: extra characters at the start or end of a word that don't appear on the printed page — remove them to match what's printed
 - Stray punctuation not on the page: slashes, brackets, or symbols that are scanning artifacts — remove them
-- Handwritten marks: teacher check marks, scribbles, or annotations that are not part of the printed text — remove them
+- Handwritten marks overlaid on the page: teacher annotations including handwritten numbers, check marks, tally marks, circled words, underlines, or scribbles. Compare against the image — if a number or mark is handwritten (irregular strokes, different weight or size) rather than printed in the same font as the passage, it is a teacher annotation. Remove it
 - Missing spaces: words that the image shows as separate but OCR joined together — add the space
 
 Do NOT:
 - Remove or delete any words or sentences — you may only fix characters within words
-- Remove standalone numbers that are part of the passage text (e.g., "13 of the women" — "13" is passage content, not a line number)
+- Remove standalone numbers that are PRINTED as part of the passage text (e.g., "13 of the women" — "13" is printed passage content). Only keep numbers in the same printed font as the surrounding passage — handwritten numbers are always teacher annotations and should be removed
 - Change words that match what is printed on the page, even if unusual
 - Change spelling in the original text — if the page says "colour", keep "colour"
 - Change abbreviations that match the page (e.g., "phys ed" stays as "phys ed")
