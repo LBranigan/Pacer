@@ -1099,6 +1099,13 @@ export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, di
   errBox.innerHTML = '<span class="metric-label">' + (errParts.length > 0 ? errParts.join(', ') : 'No errors') + '</span>';
   metricsBar.appendChild(errBox);
 
+  // Words correct / total attempted
+  const wordsBox = document.createElement('div');
+  wordsBox.className = 'metric-box';
+  wordsBox.innerHTML = '<span class="metric-value">' + accuracy.correctCount + ' / ' + accuracy.totalRefWords + '</span><span class="metric-label">Words Correct</span>';
+  wordsBox.title = accuracy.correctCount + ' correct out of ' + accuracy.totalRefWords + ' words in passage';
+  metricsBar.appendChild(wordsBox);
+
   // Tier breakdown row
   if (tierBreakdown) {
     const tierRow = document.createElement('div');
