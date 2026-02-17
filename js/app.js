@@ -945,7 +945,12 @@ async function runAnalysis() {
       const v1Ins = v1InsGroups[ri] || [];
       const v1Parts = [...v1Ins.map(e => e.hyp)];
       if (v1Entry.compound && v1Entry.parts) v1Parts.push(...v1Entry.parts);
-      else if (v1Entry.hyp) v1Parts.push(v1Entry.hyp);
+      else if (v1Entry.hyp) {
+        // Surface pre-merge fragments so tooltip shows raw STT output ("in + land")
+        const tw = v1Entry.hypIndex >= 0 ? transcriptWords[v1Entry.hypIndex] : null;
+        if (tw?._mergedFragments) v1Parts.push(...tw._mergedFragments);
+        else v1Parts.push(v1Entry.hyp);
+      }
       if (v1Parts.length > 1) v1Entry._v1RawAttempt = v1Parts;
     }
     if (hasV0 && v0Entry) {
