@@ -987,8 +987,10 @@ async function runAnalysis() {
       const recoveryTs = parakeetTs || v0Ts;
       xvalRecoveredOmissions.push({ refIndex: ri, entry: v1Entry, timestamps: recoveryTs });
     } else if (correctCount >= 2) {
-      // Majority correct → confirmed
-      status = 'confirmed';
+      // Majority correct — but did V1 agree?
+      // V1 correct + another correct → truly confirmed
+      // V1 wrong + V0&Pk both correct → V1 overridden (disagreed)
+      status = v1Correct ? 'confirmed' : 'disagreed';
     } else if (v1Compound && (v0Correct || pkCorrect)) {
       // V1 fragmented but matched + another engine confirms → confirmed (struggle preserved on entry)
       status = 'confirmed';
