@@ -384,7 +384,7 @@ Fix these artifacts by comparing each word against what is actually printed on t
 - Missing spaces: words that the image shows as separate but OCR joined together — add the space
 
 Do NOT:
-- Remove or delete any words or sentences — you may only fix characters within words
+- Remove or delete any words or sentences — you may only fix characters within words or restore missing spaces between words
 - Remove standalone numbers that are PRINTED as part of the passage text (e.g., "13 of the women" — "13" is printed passage content). Only keep numbers in the same printed font as the surrounding passage — handwritten numbers are always teacher annotations and should be removed
 - Change words that match what is printed on the page, even if unusual
 - Change spelling in the original text — if the page says "colour", keep "colour"
