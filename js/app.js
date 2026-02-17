@@ -1566,6 +1566,19 @@ async function runAnalysis() {
       const regex = /\S+/g;
       let m;
       while ((m = regex.exec(referenceText)) !== null) {
+        // Split em-dash/en-dash within tokens (e.g., "language—mathematics" → two tokens)
+        const emParts = m[0].split(/[\u2014\u2013]/);
+        if (emParts.length > 1) {
+          let cursor = m.index;
+          for (const part of emParts) {
+            const stripped = part.replace(/^[^\w'-]+|[^\w'-]+$/g, '');
+            if (stripped.length > 0) {
+              rawTokens.push({ original: part, stripped, start: cursor, end: cursor + part.length });
+            }
+            cursor += part.length + 1; // +1 for the em-dash character
+          }
+          continue;
+        }
         const stripped = m[0].replace(/^[^\w'-]+|[^\w'-]+$/g, '');
         if (stripped.length > 0) {
           rawTokens.push({ original: m[0], stripped, start: m.index, end: m.index + m[0].length });
@@ -1618,7 +1631,7 @@ async function runAnalysis() {
     // Build set of words that appear lowercase (non-sentence-start) in the reference text.
     // Uses raw split (not merged) so "sheet" from "spread- sheet" is captured, preventing
     // false proper-noun forgiveness for "Sheet" in "Google Sheet".
-    const rawRefWords = referenceText.trim().split(/\s+/);
+    const rawRefWords = referenceText.trim().replace(/[\u2014\u2013]/g, ' ').split(/\s+/);
     const refLowercaseSet = new Set(
       rawRefWords
         .filter((w, i) => {

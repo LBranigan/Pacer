@@ -20,6 +20,7 @@ export function normalizeText(text) {
   if (!text || typeof text !== 'string') return [];
   const tokens = text
     .replace(/-\s*\n\s*/g, '')   // Rejoin line-break hyphens when newlines survive
+    .replace(/[\u2014\u2013]/g, ' ')  // Em-dash/en-dash → space (word separator, not hyphen)
     .toLowerCase()
     .split(/\s+/)
     .map(w => w.replace(/^[^\w'-]+|[^\w'-]+$/g, ''))
@@ -95,7 +96,8 @@ export function splitHyphenParts(stripped) {
  */
 export function splitReferenceForDisplay(referenceText) {
   const stripPunct = w => w.replace(/^[^\w'-]+|[^\w'-]+$/g, '');
-  const rawTokens = referenceText.trim().split(/\s+/);
+  // Replace em-dash/en-dash with space to match normalizeText's splitting
+  const rawTokens = referenceText.trim().replace(/[\u2014\u2013]/g, ' ').split(/\s+/);
 
   // Step 1: Trailing-hyphen merge (OCR line-break artifacts)
   const merged = [];
