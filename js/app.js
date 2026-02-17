@@ -1728,8 +1728,13 @@ async function runAnalysis() {
         };
 
         if (isProperViaNL) {
-          // Try combining with following insertions to find best phonetic match
-          // (handles "her" + "my" + "own" = "hermyown" for "Hermione")
+          // Exotic proper noun (passed NL API + dictionary guard).
+          // ASR has no vocabulary for these words, so its transcript is unreliable.
+          // A substitution means ASR heard SOMETHING → student spoke SOMETHING →
+          // student was attempting the word they can see on the page. Forgive it.
+          //
+          // We still compute the best phonetic ratio for diagnostics/logging,
+          // but it does NOT gate forgiveness — only the dictionary guard does.
           let bestRatio = levenshteinRatio(entry.ref, entry.hyp);
           let bestCombined = entry.hyp;
           let bestInsertionsUsed = 0;
@@ -1753,21 +1758,19 @@ async function runAnalysis() {
           logEntry.bestRatio = bestRatio;
           logEntry.bestCombined = bestCombined;
           logEntry.bestInsertionsUsed = bestInsertionsUsed;
-          logEntry.threshold = 0.4;
-          logEntry.meetsThreshold = bestRatio >= 0.4;
+          logEntry.threshold = 'none (exotic proper noun)';
+          logEntry.meetsThreshold = true;
 
-          if (bestRatio >= 0.4) {
-            entry.forgiven = true;
-            entry.phoneticRatio = Math.round(bestRatio * 100);
-            entry.properNounSource = 'NL API';
-            logEntry.forgiven = true;
-            if (bestInsertionsUsed > 0) {
-              entry.combinedPronunciation = bestCombined;
-              // Also mark the insertions as part of the forgiven pronunciation
-              for (let j = 1; j <= bestInsertionsUsed; j++) {
-                if (alignment[i + j]) {
-                  alignment[i + j].partOfForgiven = true;
-                }
+          entry.forgiven = true;
+          entry.phoneticRatio = Math.round(bestRatio * 100);
+          entry.properNounSource = 'NL API';
+          logEntry.forgiven = true;
+          if (bestInsertionsUsed > 0) {
+            entry.combinedPronunciation = bestCombined;
+            // Also mark the insertions as part of the forgiven pronunciation
+            for (let j = 1; j <= bestInsertionsUsed; j++) {
+              if (alignment[i + j]) {
+                alignment[i + j].partOfForgiven = true;
               }
             }
           }
@@ -1806,14 +1809,20 @@ async function runAnalysis() {
         };
 
         if (isProperViaNL) {
+          // Exotic proper noun omission. We need SOME evidence the student
+          // attempted the word (not just silence/genuine skip). But since ASR
+          // can't reliably transcribe exotic proper nouns, we accept ANY speech
+          // evidence — Parakeet hearing anything, or Reverb fragments nearby.
           let bestRatio = 0;
           let bestEvidence = null;
           let evidenceSource = null;
+          let hasAnyEvidence = false;
 
           // Primary: Parakeet heard something for this ref slot
           if (entry._xvalWord) {
             const xvalNorm = entry._xvalWord.toLowerCase().replace(/[^a-z]/g, '');
             const ratio = levenshteinRatio(entry.ref, xvalNorm);
+            hasAnyEvidence = true;
             if (ratio > bestRatio) {
               bestRatio = ratio;
               bestEvidence = xvalNorm;
@@ -1828,6 +1837,7 @@ async function runAnalysis() {
             precedingIns.unshift(alignment[j]);
           }
           if (precedingIns.length > 0) {
+            hasAnyEvidence = true;
             let combined = '';
             const fragmentAttempts = [];
             for (let j = precedingIns.length - 1; j >= 0; j--) {
@@ -1846,10 +1856,14 @@ async function runAnalysis() {
           logEntry.bestRatio = bestRatio;
           logEntry.bestEvidence = bestEvidence;
           logEntry.evidenceSource = evidenceSource;
-          logEntry.threshold = 0.4;
-          logEntry.meetsThreshold = bestRatio >= 0.4;
+          logEntry.hasAnyEvidence = hasAnyEvidence;
+          logEntry.threshold = hasAnyEvidence ? 'none (exotic proper noun + speech detected)' : 'no evidence of speech';
+          logEntry.meetsThreshold = hasAnyEvidence;
 
-          if (bestRatio >= 0.4) {
+          // For exotic proper nouns: any speech evidence = forgive.
+          // No similarity threshold — ASR transcript is unreliable for these words.
+          // Only genuine silence (no evidence at all) stays as an omission.
+          if (hasAnyEvidence) {
             entry.forgiven = true;
             entry.phoneticRatio = Math.round(bestRatio * 100);
             entry.properNounSource = 'NL API';
