@@ -246,7 +246,14 @@ async function runAnalysis() {
 
   // Initialize debug logging for this assessment
   initDebugLog();
-  addStage('start', { codeVersion: CODE_VERSION, timestamp: new Date().toISOString() });
+  addStage('start', {
+    codeVersion: CODE_VERSION,
+    timestamp: new Date().toISOString(),
+    toggles: {
+      trustPk: isPkTrustEnabled(),
+      inflectionalLeniency: isInflectionalLeniencyEnabled()
+    }
+  });
 
   if (!appState.audioBlob) {
     setStatus('No audio recorded or uploaded.');
@@ -2384,27 +2391,65 @@ async function runAnalysis() {
   // Reverb's role becomes disfluency detection (V1 vs V0) + initial transcript.
   // Rationale: CTC (V1/V0) systematically drops suffixes and misrecognizes
   // words that Parakeet's RNNT captures correctly.
+  //
+  // FRAGMENT GUARD: If Parakeet itself produced insertion fragments that are
+  // near-misses of the ref word at the same boundary, Pk's "correct" match is
+  // likely its autoregressive decoder reconstructing the word from a struggled
+  // attempt — not evidence the child read it cleanly. Skip the override.
   if (isPkTrustEnabled()) {
     const pkTrustLog = [];
+    const pkTrustBlocked = [];
+    let refIdx = 0;
     for (const entry of alignment) {
-      if (!entry.ref) continue;
-      if (entry.type !== 'substitution') continue;
-      if (entry.forgiven) continue;
-      if (entry.crossValidation !== 'disagreed') continue;
-      if (entry._pkType !== 'correct') continue;
+      if (entry.type === 'insertion') continue;
+      // entry is a ref-anchored word — advance refIdx after processing
+      try {
+        if (entry.type !== 'substitution') continue;
+        if (entry.forgiven) continue;
+        if (entry.crossValidation !== 'disagreed') continue;
+        if (entry._pkType !== 'correct') continue;
 
-      entry.forgiven = true;
-      entry._pkTrustOverride = true;
-      pkTrustLog.push({
-        ref: entry.ref, v1Hyp: entry.hyp,
-        pkWord: entry._xvalWord || entry.ref
-      });
+        // Fragment guard: check for Pk insertions at this ref boundary
+        // pkInsGroups[ri] = insertions BEFORE ref word ri
+        // pkInsGroups[ri+1] = insertions AFTER ref word ri (before next)
+        if (hasPk && pkInsGroups.length > 0) {
+          const insBefore = pkInsGroups[refIdx] || [];
+          const insAfter = pkInsGroups[refIdx + 1] || [];
+          const refNorm = entry.ref.toLowerCase();
+          const hasFragments = [...insBefore, ...insAfter].some(ins => {
+            const insNorm = (ins.hyp || '').toLowerCase();
+            return insNorm.length >= 2 && isNearMiss(insNorm, refNorm);
+          });
+          if (hasFragments) {
+            pkTrustBlocked.push({
+              ref: entry.ref, v1Hyp: entry.hyp,
+              pkWord: entry._xvalWord || entry.ref,
+              reason: 'pk_fragment_evidence',
+              fragments: [...insBefore, ...insAfter]
+                .filter(ins => isNearMiss((ins.hyp || '').toLowerCase(), refNorm))
+                .map(ins => ins.hyp)
+            });
+            continue;
+          }
+        }
+
+        entry.forgiven = true;
+        entry._pkTrustOverride = true;
+        pkTrustLog.push({
+          ref: entry.ref, v1Hyp: entry.hyp,
+          pkWord: entry._xvalWord || entry.ref
+        });
+      } finally {
+        refIdx++;
+      }
     }
 
-    if (pkTrustLog.length > 0) {
+    if (pkTrustLog.length > 0 || pkTrustBlocked.length > 0) {
       addStage('pk_trust_override', {
         forgiven: pkTrustLog.length,
-        details: pkTrustLog
+        blocked: pkTrustBlocked.length,
+        details: pkTrustLog,
+        blockedDetails: pkTrustBlocked
       });
     }
   }
