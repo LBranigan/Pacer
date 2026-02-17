@@ -1413,21 +1413,27 @@ function initRhythmRemix() {
   const vinylTitle = document.getElementById('vinylTitle');
   if (vinylTitle) vinylTitle.textContent = 'Study Beats FM';
 
-  // Fetch DJ intro in background (non-blocking)
+  // Fetch DJ intro — disable play until ready
   const passagePreview = assessment.passagePreview || '';
-  djIntroLoading = true;
-  fetchDJIntro(studentName, passagePreview).then(wavBuf => {
-    djIntroBuffer = wavBuf;
-    djIntroLoading = false;
-    if (wavBuf) {
-      console.log('[StudyBeatsFM] DJ intro ready');
-      // Show a subtle indicator that radio mode is available
-      const status = document.getElementById('remix-status');
-      if (status && !isPlaying) status.textContent = 'Study Beats FM ready';
-    }
-  }).catch(() => {
-    djIntroLoading = false;
-  });
+  const apiKey = localStorage.getItem('orf_gemini_key') || '';
+  if (apiKey) {
+    disablePlayBtn();
+    setStatus('Tuning in to Study Beats FM...');
+    djIntroLoading = true;
+    fetchDJIntro(studentName, passagePreview).then(wavBuf => {
+      djIntroBuffer = wavBuf;
+      djIntroLoading = false;
+      const btn = document.getElementById('playBtn');
+      if (btn) btn.disabled = false;
+      setStatus(wavBuf ? 'Study Beats FM ready' : '');
+      if (wavBuf) console.log('[StudyBeatsFM] DJ intro ready');
+    }).catch(() => {
+      djIntroLoading = false;
+      const btn = document.getElementById('playBtn');
+      if (btn) btn.disabled = false;
+      setStatus('');
+    });
+  }
 
   // Build word sequence
   wordSequence = buildWordSequence(alignment, sttWords);

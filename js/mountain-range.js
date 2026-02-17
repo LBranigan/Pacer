@@ -135,8 +135,14 @@ export class MountainRange {
     this._resize();
     this._stars = generateStars(45, this._w, this._h);
 
+    // Draw initial sky + stars scene
+    this._draw(0);
+
     // ResizeObserver
-    this._ro = new ResizeObserver(() => this._resize());
+    this._ro = new ResizeObserver(() => {
+      this._resize();
+      this._draw(0);
+    });
     this._ro.observe(canvas.parentElement);
   }
 
