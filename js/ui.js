@@ -469,6 +469,7 @@ function renderNewAnalyzedWords(container, alignment, sttLookup, diagnostics, tr
     if (entry.forgiven) {
       if (entry._oovExcluded) return 'oov-excluded';
       if (entry._functionWordCollateral) return 'function-word-forgiven';
+      if (entry._pkTrustOverride) return 'pk-trust-forgiven';
       return 'correct';  // proper noun, OOV phonetic match → still "correct"
     }
     if (entry.type === 'omission') return 'omitted';
@@ -538,6 +539,7 @@ function renderNewAnalyzedWords(container, alignment, sttLookup, diagnostics, tr
 
   const BUCKET = {
     'correct':                 { label: 'Correct',                   color: '#2e7d32' },
+    'pk-trust-forgiven':       { label: 'Pk Trust',                  color: '#4caf50' },
     'oov-excluded':            { label: 'OOV Excluded',              color: '#4caf50' },
     'function-word-forgiven':  { label: 'Forgiven',                  color: '#4caf50' },
     'struggle-correct':        { label: 'Struggle but Correct',      color: '#558b2f' },
@@ -569,6 +571,15 @@ function renderNewAnalyzedWords(container, alignment, sttLookup, diagnostics, tr
       '\u2022 Not a recovered word (at least V1 or V0 heard it)\n' +
       '\u2022 OR: word was forgiven (proper noun with dictionary guard)\n' +
       '\u2022 Does NOT count as an error',
+
+    'pk-trust-forgiven': 'PK TRUST\n' +
+      'Parakeet heard the correct word but Reverb disagreed.\n\n' +
+      'Rules:\n' +
+      '\u2022 "Trust Pk" toggle is ON\n' +
+      '\u2022 Reverb heard a different word (substitution)\n' +
+      '\u2022 Parakeet independently heard the reference word\n' +
+      '\u2022 Counted as correct (forgiven)\n' +
+      '\u2022 Risk: Parakeet may hallucinate common words via its implicit LM',
 
     'oov-excluded': 'OOV EXCLUDED\n' +
       'Out-of-vocabulary word excluded from scoring.\n\n' +

@@ -153,10 +153,10 @@ const EQUIVALENCE_GROUPS = [
   ['were', 'we are'],
   ['weve', 'we have'],
   ['well', 'we will'],
-  ['theyre', 'they are'],
+  // 'theyre' moved to HOMOPHONE_GROUPS (with 'they are') to avoid conflict
   ['theyve', 'they have'],
   ['theyll', 'they will'],
-  ['youre', 'you are'],
+  // 'youre' moved to HOMOPHONE_GROUPS (with 'you are') to avoid conflict
   ['youve', 'you have'],
   ['youll', 'you will'],
   ['hes', 'he is', 'he has'],
@@ -214,8 +214,8 @@ const EQUIVALENCE_GROUPS = [
  * Important for oral reading: student saying "there" when text says "their" is correct pronunciation.
  */
 const HOMOPHONE_GROUPS = [
-  ['their', 'there', 'theyre'],
-  ['your', 'youre'],
+  ['their', 'there', 'theyre', 'they are'],
+  ['your', 'youre', 'you are'],
   // "it's" → "its" after normalizeText; contraction group handles "its"↔"it is"
   ['to', 'too', 'two'],
   ['by', 'bye', 'buy'],

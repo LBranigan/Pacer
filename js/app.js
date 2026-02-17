@@ -2318,7 +2318,7 @@ async function runAnalysis() {
     const pkTrustLog = [];
     for (const entry of alignment) {
       if (!entry.ref) continue;
-      if (entry.type !== 'substitution') continue;
+      if (entry.type !== 'substitution' && entry.type !== 'struggle') continue;
       if (entry.forgiven) continue;
       if (entry.crossValidation !== 'disagreed') continue;
       if (entry._pkType !== 'correct') continue;
