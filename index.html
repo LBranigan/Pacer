@@ -15,7 +15,7 @@
 </head>
 <body>
 
-<div id="version" style="text-align:right;font-size:0.75rem;color:#999;">v 2026-02-17 20:15</div>
+<div id="version" style="text-align:right;font-size:0.75rem;color:#999;">v 2026-02-18 02:00</div>
 <h1>Pacer — Fluency and Comprehension Training</h1>
 <p class="subtitle">Reverb + Parakeet &mdash; 3-Engine Consensus Pipeline</p>
 
@@ -154,6 +154,14 @@
         <span style="position:absolute;top:2px;left:2px;width:18px;height:18px;background:#fff;border-radius:50%;transition:0.3s;box-shadow:0 1px 3px rgba(0,0,0,0.3);" id="pkTrustThumb"></span>
       </label>
       <span style="color:#666;" title="When ON, trust Parakeet over Reverb on disagreed words where Parakeet heard the correct word">Trust Pk</span>
+    </div>
+    <div style="display:inline-flex;align-items:center;gap:0.4rem;font-size:0.85rem;">
+      <label style="position:relative;display:inline-block;width:40px;height:22px;margin:0;">
+        <input type="checkbox" id="inflectionalToggle" style="opacity:0;width:0;height:0;">
+        <span style="position:absolute;cursor:pointer;top:0;left:0;right:0;bottom:0;background:#ccc;border-radius:22px;transition:0.3s;" id="inflectionalTrack"></span>
+        <span style="position:absolute;top:2px;left:2px;width:18px;height:18px;background:#fff;border-radius:50%;transition:0.3s;box-shadow:0 1px 3px rgba(0,0,0,0.3);" id="inflectionalThumb"></span>
+      </label>
+      <span style="color:#666;" title="When ON, forgive substitutions that differ by only an inflectional suffix (-s, -ed, -ing, -er, -est, -ly)">Inflection</span>
     </div>
   </div>
   <div id="status"></div>

@@ -1929,6 +1929,59 @@ async function runAnalysis() {
     });
   }
 
+  // ── Phase 1.5: Inflectional morphology leniency ─────────────────────────
+  // When a substitution differs from the reference by only an inflectional
+  // suffix (-s, -es, -ed, -d, -ing, -er, -est, -ly), the student decoded
+  // the base word correctly. Forgive the inflectional difference.
+  // Justified by: Florida FAIR precedent, dialect fairness (AAE drops -s/-ed),
+  // ASR unreliability on word-final suffixes, and miscue analysis research
+  // showing morphological variants are meaning-preserving.
+  if (isInflectionalLeniencyEnabled()) {
+    const INFLECTIONAL_SUFFIXES = ['es', 'ing', 'est', 'ed', 'er', 'ly', 's', 'd'];
+    const inflectionalLog = [];
+
+    for (const entry of alignment) {
+      if (entry.type !== 'substitution') continue;
+      if (entry.forgiven) continue; // already forgiven by proper noun or other mechanism
+
+      const ref = (entry.ref || '').toLowerCase();
+      const hyp = (entry.hyp || '').toLowerCase();
+      if (!ref || !hyp || ref === hyp) continue;
+
+      // Determine which is longer (has the suffix) and which is the base
+      const longer = ref.length >= hyp.length ? ref : hyp;
+      const shorter = ref.length >= hyp.length ? hyp : ref;
+
+      // Base word must be at least 3 chars to avoid false positives (e.g., "an"/"and")
+      if (shorter.length < 3) continue;
+      if (!longer.startsWith(shorter)) continue;
+
+      const suffix = longer.slice(shorter.length);
+      if (INFLECTIONAL_SUFFIXES.includes(suffix)) {
+        const direction = ref.length > hyp.length ? 'dropped' : 'added';
+        entry.forgiven = true;
+        entry._inflectionalVariant = true;
+        entry._inflectionalSuffix = suffix;
+        entry._inflectionalDirection = direction;
+
+        inflectionalLog.push({
+          ref: entry.ref,
+          hyp: entry.hyp,
+          suffix,
+          direction,
+          crossValidation: entry.crossValidation || 'n/a'
+        });
+      }
+    }
+
+    addStage('inflectional_forgiveness', {
+      forgiven: inflectionalLog.length,
+      details: inflectionalLog
+    });
+  } else {
+    addStage('inflectional_forgiveness', { skipped: true, reason: 'toggle off' });
+  }
+
   // ── Phase 2: OOV detection ─────────────────────────────────────────────
   // Flag reference words absent from CMUdict (125K English words).
   // If a word isn't in CMUdict, English ASR models almost certainly can't recognize it.
@@ -2921,6 +2974,33 @@ function updatePkTrustToggleUI() {
 /** Check if Pk Trust mode is enabled. */
 export function isPkTrustEnabled() {
   return localStorage.getItem('orf_trust_pk') === 'true';
+}
+
+// Inflectional leniency toggle
+const inflectionalToggle = document.getElementById('inflectionalToggle');
+const inflectionalTrack = document.getElementById('inflectionalTrack');
+const inflectionalThumb = document.getElementById('inflectionalThumb');
+
+const savedInflectional = localStorage.getItem('orf_inflectional_leniency') || 'false';
+if (inflectionalToggle) {
+  inflectionalToggle.checked = savedInflectional === 'true';
+  updateInflectionalToggleUI();
+  inflectionalToggle.addEventListener('change', () => {
+    localStorage.setItem('orf_inflectional_leniency', inflectionalToggle.checked ? 'true' : 'false');
+    updateInflectionalToggleUI();
+  });
+}
+
+function updateInflectionalToggleUI() {
+  if (!inflectionalToggle) return;
+  const isOn = inflectionalToggle.checked;
+  inflectionalTrack.style.background = isOn ? '#4caf50' : '#ccc';
+  inflectionalThumb.style.left = isOn ? '20px' : '2px';
+}
+
+/** Check if inflectional leniency is enabled. */
+export function isInflectionalLeniencyEnabled() {
+  return localStorage.getItem('orf_inflectional_leniency') === 'true';
 }
 
 if (imageInput) {
