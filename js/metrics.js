@@ -37,6 +37,9 @@ export function computeAccuracy(alignmentResult, options = {}) {
         if (w.forgiven) {
           correctCount++;
           forgiven++;
+        } else if (w._pkType === 'correct' && w._v0Type === 'correct') {
+          // Both cross-validators heard correct — V1 outvoted, not an error
+          correctCount++;
         } else {
           wordErrors++;
         }

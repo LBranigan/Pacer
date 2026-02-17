@@ -528,8 +528,13 @@ function renderNewAnalyzedWords(container, alignment, sttLookup, diagnostics, tr
       // <unknown> CTC token = ASR detected speech but couldn't decode → definite struggle
       if (entry.hyp === 'unknown' && norm(entry.ref) !== 'unknown') return 'definite-struggle';
       const refN = norm(entry.ref);
-      // Did any engine hear the correct word?
-      if (norm(entry._xvalWord) === refN || norm(entry._v0Word) === refN) return 'attempted-struggled';
+      // Did the cross-validators hear the correct word?
+      const xvalCorrect = norm(entry._xvalWord) === refN;
+      const v0Correct = norm(entry._v0Word) === refN;
+      // Both V0 and Parakeet correct → V1 outvoted, student said it right
+      if (xvalCorrect && v0Correct) return 'struggle-correct';
+      // Only one cross-validator correct → attempted but struggled
+      if (xvalCorrect || v0Correct) return 'attempted-struggled';
       // Is any engine's word a near-miss (morphological/phonetic)?
       if (entry.ref && (
           (entry.hyp && isNearMiss(entry.hyp, entry.ref)) ||
