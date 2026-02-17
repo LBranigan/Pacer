@@ -345,7 +345,7 @@ body::before {
   margin: 0.5rem 0;
   border-radius: var(--rm-radius);
   overflow: hidden;
-  background: transparent;
+  background: #0d0b14; /* fallback matches sky top color */
 }
 
 .mountain-container canvas {
