@@ -804,6 +804,12 @@ function renderNewAnalyzedWords(container, alignment, sttLookup, diagnostics, tr
 
   let refIdx = 0;
   for (const { entry, bucket, insertionsBefore, insertionsAfter } of classified) {
+    // Skip not-attempted words entirely — post-reading speech, not student reading
+    if (bucket === 'not-attempted') {
+      if (entry.type !== 'insertion') refIdx++;
+      continue;
+    }
+
     // ── Long pause indicator ──
     if (pauseBeforeMap.has(entry.hypIndex)) {
       const pause = pauseBeforeMap.get(entry.hypIndex);
@@ -820,6 +826,7 @@ function renderNewAnalyzedWords(container, alignment, sttLookup, diagnostics, tr
 
     // ── Insertion fragments before (false starts) ──
     const visibleInsBefore = insertionsBefore.filter(ins => {
+      if (ins._notAttempted) return false;
       if (ins.hypIndex >= 0 && transcriptWords?.[ins.hypIndex]?._preWordArtifact) return false;
       if (ins.hypIndex >= 0 && transcriptWords?.[ins.hypIndex]?._postWordArtifact) return false;
       return true;
@@ -1032,6 +1039,7 @@ function renderNewAnalyzedWords(container, alignment, sttLookup, diagnostics, tr
 
     // ── Insertion fragments after (trailing fragments) ──
     const visibleInsAfter = insertionsAfter.filter(ins => {
+      if (ins._notAttempted) return false;
       if (ins.hypIndex >= 0 && transcriptWords?.[ins.hypIndex]?._postWordArtifact) return false;
       return true;
     });

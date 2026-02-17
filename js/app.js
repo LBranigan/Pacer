@@ -2458,13 +2458,13 @@ async function runAnalysis() {
     }
   }
 
-  // ── Phase 7b: Parakeet trust override ────────────────────────────────
-  // When "Trust Pk" toggle is ON: any disagreed substitution where
-  // Parakeet heard the correct word gets forgiven. This overrides the
-  // dual-gate requirement (V0 + Pk both correct) in computeAccuracy().
+  // ── Phase 7b: Parakeet trust override (ON by default) ───────────────
+  // With Trust Pk ON, Parakeet is the PRIMARY correctness engine: any
+  // disagreed substitution where Parakeet heard the correct word gets
+  // forgiven. This makes Parakeet's verdict final on every disputed word.
+  // Reverb's role becomes disfluency detection (V1 vs V0) + initial transcript.
   // Rationale: CTC (V1/V0) systematically drops suffixes and misrecognizes
-  // words that Parakeet's RNNT captures correctly. The user enables this
-  // toggle to see the effect on scoring.
+  // words that Parakeet's RNNT captures correctly.
   if (isPkTrustEnabled()) {
     const pkTrustLog = [];
     for (const entry of alignment) {
@@ -2597,7 +2597,22 @@ async function runAnalysis() {
   if (wcpm && oovTimeCreditSeconds > 0) {
     wcpm.oovTimeCreditSeconds = Math.round(oovTimeCreditSeconds * 100) / 100;
   }
-  const longPauseCount = diagnostics.longPauses?.length || 0;
+  // Exclude long pauses at or beyond the end-of-reading boundary
+  let lastAttemptedHypIdx = Infinity;
+  const hasNotAttempted = alignment.some(e => e._notAttempted);
+  if (hasNotAttempted) {
+    // Find the hypIndex of the last attempted (non-insertion) entry
+    for (let i = alignment.length - 1; i >= 0; i--) {
+      const e = alignment[i];
+      if (!e._notAttempted && e.type !== 'insertion' && e.hypIndex >= 0) {
+        lastAttemptedHypIdx = e.hypIndex;
+        break;
+      }
+    }
+  }
+  const longPauseCount = (diagnostics.longPauses || []).filter(p =>
+    p.afterWordIndex <= lastAttemptedHypIdx
+  ).length;
   const accuracy = computeAccuracy(alignment, { forgivenessEnabled: !!nlAnnotations, longPauseCount });
   const tierBreakdown = nlAnnotations ? computeTierBreakdown(alignment) : null;
 
