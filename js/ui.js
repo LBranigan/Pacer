@@ -837,7 +837,9 @@ function renderNewAnalyzedWords(container, alignment, sttLookup, diagnostics, tr
 
     // Tooltip
     const tip = [];
-    const bucketLabel = entry.forgiven && entry.properNounSource ? 'Forgiven (proper noun)' : (BUCKET[bucket]?.label || bucket);
+    const bucketLabel = entry.forgiven && entry._pkTrustOverride ? 'Forgiven (Pk trust)'
+      : entry.forgiven && entry.properNounSource ? 'Forgiven (proper noun)'
+      : (BUCKET[bucket]?.label || bucket);
     tip.push(`"${displayText}" \u2014 ${bucketLabel}`);
     if (isConfIns) {
       tip.push(`All engines heard: "${entry.hyp}"`);
@@ -884,6 +886,9 @@ function renderNewAnalyzedWords(container, alignment, sttLookup, diagnostics, tr
     }
     if (bucket === 'function-word-forgiven') {
       tip.push('All engines missed this word near a struggle/OOV \u2014 forgiven as collateral');
+    }
+    if (entry.forgiven && entry._pkTrustOverride) {
+      tip.push(`Pk trust: Reverb heard "${entry.hyp}", Parakeet heard "${entry._xvalWord || entry.ref}" \u2014 trusting Parakeet`);
     }
     if (entry.forgiven && entry.properNounSource) {
       const ratioText = entry.phoneticRatio ? ` (${entry.phoneticRatio}%)` : '';

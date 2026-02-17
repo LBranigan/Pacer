@@ -66,12 +66,13 @@ export function computeAccuracy(alignmentResult, options = {}) {
   }
   // ORF formula: accuracy = (Total Words Attempted − Errors) / Total Words Attempted
   // totalRefWords = passage length (fixed), errors don't inflate word count
+  const pkTrustCount = alignmentResult.filter(w => w._pkTrustOverride).length;
   const totalRefWords = correctCount + wordErrors + omissions;
   const totalErrors = wordErrors + omissions + longPauseErrors;
   const accuracy = totalRefWords === 0
     ? 0
     : Math.round(((totalRefWords - totalErrors) / totalRefWords) * 1000) / 10;
-  return { accuracy, correctCount, totalRefWords, totalErrors, wordErrors, omissions, insertionErrors, forgiven, longPauseErrors };
+  return { accuracy, correctCount, totalRefWords, totalErrors, wordErrors, omissions, insertionErrors, forgiven, longPauseErrors, pkTrustCount };
 }
 
 /**

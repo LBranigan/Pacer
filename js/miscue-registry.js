@@ -593,6 +593,30 @@ const FORGIVENESS_RULES = {
     ],
     uiClass: 'word-forgiven',
     note: 'Foreign words (Spanish "cayuco", French "château") and rare English words absent from CMUdict trigger OOV detection. Phonetic normalization collapses common equivalences (c/k, ph/f, ck/k) before Levenshtein comparison. Adjacent insertion fragments from ASR splitting are cleaned up (_partOfOOVForgiven).'
+  },
+  pkTrustOverride: {
+    description: 'Disagreed substitution where Parakeet heard the correct word — forgiven when "Trust Pk" toggle is ON. CTC (Reverb) systematically drops suffixes and misrecognizes words that RNNT (Parakeet) captures correctly.',
+    detector: 'app.js → Phase 7b: Parakeet trust override (after function word forgiveness, before post-struggle leniency)',
+    countsAsError: false,
+    config: {
+      toggle: 'localStorage orf_trust_pk (UI toggle next to Upload WAV)',
+      requires_disagreed: true,
+      requires_pk_correct: true
+    },
+    example: {
+      reference: 'wounded',
+      spoken: 'Reverb: "wound", Parakeet: "wounded"',
+      result: 'Disagreed + Pk heard correct → forgiven (Trust Pk ON)'
+    },
+    guards: [
+      'Trust Pk toggle must be ON (localStorage orf_trust_pk === "true")',
+      'Entry must be type === "substitution"',
+      'crossValidation must be "disagreed" (V1 and Pk disagree)',
+      '_pkType must be "correct" (Parakeet heard the reference word)',
+      'Not already forgiven by another mechanism'
+    ],
+    uiClass: 'word-forgiven',
+    note: 'This is a user-controlled toggle, not automatic. Departures from standard ORF scoring (DIBELS/AIMSweb count dropped suffixes as errors). The toggle lets users compare accuracy with and without Parakeet trust. Risk: Parakeet RNNT implicit LM may hallucinate suffixes on common inflected forms.'
   }
 };
 

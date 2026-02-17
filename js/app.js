@@ -2307,6 +2307,38 @@ async function runAnalysis() {
     }
   }
 
+  // ── Phase 7b: Parakeet trust override ────────────────────────────────
+  // When "Trust Pk" toggle is ON: any disagreed substitution where
+  // Parakeet heard the correct word gets forgiven. This overrides the
+  // dual-gate requirement (V0 + Pk both correct) in computeAccuracy().
+  // Rationale: CTC (V1/V0) systematically drops suffixes and misrecognizes
+  // words that Parakeet's RNNT captures correctly. The user enables this
+  // toggle to see the effect on scoring.
+  if (isPkTrustEnabled()) {
+    const pkTrustLog = [];
+    for (const entry of alignment) {
+      if (!entry.ref) continue;
+      if (entry.type !== 'substitution') continue;
+      if (entry.forgiven) continue;
+      if (entry.crossValidation !== 'disagreed') continue;
+      if (entry._pkType !== 'correct') continue;
+
+      entry.forgiven = true;
+      entry._pkTrustOverride = true;
+      pkTrustLog.push({
+        ref: entry.ref, v1Hyp: entry.hyp,
+        pkWord: entry._xvalWord || entry.ref
+      });
+    }
+
+    if (pkTrustLog.length > 0) {
+      addStage('pk_trust_override', {
+        forgiven: pkTrustLog.length,
+        details: pkTrustLog
+      });
+    }
+  }
+
   // ── Phase 8: Post-struggle Parakeet leniency ────────────────────────
   // After a confirmed error, Reverb's CTC decoder often can't recover
   // for the next word. If Parakeet independently heard it correctly,
@@ -2844,6 +2876,33 @@ function updateOcrToggleUI() {
   ocrToggleThumb.style.left = isHybrid ? '20px' : '2px';
   ocrEngineLabel.textContent = isHybrid ? 'Vision + Gemini' : 'Cloud Vision';
   ocrEngineLabel.style.color = isHybrid ? '#4285f4' : '#666';
+}
+
+// Pk Trust toggle (trust Parakeet on disagreed words)
+const pkTrustToggle = document.getElementById('pkTrustToggle');
+const pkTrustTrack = document.getElementById('pkTrustTrack');
+const pkTrustThumb = document.getElementById('pkTrustThumb');
+
+const savedPkTrust = localStorage.getItem('orf_trust_pk') || 'false';
+if (pkTrustToggle) {
+  pkTrustToggle.checked = savedPkTrust === 'true';
+  updatePkTrustToggleUI();
+  pkTrustToggle.addEventListener('change', () => {
+    localStorage.setItem('orf_trust_pk', pkTrustToggle.checked ? 'true' : 'false');
+    updatePkTrustToggleUI();
+  });
+}
+
+function updatePkTrustToggleUI() {
+  if (!pkTrustToggle) return;
+  const isOn = pkTrustToggle.checked;
+  pkTrustTrack.style.background = isOn ? '#4caf50' : '#ccc';
+  pkTrustThumb.style.left = isOn ? '20px' : '2px';
+}
+
+/** Check if Pk Trust mode is enabled. */
+export function isPkTrustEnabled() {
+  return localStorage.getItem('orf_trust_pk') === 'true';
 }
 
 if (imageInput) {
