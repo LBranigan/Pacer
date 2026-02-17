@@ -30,13 +30,14 @@ export function normalizeText(text) {
 
   // Merge trailing-hyphen tokens with next token (line-break artifacts from OCR).
   // e.g., ["spread-", "sheet"] → ["spreadsheet"]
+  // If no next token exists, strip the trailing hyphen (ASR artifact).
   const merged = [];
   for (let i = 0; i < tokens.length; i++) {
     if (tokens[i].endsWith('-') && i + 1 < tokens.length) {
       merged.push(tokens[i].slice(0, -1) + tokens[i + 1]);
       i++; // skip next token
     } else {
-      merged.push(tokens[i]);
+      merged.push(tokens[i].replace(/-+$/, ''));
     }
   }
 
