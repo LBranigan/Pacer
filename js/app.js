@@ -1115,13 +1115,17 @@ async function runAnalysis() {
         if (entry.crossValidation && entry.crossValidation !== 'pending') continue;
         const norm = _insNorm(entry.hyp);
 
-        // Check Parakeet (same as before — sets crossValidation confirmed/unconfirmed)
+        // Flat match: Parakeet heard this word somewhere in the passage.
+        // This is NOT positional confirmation — only record _xvalWord metadata.
+        // Don't set crossValidation or timestamps: the matched Parakeet word may
+        // be from a completely different position (e.g., V1 "in" at 12s matched to
+        // Parakeet "in" at 58s), which would corrupt the temporal ordering of
+        // transcriptWords and cause phantom long-pause detections.
         const pkMatches = pInsNorms.get(norm);
         const pkHeard = pkMatches && pkMatches.length > 0;
         if (pkHeard) {
           const match = pkMatches.shift();
           const ts = _getEngineTimestamp(match, parakeetWords);
-          _setCrossValidation(entry, transcriptWords, 'confirmed', ts);
           if (ts) {
             entry._xvalWord = ts.word;
             if (entry.hypIndex != null && entry.hypIndex >= 0) {
@@ -1140,6 +1144,16 @@ async function runAnalysis() {
         const pkPosIdx = pkNorms.indexOf(norm);
         const pkPosHeard = pkPosIdx >= 0;
         if (pkPosHeard) pkNorms[pkPosIdx] = ''; // consume
+
+        // Positional Pk match IS real confirmation — Parakeet heard the same
+        // insertion at the same ref-word boundary. Apply Parakeet timestamps.
+        if (pkPosHeard) {
+          const pkPosEntry = (pkInsGroups[pos] || [])[pkPosIdx];
+          if (pkPosEntry) {
+            const pkPosTs = _getEngineTimestamp(pkPosEntry, parakeetWords);
+            _setCrossValidation(entry, transcriptWords, 'confirmed', pkPosTs);
+          }
+        }
 
         // 3-way confirmed insertion: all available engines heard it at this position
         // Require at least V1 + one other engine; if both available, both must agree
