@@ -85,8 +85,9 @@ function buildSimilarityMatrix(spoken, ocr) {
 
 /**
  * Find where in the OCR text the student started and stopped reading.
- * Uses DP alignment trying multiple starting positions — matches the proven
- * approach from the Word Analyzer iPad app's findSpokenRangeInOCR.
+ * Uses 2D semi-global alignment: free leading/trailing OCR gaps so the
+ * student can start and end anywhere in the passage, with penalized gaps
+ * in the middle (skipped OCR words during reading).
  *
  * @param {string[]} spokenNorm  Normalized spoken words (disfluencies removed)
  * @param {string[]} ocrNorm     Normalized OCR words
@@ -103,70 +104,73 @@ export function findSpokenRangeInOCR(spokenNorm, ocrNorm) {
   const n = ocrNorm.length;
 
   const MATCH_THRESHOLD = 0.55;
-  const SKIP_PENALTY = 0.3;
-  const GAP_PENALTY = 0.4;
+  const SKIP_PENALTY = 0.3;   // OCR word skipped during reading
+  const GAP_PENALTY = 0.4;    // Spoken word with no OCR match
 
-  let bestScore = 0;
-  let bestStartOCR = -1;
-  let bestEndOCR = -1;
-  let bestMatchCount = 0;
+  // dp[s][o] = best score aligning spoken[0..s-1] to OCR[0..o-1]
+  // Semi-global: free leading OCR gaps (dp[0][o] = 0), free trailing (max over o at end)
+  const dp = Array.from({ length: m + 1 }, () => new Float64Array(n + 1));
+  // Pointer: 0=none, 1=diag(match), 2=up(skip spoken), 3=left(skip OCR)
+  const ptr = Array.from({ length: m + 1 }, () => new Uint8Array(n + 1));
 
-  // Try different starting positions in OCR
-  for (let startOCR = 0; startOCR < n; startOCR++) {
-    const dp = new Array(m + 1);
-    for (let k = 0; k <= m; k++) {
-      dp[k] = { score: 0, matchCount: 0, lastOCR: startOCR - 1, firstOCR: -1 };
-    }
+  // dp[0][o] = 0 for all o (free to start at any OCR position) — already zero
+  // dp[s][0] = skip all spoken words
+  for (let s = 1; s <= m; s++) {
+    dp[s][0] = dp[s - 1][0] - GAP_PENALTY;
+    ptr[s][0] = 2;
+  }
 
-    for (let s = 0; s < m; s++) {
-      const prev = dp[s];
+  for (let s = 1; s <= m; s++) {
+    for (let o = 1; o <= n; o++) {
+      // Skip spoken word (no OCR match for this word)
+      let best = dp[s - 1][o] - GAP_PENALTY;
+      let bestPtr = 2;
 
-      // Try matching spoken[s] to each OCR word after the previous match
-      for (let o = prev.lastOCR + 1; o < n; o++) {
-        const sim = simMatrix[s][o];
+      // Skip OCR word (student didn't read this word)
+      const skipOCR = dp[s][o - 1] - SKIP_PENALTY;
+      if (skipOCR > best) { best = skipOCR; bestPtr = 3; }
 
-        if (sim >= MATCH_THRESHOLD) {
-          const skippedOCR = o - prev.lastOCR - 1;
-          const skipPen = skippedOCR * SKIP_PENALTY;
-          const newScore = prev.score + sim - skipPen;
-
-          if (newScore > dp[s + 1].score) {
-            dp[s + 1] = {
-              score: newScore,
-              matchCount: prev.matchCount + 1,
-              lastOCR: o,
-              firstOCR: prev.firstOCR === -1 ? o : prev.firstOCR
-            };
-          }
-        }
+      // Match spoken to OCR
+      const sim = simMatrix[s - 1][o - 1];
+      if (sim >= MATCH_THRESHOLD) {
+        const matchScore = dp[s - 1][o - 1] + sim;
+        if (matchScore > best) { best = matchScore; bestPtr = 1; }
       }
 
-      // Allow skipping spoken words (student said something not in text)
-      if (dp[s].score - GAP_PENALTY > dp[s + 1].score) {
-        dp[s + 1] = {
-          score: dp[s].score - GAP_PENALTY,
-          matchCount: dp[s].matchCount,
-          lastOCR: dp[s].lastOCR,
-          firstOCR: dp[s].firstOCR
-        };
-      }
-    }
-
-    const final = dp[m];
-    if (final.matchCount >= 2 && final.score > bestScore) {
-      bestScore = final.score;
-      bestEndOCR = final.lastOCR;
-      bestStartOCR = final.firstOCR;
-      bestMatchCount = final.matchCount;
+      dp[s][o] = best;
+      ptr[s][o] = bestPtr;
     }
   }
 
-  // Fallback: no good alignment found
-  if (bestStartOCR === -1 || bestEndOCR === -1) {
+  // Free trailing OCR gaps: find best ending position
+  let bestO = 0;
+  for (let o = 1; o <= n; o++) {
+    if (dp[m][o] > dp[m][bestO]) bestO = o;
+  }
+
+  // Traceback to find first and last matched OCR positions
+  let s = m, o = bestO;
+  let firstOCR = -1, lastOCR = -1, matchCount = 0;
+
+  while (s > 0 && o > 0) {
+    const p = ptr[s][o];
+    if (p === 1) { // match
+      if (lastOCR === -1) lastOCR = o - 1;
+      firstOCR = o - 1;
+      matchCount++;
+      s--; o--;
+    } else if (p === 2) { // skip spoken
+      s--;
+    } else { // skip OCR
+      o--;
+    }
+  }
+
+  if (firstOCR === -1 || lastOCR === -1 || matchCount < 2) {
     return { firstIndex: 0, lastIndex: ocrNorm.length - 1, matchedCount: 0 };
   }
 
-  return { firstIndex: bestStartOCR, lastIndex: bestEndOCR, matchedCount: bestMatchCount };
+  return { firstIndex: firstOCR, lastIndex: lastOCR, matchedCount: matchCount };
 }
 
 /**
