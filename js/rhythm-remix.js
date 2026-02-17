@@ -7,8 +7,8 @@
  * @module rhythm-remix
  */
 
-import { LofiEngine } from './lofi-engine.js';
-import { MountainRange } from './mountain-range.js';
+import { LofiEngine } from './lofi-engine.js?v=20260218';
+import { MountainRange } from './mountain-range.js?v=20260218';
 import { getAudioBlob } from './audio-store.js';
 import { getAssessment, getStudents } from './storage.js';
 import { getPunctuationPositions } from './diagnostics.js';
@@ -217,11 +217,10 @@ function buildDJPrompt(studentName, passagePreview) {
     ? passagePreview.replace(/\.{3}$/, '').trim()
     : 'a great story';
   return (
-    `Say the following in a smooth, warm, late-night radio DJ voice. ` +
-    `Relaxed and chill, like a lo-fi hip-hop study beats radio host. ` +
-    `Keep it short and natural — no more than two sentences. ` +
-    `Speak slowly with a warm smile in your voice.\n\n` +
-    `"You're listening to Study Beats FM. Next up, here's ${name} with '${passage}'."`
+    `You are a late-night lo-fi radio DJ. Speak in one short sentence — smooth, ` +
+    `warm, and breathy. Add subtle vocal fry and a relaxed trailing "mmm" or sigh. ` +
+    `Deliver it slowly like you're half-asleep but smiling.\n\n` +
+    `"Study Beats FM... here's ${name}, reading '${passage}'."`
   );
 }
 
@@ -1015,7 +1014,7 @@ function animationLoop(timestamp) {
 
   // 8. Update mountain range
   if (mountainRange) {
-    const beatPhase = lofi ? lofi.getBeatPhase() : 0;
+    const beatPhase = (lofi && typeof lofi.getBeatPhase === 'function') ? lofi.getBeatPhase() : 0;
     mountainRange.update(dt, beatPhase);
   }
 

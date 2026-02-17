@@ -226,6 +226,60 @@ const BASS_PATTERNS = {
 };
 
 
+// ─── Per-style synthesis config ─────────────────────────────────────────────
+// Controls timbre, signal chain, and drum routing for each style.
+const STYLE_CONFIG = {
+  lofi: {
+    padType: 'sine',        padFilterCutoff: 2000,   padAttack: 0.2,  padRelease: 0.5,
+    bassType: 'sine',       bassFilterCutoff: 400,
+    reverbWet: 0.3,         warmthCutoff: 6000,
+    tapeWobbleDepth: 0.003, crusherBits: 12,
+    kickStyle: 'standard',  snareStyle: 'standard',  hatStyle: 'standard',
+  },
+  jazzhop: {
+    padType: 'triangle',    padFilterCutoff: 2800,   padAttack: 0.15, padRelease: 0.8,
+    bassType: 'sine',       bassFilterCutoff: 500,
+    reverbWet: 0.35,        warmthCutoff: 7000,
+    tapeWobbleDepth: 0.002, crusherBits: 14,
+    kickStyle: 'standard',  snareStyle: 'brush',     hatStyle: 'standard',
+  },
+  ambient: {
+    padType: 'sine',        padFilterCutoff: 1200,   padAttack: 1.5,  padRelease: 2.0,
+    bassType: 'sine',       bassFilterCutoff: 300,
+    reverbWet: 0.6,         warmthCutoff: 4000,
+    tapeWobbleDepth: 0.005, crusherBits: 16,
+    kickStyle: 'none',      snareStyle: 'none',      hatStyle: 'none',
+  },
+  bossa: {
+    padType: 'triangle',    padFilterCutoff: 3000,   padAttack: 0.1,  padRelease: 0.4,
+    bassType: 'sine',       bassFilterCutoff: 450,
+    reverbWet: 0.25,        warmthCutoff: 8000,
+    tapeWobbleDepth: 0.001, crusherBits: 14,
+    kickStyle: 'soft',      snareStyle: 'rim',       hatStyle: 'soft',
+  },
+  chiptune: {
+    padType: 'square',      padFilterCutoff: 4000,   padAttack: 0.01, padRelease: 0.1,
+    bassType: 'square',     bassFilterCutoff: 600,
+    reverbWet: 0.1,         warmthCutoff: 10000,
+    tapeWobbleDepth: 0.0,   crusherBits: 8,
+    kickStyle: 'chip',      snareStyle: 'chip',      hatStyle: 'chip',
+  },
+  classical: {
+    padType: 'sine',        padFilterCutoff: 3500,   padAttack: 0.6,  padRelease: 1.5,
+    bassType: 'sine',       bassFilterCutoff: 350,
+    reverbWet: 0.45,        warmthCutoff: 9000,
+    tapeWobbleDepth: 0.0,   crusherBits: 16,
+    kickStyle: 'none',      snareStyle: 'none',      hatStyle: 'none',
+  },
+  trap: {
+    padType: 'sawtooth',    padFilterCutoff: 1500,   padAttack: 0.05, padRelease: 0.3,
+    bassType: 'sine',       bassFilterCutoff: 250,
+    reverbWet: 0.15,        warmthCutoff: 5000,
+    tapeWobbleDepth: 0.0,   crusherBits: 14,
+    kickStyle: '808',       snareStyle: 'clap',      hatStyle: 'trap',
+  },
+};
+
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
 /**
@@ -378,6 +432,7 @@ export class LofiEngine {
   setStyle(name) {
     if (!CHORD_SETS[name]) return;
     this._style = name;
+    this._applyStyleConfig();
   }
 
   /**
@@ -607,6 +662,7 @@ export class LofiEngine {
     this._paused = false;
     this._currentBeat = 0;
     this._nextBeatTime = this._ctx.currentTime + 0.05;
+    this._applyStyleConfig();
     this._startCrackle();
     this._startScheduler();
   }
@@ -644,6 +700,7 @@ export class LofiEngine {
     if (!this._playing || !this._paused) return;
     this._paused = false;
     this._nextBeatTime = this._ctx.currentTime + 0.05;
+    this._applyStyleConfig();
     this._startCrackle();
     this._startScheduler();
   }
@@ -844,26 +901,38 @@ export class LofiEngine {
       ? secondsPerBeat * 0.3 : 0;
 
     // ── Drums (whisper = no drums at all) ──
-    if (style !== 'ambient' && style !== 'classical' && density !== 'whisper') {
-      // Kick: always plays in normal/full; plays in sparse too
+    const drumCfg = STYLE_CONFIG[style] || STYLE_CONFIG.lofi;
+    if (drumCfg.kickStyle !== 'none' && density !== 'whisper') {
+      // Kick
       if (drumPat.kick[beat]) {
-        if (style === 'trap') this._playTrapKick(time);
+        if (drumCfg.kickStyle === '808') this._playTrapKick(time);
+        else if (drumCfg.kickStyle === 'soft') this._playKickSoft(time);
+        else if (drumCfg.kickStyle === 'chip') this._playChipKick(time);
         else this._playKick(time);
       }
 
       // Snare: not in sparse
       if (density !== 'sparse' && drumPat.snare[beat]) {
-        this._playSnare(time, style);
+        if (drumCfg.snareStyle === 'clap') this._playClap(time);
+        else if (drumCfg.snareStyle === 'rim') this._playRimClick(time);
+        else if (drumCfg.snareStyle === 'chip') this._playChipSnare(time);
+        else this._playSnare(time, style);
       }
 
       // Closed hi-hat: not in sparse
       if (density !== 'sparse' && drumPat.hatC[beat]) {
-        this._playHiHatClosed(time + swingOffset);
+        if (drumCfg.hatStyle === 'trap') this._playTrapHat(time + swingOffset, 0.04, 0.25);
+        else if (drumCfg.hatStyle === 'chip') this._playChipHat(time + swingOffset);
+        else if (drumCfg.hatStyle === 'soft') this._playHiHatSoft(time + swingOffset, 0.05, 0.2);
+        else this._playHiHatClosed(time + swingOffset);
       }
 
       // Open hi-hat: only in full
       if (density === 'full' && drumPat.hatO[beat]) {
-        this._playHiHatOpen(time + swingOffset);
+        if (drumCfg.hatStyle === 'trap') this._playTrapHat(time + swingOffset, 0.25, 0.35);
+        else if (drumCfg.hatStyle === 'chip') this._playChipHat(time + swingOffset);
+        else if (drumCfg.hatStyle === 'soft') this._playHiHatSoft(time + swingOffset, 0.3, 0.35);
+        else this._playHiHatOpen(time + swingOffset);
       }
     }
 
@@ -883,8 +952,9 @@ export class LofiEngine {
     if (triggerPad) {
       const padDuration = 8 * secondsPerBeat; // lasts 2 bars
       const padVol = density === 'whisper' ? 0.25 : density === 'sparse' ? 0.5 : density === 'normal' ? 0.75 : 1.0;
-      const attackTime = (style === 'ambient' || style === 'classical') ? 0.6 : 0.2;
-      const releaseTime = (style === 'ambient' || style === 'classical') ? 1.5 : 0.5;
+      const cfg = STYLE_CONFIG[style] || STYLE_CONFIG.lofi;
+      const attackTime = cfg.padAttack;
+      const releaseTime = cfg.padRelease;
 
       if (style === 'chiptune') {
         this._playChipPad(time, chord.notes, padDuration, padVol);
@@ -1060,12 +1130,14 @@ export class LofiEngine {
   _playChordPad(time, noteFreqs, duration, volumeScale, attackTime, releaseTime) {
     const ctx = this._ctx;
     const endTime = time + duration;
+    const cfg = STYLE_CONFIG[this._style] || STYLE_CONFIG.lofi;
+    const oscType = cfg.padType;
 
     for (const freq of noteFreqs) {
       // Two oscillators per note with ±2 cent detuning for warmth
       for (const detune of [-2, 2]) {
         const osc = ctx.createOscillator();
-        osc.type = 'sine';
+        osc.type = oscType;
         osc.frequency.value = freq;
         osc.detune.value = detune;
 
@@ -1120,34 +1192,35 @@ export class LofiEngine {
    */
   _playBass(time, freq, duration, volumeScale) {
     const ctx = this._ctx;
+    const cfg = STYLE_CONFIG[this._style] || STYLE_CONFIG.lofi;
 
-    // Sine fundamental
+    // Fundamental oscillator (type from config)
     const osc1 = ctx.createOscillator();
-    osc1.type = 'sine';
+    osc1.type = cfg.bassType || 'sine';
     osc1.frequency.value = freq;
 
-    // Triangle harmonic (one octave up, much quieter)
+    // Harmonic layer (one octave up, much quieter)
     const osc2 = ctx.createOscillator();
-    osc2.type = 'triangle';
+    osc2.type = cfg.bassType === 'sawtooth' ? 'sawtooth' : 'triangle';
     osc2.frequency.value = freq * 2;
 
     const gain = ctx.createGain();
     gain.gain.setValueAtTime(0.0001, time);
-    gain.gain.linearRampToValueAtTime(volumeScale * 0.5, time + 0.02); // quick attack
+    gain.gain.linearRampToValueAtTime(volumeScale * 0.5, time + 0.02);
     gain.gain.setValueAtTime(volumeScale * 0.5, time + duration * 0.6);
     gain.gain.exponentialRampToValueAtTime(0.001, time + duration);
 
     const gain2 = ctx.createGain();
-    gain2.gain.value = 0.2; // triangle layer at 20%
+    gain2.gain.value = 0.2;
 
     osc1.connect(gain);
     osc2.connect(gain2);
     gain2.connect(gain);
 
-    // Low-pass the bass to keep it smooth
+    // Low-pass filter (cutoff from config)
     const lp = ctx.createBiquadFilter();
     lp.type = 'lowpass';
-    lp.frequency.value = 400;
+    lp.frequency.value = cfg.bassFilterCutoff || 400;
     lp.Q.value = 0.5;
 
     gain.connect(lp);
@@ -1192,6 +1265,223 @@ export class LofiEngine {
     osc.stop(time + 0.55);
     this._trackSource(osc, time + 0.6);
   }
+
+  /**
+   * Soft kick for bossa — lighter, higher, faster decay.
+   */
+  _playKickSoft(time) {
+    const ctx = this._ctx;
+    const osc = ctx.createOscillator();
+    osc.type = 'triangle';
+    osc.frequency.setValueAtTime(120, time);
+    osc.frequency.exponentialRampToValueAtTime(60, time + 0.05);
+
+    const gain = ctx.createGain();
+    gain.gain.setValueAtTime(0.5, time);
+    gain.gain.exponentialRampToValueAtTime(0.001, time + 0.15);
+
+    osc.connect(gain);
+    gain.connect(this._nodes.drumBus);
+    osc.start(time);
+    osc.stop(time + 0.2);
+    this._trackSource(osc, time + 0.25);
+  }
+
+  /**
+   * Trap clap — layered noise bursts (classic 808 clap).
+   */
+  _playClap(time) {
+    const ctx = this._ctx;
+    const burstCount = 3;
+    const burstGap = 0.015;
+
+    for (let b = 0; b < burstCount; b++) {
+      const t = time + b * burstGap;
+      const dur = 0.03;
+      const buf = ctx.createBuffer(1, ctx.sampleRate * dur, ctx.sampleRate);
+      const data = buf.getChannelData(0);
+      for (let i = 0; i < data.length; i++) {
+        data[i] = Math.random() * 2 - 1;
+      }
+      const src = ctx.createBufferSource();
+      src.buffer = buf;
+
+      const bp = ctx.createBiquadFilter();
+      bp.type = 'bandpass';
+      bp.frequency.value = 1500;
+      bp.Q.value = 0.7;
+
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(0.6, t);
+      g.gain.exponentialRampToValueAtTime(0.001, t + 0.08);
+
+      src.connect(bp);
+      bp.connect(g);
+      g.connect(this._nodes.drumBus);
+      src.start(t);
+      this._trackSource(src, t + 0.1);
+    }
+
+    // Tail noise
+    const tailDur = 0.12;
+    const tailBuf = ctx.createBuffer(1, ctx.sampleRate * tailDur, ctx.sampleRate);
+    const tailData = tailBuf.getChannelData(0);
+    for (let i = 0; i < tailData.length; i++) tailData[i] = Math.random() * 2 - 1;
+    const tailSrc = ctx.createBufferSource();
+    tailSrc.buffer = tailBuf;
+
+    const tailBP = ctx.createBiquadFilter();
+    tailBP.type = 'bandpass';
+    tailBP.frequency.value = 1200;
+    tailBP.Q.value = 0.5;
+
+    const tailG = ctx.createGain();
+    tailG.gain.setValueAtTime(0.4, time + burstCount * burstGap);
+    tailG.gain.exponentialRampToValueAtTime(0.001, time + 0.2);
+
+    tailSrc.connect(tailBP);
+    tailBP.connect(tailG);
+    tailG.connect(this._nodes.drumBus);
+    tailSrc.start(time + burstCount * burstGap);
+    this._trackSource(tailSrc, time + 0.25);
+  }
+
+  /**
+   * Bossa rim click — short triangle ping, wooden stick sound.
+   */
+  _playRimClick(time) {
+    const ctx = this._ctx;
+    const osc = ctx.createOscillator();
+    osc.type = 'triangle';
+    osc.frequency.value = 800;
+
+    const gain = ctx.createGain();
+    gain.gain.setValueAtTime(0.45, time);
+    gain.gain.exponentialRampToValueAtTime(0.001, time + 0.04);
+
+    osc.connect(gain);
+    gain.connect(this._nodes.drumBus);
+    osc.start(time);
+    osc.stop(time + 0.06);
+    this._trackSource(osc, time + 0.08);
+  }
+
+  /**
+   * Chiptune kick — square wave pitch drop.
+   */
+  _playChipKick(time) {
+    const ctx = this._ctx;
+    const osc = ctx.createOscillator();
+    osc.type = 'square';
+    osc.frequency.setValueAtTime(200, time);
+    osc.frequency.exponentialRampToValueAtTime(40, time + 0.06);
+
+    const gain = ctx.createGain();
+    gain.gain.setValueAtTime(0.6, time);
+    gain.gain.exponentialRampToValueAtTime(0.001, time + 0.12);
+
+    osc.connect(gain);
+    gain.connect(this._nodes.drumBus);
+    osc.start(time);
+    osc.stop(time + 0.15);
+    this._trackSource(osc, time + 0.18);
+  }
+
+  /**
+   * Chiptune snare — short noise burst, harsh.
+   */
+  _playChipSnare(time) {
+    const ctx = this._ctx;
+    const dur = 0.06;
+    const buf = ctx.createBuffer(1, ctx.sampleRate * dur, ctx.sampleRate);
+    const data = buf.getChannelData(0);
+    for (let i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1;
+
+    const src = ctx.createBufferSource();
+    src.buffer = buf;
+
+    const gain = ctx.createGain();
+    gain.gain.setValueAtTime(0.5, time);
+    gain.gain.exponentialRampToValueAtTime(0.001, time + dur);
+
+    src.connect(gain);
+    gain.connect(this._nodes.drumBus);
+    src.start(time);
+    this._trackSource(src, time + dur + 0.05);
+  }
+
+  /**
+   * Chiptune hi-hat — very short high-pitched square.
+   */
+  _playChipHat(time) {
+    const ctx = this._ctx;
+    const osc = ctx.createOscillator();
+    osc.type = 'square';
+    osc.frequency.value = 12000;
+
+    const gain = ctx.createGain();
+    gain.gain.setValueAtTime(0.15, time);
+    gain.gain.exponentialRampToValueAtTime(0.001, time + 0.03);
+
+    const hp = ctx.createBiquadFilter();
+    hp.type = 'highpass';
+    hp.frequency.value = 8000;
+
+    osc.connect(hp);
+    hp.connect(gain);
+    gain.connect(this._nodes.drumBus);
+    osc.start(time);
+    osc.stop(time + 0.05);
+    this._trackSource(osc, time + 0.06);
+  }
+
+  /**
+   * Trap hi-hat — higher pitched, sharper.
+   */
+  _playTrapHat(time, decayTime, volume) {
+    const ctx = this._ctx;
+    const fundamental = 60;
+    const ratios = [2, 3, 4.16, 5.43, 6.79, 8.21];
+
+    const hatGain = ctx.createGain();
+    hatGain.gain.setValueAtTime(volume, time);
+    hatGain.gain.exponentialRampToValueAtTime(0.001, time + decayTime);
+
+    const hp = ctx.createBiquadFilter();
+    hp.type = 'highpass';
+    hp.frequency.value = 9000;
+
+    const bp = ctx.createBiquadFilter();
+    bp.type = 'bandpass';
+    bp.frequency.value = 12000;
+    bp.Q.value = 1.5;
+
+    hp.connect(bp);
+    bp.connect(hatGain);
+    hatGain.connect(this._nodes.drumBus);
+
+    for (const ratio of ratios) {
+      const osc = ctx.createOscillator();
+      osc.type = 'square';
+      osc.frequency.value = fundamental * ratio;
+      osc.connect(hp);
+      osc.start(time);
+      osc.stop(time + decayTime + 0.02);
+      this._trackSource(osc, time + decayTime + 0.05);
+    }
+  }
+
+  /**
+   * Soft hi-hat for bossa — gentler, lower volume.
+   */
+  _playHiHatSoft(time, decayTime, volume) {
+    this._playHiHat(time, decayTime, volume * 0.5);
+  }
+
+  /**
+   * Brush snare for jazzhop — already handled in _playSnare via style check,
+   * but this provides a dedicated quieter path.
+   */
 
   /**
    * Chiptune pad — square wave chords, 8-bit feel.
@@ -1465,6 +1755,20 @@ export class LofiEngine {
       }
       this._crackleBufs[intensity] = buf;
     }
+  }
+
+  /**
+   * Apply the current style's config to the live audio graph.
+   */
+  _applyStyleConfig() {
+    const cfg = STYLE_CONFIG[this._style];
+    if (!cfg || !this._nodes.warmthFilter) return;
+    const n = this._nodes;
+    n.warmthFilter.frequency.value = cfg.warmthCutoff;
+    n.padFilter.frequency.value = cfg.padFilterCutoff;
+    n.tapeLFOGain.gain.value = cfg.tapeWobbleDepth;
+    n.reverbGain.gain.value = cfg.reverbWet;
+    n.bitcrusher.curve = createBitcrusherCurve(cfg.crusherBits);
   }
 
   _startCrackle() {
