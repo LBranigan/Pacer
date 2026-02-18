@@ -1638,43 +1638,44 @@ export class LofiEngine {
   }
 
   /**
-   * Dissonance-to-consonance ping for self-corrections.
+   * Warm rising two-note chime for self-corrections — "nice catch!"
    */
   _playResolutionPing(time, chord) {
     const ctx = this._ctx;
-    const root = chord.scale ? chord.scale[0] : NOTE.C4;
+    const scale = chord.scale || [NOTE.C4, NOTE.D4, NOTE.E4, NOTE.G4, NOTE.A4];
+    // Rising major third: 3rd → 5th scale degree (warm, uplifting)
+    const notes = [scale[2], scale[4]];
 
-    // Dissonant note (tritone above root)
-    const osc1 = ctx.createOscillator();
-    osc1.type = 'sine';
-    osc1.frequency.value = root * Math.pow(2, 6 / 12); // tritone
+    for (let i = 0; i < notes.length; i++) {
+      const t = time + i * 0.1;
+      const osc = ctx.createOscillator();
+      osc.type = 'sine';
+      osc.frequency.value = notes[i];
 
-    const g1 = ctx.createGain();
-    g1.gain.setValueAtTime(0.0001, time);
-    g1.gain.linearRampToValueAtTime(0.08, time + 0.02);
-    g1.gain.exponentialRampToValueAtTime(0.001, time + 0.2);
+      const osc2 = ctx.createOscillator();
+      osc2.type = 'triangle';
+      osc2.frequency.value = notes[i] * 2;
 
-    // Resolution note (root, slight delay)
-    const osc2 = ctx.createOscillator();
-    osc2.type = 'sine';
-    osc2.frequency.value = root;
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.linearRampToValueAtTime(0.1, t + 0.02);
+      g.gain.exponentialRampToValueAtTime(0.001, t + 0.4);
 
-    const g2 = ctx.createGain();
-    g2.gain.setValueAtTime(0.0001, time + 0.1);
-    g2.gain.linearRampToValueAtTime(0.1, time + 0.12);
-    g2.gain.exponentialRampToValueAtTime(0.001, time + 0.5);
+      const g2 = ctx.createGain();
+      g2.gain.value = 0.08;
 
-    osc1.connect(g1);
-    g1.connect(this._nodes.padBus);
-    osc2.connect(g2);
-    g2.connect(this._nodes.padBus);
+      osc.connect(g);
+      osc2.connect(g2);
+      g2.connect(g);
+      g.connect(this._nodes.padBus);
 
-    osc1.start(time);
-    osc1.stop(time + 0.25);
-    osc2.start(time + 0.1);
-    osc2.stop(time + 0.55);
-    this._trackSource(osc1, time + 0.3);
-    this._trackSource(osc2, time + 0.6);
+      osc.start(t);
+      osc2.start(t);
+      osc.stop(t + 0.45);
+      osc2.stop(t + 0.45);
+      this._trackSource(osc, t + 0.5);
+      this._trackSource(osc2, t + 0.5);
+    }
   }
 
   /**
