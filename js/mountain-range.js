@@ -282,10 +282,17 @@ export class MountainRange {
     const parent = this._canvas.parentElement;
     if (!parent) return;
     const rect = parent.getBoundingClientRect();
-    this._w = rect.width;
-    this._h = rect.height;
-    this._canvas.width = rect.width;
-    this._canvas.height = rect.height;
+    const w = Math.max(Math.round(rect.width), 200);
+    const h = Math.max(Math.round(rect.height), 120);
+    // Guard: skip if nothing actually changed
+    if (w === this._w && h === this._h) return;
+    this._w = w;
+    this._h = h;
+    // Set canvas resolution (attribute) AND display size (CSS) explicitly
+    this._canvas.width = w;
+    this._canvas.height = h;
+    this._canvas.style.width = w + 'px';
+    this._canvas.style.height = h + 'px';
     // Regenerate stars for new dimensions
     this._stars = generateStars(45, this._w, this._h);
   }
