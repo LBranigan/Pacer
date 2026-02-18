@@ -980,14 +980,9 @@ async function runAnalysis() {
     // V1 compound = student fragmented the word — don't count as clean correct
     const v1Compound = v1Entry._isStruggle && v1Entry.compound;
     const v1Correct = v1Entry.type === 'correct' && !v1Compound;
-    const v0Correct = v0Type === 'correct';  // kept for display/logging
     const pkCorrect = pkType === 'correct';
-    const correctCount = (v1Correct ? 1 : 0) + (pkCorrect ? 1 : 0);  // V0 excluded from scoring
-
     const v1Omitted = v1Entry.type === 'omission';
-    const v0Omitted = v0Type === 'omission';  // kept for display/logging
     const pkOmitted = pkType === 'omission';
-    const omitCount = (v1Omitted ? 1 : 0) + (pkOmitted ? 1 : 0);  // V0 excluded from scoring
 
     let status;
 
@@ -1000,11 +995,9 @@ async function runAnalysis() {
       status = 'recovered';
       const recoveryTs = parakeetTs;
       xvalRecoveredOmissions.push({ refIndex: ri, entry: v1Entry, timestamps: recoveryTs });
-    } else if (correctCount >= 2) {
-      // Majority correct — but did V1 agree?
-      // V1 correct + another correct → truly confirmed
-      // V1 wrong + V0&Pk both correct → V1 overridden (disagreed)
-      status = v1Correct ? 'confirmed' : 'disagreed';
+    } else if (v1Correct && pkCorrect) {
+      // Both scoring engines correct → confirmed
+      status = 'confirmed';
     } else if (v1Compound && pkCorrect) {
       // V1 fragmented but matched + Parakeet confirms → confirmed (struggle preserved on entry)
       status = 'confirmed';
@@ -1017,9 +1010,6 @@ async function runAnalysis() {
     } else if (!v1Correct && pkCorrect) {
       // V1 wrong but Parakeet correct → disagreed (Pk is strong)
       status = 'disagreed';
-    } else if (omitCount >= 2) {
-      // Majority omitted
-      status = 'confirmed';
     } else if (v1Entry.type === 'substitution') {
       // V1 has substitution — check if others agree on the wrong word
       const v1Hyp = (v1Entry.hyp || '').toLowerCase().replace(/[^a-z'-]/g, '');
@@ -1100,11 +1090,10 @@ async function runAnalysis() {
   {
     const _insNorm = s => (s || '').toLowerCase().replace(/[^a-z'-]/g, '');
 
-    // Build per-position norm lists for V0 and Pk insertions
+    // Build per-position norm lists for Pk insertions (V0 excluded from scoring)
     const _buildInsNormGroups = (groups) =>
       groups.map(g => g.map(e => _insNorm(e.hyp)));
 
-    const v0InsNormGroups = _buildInsNormGroups(v0InsGroups);
     const pkInsNormGroups = _buildInsNormGroups(pkInsGroups);
 
     // Also build a flat Parakeet insertion map for the existing confirmed/unconfirmed tagging
@@ -1124,7 +1113,6 @@ async function runAnalysis() {
     for (let pos = 0; pos < v1InsGroups.length; pos++) {
       const isBoundary = pos === 0 || pos === lastInsGroupIdx;
       const v1Ins = v1InsGroups[pos];
-      const v0Norms = v0InsNormGroups[pos] || [];
       const pkNorms = pkInsNormGroups[pos] || [];
 
       for (const entry of v1Ins) {
@@ -1151,12 +1139,7 @@ async function runAnalysis() {
           }
         }
 
-        // Check V0 at same ref-word position
-        const v0Idx = v0Norms.indexOf(norm);
-        const v0Heard = v0Idx >= 0;
-        if (v0Heard) v0Norms[v0Idx] = ''; // consume to avoid double-match
-
-        // Check Pk at same ref-word position (stricter positional check)
+        // Check Pk at same ref-word position (V0 excluded from scoring)
         const pkPosIdx = pkNorms.indexOf(norm);
         const pkPosHeard = pkPosIdx >= 0;
         if (pkPosHeard) pkNorms[pkPosIdx] = ''; // consume
