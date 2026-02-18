@@ -63,7 +63,7 @@ function generateStars(count, w, h) {
       size: bright ? (1.4 + Math.random() * 1.2) : (0.7 + Math.random() * 1.0),
       baseAlpha: bright ? (0.7 + Math.random() * 0.3) : (0.35 + Math.random() * 0.4),
       phase: Math.random() * Math.PI * 2,
-      freq: bright ? (2.5 + Math.random() * 3.0) : (1.0 + Math.random() * 2.0),
+      freq: bright ? (0.8 + Math.random() * 1.2) : (0.3 + Math.random() * 0.7),
     });
   }
   return stars;

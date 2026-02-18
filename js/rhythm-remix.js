@@ -8,7 +8,7 @@
  */
 
 import { LofiEngine } from './lofi-engine.js?v=20260218k';
-import { MountainRange } from './mountain-range.js?v=20260218k';
+import { MountainRange } from './mountain-range.js?v=20260218n';
 import { getAudioBlob } from './audio-store.js';
 import { getAssessment, getStudents } from './storage.js';
 import { getPunctuationPositions } from './diagnostics.js';
@@ -811,9 +811,12 @@ function updateWordClasses(idx) {
     const el = w.el;
     if (!el) continue;
 
+    // Self-corrected rainbow persists — never remove once applied
+    if (el.classList.contains('done-self-corrected')) continue;
+
     el.classList.remove(
       'active', 'done-correct', 'done-error', 'done-struggle',
-      'done-omission', 'done-self-corrected', 'upcoming'
+      'done-omission', 'upcoming'
     );
 
     if (i < idx) {
