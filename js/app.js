@@ -2603,8 +2603,15 @@ async function runAnalysis() {
             reason = 'repetition';
             break;
           }
-          // (d) Near-miss (false start before correct word)
+          // (d) Near-miss or prefix false start before correct word
           if (isNearMiss(ins.hyp, entry.ref)) {
+            evidence = [ins.hyp];
+            reason = 'near-miss-insertion';
+            break;
+          }
+          // (d2) Short prefix: "tr" before "treated" — too short for isNearMiss
+          // but unambiguous false start when it's a prefix of the ref (≥ 2 chars)
+          if (insN.length >= 2 && refN.startsWith(insN)) {
             evidence = [ins.hyp];
             reason = 'near-miss-insertion';
             break;
