@@ -25,8 +25,6 @@ import { loadPhonemeData, getPhonemeCount, getPhonemeCountWithFallback } from '.
 import { generateMovieTrailer } from './movie-trailer.js';
 import { syllabifyWord, analyzeSyllableCoverage, analyzeFragmentsCoverage } from './syllable-analysis.js';
 import { analyzeReadability } from './readability.js';
-import { getSeason, getBenchmarkStatus } from './benchmarks.js';
-import { buildInsightPayload, generateInsight, renderInsightPanel } from './insight-engine.js';
 
 // Code version for cache verification
 const CODE_VERSION = 'v39-2026-02-07';
@@ -2728,19 +2726,6 @@ async function runAnalysis() {
   const tierBreakdown = nlAnnotations ? computeTierBreakdown(alignment) : null;
   const readability = await analyzeReadability(referenceText);
 
-  // Hasbrouck-Tindal benchmark status (requires student grade + WCPM)
-  let benchmark = null;
-  if (wcpm && appState.selectedStudentId) {
-    const student = getStudents().find(s => s.id === appState.selectedStudentId);
-    if (student?.grade) {
-      const season = getSeason(new Date());
-      benchmark = getBenchmarkStatus(wcpm.wcpmMin, student.grade, season);
-      benchmark.grade = student.grade;
-      benchmark.season = season;
-      benchmark.wcpm = wcpm.wcpmMin;
-    }
-  }
-
   addStage('metrics_computed', {
     readability: readability ? { band: readability.band, median: readability.median, formulas: readability.formulas } : null,
     wcpm: wcpm?.wcpmMin ?? null,
@@ -2960,8 +2945,7 @@ async function runAnalysis() {
       v0Alignment: v0Alignment || [],
       threeWayTable: threeWayTable || []
     },
-    readability,                            // Passage readability / grade-level estimate
-    benchmark                               // Hasbrouck-Tindal benchmark status
+    readability                             // Passage readability / grade-level estimate
   );
 
   // Log UI bucket classification (runs after displayAlignmentResults stamps _uiBucket)
@@ -2973,25 +2957,6 @@ async function runAnalysis() {
       crossValidation: a.crossValidation || null
     }))
   });
-
-  // AI Insight (non-blocking — don't delay results display)
-  const insightKey = localStorage.getItem('orf_gemini_key') || document.getElementById('geminiKey')?.value?.trim();
-  if (insightKey) {
-    const insightPayload = buildInsightPayload(alignment, wcpm, accuracy, diagnostics, referenceText);
-    const insightContainer = document.getElementById('insightContainer');
-    renderInsightPanel(insightContainer, null, true); // loading state
-    const insightStudent = getStudents().find(s => s.id === appState.selectedStudentId);
-    generateInsight(insightPayload, insightKey, {
-      studentName: insightStudent?.name || null,
-      passageSnippet: referenceText ? referenceText.substring(0, 50) : null,
-      readabilityInfo: readability ? 'grade ' + readability.band + ' ' + readability.label : null
-    }).then(text => {
-      renderInsightPanel(insightContainer, text, false);
-    }).catch(err => {
-      console.warn('[insight] Generation failed:', err);
-      renderInsightPanel(insightContainer, null, false); // hide on error
-    });
-  }
 
   if (appState.selectedStudentId) {
     const errorBreakdown = {
