@@ -7,8 +7,8 @@
  * @module rhythm-remix
  */
 
-import { LofiEngine } from './lofi-engine.js?v=20260218n';
-import { MountainRange } from './mountain-range.js?v=20260218n';
+import { LofiEngine } from './lofi-engine.js?v=20260218p';
+import { MountainRange } from './mountain-range.js?v=20260218p';
 import { getAudioBlob } from './audio-store.js';
 import { getAssessment, getStudents } from './storage.js';
 import { getPunctuationPositions } from './diagnostics.js';

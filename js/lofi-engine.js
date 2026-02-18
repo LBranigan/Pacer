@@ -206,13 +206,16 @@ const DRUM_PATTERNS = {
     hatO:    new Array(32).fill(0),
   },
   trap: {
-    // Trap: double kicks, hard claps, rolling hi-hats with open hat accents
-    kick:    [1,0,0,1, 0,0,0,1, 1,0,1,0, 0,0,0,1, 1,0,0,1, 0,0,0,1, 1,0,1,0, 0,0,0,1],
-    snare:   [0,0,0,0, 1,0,0,0, 0,0,0,0, 1,0,0,1, 0,0,0,0, 1,0,0,0, 0,0,0,0, 1,0,0,1],
+    // Trap (Bad and Boujee style): syncopated 808 kicks, clean backbeat claps, rolling hats
+    kick:    [1,0,0,0, 0,0,1,0, 0,0,0,0, 1,0,0,1, 1,0,0,0, 0,0,1,0, 0,0,0,0, 1,0,0,1],
+    snare:   [0,0,0,0, 1,0,0,0, 0,0,0,0, 1,0,0,0, 0,0,0,0, 1,0,0,0, 0,0,0,0, 1,0,0,0],
     hatC:    [1,1,1,1, 1,1,1,1, 1,1,1,1, 1,1,1,1, 1,1,1,1, 1,1,1,1, 1,1,1,1, 1,1,1,1],
     hatO:    [0,0,1,0, 0,0,1,1, 0,0,1,0, 0,1,0,0, 0,0,1,0, 0,0,1,1, 0,0,1,0, 0,1,0,0],
   }
 };
+
+// Trap hi-hat roll pattern: 0 = single hit, 3/4 = triplet/quadruplet roll
+const TRAP_HAT_ROLLS = [0,0,0,3, 0,0,0,0, 0,0,3,0, 0,4,0,0, 0,0,0,3, 0,0,0,0, 0,0,3,0, 0,4,0,0];
 
 // Bass patterns (beat index → play root note). Per-style.
 const BASS_PATTERNS = {
@@ -601,11 +604,13 @@ export class LofiEngine {
 
     if (event === 'correct') {
       this._correctStreak++;
-      if (this._correctStreak === 5) {
-        this._playStreakChime(time, chord);
-      } else if (this._correctStreak > 5 && this._correctStreak % 3 === 0) {
-        // Additional chimes every 3 words after initial streak
-        this._playStreakChime(time, chord);
+      const s = this._correctStreak;
+      if (s === 3 || (s > 3 && s % 3 === 0)) {
+        this._playStreakChime(time, chord, s);
+      }
+      // Drum fill at streak 10, then every 5 words after 15
+      if (s === 10 || (s >= 15 && s % 5 === 0)) {
+        this._playStreakFill(time);
       }
     } else if (event === 'error' || event === 'omission') {
       this._correctStreak = 0;
@@ -961,7 +966,15 @@ export class LofiEngine {
 
       // Closed hi-hat: not in sparse
       if (density !== 'sparse' && drumPat.hatC[beat]) {
-        if (drumCfg.hatStyle === 'trap') this._playTrapHat(time + swingOffset, 0.04, 0.25);
+        if (drumCfg.hatStyle === 'trap') {
+          // Check for hi-hat roll on this beat
+          const rollCount = (density !== 'sparse') ? TRAP_HAT_ROLLS[beat] : 0;
+          if (rollCount > 0) {
+            this._playHiHatRoll(time + swingOffset, rollCount, secondsPerBeat, 0.25);
+          } else {
+            this._playTrapHat(time + swingOffset, 0.04, 0.25);
+          }
+        }
         else if (drumCfg.hatStyle === 'chip') this._playChipHat(time + swingOffset);
         else if (drumCfg.hatStyle === 'soft') this._playHiHatSoft(time + swingOffset, 0.05, 0.2);
         else this._playHiHatClosed(time + swingOffset);
@@ -973,6 +986,16 @@ export class LofiEngine {
         else if (drumCfg.hatStyle === 'chip') this._playChipHat(time + swingOffset);
         else if (drumCfg.hatStyle === 'soft') this._playHiHatSoft(time + swingOffset, 0.3, 0.35);
         else this._playHiHatOpen(time + swingOffset);
+      }
+
+      // Lofi ghost hi-hats: subtle off-beat 8th notes at full density
+      if (style === 'lofi' && density === 'full' && drumPat.hatC[beat]) {
+        this._playHiHat(time + secondsPerBeat * 0.5, 0.04, 0.08);
+      }
+
+      // Bossa shaker: continuous "ch-ch-ch-ch" on every beat
+      if (style === 'bossa' && density !== 'whisper') {
+        this._playShaker(time);
       }
     }
 
@@ -1010,10 +1033,11 @@ export class LofiEngine {
       const bassVol = style === 'classical' ? 0.55
         : style === 'ambient' ? 0.3
         : style === 'trap' ? 1.0
-        : style === 'bossa' ? 0.45
+        : style === 'bossa' ? 0.55
         : (density === 'full' ? 0.9 : 0.65);
       const bassDur = (style === 'ambient' || style === 'classical') ? secondsPerBeat * 3.5
-        : style === 'trap' ? secondsPerBeat * 1.5
+        : style === 'trap' ? secondsPerBeat * 2.5
+        : style === 'bossa' ? secondsPerBeat * 1.2
         : secondsPerBeat * 0.8;
       if (style === 'chiptune') {
         this._playChipBass(time, chord.root, secondsPerBeat * 0.6);
@@ -1224,6 +1248,33 @@ export class LofiEngine {
     sawOsc.start(time);
     sawOsc.stop(endTime + 0.05);
     this._trackSource(sawOsc, endTime + 0.1);
+
+    // Second sawtooth at the 5th for extra warmth
+    if (noteFreqs.length >= 3) {
+      const sawOsc2 = ctx.createOscillator();
+      sawOsc2.type = 'sawtooth';
+      sawOsc2.frequency.value = noteFreqs[2]; // 5th of chord (3rd note)
+      sawOsc2.detune.value = 7;
+
+      const sawFilter2 = ctx.createBiquadFilter();
+      sawFilter2.type = 'lowpass';
+      sawFilter2.frequency.value = 600;
+      sawFilter2.Q.value = 0.5;
+
+      const sawGain2 = ctx.createGain();
+      sawGain2.gain.setValueAtTime(0.0001, time);
+      sawGain2.gain.linearRampToValueAtTime(volumeScale * 0.03, time + attackTime);
+      sawGain2.gain.setValueAtTime(volumeScale * 0.03, endTime - releaseTime);
+      sawGain2.gain.linearRampToValueAtTime(0.0001, endTime);
+
+      sawOsc2.connect(sawFilter2);
+      sawFilter2.connect(sawGain2);
+      sawGain2.connect(this._nodes.padFilter);
+
+      sawOsc2.start(time);
+      sawOsc2.stop(endTime + 0.05);
+      this._trackSource(sawOsc2, endTime + 0.1);
+    }
   }
 
   // ─── Bass Synthesis ─────────────────────────────────────────────────────
@@ -1284,30 +1335,30 @@ export class LofiEngine {
   _playTrapKick(time) {
     const ctx = this._ctx;
 
-    // Main 808 body — starts high, sweeps deep
+    // Main 808 body — deep sweep for that Metro Boomin thump
     const osc = ctx.createOscillator();
     osc.type = 'sine';
-    osc.frequency.setValueAtTime(180, time);
-    osc.frequency.exponentialRampToValueAtTime(28, time + 0.2);
+    osc.frequency.setValueAtTime(160, time);
+    osc.frequency.exponentialRampToValueAtTime(25, time + 0.25);
 
-    // Sub layer for extra weight
+    // Sub layer — goes even deeper
     const sub = ctx.createOscillator();
     sub.type = 'sine';
-    sub.frequency.setValueAtTime(80, time);
-    sub.frequency.exponentialRampToValueAtTime(30, time + 0.3);
+    sub.frequency.setValueAtTime(70, time);
+    sub.frequency.exponentialRampToValueAtTime(22, time + 0.4);
 
     const gain = ctx.createGain();
-    gain.gain.setValueAtTime(1.2, time);
-    gain.gain.setValueAtTime(0.8, time + 0.08);
-    gain.gain.exponentialRampToValueAtTime(0.001, time + 0.7);
+    gain.gain.setValueAtTime(1.4, time);
+    gain.gain.setValueAtTime(0.9, time + 0.08);
+    gain.gain.exponentialRampToValueAtTime(0.001, time + 1.0);
 
     const subGain = ctx.createGain();
-    subGain.gain.setValueAtTime(0.6, time);
-    subGain.gain.exponentialRampToValueAtTime(0.001, time + 0.6);
+    subGain.gain.setValueAtTime(0.8, time);
+    subGain.gain.exponentialRampToValueAtTime(0.001, time + 0.9);
 
-    // Heavy distortion for punch
+    // Heavy distortion for grit
     const dist = ctx.createWaveShaper();
-    dist.curve = createSaturationCurve(4.0, 1024);
+    dist.curve = createSaturationCurve(5.0, 1024);
 
     osc.connect(dist);
     sub.connect(subGain);
@@ -1317,10 +1368,10 @@ export class LofiEngine {
 
     osc.start(time);
     sub.start(time);
-    osc.stop(time + 0.75);
-    sub.stop(time + 0.65);
-    this._trackSource(osc, time + 0.8);
-    this._trackSource(sub, time + 0.7);
+    osc.stop(time + 1.05);
+    sub.stop(time + 0.95);
+    this._trackSource(osc, time + 1.1);
+    this._trackSource(sub, time + 1.0);
   }
 
   /**
@@ -1368,19 +1419,27 @@ export class LofiEngine {
       bp.frequency.value = 1800;
       bp.Q.value = 0.5;
 
+      // Second bandpass layer for more body
+      const bp2 = ctx.createBiquadFilter();
+      bp2.type = 'bandpass';
+      bp2.frequency.value = 2500;
+      bp2.Q.value = 0.6;
+
       const g = ctx.createGain();
-      g.gain.setValueAtTime(0.85, t);
+      g.gain.setValueAtTime(1.0, t);
       g.gain.exponentialRampToValueAtTime(0.001, t + 0.1);
 
       src.connect(bp);
+      src.connect(bp2);
       bp.connect(g);
+      bp2.connect(g);
       g.connect(this._nodes.drumBus);
       src.start(t);
       this._trackSource(src, t + 0.12);
     }
 
     // Heavier tail with reverb-like decay
-    const tailDur = 0.18;
+    const tailDur = 0.22;
     const tailBuf = ctx.createBuffer(1, ctx.sampleRate * tailDur, ctx.sampleRate);
     const tailData = tailBuf.getChannelData(0);
     for (let i = 0; i < tailData.length; i++) tailData[i] = Math.random() * 2 - 1;
@@ -1393,14 +1452,14 @@ export class LofiEngine {
     tailBP.Q.value = 0.4;
 
     const tailG = ctx.createGain();
-    tailG.gain.setValueAtTime(0.6, time + burstCount * burstGap);
-    tailG.gain.exponentialRampToValueAtTime(0.001, time + 0.3);
+    tailG.gain.setValueAtTime(0.8, time + burstCount * burstGap);
+    tailG.gain.exponentialRampToValueAtTime(0.001, time + 0.35);
 
     tailSrc.connect(tailBP);
     tailBP.connect(tailG);
     tailG.connect(this._nodes.drumBus);
     tailSrc.start(time + burstCount * burstGap);
-    this._trackSource(tailSrc, time + 0.35);
+    this._trackSource(tailSrc, time + 0.4);
   }
 
   /**
@@ -1529,10 +1588,50 @@ export class LofiEngine {
   }
 
   /**
+   * Rapid-fire triplet hi-hat roll (Metro Boomin signature).
+   */
+  _playHiHatRoll(time, count, totalDur, volume) {
+    const spacing = totalDur / count;
+    for (let i = 0; i < count; i++) {
+      const t = time + i * spacing;
+      const vol = volume * (0.8 + Math.random() * 0.2); // 80-100% randomized
+      this._playTrapHat(t, 0.02, vol);
+    }
+  }
+
+  /**
    * Soft hi-hat for bossa — gentler, lower volume.
    */
   _playHiHatSoft(time, decayTime, volume) {
     this._playHiHat(time, decayTime, volume * 0.5);
+  }
+
+  /**
+   * Bossa shaker — tiny highpassed noise burst, "ch" sound.
+   */
+  _playShaker(time) {
+    const ctx = this._ctx;
+    const dur = 0.015;
+    const buf = ctx.createBuffer(1, ctx.sampleRate * dur, ctx.sampleRate);
+    const data = buf.getChannelData(0);
+    for (let i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1;
+
+    const src = ctx.createBufferSource();
+    src.buffer = buf;
+
+    const hp = ctx.createBiquadFilter();
+    hp.type = 'highpass';
+    hp.frequency.value = 8000;
+
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.08, time);
+    g.gain.exponentialRampToValueAtTime(0.001, time + dur);
+
+    src.connect(hp);
+    hp.connect(g);
+    g.connect(this._nodes.drumBus);
+    src.start(time);
+    this._trackSource(src, time + dur + 0.02);
   }
 
   /**
@@ -1653,13 +1752,25 @@ export class LofiEngine {
   /**
    * Rising pentatonic arpeggio for correct word streaks.
    */
-  _playStreakChime(time, chord) {
+  _playStreakChime(time, chord, streak) {
     const ctx = this._ctx;
     const scale = chord.scale || [NOTE.C4, NOTE.D4, NOTE.E4, NOTE.G4, NOTE.A4];
-    // Play 3 ascending notes from the chord scale
-    for (let i = 0; i < 3; i++) {
+
+    // Escalate based on streak count
+    let noteCount, vol;
+    if (streak >= 10) {
+      noteCount = 5; vol = 0.32;
+    } else if (streak >= 6) {
+      noteCount = 4; vol = 0.28;
+    } else {
+      noteCount = 3; vol = 0.22;
+    }
+
+    for (let i = 0; i < noteCount; i++) {
       const noteTime = time + i * 0.08;
-      const freq = scale[Math.min(i + 2, scale.length - 1)]; // start from 3rd scale degree
+      // Spread across the full scale for bigger streaks
+      const scaleIdx = Math.min(Math.floor(i * scale.length / noteCount), scale.length - 1);
+      const freq = scale[scaleIdx];
 
       const osc = ctx.createOscillator();
       osc.type = 'sine';
@@ -1667,7 +1778,7 @@ export class LofiEngine {
 
       const gain = ctx.createGain();
       gain.gain.setValueAtTime(0.0001, noteTime);
-      gain.gain.linearRampToValueAtTime(0.22, noteTime + 0.02);
+      gain.gain.linearRampToValueAtTime(vol, noteTime + 0.02);
       gain.gain.exponentialRampToValueAtTime(0.001, noteTime + 0.5);
 
       osc.connect(gain);
@@ -1675,6 +1786,65 @@ export class LofiEngine {
       osc.start(noteTime);
       osc.stop(noteTime + 0.55);
       this._trackSource(osc, noteTime + 0.6);
+
+      // Add triangle shimmer for streak 10+
+      if (streak >= 10) {
+        const shimmer = ctx.createOscillator();
+        shimmer.type = 'triangle';
+        shimmer.frequency.value = freq * 2;
+        const sg = ctx.createGain();
+        sg.gain.setValueAtTime(0.0001, noteTime);
+        sg.gain.linearRampToValueAtTime(vol * 0.3, noteTime + 0.02);
+        sg.gain.exponentialRampToValueAtTime(0.001, noteTime + 0.4);
+        shimmer.connect(sg);
+        sg.connect(this._nodes.padBus);
+        shimmer.start(noteTime);
+        shimmer.stop(noteTime + 0.45);
+        this._trackSource(shimmer, noteTime + 0.5);
+      }
+    }
+  }
+
+  /**
+   * Style-aware drum fill for big streak milestones.
+   */
+  _playStreakFill(time) {
+    const ctx = this._ctx;
+    const style = this._style;
+
+    if (style === 'trap') {
+      // 4 rapid 808 kicks ascending in pitch
+      const pitches = [25, 40, 55, 70];
+      for (let i = 0; i < 4; i++) {
+        const t = time + i * 0.1;
+        const osc = ctx.createOscillator();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(pitches[i] * 2, t);
+        osc.frequency.exponentialRampToValueAtTime(pitches[i], t + 0.08);
+        const g = ctx.createGain();
+        g.gain.setValueAtTime(0.9, t);
+        g.gain.exponentialRampToValueAtTime(0.001, t + 0.15);
+        const dist = ctx.createWaveShaper();
+        dist.curve = createSaturationCurve(4.0, 512);
+        osc.connect(dist);
+        dist.connect(g);
+        g.connect(this._nodes.drumBus);
+        osc.start(t);
+        osc.stop(t + 0.2);
+        this._trackSource(osc, t + 0.25);
+      }
+    } else if (style === 'bossa') {
+      // 3 rapid rim clicks (flam)
+      for (let i = 0; i < 3; i++) {
+        const t = time + i * 0.07;
+        this._playRimClick(t);
+      }
+    } else {
+      // Lofi and others: snare roll (4 snares at decreasing intervals)
+      const gaps = [0, 0.12, 0.2, 0.26];
+      for (let i = 0; i < 4; i++) {
+        this._playSnare(time + gaps[i], this._style);
+      }
     }
   }
 
