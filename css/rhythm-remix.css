@@ -331,11 +331,11 @@ body::before {
   opacity: 0.5;
 }
 
-/* Self-corrected: amber flash → green settle */
+/* Self-corrected: rainbow shimmer → settle to green */
 .word-span.done-self-corrected {
   color: var(--rm-correct);
   opacity: 1;
-  animation: scResolve 0.5s ease-out;
+  animation: scRainbow 0.9s ease-out;
 }
 
 /* ============================================================
@@ -745,10 +745,15 @@ body::before {
   to   { opacity: 1; transform: translateY(0); }
 }
 
-@keyframes scResolve {
-  0%   { background: rgba(232, 168, 124, 0.25); color: var(--rm-error); }
-  60%  { background: rgba(168, 216, 168, 0.15); color: var(--rm-correct); }
-  100% { background: transparent; color: var(--rm-correct); }
+@keyframes scRainbow {
+  0%   { color: #ff6b6b; background: rgba(255, 107, 107, 0.15); }
+  15%  { color: #ffa94d; background: rgba(255, 169, 77, 0.12); }
+  30%  { color: #ffd43b; background: rgba(255, 212, 59, 0.12); }
+  45%  { color: #69db7c; background: rgba(105, 219, 124, 0.12); }
+  60%  { color: #4dabf7; background: rgba(77, 171, 247, 0.12); }
+  75%  { color: #da77f2; background: rgba(218, 119, 242, 0.12); }
+  90%  { color: var(--rm-correct); background: rgba(168, 216, 168, 0.08); }
+  100% { color: var(--rm-correct); background: transparent; }
 }
 
 /* ============================================================

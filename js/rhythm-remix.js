@@ -196,16 +196,17 @@ function bezierArc(p0x, p0y, p1x, p1y, t) {
   };
 }
 
-// ── Color lerp utility ──────────────────────────────────────────────────
+// ── Rainbow color utility ────────────────────────────────────────────────
 
-function lerpColor(a, b, t) {
-  const ah = parseInt(a.slice(1), 16), bh = parseInt(b.slice(1), 16);
-  const ar = ah >> 16, ag = (ah >> 8) & 0xff, ab = ah & 0xff;
-  const br = bh >> 16, bg = (bh >> 8) & 0xff, bb = bh & 0xff;
-  const r = Math.round(ar + (br - ar) * t);
-  const g = Math.round(ag + (bg - ag) * t);
-  const bl = Math.round(ab + (bb - ab) * t);
-  return '#' + ((1 << 24) | (r << 16) | (g << 8) | bl).toString(16).slice(1);
+function hslToHex(h, s, l) {
+  s /= 100; l /= 100;
+  const a = s * Math.min(l, 1 - l);
+  const f = n => {
+    const k = (n + h / 30) % 12;
+    const c = l - a * Math.max(-1, Math.min(k - 3, 9 - k, 1));
+    return Math.round(c * 255).toString(16).padStart(2, '0');
+  };
+  return '#' + f(0) + f(8) + f(4);
 }
 
 // ── Spring physics ───────────────────────────────────────────────────────────
@@ -572,8 +573,8 @@ function onWordChange(fromIdx, toIdx) {
     } else if (isCorrect) {
       lofi.notifyWordEvent('correct');
     }
-    // Self-correction detection: forgiven word that was originally a substitution
-    if (w.forgiven && w.type === 'substitution') {
+    // Self-correction: pipeline-detected self-correction (always plays, not gated by celebrations)
+    if (w.selfCorrected) {
       lofi.notifyWordEvent('self-correction');
     }
   }
@@ -715,9 +716,12 @@ function updateBallPhysics(dt) {
     // Spawn arrival particles
     if (!prefersReducedMotion && w) {
       if (w.selfCorrected) {
-        // Struggle dissipating (amber, fast fade) + success emerging (green, longer)
-        spawnParticles(ball.x, ball.y, WORD_COLORS.struggle, 3, { vy: -60, spread: 25, life: 0.3, size: 2 });
-        spawnParticles(ball.x, ball.y, WORD_COLORS.correct, 5, { vy: -50, spread: 40, life: 0.6, size: 3 });
+        // Rainbow burst — multiple colors radiating outward
+        const rainbowHues = [0, 45, 120, 200, 280, 330];
+        for (const hue of rainbowHues) {
+          spawnParticles(ball.x, ball.y, hslToHex(hue, 85, 60), 1, { vy: -55, spread: 50, life: 0.7, size: 3 });
+        }
+        spawnParticles(ball.x, ball.y, WORD_COLORS.correct, 3, { vy: -40, spread: 30, life: 0.5, size: 2.5 });
       } else if (w.type === 'correct' || w.forgiven) {
         spawnParticles(ball.x, ball.y, WORD_COLORS.correct, 4, { vy: -50, spread: 30, life: 0.5, size: 2.5 });
       } else if (w.isStruggle || w.type === 'substitution') {
@@ -738,13 +742,17 @@ function updateBallPhysics(dt) {
     updateSpring(dt);
     ball.y = ball.travelEndY + ball.springY;
 
-    // Self-correction color transition: amber → green over 0.4s
+    // Self-correction: rainbow color cycling over 0.8s then settle to green
     if (ball.scTransition && ball.phase === 'dwelling') {
       if (!ball.scTransitionStart) ball.scTransitionStart = now;
-      const t = Math.min((now - ball.scTransitionStart) / 0.4, 1);
-      ball.color = lerpColor(WORD_COLORS.struggle, WORD_COLORS.correct, t);
-      ball.glowColor = ball.color;
-      if (t >= 1) {
+      const elapsed = now - ball.scTransitionStart;
+      if (elapsed < 0.8) {
+        const hue = (elapsed / 0.8) * 360;
+        ball.color = hslToHex(hue % 360, 85, 60);
+        ball.glowColor = hslToHex(hue % 360, 85, 50);
+      } else {
+        ball.color = WORD_COLORS.correct;
+        ball.glowColor = WORD_COLORS.correct;
         ball.scTransition = false;
         ball.scTransitionStart = 0;
       }

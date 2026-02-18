@@ -586,10 +586,18 @@ export class LofiEngine {
    * @param {'correct'|'error'|'omission'|'self-correction'|'sentence-end'} event
    */
   notifyWordEvent(event) {
-    if (!this._celebrationsEnabled || this._disposed || !this._playing) return;
+    if (this._disposed || !this._playing) return;
     const ctx = this._ctx;
     const time = ctx.currentTime;
     const chord = this._getCurrentChord();
+
+    // Self-correction always plays (not gated by celebrations toggle)
+    if (event === 'self-correction') {
+      this._playResolutionPing(time, chord);
+      return;
+    }
+
+    if (!this._celebrationsEnabled) return;
 
     if (event === 'correct') {
       this._correctStreak++;
@@ -601,8 +609,6 @@ export class LofiEngine {
       }
     } else if (event === 'error' || event === 'omission') {
       this._correctStreak = 0;
-    } else if (event === 'self-correction') {
-      this._playResolutionPing(time, chord);
     } else if (event === 'sentence-end') {
       this._playSentenceSwell(time);
     }
@@ -1672,31 +1678,31 @@ export class LofiEngine {
   }
 
   /**
-   * Warm rising two-note chime for self-corrections — "nice catch!"
+   * Bright rising 3-note sparkle arpeggio for self-corrections — "nice catch!"
    */
   _playResolutionPing(time, chord) {
     const ctx = this._ctx;
     const scale = chord.scale || [NOTE.C4, NOTE.D4, NOTE.E4, NOTE.G4, NOTE.A4];
-    // Rising major third: 3rd → 5th scale degree (warm, uplifting)
-    const notes = [scale[2], scale[4]];
+    // Rising 3-note arpeggio: 1st → 3rd → 5th (bright, triumphant)
+    const notes = [scale[0], scale[2], scale[4]];
 
     for (let i = 0; i < notes.length; i++) {
-      const t = time + i * 0.1;
+      const t = time + i * 0.09;
       const osc = ctx.createOscillator();
       osc.type = 'sine';
       osc.frequency.value = notes[i];
 
       const osc2 = ctx.createOscillator();
       osc2.type = 'triangle';
-      osc2.frequency.value = notes[i] * 2;
+      osc2.frequency.value = notes[i] * 2; // octave shimmer
 
       const g = ctx.createGain();
       g.gain.setValueAtTime(0.0001, t);
-      g.gain.linearRampToValueAtTime(0.2, t + 0.02);
-      g.gain.exponentialRampToValueAtTime(0.001, t + 0.5);
+      g.gain.linearRampToValueAtTime(0.35, t + 0.02);
+      g.gain.exponentialRampToValueAtTime(0.001, t + 0.7);
 
       const g2 = ctx.createGain();
-      g2.gain.value = 0.15;
+      g2.gain.value = 0.2;
 
       osc.connect(g);
       osc2.connect(g2);
@@ -1705,10 +1711,10 @@ export class LofiEngine {
 
       osc.start(t);
       osc2.start(t);
-      osc.stop(t + 0.55);
-      osc2.stop(t + 0.55);
-      this._trackSource(osc, t + 0.6);
-      this._trackSource(osc2, t + 0.6);
+      osc.stop(t + 0.75);
+      osc2.stop(t + 0.75);
+      this._trackSource(osc, t + 0.8);
+      this._trackSource(osc2, t + 0.8);
     }
   }
 
