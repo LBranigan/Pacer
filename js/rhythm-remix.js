@@ -87,9 +87,9 @@ let savedDensity = 'normal'; // density to restore after pause ends
 /** Sentence-aligned chord toggle state. */
 let sentenceAlignedEnabled = false;
 
-/** Toggle states for new features (celebrations + melody default ON). */
+/** Toggle states for new features (celebrations default ON). */
 let celebrationsEnabled = true;
-let melodyEnabled = true;
+let melodyEnabled = false;
 let adaptiveHarmonyEnabled = false;
 
 /** Adaptive harmony: rolling fluency window. */
