@@ -7,8 +7,8 @@
  * @module rhythm-remix
  */
 
-import { LofiEngine } from './lofi-engine.js?v=20260219y';
-import { MountainRange } from './mountain-range.js?v=20260219y';
+import { LofiEngine } from './lofi-engine.js?v=20260219z';
+import { MountainRange } from './mountain-range.js?v=20260219z';
 import { getAudioBlob } from './audio-store.js';
 import { getAssessment, getStudents } from './storage.js';
 import { getPunctuationPositions } from './diagnostics.js';
@@ -233,7 +233,14 @@ function updateSpring(dt) {
 
 function wcpmToBpm(wcpm) {
   const raw = 60 + ((wcpm - 40) * 30 / 140);
-  return Math.max(55, Math.min(100, raw));
+  return Math.max(55, Math.min(100, raw)) * styleTempoMultiplier();
+}
+
+/** Zelda styles play at 1.5x BPM to feel energetic. */
+function styleTempoMultiplier() {
+  const sel = document.getElementById('styleSelect');
+  const style = sel ? sel.value : '';
+  return (style === 'zelda' || style === 'zelda-piano') ? 1.5 : 1;
 }
 
 // ── Adaptive tempo — beat tracks reading pace ────────────────────────────────
@@ -241,7 +248,7 @@ function wcpmToBpm(wcpm) {
 function adaptiveWpmToBpm(wpm) {
   // 30-180 WPM → 50-110 BPM (wider range than wcpmToBpm)
   const raw = 50 + ((wpm - 30) * 60 / 150);
-  return Math.max(50, Math.min(110, raw));
+  return Math.max(50, Math.min(110, raw)) * styleTempoMultiplier();
 }
 
 function updateAdaptiveTempo(toIdx) {
@@ -549,7 +556,7 @@ function setupAudio() {
   lofi.setAdaptiveHarmony(adaptiveHarmonyEnabled);
 
   // Set style from localStorage preference
-  const validStyles = ['lofi', 'jazzhop', 'ambient', 'bossa', 'chiptune', 'classical', 'trap'];
+  const validStyles = ['lofi', 'jazzhop', 'ambient', 'bossa', 'chiptune', 'classical', 'trap', 'zelda', 'bossa-piano', 'jazzhop-piano', 'chiptune-piano', 'zelda-piano'];
   const savedStyle = localStorage.getItem('orf_remix_style');
   if (savedStyle && validStyles.includes(savedStyle)) {
     lofi.setStyle(savedStyle);
@@ -1313,7 +1320,13 @@ function wireControls() {
   if (styleSelect) {
     styleSelect.addEventListener('change', () => {
       const val = styleSelect.value;
-      if (lofi) lofi.setStyle(val);
+      if (lofi) {
+        lofi.setStyle(val);
+        // Re-apply tempo with style-specific multiplier (Zelda = 1.5x)
+        if (assessment && assessment.wcpm) {
+          lofi.setTempo(wcpmToBpm(assessment.wcpm) * playbackRate);
+        }
+      }
       localStorage.setItem('orf_remix_style', val);
     });
   }
