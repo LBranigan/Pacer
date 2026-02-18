@@ -976,49 +976,46 @@ async function runAnalysis() {
       if (pkParts.length > 1) v1Entry._xvalAttempt = pkParts;
     }
 
-    // Count how many engines got this word correct
+    // Count how many engines got this word correct (V0 demoted to display-only)
     // V1 compound = student fragmented the word — don't count as clean correct
     const v1Compound = v1Entry._isStruggle && v1Entry.compound;
     const v1Correct = v1Entry.type === 'correct' && !v1Compound;
-    const v0Correct = v0Type === 'correct';
+    const v0Correct = v0Type === 'correct';  // kept for display/logging
     const pkCorrect = pkType === 'correct';
-    const correctCount = (v1Correct ? 1 : 0) + (v0Correct ? 1 : 0) + (pkCorrect ? 1 : 0);
+    const correctCount = (v1Correct ? 1 : 0) + (pkCorrect ? 1 : 0);  // V0 excluded from scoring
 
     const v1Omitted = v1Entry.type === 'omission';
-    const v0Omitted = v0Type === 'omission';
+    const v0Omitted = v0Type === 'omission';  // kept for display/logging
     const pkOmitted = pkType === 'omission';
-    const omitCount = (v1Omitted ? 1 : 0) + (v0Omitted ? 1 : 0) + (pkOmitted ? 1 : 0);
+    const omitCount = (v1Omitted ? 1 : 0) + (pkOmitted ? 1 : 0);  // V0 excluded from scoring
 
     let status;
 
-    if (v1Omitted && pkOmitted && (!hasV0 || v0Omitted)) {
-      // All engines omitted — confirmed omission, skip
+    if (v1Omitted && pkOmitted) {
+      // Both scoring engines omitted — confirmed omission, skip
       threeWayTable.push({ ref: v1Entry.ref, v1: '—', v0: v0Entry ? '—' : 'n/a', pk: pkEntry ? '—' : 'n/a', status: 'confirmed_omission' });
       continue;
-    } else if (v1Omitted && (pkCorrect || (!hasPk && v0Correct))) {
-      // V1 omitted but another engine heard it → recovery
+    } else if (v1Omitted && pkCorrect) {
+      // V1 omitted but Parakeet heard it → recovery
       status = 'recovered';
-      const recoveryTs = parakeetTs || v0Ts;
+      const recoveryTs = parakeetTs;
       xvalRecoveredOmissions.push({ refIndex: ri, entry: v1Entry, timestamps: recoveryTs });
     } else if (correctCount >= 2) {
       // Majority correct — but did V1 agree?
       // V1 correct + another correct → truly confirmed
       // V1 wrong + V0&Pk both correct → V1 overridden (disagreed)
       status = v1Correct ? 'confirmed' : 'disagreed';
-    } else if (v1Compound && (v0Correct || pkCorrect)) {
-      // V1 fragmented but matched + another engine confirms → confirmed (struggle preserved on entry)
+    } else if (v1Compound && pkCorrect) {
+      // V1 fragmented but matched + Parakeet confirms → confirmed (struggle preserved on entry)
       status = 'confirmed';
     } else if (v1Compound) {
-      // V1 fragmented match but no other engine confirms
-      status = hasPk || hasV0 ? 'unconfirmed' : 'unavailable';
-    } else if (v1Correct && !v0Correct && !pkCorrect) {
+      // V1 fragmented match but Parakeet doesn't confirm
+      status = hasPk ? 'unconfirmed' : 'unavailable';
+    } else if (v1Correct && !pkCorrect) {
       // Only V1 heard it correctly
-      status = hasPk || hasV0 ? 'unconfirmed' : 'unavailable';
+      status = hasPk ? 'unconfirmed' : 'unavailable';
     } else if (!v1Correct && pkCorrect) {
       // V1 wrong but Parakeet correct → disagreed (Pk is strong)
-      status = 'disagreed';
-    } else if (!v1Correct && !pkCorrect && v0Correct) {
-      // V1 wrong, Pk wrong, V0 correct → disagreed (V0 tiebreak)
       status = 'disagreed';
     } else if (omitCount >= 2) {
       // Majority omitted
@@ -1027,14 +1024,13 @@ async function runAnalysis() {
       // V1 has substitution — check if others agree on the wrong word
       const v1Hyp = (v1Entry.hyp || '').toLowerCase().replace(/[^a-z'-]/g, '');
       const pkHyp = (pkEntry?.hyp || '').toLowerCase().replace(/[^a-z'-]/g, '');
-      const v0Hyp = (v0Entry?.hyp || '').toLowerCase().replace(/[^a-z'-]/g, '');
-      if ((hasPk && v1Hyp === pkHyp) || (hasV0 && v1Hyp === v0Hyp)) {
+      if (hasPk && v1Hyp === pkHyp) {
         status = 'confirmed';
       } else {
         status = 'disagreed';
       }
     } else {
-      status = hasPk || hasV0 ? 'unconfirmed' : 'unavailable';
+      status = hasPk ? 'unconfirmed' : 'unavailable';
     }
 
     _setCrossValidation(v1Entry, transcriptWords, status, parakeetTs);
@@ -1175,14 +1171,12 @@ async function runAnalysis() {
           }
         }
 
-        // 3-way confirmed insertion: all available engines heard it at this position
-        // Require at least V1 + one other engine; if both available, both must agree.
+        // Confirmed insertion: V1 + Parakeet heard it at this position.
+        // V0 excluded from scoring — only V1 + Pk required.
         // Boundary groups (pos 0 / N) are pre/post-reading speech — never confirm.
-        const enginesAvailable = 1 + (hasV0 ? 1 : 0) + (hasPk ? 1 : 0);
-        const enginesHeard = 1 + (v0Heard ? 1 : 0) + (pkPosHeard ? 1 : 0);
-        if (!isBoundary && enginesAvailable >= 2 && enginesHeard === enginesAvailable) {
+        if (!isBoundary && hasPk && pkPosHeard) {
           entry._confirmedInsertion = true;
-          entry._insertionEngines = enginesHeard;
+          entry._insertionEngines = 2;  // V1 + Pk
         }
       }
     }
@@ -1472,10 +1466,9 @@ async function runAnalysis() {
       if (!entry._isStruggle) {
         const refN = _norm(entry.ref);
         const hypN = _norm(entry.hyp);
-        const v0N = entry._v0Word ? _norm(entry._v0Word) : null;
         const pkN = entry._xvalWord ? _norm(entry._xvalWord) : null;
-        const anyCorrect = v0N === refN || pkN === refN;
-        const enginesAgree = (!v0N || v0N === hypN) && (!pkN || pkN === hypN);
+        const anyCorrect = pkN === refN;  // V0 excluded from scoring
+        const enginesAgree = !pkN || pkN === hypN;
         if (!anyCorrect && enginesAgree && !isNearMiss(entry.hyp, entry.ref)) {
           continue; // Confirmed substitution — clean error, not a struggle
         }
@@ -1488,7 +1481,7 @@ async function runAnalysis() {
     if (entry.type === 'correct') {
       if (entry._postStruggleLeniency || entry._recovered ||
           (entry.compound && entry.parts?.length >= 2) ||
-          entry._v0Type === 'substitution' || entry._pkType === 'omission') {
+          entry._pkType === 'omission') {
         entry._possibleStruggle = true;
       }
     }
@@ -2028,8 +2021,7 @@ async function runAnalysis() {
       const hearings = [];
       if (entry._v1RawAttempt) hearings.push(entry._v1RawAttempt.join(''));
       else if (entry.hyp) hearings.push(entry.hyp);
-      if (entry._v0Attempt) hearings.push(entry._v0Attempt.join(''));
-      else if (entry._v0Word) hearings.push(entry._v0Word);
+      // V0 excluded from scoring — do not include V0 hearings
       if (entry._xvalAttempt) hearings.push(entry._xvalAttempt.join(''));
       else if (entry._xvalWord) hearings.push(entry._xvalWord);
 
@@ -2110,7 +2102,7 @@ async function runAnalysis() {
         // If another engine heard this word correctly, the <unknown> is V1's CTC confusion,
         // not the OOV word's vocalization. The 3-way verdict sets crossValidation='disagreed'
         // but does NOT change V1's type — so we must check engine types directly.
-        if (candidate._pkType === 'correct' || candidate._v0Type === 'correct') continue;
+        if (candidate._pkType === 'correct') continue;  // V0 excluded from scoring
         if (candidate._isOOV) continue;             // don't steal from another OOV word
         if (candidate.forgiven) continue;            // don't steal from already-resolved entries
         if (candidate.hyp !== 'unknown') continue;
@@ -2337,11 +2329,10 @@ async function runAnalysis() {
 
   // ── Phase 7: Single-letter function word forgiveness ─────────────────
   // "a" and "I" are too short for ASR to capture when student is
-  // struggling with an adjacent word. Forgive if ALL engines missed it.
+  // struggling with an adjacent word. Forgive if scoring engines missed it.
   {
     const FUNCTION_LETTERS = new Set(['a', 'i']);
     const pkRefEntries = data._threeWay?.pkRef;
-    const v0RefEntries = data._threeWay?.v0Ref;
 
     let refIdx = 0;
     for (let i = 0; i < alignment.length; i++) {
@@ -2370,14 +2361,12 @@ async function runAnalysis() {
 
       if (!adjacentStruggle) continue;
 
-      // Verify ALL engines missed it (no engine heard this word at this position)
-      const v0Entry = v0RefEntries?.[currentRefIdx];
+      // Verify scoring engines missed it (V0 excluded from scoring)
       const pkEntry = pkRefEntries?.[currentRefIdx];
       const v1Omission = entry.type === 'omission';
-      const v0Omission = !v0Entry || v0Entry.type === 'omission';
       const pkOmission = !pkEntry || pkEntry.type === 'omission';
 
-      if (v1Omission && v0Omission && pkOmission) {
+      if (v1Omission && pkOmission) {
         entry.forgiven = true;
         entry._functionWordCollateral = true;
       }
@@ -2388,8 +2377,8 @@ async function runAnalysis() {
   // With Trust Pk ON, Parakeet is the PRIMARY correctness engine: any
   // disagreed substitution where Parakeet heard the correct word gets
   // forgiven. This makes Parakeet's verdict final on every disputed word.
-  // Reverb's role becomes disfluency detection (V1 vs V0) + initial transcript.
-  // Rationale: CTC (V1/V0) systematically drops suffixes and misrecognizes
+  // Reverb's role is disfluency detection (V1 filler keywords) + initial transcript.
+  // Rationale: CTC (V1) systematically drops suffixes and misrecognizes
   // words that Parakeet's RNNT captures correctly.
   //
   // FRAGMENT GUARD: If Parakeet itself produced insertion fragments that are
@@ -2515,7 +2504,7 @@ async function runAnalysis() {
 
       if (entry.type === 'substitution') {
         const ref = (entry.ref || '').toLowerCase().replace(/[^a-z'-]/g, '');
-        const engines = [entry.hyp, entry._v0Word, entry._xvalWord].filter(Boolean);
+        const engines = [entry.hyp, entry._xvalWord].filter(Boolean);  // V0 excluded from scoring
         const anyNearMiss = engines.some(w => isNearMiss(w, ref));
         if (anyNearMiss) break;
         entry._notAttempted = true;
@@ -2575,7 +2564,7 @@ async function runAnalysis() {
 
       // Only flag words that resolved as correct or forgiven
       const isCorrectish = entry.type === 'correct' ||
-        (entry.type === 'substitution' && (entry.forgiven || entry._v0Type === 'correct'));
+        (entry.type === 'substitution' && entry.forgiven);
       if (!isCorrectish) continue;
 
       let evidence = null;
@@ -2604,10 +2593,27 @@ async function runAnalysis() {
           after.push(alignment[j]);
         }
 
+        // Build set of nearby ref words (next 5) to detect phrase false starts.
+        // If an insertion matches an upcoming ref word, it's a read-ahead, not a
+        // self-correction attempt of the current word.
+        const nearbyRefWords = new Set();
+        let refsSeen = 0;
+        for (let j = i + 1; j < alignment.length && refsSeen < 5; j++) {
+          if (alignment[j].ref) {
+            nearbyRefWords.add(scNorm(alignment[j].ref));
+            refsSeen++;
+          }
+        }
+
         for (const ins of [...before, ...after]) {
           const insN = scNorm(ins.hyp);
           if (!insN || insN.length < 2) continue;
           if (['uh', 'um', 'ah', 'er', 'hm', 'mm'].includes(insN)) continue;
+          // Skip insertions already classified by another pipeline stage
+          if (ins._confirmedInsertion || ins._partOfStruggle || ins.isDisfluency) continue;
+          // Skip insertions that match an upcoming ref word (phrase false start),
+          // but allow through if the insertion matches the CURRENT ref (repetition)
+          if (insN !== refN && nearbyRefWords.has(insN)) continue;
           // (c) Exact repetition
           if (insN === refN) {
             evidence = [ins.hyp];

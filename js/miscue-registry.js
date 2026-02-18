@@ -62,17 +62,17 @@ const ALIGNMENT_MISCUES = {
   },
 
   confirmed_insertion: {
-    description: 'Student added a word not in the reference passage, confirmed by all available ASR engines (V1 + V0 + Parakeet). Strong evidence the student actually said an extra word.',
-    detector: 'app.js → 3-way insertion cross-validation (after alignment, grouped by ref-word boundary)',
+    description: 'Student added a word not in the reference passage, confirmed by V1 + Parakeet at the same ref-word boundary. Strong evidence the student actually said an extra word.',
+    detector: 'app.js → insertion cross-validation (after alignment, grouped by ref-word boundary)',
     countsAsError: false, // Per ORF standard, insertions never count as errors (still tracked/displayed)
     config: {
-      requirement: 'All available engines must hear the same normalized word at the same ref-word boundary position',
+      requirement: 'V1 + Parakeet must hear the same normalized word at the same ref-word boundary position (V0 excluded from scoring)',
       exclusions: 'Fillers (isDisfluency), struggle fragments (_partOfStruggle), CTC artifacts (_ctcArtifact) are excluded'
     },
     example: {
       reference: 'the dog',
       spoken: 'the big dog',
-      result: 'V1 hears "big", V0 hears "big", Parakeet hears "big" → _confirmedInsertion: true → counts as error'
+      result: 'V1 hears "big", Parakeet hears "big" → _confirmedInsertion: true → counts as error'
     },
     uiClass: 'word-bucket-confirmed-insertion',
     note: 'Rendered inline in word flow (not as fragment) with its own bucket color. The "+" prefix in display text indicates an added word. Regular insertions (single-engine or 2-engine) remain non-errors and show in the "Inserted words" section.'
@@ -80,8 +80,8 @@ const ALIGNMENT_MISCUES = {
 };
 
 // ============================================================================
-// REVERB DISFLUENCY MISCUES (detected in app.js via V1/V0 insertion diff)
-// Model-level disfluencies from Reverb verbatim vs clean comparison
+// REVERB DISFLUENCY MISCUES (detected in app.js via V1 keyword matching)
+// Model-level disfluencies from Reverb verbatim pass
 // ============================================================================
 
 const REVERB_DISFLUENCY_MISCUES = {
@@ -259,7 +259,7 @@ const DIAGNOSTIC_MISCUES = {
         note: 'Fixes undercounting where _nearMissEvidence only contained pass 1 fragments but absorbMispronunciationFragments added more _partOfStruggle insertions (like single-char "a") that were missed. The full attempt gives downstream AI the complete picture of what the student produced.'
       }
     },
-    note: 'A word can match multiple pathways simultaneously. Paths 1-3 require a substitution base (student said wrong word). Compound fragments pathway reclassifies correct words where V1 compound merge combined 2+ fragments — detected via independent 3-way reference alignment (V1, V0, Parakeet each aligned to reference separately).'
+    note: 'A word can match multiple pathways simultaneously. Paths 1-3 require a substitution base (student said wrong word). Compound fragments pathway reclassifies correct words where V1 compound merge combined 2+ fragments — detected via independent reference alignment (V1 and Parakeet each aligned to reference separately; V0 is display-only).'
   },
 
   reverbCtcFailure: {
@@ -345,7 +345,7 @@ const PRE_ALIGNMENT_FIXES = {
       after: 'correct("true"), sub("informational"←"in"), ins("four",_spillover), ins("uh",_spillover), omission("expert",_spilloverOmission), correct("for")',
       result: '"infour" near-miss for "informational" → resolveNearMissClusters upgrades to struggle; "expert" recovered by Parakeet in 3-way verdict'
     },
-    note: 'Runs independently per engine (V1, V0, Parakeet) after alignWords() and before 3-way comparison. Uses only the engine\'s own data — no cross-engine dependency. Modifies alignment array in place. Downstream resolveNearMissClusters and absorbMispronunciationFragments consume the reassigned fragments naturally.'
+    note: 'Runs independently per engine (V1, V0, Parakeet) after alignWords() and before comparison. Uses only the engine\'s own data — no cross-engine dependency. Modifies alignment array in place. V0 alignment is computed for display but excluded from scoring decisions.'
   },
 
   tier1NearMatchOverride: {
@@ -497,7 +497,7 @@ const FORGIVENESS_RULES = {
   },
 
   properNounOmissionForgiveness: {
-    description: 'Proper noun scored as omission by V1/V0 (Reverb fragmented the attempt) but Parakeet captured a near-miss. Student attempted the word — ASR fragmentation caused the false omission.',
+    description: 'Proper noun scored as omission by V1 (Reverb fragmented the attempt) but Parakeet captured a near-miss. Student attempted the word — ASR fragmentation caused the false omission.',
     detector: 'app.js → forgiveness loop (omission branch, uses _xvalWord or preceding insertion fragments)',
     countsAsError: false,
     config: {
@@ -598,7 +598,7 @@ const FORGIVENESS_RULES = {
     countsAsError: false,
     config: {
       FUNCTION_LETTERS: ['a', 'i'],
-      requirement: 'Omitted by ALL engines (V1, V0, Parakeet) at this ref position',
+      requirement: 'Omitted by scoring engines (V1, Parakeet) at this ref position',
       adjacency: 'Adjacent non-insertion ref entry must be OOV, struggle, substitution, or _oovExcluded'
     },
     example: {
@@ -609,12 +609,12 @@ const FORGIVENESS_RULES = {
     guards: [
       'Reference word must be single letter: "a" or "I"',
       'Entry type must be omission',
-      'ALL three engines must have omission at this ref position (checked via _threeWay)',
+      'Scoring engines (V1 + Pk) must have omission at this ref position (checked via _threeWay)',
       'Must be adjacent (in ref-word space, skipping insertions) to OOV or struggle entry',
       'Entry must not already be forgiven'
     ],
     uiClass: 'word-forgiven',
-    note: 'Uses _threeWay.pkRef[refIdx] and _threeWay.v0Ref[refIdx] for per-engine verification. refIdx tracked by incrementing counter for each non-insertion alignment entry (same pattern as post-struggle leniency).'
+    note: 'Uses _threeWay.pkRef[refIdx] for Parakeet verification. V0 data still stored for display but not checked for scoring decisions. refIdx tracked by incrementing counter for each non-insertion alignment entry (same pattern as post-struggle leniency).'
   },
 
   oovPhoneticForgiveness: {
@@ -649,7 +649,7 @@ const FORGIVENESS_RULES = {
     detector: 'app.js → Phase 8: End-of-reading detection (backward walk from alignment end)',
     countsAsError: false,
     config: {
-      comparison: 'isNearMiss(engineWord, refWord) checked for V1, V0, and Parakeet',
+      comparison: 'isNearMiss(engineWord, refWord) checked for V1 and Parakeet (V0 excluded from scoring)',
       stopCondition: 'Walk stops at first correct, forgiven, or near-miss entry',
       omissionPolicy: 'Trailing omissions only marked if a not-attempted substitution exists after them'
     },
@@ -663,28 +663,29 @@ const FORGIVENESS_RULES = {
   },
 
   pkTrustOverride: {
-    description: 'Disagreed substitution where Parakeet heard the correct word — forgiven when "Trust Pk" toggle is ON. CTC (Reverb) systematically drops suffixes and misrecognizes words that RNNT (Parakeet) captures correctly.',
+    description: 'Disagreed substitution where Parakeet heard the correct word — forgiven by default (Trust Pk is ON by default). With Trust Pk ON, Parakeet is the PRIMARY correctness engine: it overrides Reverb on every disagreed word. Reverb\'s role becomes disfluency detection + initial transcript.',
     detector: 'app.js → Phase 7b: Parakeet trust override (after function word forgiveness, before post-struggle leniency)',
     countsAsError: false,
     config: {
-      toggle: 'localStorage orf_trust_pk (UI toggle next to Upload WAV)',
+      toggle: 'localStorage orf_trust_pk (UI toggle, ON by default)',
       requires_disagreed: true,
       requires_pk_correct: true
     },
     example: {
       reference: 'wounded',
       spoken: 'Reverb: "wound", Parakeet: "wounded"',
-      result: 'Disagreed + Pk heard correct → forgiven (Trust Pk ON)'
+      result: 'Disagreed + Pk heard correct → forgiven (Trust Pk ON by default)'
     },
     guards: [
-      'Trust Pk toggle must be ON (localStorage orf_trust_pk === "true")',
+      'Trust Pk toggle must be ON (localStorage orf_trust_pk, defaults to "true")',
       'Entry must be type === "substitution"',
       'crossValidation must be "disagreed" (V1 and Pk disagree)',
       '_pkType must be "correct" (Parakeet heard the reference word)',
-      'Not already forgiven by another mechanism'
+      'Not already forgiven by another mechanism',
+      'FRAGMENT GUARD: No Pk insertion fragments at this ref boundary that are near-misses of the ref word (isNearMiss). If Pk produced fragments like "pro" alongside correct "pronounced", its RNNT decoder likely reconstructed the word from a struggled attempt — skip override.'
     ],
     uiClass: 'word-forgiven',
-    note: 'This is a user-controlled toggle, not automatic. Departures from standard ORF scoring (DIBELS/AIMSweb count dropped suffixes as errors). The toggle lets users compare accuracy with and without Parakeet trust. Risk: Parakeet RNNT implicit LM may hallucinate suffixes on common inflected forms.'
+    note: 'ON by default. Can be toggled OFF to compare accuracy with standard ORF scoring (DIBELS/AIMSweb count dropped suffixes as errors). Fragment guard (added 2026-02-18): checks pkInsGroups[refIdx] and pkInsGroups[refIdx+1] for Pk insertions that are near-misses of the ref word. Blocked overrides logged in pk_trust_override stage with reason "pk_fragment_evidence".'
   }
 };
 
@@ -719,7 +720,7 @@ export const MISCUE_REGISTRY = {
   // Alignment-based (core errors)
   ...ALIGNMENT_MISCUES,
 
-  // Reverb disfluencies (V1/V0 insertion diff in app.js)
+  // Reverb disfluencies (V1 keyword matching in app.js)
   ...REVERB_DISFLUENCY_MISCUES,
 
   // Diagnostics (fluency indicators)

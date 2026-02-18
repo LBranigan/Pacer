@@ -478,6 +478,11 @@ export class LofiEngine {
     if (!['light', 'medium', 'heavy'].includes(intensity)) return;
     if (intensity === this._crackleIntensity) return;
     this._crackleIntensity = intensity;
+    // Scale crackle volume with intensity so heavy is unmistakable
+    if (this._nodes.crackleBus) {
+      const vol = intensity === 'heavy' ? 0.18 : intensity === 'medium' ? 0.12 : 0.06;
+      this._nodes.crackleBus.gain.setTargetAtTime(vol, this._ctx.currentTime, 0.05);
+    }
     // Hot-swap the crackle buffer if currently playing
     if (this._crackleSource && this._crackleBufs[intensity]) {
       this._stopCrackle();
@@ -486,54 +491,83 @@ export class LofiEngine {
   }
 
   /**
-   * Play a brief record-skip stutter (for struggle words).
+   * Play a record-skip stutter (for struggle words).
+   * Audible scratch + brief master volume dip to simulate vinyl skip.
    */
   playRecordSkip() {
     if (this._disposed || !this._playing) return;
     const ctx = this._ctx;
     const time = ctx.currentTime;
 
-    // Brief burst of dense crackle + volume dip
-    const skipBuf = ctx.createBuffer(1, ctx.sampleRate * 0.08, ctx.sampleRate);
+    // Dense crackle burst (longer, louder)
+    const skipBuf = ctx.createBuffer(1, ctx.sampleRate * 0.15, ctx.sampleRate);
     const data = skipBuf.getChannelData(0);
     for (let i = 0; i < data.length; i++) {
-      if (Math.random() < 200 / ctx.sampleRate) {
-        data[i] = (Math.random() * 2 - 1) * 0.8;
-        if (i + 1 < data.length) data[i + 1] = data[i] * -0.6;
+      if (Math.random() < 300 / ctx.sampleRate) {
+        data[i] = (Math.random() * 2 - 1) * 1.0;
+        if (i + 1 < data.length) data[i + 1] = data[i] * -0.7;
+        if (i + 2 < data.length) data[i + 2] = data[i] * 0.3;
       }
     }
     const src = ctx.createBufferSource();
     src.buffer = skipBuf;
     const g = ctx.createGain();
-    g.gain.setValueAtTime(0.06, time);
-    g.gain.exponentialRampToValueAtTime(0.001, time + 0.08);
+    g.gain.setValueAtTime(0.2, time);
+    g.gain.exponentialRampToValueAtTime(0.001, time + 0.15);
     src.connect(g);
     g.connect(this._nodes.crackleFilter);
     src.start(time);
-    this._trackSource(src, time + 0.1);
+    this._trackSource(src, time + 0.2);
+
+    // Brief master volume dip — "the record skipped"
+    const master = this._nodes.masterGain;
+    if (master) {
+      master.gain.setValueAtTime(0.85, time);
+      master.gain.linearRampToValueAtTime(0.5, time + 0.03);
+      master.gain.linearRampToValueAtTime(0.85, time + 0.18);
+    }
   }
 
   /**
    * Play a needle-drop thump (for recovery after pause).
+   * Deep thump through the drum bus + crackle burst — unmistakable "we're back".
    */
   playNeedleDrop() {
     if (this._disposed || !this._playing) return;
     const ctx = this._ctx;
     const time = ctx.currentTime;
 
-    // Low thump + crackle burst
+    // Deep thump through drum bus (not crackle bus) so it's properly audible
     const osc = ctx.createOscillator();
     osc.type = 'sine';
-    osc.frequency.setValueAtTime(80, time);
-    osc.frequency.exponentialRampToValueAtTime(30, time + 0.15);
+    osc.frequency.setValueAtTime(100, time);
+    osc.frequency.exponentialRampToValueAtTime(35, time + 0.15);
     const g = ctx.createGain();
-    g.gain.setValueAtTime(0.15, time);
-    g.gain.exponentialRampToValueAtTime(0.001, time + 0.2);
+    g.gain.setValueAtTime(0.45, time);
+    g.gain.exponentialRampToValueAtTime(0.001, time + 0.25);
     osc.connect(g);
-    g.connect(this._nodes.crackleBus);
+    g.connect(this._nodes.drumBus);
     osc.start(time);
-    osc.stop(time + 0.25);
-    this._trackSource(osc, time + 0.3);
+    osc.stop(time + 0.3);
+    this._trackSource(osc, time + 0.35);
+
+    // Crackle burst alongside
+    const skipBuf = ctx.createBuffer(1, ctx.sampleRate * 0.1, ctx.sampleRate);
+    const data = skipBuf.getChannelData(0);
+    for (let i = 0; i < data.length; i++) {
+      if (Math.random() < 100 / ctx.sampleRate) {
+        data[i] = (Math.random() * 2 - 1) * 0.6;
+      }
+    }
+    const src = ctx.createBufferSource();
+    src.buffer = skipBuf;
+    const g2 = ctx.createGain();
+    g2.gain.setValueAtTime(0.15, time);
+    g2.gain.exponentialRampToValueAtTime(0.001, time + 0.12);
+    src.connect(g2);
+    g2.connect(this._nodes.crackleFilter);
+    src.start(time);
+    this._trackSource(src, time + 0.15);
   }
 
   // ─── Micro-Celebrations ────────────────────────────────────────────────
@@ -613,7 +647,7 @@ export class LofiEngine {
       freq = freq * Math.pow(2, 1 / 12); // semitone up
     }
 
-    this._playMelodyNote(time, freq, isError ? 0.2 : 0.3, isError ? 0.08 : 0.12);
+    this._playMelodyNote(time, freq, isError ? 0.25 : 0.4, isError ? 0.15 : 0.22);
   }
 
   // ─── Adaptive Harmony ─────────────────────────────────────────────────
@@ -816,7 +850,7 @@ export class LofiEngine {
 
     // ── Vinyl crackle (separate path, very low volume) ──
     n.crackleBus = ctx.createGain();
-    n.crackleBus.gain.value = 0.03; // ~-30dB
+    n.crackleBus.gain.value = 0.10; // audible crackle
     n.crackleFilter = ctx.createBiquadFilter();
     n.crackleFilter.type = 'highpass';
     n.crackleFilter.frequency.value = 1000;
@@ -1626,14 +1660,14 @@ export class LofiEngine {
 
       const gain = ctx.createGain();
       gain.gain.setValueAtTime(0.0001, noteTime);
-      gain.gain.linearRampToValueAtTime(0.12, noteTime + 0.02);
-      gain.gain.exponentialRampToValueAtTime(0.001, noteTime + 0.4);
+      gain.gain.linearRampToValueAtTime(0.22, noteTime + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.001, noteTime + 0.5);
 
       osc.connect(gain);
       gain.connect(this._nodes.padBus);
       osc.start(noteTime);
-      osc.stop(noteTime + 0.45);
-      this._trackSource(osc, noteTime + 0.5);
+      osc.stop(noteTime + 0.55);
+      this._trackSource(osc, noteTime + 0.6);
     }
   }
 
@@ -1658,11 +1692,11 @@ export class LofiEngine {
 
       const g = ctx.createGain();
       g.gain.setValueAtTime(0.0001, t);
-      g.gain.linearRampToValueAtTime(0.1, t + 0.02);
-      g.gain.exponentialRampToValueAtTime(0.001, t + 0.4);
+      g.gain.linearRampToValueAtTime(0.2, t + 0.02);
+      g.gain.exponentialRampToValueAtTime(0.001, t + 0.5);
 
       const g2 = ctx.createGain();
-      g2.gain.value = 0.08;
+      g2.gain.value = 0.15;
 
       osc.connect(g);
       osc2.connect(g2);
@@ -1671,10 +1705,10 @@ export class LofiEngine {
 
       osc.start(t);
       osc2.start(t);
-      osc.stop(t + 0.45);
-      osc2.stop(t + 0.45);
-      this._trackSource(osc, t + 0.5);
-      this._trackSource(osc2, t + 0.5);
+      osc.stop(t + 0.55);
+      osc2.stop(t + 0.55);
+      this._trackSource(osc, t + 0.6);
+      this._trackSource(osc2, t + 0.6);
     }
   }
 
@@ -1701,7 +1735,7 @@ export class LofiEngine {
     hp.frequency.value = 6000;
 
     const gain = ctx.createGain();
-    gain.gain.value = 0.06;
+    gain.gain.value = 0.14;
 
     src.connect(hp);
     hp.connect(gain);

@@ -15,7 +15,7 @@ export function computeWCPM(alignmentResult, elapsedSeconds) {
   const correctCount = alignmentResult.filter(w =>
     !w._notAttempted &&
     (w.type === 'correct' ||
-    (w.type === 'substitution' && (w.forgiven || w._v0Type === 'correct')))
+    (w.type === 'substitution' && w.forgiven))
   ).length;
   const wcpm = Math.round((correctCount / elapsedSeconds) * 60 * 10) / 10;
   return { wcpm, correctCount, elapsedSeconds };
@@ -47,9 +47,6 @@ export function computeAccuracy(alignmentResult, options = {}) {
         if (w.forgiven) {
           correctCount++;
           forgiven++;
-        } else if (w._v0Type === 'correct') {
-          // V0 (clean pass) heard correct — V1 verbatim decode diverged, not an error
-          correctCount++;
         } else {
           wordErrors++;
         }
@@ -99,12 +96,12 @@ export function computeWCPMRange(alignmentResult, elapsedSeconds) {
   }
 
   // Count correct words (exclude compound struggles — type 'correct' but _isStruggle)
-  // Also include forgiven substitutions and V0-correct substitutions
+  // Also include forgiven substitutions
   // Exclude _notAttempted (post-reading speech)
   const correctWords = alignmentResult.filter(w =>
     !w._notAttempted &&
     ((w.type === 'correct' && !w._isStruggle) ||
-    (w.type === 'substitution' && (w.forgiven || w._v0Type === 'correct')))
+    (w.type === 'substitution' && w.forgiven))
   );
   const correctCount = correctWords.length;
 

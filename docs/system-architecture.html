@@ -895,7 +895,7 @@ code {
 <nav class="sidebar">
   <div class="sidebar-brand">
     <h1>PACER</h1>
-    <p>System Architecture v3.0</p>
+    <p>System Architecture v4.0</p>
   </div>
   <div class="sidebar-nav">
     <div class="nav-section-label">Overview</div>
@@ -914,17 +914,18 @@ code {
     <a href="#alignment" class="nav-link"><span class="nav-num">08</span> Alignment Engine</a>
     <a href="#diagnostics" class="nav-link"><span class="nav-num">09</span> Diagnostics Pipeline</a>
     <a href="#struggle" class="nav-link"><span class="nav-num">10</span> Struggle System</a>
+    <a href="#forgiveness" class="nav-link"><span class="nav-num">11</span> Forgiveness Pipeline</a>
 
     <div class="nav-section-label">Output</div>
-    <a href="#speedmap" class="nav-link"><span class="nav-num">11</span> Word Speed Map</a>
-    <a href="#metrics" class="nav-link"><span class="nav-num">12</span> Metrics</a>
-    <a href="#ui" class="nav-link"><span class="nav-num">13</span> UI Rendering</a>
-    <a href="#ocr" class="nav-link"><span class="nav-num">14</span> OCR Integration</a>
-    <a href="#engagement" class="nav-link"><span class="nav-num">15</span> Engagement</a>
-    <a href="#filemap" class="nav-link"><span class="nav-num">16</span> File Map</a>
+    <a href="#speedmap" class="nav-link"><span class="nav-num">12</span> Word Speed Map</a>
+    <a href="#metrics" class="nav-link"><span class="nav-num">13</span> Metrics</a>
+    <a href="#ui" class="nav-link"><span class="nav-num">14</span> UI Rendering</a>
+    <a href="#ocr" class="nav-link"><span class="nav-num">15</span> OCR Integration</a>
+    <a href="#engagement" class="nav-link"><span class="nav-num">16</span> Engagement</a>
+    <a href="#filemap" class="nav-link"><span class="nav-num">17</span> File Map</a>
   </div>
   <div class="sidebar-footer">
-    45+ JS modules &middot; 1 Python server<br>
+    47 JS modules &middot; 1 Python server<br>
     &copy; PACER Assessment Tool
   </div>
 </nav>
@@ -989,7 +990,7 @@ code {
   </ul>
 
   <p>Every stage of this pipeline exists to <strong>separate student behavior from ASR artifact</strong>. The multi-engine
-  approach (Reverb dual-pass + Parakeet cross-validation) provides redundancy. The graded alignment, compound merging,
+  approach (Reverb dual-pass + Parakeet as primary correctness engine) provides redundancy. The graded alignment, compound merging,
   fragment absorption, and struggle detection recover the true signal. The result is a data structure rich enough that
   an AI layer on top can move beyond "47 WCPM, 82% accuracy" and toward genuine understanding of the child's reading profile.</p>
 </div>
@@ -1022,7 +1023,7 @@ code {
     <div class="flow-row">
       <div class="flow-box box-blue">Reverb v=1.0<small>Verbatim</small></div>
       <div class="flow-box box-green">Reverb v=0.0<small>Clean</small></div>
-      <div class="flow-box box-purple">Parakeet TDT<small>Cross-validator</small></div>
+      <div class="flow-box box-purple">Parakeet TDT<small>Primary engine</small></div>
     </div>
     <span class="flow-arrow-down">&darr;</span>
     <div class="flow-label">3 Independent Reference Alignments</div>
@@ -1038,7 +1039,7 @@ code {
       <span class="flow-arrow">&rarr;</span>
       <div class="flow-box box-orange">3-Way Verdict<small>Per-ref-word</small></div>
       <span class="flow-arrow">&rarr;</span>
-      <div class="flow-box box-pink">Diagnostics<small>5 detectors</small></div>
+      <div class="flow-box box-pink">Diagnostics<small>27 phases</small></div>
     </div>
     <span class="flow-arrow-down">&darr;</span>
     <div class="flow-label">Output</div>
@@ -1102,9 +1103,10 @@ code {
     <h2 class="section-title">Reverb ASR Engine</h2>
   </div>
 
-  <p>Reverb is the primary ASR engine &mdash; Rev.ai's open-source model built on the wenet CTC toolkit
-  with attention rescoring. The key innovation is the <strong>dual-pass system</strong>: running the same model
-  twice with different verbatimicity settings to detect disfluencies.</p>
+  <p>Reverb is the <strong>disfluency detection engine</strong> &mdash; Rev.ai's open-source model built on the wenet CTC toolkit
+  with attention rescoring. While Parakeet serves as the primary correctness engine, Reverb's key contribution is the
+  <strong>dual-pass system</strong>: running the same model twice with different verbatimicity settings to detect disfluencies
+  and provide the initial transcript that Parakeet then corrects.</p>
 
   <div class="comparison">
     <div class="compare-card card-verbatim">
@@ -1223,7 +1225,9 @@ code {
     </div>
     <div class="collapsible-body"><div class="collapsible-content">
       <p>Parakeet is NVIDIA's Token-and-Duration Transducer model, running locally on the same GPU as Reverb.
-      It serves as the <strong>cross-validator</strong>: an independent second opinion on what the student said.</p>
+      With "Trust Pk" ON (the default), Parakeet serves as the <strong>primary correctness engine</strong> &mdash;
+      it overrides Reverb on every disagreed word. The code still uses "cross-validator" in filenames and
+      variable names for historical reasons, but Parakeet's actual role is final arbiter of word correctness.</p>
 
       <table class="data-table">
         <tr><th>Property</th><th>Value</th></tr>
@@ -1233,7 +1237,7 @@ code {
         <tr><td>Audio Format</td><td>Mono, 16kHz (ffmpeg conversion required)</td></tr>
         <tr><td>Confidence</td><td>Always 1.0 (TDT limitation &mdash; no per-word scores)</td></tr>
         <tr><td>API Key</td><td>Not required (local inference)</td></tr>
-        <tr><td>Role</td><td>Cross-validator &amp; <strong>primary timekeeper</strong></td></tr>
+        <tr><td>Role</td><td><strong>Primary correctness engine</strong> &amp; <strong>primary timekeeper</strong></td></tr>
       </table>
 
       <div class="callout callout-purple">
@@ -1266,10 +1270,10 @@ ffmpeg -y -i input.wav -ac <span class="num">1</span> -ar <span class="num">1600
     <div class="collapsible-header" onclick="this.parentElement.classList.toggle('open')">
       <span class="collapsible-arrow">&#9654;</span>
       <span class="collapsible-tag tag-engine">Engine</span>
-      <span class="collapsible-title">Alternative Cross-Validator (Cloud API)</span>
+      <span class="collapsible-title">Fallback Engine (Cloud API)</span>
     </div>
     <div class="collapsible-body"><div class="collapsible-content">
-      <p>Deepgram Nova-3 is a cloud-based ASR used as a <strong>fallback cross-validator</strong> when Parakeet is unavailable.
+      <p>Deepgram Nova-3 is a cloud-based ASR used as a <strong>fallback engine</strong> when Parakeet is unavailable.
       Deepgram fills Parakeet's slot in the 3-way alignment when needed.
       The browser cannot call Deepgram directly (CORS restrictions), so requests are proxied through the backend server.</p>
 
@@ -1324,7 +1328,7 @@ ffmpeg -y -i input.wav -ac <span class="num">1</span> -ar <span class="num">1600
         <div class="status-card" style="background:#fff0f0;border-color:#fca5a5">
           <h4 style="color:#991b1b">Recovered</h4>
           <p>V1 omitted the word, but Parakeet heard it correctly &mdash;
-          word is recovered from cross-validator with timestamps.</p>
+          word is recovered with Parakeet timestamps.</p>
         </div>
         <div class="status-card" style="background:#fefce8;border-color:#fde68a">
           <h4 style="color:#92400e">Confirmed Omission</h4>
@@ -1424,8 +1428,9 @@ ffmpeg -y -i input.wav -ac <span class="num">1</span> -ar <span class="num">1600
 
       <div class="subsection">
         <div class="subsection-title">Single-Letter Hyphen Join</div>
-        <p>If any part from hyphen-split is a single character, all parts are joined: <code>"e-mail" &rarr; "email"</code>,
-        <code>"x-ray" &rarr; "xray"</code>. Without this, "e-mail" produces 2 ref tokens but ASR hears "email" as 1 &mdash;
+        <p>If the <strong>first</strong> part from hyphen-split is a single character, all parts are joined: <code>"e-mail" &rarr; "email"</code>,
+        <code>"x-ray" &rarr; "xray"</code>. Only prefix triggers joining &mdash; suffix single-letter splits normally.
+        Without this, "e-mail" produces 2 ref tokens but ASR hears "email" as 1 &mdash;
         causing cascading misalignment.</p>
       </div>
 
@@ -1491,7 +1496,7 @@ ffmpeg -y -i input.wav -ac <span class="num">1</span> -ar <span class="num">1600
       <ol>
         <li><strong>mergeCompoundWords:</strong> <code>sub("everyone"/"every") + ins("one")</code> &rarr; <code>correct("everyone")</code>. Creates synthetic <code>sttLookup</code> entries.</li>
         <li><strong>mergeAbbreviationExpansions:</strong> <code>ref "ie"</code> &rarr; <code>hyp "that is"</code> using the <code>ABBREVIATION_EXPANSIONS</code> table (ie&rarr;"that is", eg&rarr;"for example", etc&rarr;"et cetera").</li>
-        <li><strong>mergeNumberExpansions:</strong> <code>ref "2014"</code> &rarr; <code>hyp "twenty" + "fourteen"</code>. Uses <code>numberToWordForms()</code> to generate all valid spoken forms (year-style, formal, British, oh-style) for numbers 0&ndash;9999.</li>
+        <li><strong>mergeNumberExpansions:</strong> <code>ref "2014"</code> &rarr; <code>hyp "twenty" + "fourteen"</code>. Uses <code>numberToWordForms()</code> to generate all valid spoken forms (year-style, formal, British, oh-style, ordinals) for numbers 0&ndash;999,999 + decimals.</li>
         <li><strong>mergeContractions:</strong> Handles <code>don't</code>, <code>can't</code>, <code>I'm</code> where STT splits them.</li>
       </ol>
 
@@ -1501,7 +1506,7 @@ ffmpeg -y -i input.wav -ac <span class="num">1</span> -ar <span class="num">1600
         Used during alignment scoring but <strong>not</strong> for <code>sttLookup</code> keys (those use normalized forms to avoid misses).</p>
       </div>
 
-      <p><code>js/alignment.js</code> (870 lines) &middot; <code>js/word-equivalences.js</code> &middot; <code>js/number-words.js</code></p>
+      <p><code>js/alignment.js</code> (748 lines) &middot; <code>js/word-equivalences.js</code> &middot; <code>js/number-words.js</code></p>
     </div></div>
   </div>
 </div>
@@ -1515,7 +1520,8 @@ ffmpeg -y -i input.wav -ac <span class="num">1</span> -ar <span class="num">1600
 
   <p>The full pipeline runs sequentially after the Kitchen Sink returns raw ASR results. Order matters &mdash;
   several stages depend on outputs from earlier ones (e.g., omission recovery must precede near-miss resolution).
-  The 3 independent reference alignments and 3-way verdict significantly expand the pipeline.</p>
+  The 3 independent reference alignments and 3-way verdict significantly expand the pipeline. The main orchestrator
+  (<code>js/app.js</code>, 4,109 lines) executes ~30 phases in strict order.</p>
 
   <div class="pipeline">
     <div class="pipeline-step">
@@ -1531,7 +1537,7 @@ ffmpeg -y -i input.wav -ac <span class="num">1</span> -ar <span class="num">1600
       <div class="pipeline-card">
         <div class="pipeline-card-title">2. Fragment Pre-Merge</div>
         <div class="pipeline-card-desc">Reference-aware pre-merging of STT fragments using <code>refNormSet</code> from <code>normalizeText()</code>. Runs before alignment.</div>
-        <div class="pipeline-card-file">js/app.js:512&ndash;577</div>
+        <div class="pipeline-card-file">js/app.js:521&ndash;586</div>
       </div>
     </div>
     <div class="pipeline-step">
@@ -1539,7 +1545,7 @@ ffmpeg -y -i input.wav -ac <span class="num">1</span> -ar <span class="num">1600
       <div class="pipeline-card">
         <div class="pipeline-card-title">3. Three Independent NW Alignments</div>
         <div class="pipeline-card-desc">V1, V0, and Parakeet each independently aligned to reference text via <code>alignWords()</code> with graded substitution scoring.</div>
-        <div class="pipeline-card-file">js/alignment.js &middot; js/app.js:712&ndash;763</div>
+        <div class="pipeline-card-file">js/alignment.js &middot; js/app.js:715&ndash;800</div>
       </div>
     </div>
     <div class="pipeline-step">
@@ -1563,7 +1569,7 @@ ffmpeg -y -i input.wav -ac <span class="num">1</span> -ar <span class="num">1600
       <div class="pipeline-card">
         <div class="pipeline-card-title">9. Compound Struggle Reclassification</div>
         <div class="pipeline-card-desc"><code>type='correct' + compound + parts.length >= 2</code> &rarr; reclassified as struggle. Skips <code>_abbreviationExpansion</code> and <code>_numberExpansion</code> entries.</div>
-        <div class="pipeline-card-file">js/app.js:793&ndash;817</div>
+        <div class="pipeline-card-file">js/app.js:802&ndash;855</div>
       </div>
     </div>
     <div class="pipeline-step">
@@ -1571,15 +1577,15 @@ ffmpeg -y -i input.wav -ac <span class="num">1</span> -ar <span class="num">1600
       <div class="pipeline-card">
         <div class="pipeline-card-title">10. 3-Way Per-Ref-Word Verdict</div>
         <div class="pipeline-card-desc">Compares V1, V0, Parakeet per reference word. Statuses: confirmed, disagreed, recovered, confirmed_omission, unconfirmed, unavailable.</div>
-        <div class="pipeline-card-file">js/app.js:849&ndash;1038</div>
+        <div class="pipeline-card-file">js/app.js:857&ndash;1396</div>
       </div>
     </div>
     <div class="pipeline-step">
       <div class="pipeline-line"><div class="pipeline-dot dot-purple"></div><div class="pipeline-stem"></div></div>
       <div class="pipeline-card">
         <div class="pipeline-card-title">11. Filler &amp; Insertion Cross-Validation</div>
-        <div class="pipeline-card-desc">Filler classification (um, uh, etc.) &rarr; 3-way insertion cross-validation (<code>_confirmedInsertion</code>).</div>
-        <div class="pipeline-card-file">js/app.js:1057&ndash;1171</div>
+        <div class="pipeline-card-desc">Filler classification (um, uh, etc.) &rarr; 3-way insertion cross-validation (<code>_confirmedInsertion</code>). Positional match only sets timestamps; flat match only sets metadata.</div>
+        <div class="pipeline-card-file">js/app.js (within 3-way verdict block)</div>
       </div>
     </div>
     <div class="pipeline-step">
@@ -1587,7 +1593,7 @@ ffmpeg -y -i input.wav -ac <span class="num">1</span> -ar <span class="num">1600
       <div class="pipeline-card">
         <div class="pipeline-card-title">12. CTC Artifact Filtering</div>
         <div class="pipeline-card-desc">Flags overlapping <code>&lt;unknown&gt;</code> tokens (&le;120ms) as <code>_ctcArtifact</code>. Also filters pre-word and post-word artifacts outside the confirmed word window.</div>
-        <div class="pipeline-card-file">js/app.js:1173&ndash;1227</div>
+        <div class="pipeline-card-file">js/app.js (within 3-way block)</div>
       </div>
     </div>
     <div class="pipeline-step">
@@ -1595,7 +1601,7 @@ ffmpeg -y -i input.wav -ac <span class="num">1</span> -ar <span class="num">1600
       <div class="pipeline-card">
         <div class="pipeline-card-title">13. Omission Recovery</div>
         <div class="pipeline-card-desc">Recovers omitted words from unconsumed Parakeet words with timestamps. Adjusts all subsequent <code>hypIndex</code> references. Must run before near-miss resolution.</div>
-        <div class="pipeline-card-file">js/app.js:1229&ndash;1305</div>
+        <div class="pipeline-card-file">js/app.js (within 3-way block)</div>
       </div>
     </div>
     <div class="pipeline-step">
@@ -1603,7 +1609,7 @@ ffmpeg -y -i input.wav -ac <span class="num">1</span> -ar <span class="num">1600
       <div class="pipeline-card">
         <div class="pipeline-card-title">14. Xval Abbreviation Confirmation</div>
         <div class="pipeline-card-desc">If Parakeet raw words confirm a short abbreviation form (e.g., "ie"), reclassify substitution as correct.</div>
-        <div class="pipeline-card-file">js/app.js:1307&ndash;1337</div>
+        <div class="pipeline-card-file">js/app.js (within 3-way block)</div>
       </div>
     </div>
     <div class="pipeline-step">
@@ -1633,7 +1639,7 @@ ffmpeg -y -i input.wav -ac <span class="num">1</span> -ar <span class="num">1600
           detectMorphologicalErrors &middot;
           detectStruggleWords (Path 1 + Path 3)
         </div>
-        <div class="pipeline-card-file">js/diagnostics.js:2248&ndash;2256</div>
+        <div class="pipeline-card-file">js/diagnostics.js:2084&ndash;2091</div>
       </div>
     </div>
     <div class="pipeline-step">
@@ -1641,23 +1647,35 @@ ffmpeg -y -i input.wav -ac <span class="num">1</span> -ar <span class="num">1600
       <div class="pipeline-card">
         <div class="pipeline-card-title">18. VAD Gap Analysis</div>
         <div class="pipeline-card-desc">Enriches onset delays and long pauses with speech percentage via <code>enrichDiagnosticsWithVAD()</code>. Computes VAD gap summary.</div>
-        <div class="pipeline-card-file">js/app.js:1390&ndash;1439 &middot; js/vad-gap-analyzer.js</div>
+        <div class="pipeline-card-file">js/app.js:1514&ndash;1563 &middot; js/vad-gap-analyzer.js</div>
       </div>
     </div>
     <div class="pipeline-step">
       <div class="pipeline-line"><div class="pipeline-dot dot-purple"></div><div class="pipeline-stem"></div></div>
       <div class="pipeline-card">
-        <div class="pipeline-card-title">19. Self-Correction Reclassification</div>
-        <div class="pipeline-card-desc">Uses diagnostics <code>selfCorrections</code> to convert alignment entries from <code>insertion</code> to <code>self-correction</code>. Skips <code>_isSelfCorrection</code> and <code>_partOfStruggle</code> entries.</div>
-        <div class="pipeline-card-file">js/app.js:1441&ndash;1475</div>
+        <div class="pipeline-card-title">19. Syllable Coverage Annotation</div>
+        <div class="pipeline-card-desc">Annotates near-miss fragments with syllable-level coverage data via <code>analyzeSyllableCoverage()</code>, grounding AI interpretation claims in data.</div>
+        <div class="pipeline-card-file">js/app.js:1401&ndash;1455 &middot; js/syllable-analysis.js</div>
       </div>
     </div>
     <div class="pipeline-step">
       <div class="pipeline-line"><div class="pipeline-dot dot-green"></div><div class="pipeline-stem"></div></div>
       <div class="pipeline-card">
         <div class="pipeline-card-title">20. NL Annotations &amp; Proper Noun Forgiveness</div>
-        <div class="pipeline-card-desc">Maps NL API annotations to ref words. Three-stage proper noun forgiveness: NL detection &rarr; <code>refLowercaseSet</code> guard &rarr; Free Dictionary API (200 = common word, 404 = exotic name) &rarr; phonetic similarity (&ge;0.4).</div>
-        <div class="pipeline-card-file">js/app.js:1477&ndash;1719</div>
+        <div class="pipeline-card-desc">Maps NL API annotations to ref words. Three-stage proper noun forgiveness: NL detection &rarr; <code>refLowercaseSet</code> guard &rarr; Free Dictionary API (200 = common word, 404 = exotic name) &rarr; phonetic similarity (&ge;0.4). Includes omission path with Parakeet evidence.</div>
+        <div class="pipeline-card-file">js/app.js:1565&ndash;1937</div>
+      </div>
+    </div>
+    <div class="pipeline-step">
+      <div class="pipeline-line"><div class="pipeline-dot dot-green"></div><div class="pipeline-stem"></div></div>
+      <div class="pipeline-card">
+        <div class="pipeline-card-title">20.5. Inflectional Morphology Leniency</div>
+        <div class="pipeline-card-desc">
+          Phase 1.5: Forgives substitutions where ref/hyp differ only by inflectional suffix:
+          -s, -es, -ed, -d, -ing, -er, -est, -ly. Rule: <code>longer.startsWith(shorter) &amp;&amp; suffix &isin; whitelist &amp;&amp; shorter.length &ge; 3</code>.
+          Bidirectional (dropped &amp; added). Does NOT catch consonant-doubling or y&rarr;i changes.
+        </div>
+        <div class="pipeline-card-file">js/app.js:1939&ndash;1991</div>
       </div>
     </div>
     <div class="pipeline-step">
@@ -1671,39 +1689,64 @@ ffmpeg -y -i input.wav -ac <span class="num">1</span> -ar <span class="num">1600
           Part 2b: catch reassigned subs &middot;
           OOV time credit: deducts time spent on OOV clusters from elapsed seconds
         </div>
-        <div class="pipeline-card-file">js/app.js:1721&ndash;2040</div>
+        <div class="pipeline-card-file">js/app.js:1992&ndash;2336</div>
       </div>
     </div>
     <div class="pipeline-step">
       <div class="pipeline-line"><div class="pipeline-dot dot-red"></div><div class="pipeline-stem"></div></div>
       <div class="pipeline-card">
-        <div class="pipeline-card-title">22. Cleanup &amp; Post-Struggle Leniency</div>
+        <div class="pipeline-card-title">22. Function Word Forgiveness &amp; Trust Pk</div>
         <div class="pipeline-card-desc">
-          Confirmed insertion cleanup (clear for fillers, self-corrections, artifacts) &middot;
-          single-letter function word forgiveness ("a"/"I" omissions adjacent to struggles) &middot;
-          post-struggle Parakeet leniency (V1 sub promoted to correct if Parakeet confirms &amp; prev ref was error)
+          Phase 7: single-letter function word forgiveness ("a"/"I" omissions where V0/Pk correct) &middot;
+          <strong>Phase 7b: Trust Pk Override</strong> &mdash; all disagreed subs where Parakeet heard correct &rarr;
+          <code>forgiven = true, _pkTrustOverride = true</code>. Fragment guard: checks <code>pkInsGroups[refIdx]</code>
+          and <code>[refIdx+1]</code> for near-miss insertions that indicate RNNT reconstruction, not genuine correct hearing.
         </div>
-        <div class="pipeline-card-file">js/app.js:2042&ndash;2150</div>
+        <div class="pipeline-card-file">js/app.js:2338&ndash;2455</div>
       </div>
     </div>
     <div class="pipeline-step">
       <div class="pipeline-line"><div class="pipeline-dot dot-green"></div><div class="pipeline-stem"></div></div>
       <div class="pipeline-card">
-        <div class="pipeline-card-title">23. Metrics Calculation</div>
-        <div class="pipeline-card-desc">WCPM (range: min&ndash;max), accuracy (with confirmed insertion errors), tier breakdown</div>
+        <div class="pipeline-card-title">23. Post-Struggle Leniency</div>
+        <div class="pipeline-card-desc">One word of grace after a confirmed error: if prev ref was error and Parakeet confirms current word, V1 sub promoted to correct. Collateral damage entries (function word / OOV) are transparent.</div>
+        <div class="pipeline-card-file">js/app.js:2457&ndash;2498</div>
+      </div>
+    </div>
+    <div class="pipeline-step">
+      <div class="pipeline-line"><div class="pipeline-dot dot-red"></div><div class="pipeline-stem"></div></div>
+      <div class="pipeline-card">
+        <div class="pipeline-card-title">24. End-of-Reading Detection</div>
+        <div class="pipeline-card-desc">Walks backward from alignment end: trailing subs where NO engine produced a near-miss &rarr; <code>_notAttempted = true</code>. Omissions only marked if a not-attempted sub exists after them (positive evidence). Excluded from accuracy, WCPM, word speed map.</div>
+        <div class="pipeline-card-file">js/app.js:2500&ndash;2556</div>
+      </div>
+    </div>
+    <div class="pipeline-step">
+      <div class="pipeline-line"><div class="pipeline-dot dot-orange"></div><div class="pipeline-stem"></div></div>
+      <div class="pipeline-card">
+        <div class="pipeline-card-title">25. Self-Correction Detection</div>
+        <div class="pipeline-card-desc">Runs AFTER all forgiveness passes. Four conditions: (a) forgiven sub with near-miss evidence, (b) forgiven sub with multi-part full attempt, (c) correct entry + adjacent insertion exactly matches ref (repetition), (d) correct entry + adjacent near-miss insertion (false start).</div>
+        <div class="pipeline-card-file">js/app.js:2558&ndash;2636</div>
+      </div>
+    </div>
+    <div class="pipeline-step">
+      <div class="pipeline-line"><div class="pipeline-dot dot-green"></div><div class="pipeline-stem"></div></div>
+      <div class="pipeline-card">
+        <div class="pipeline-card-title">26. Metrics Calculation</div>
+        <div class="pipeline-card-desc">WCPM range (min&ndash;max), accuracy (with confirmed insertion errors), tier breakdown. Excludes <code>_notAttempted</code> entries. Counts forgiven substitutions (proper noun, inflectional, OOV) as correct.</div>
         <div class="pipeline-card-file">js/metrics.js</div>
       </div>
     </div>
     <div class="pipeline-step">
       <div class="pipeline-line"><div class="pipeline-dot dot-purple"></div></div>
       <div class="pipeline-card">
-        <div class="pipeline-card-title">24. Prosody Metrics</div>
+        <div class="pipeline-card-title">27. Prosody Metrics</div>
         <div class="pipeline-card-desc">
           Phrasing quality &middot; punctuation awareness &middot; pace consistency &middot;
           word duration outliers (IQR) &middot; word speed tiers (7 tiers) &middot;
           pause context annotation &middot; function word compression &middot; syntactic alignment
         </div>
-        <div class="pipeline-card-file">js/diagnostics.js:764&ndash;2114</div>
+        <div class="pipeline-card-file">js/diagnostics.js:764&ndash;1839</div>
       </div>
     </div>
   </div>
@@ -1777,10 +1820,91 @@ ffmpeg -y -i input.wav -ac <span class="num">1</span> -ar <span class="num">1600
 
 <div class="divider"></div>
 
-<!-- ═══════════ 11 SPEED MAP ═══════════ -->
-<div class="section" id="speedmap">
+<!-- ═══════════ 11 FORGIVENESS ═══════════ -->
+<div class="section" id="forgiveness">
   <div class="section-header">
     <span class="section-num">11</span>
+    <h2 class="section-title">Forgiveness Pipeline</h2>
+  </div>
+
+  <p>After the 3-way verdict determines raw correctness, a multi-phase forgiveness pipeline prevents false errors.
+  Each phase has strict ordering requirements and guards against over-forgiveness.</p>
+
+  <div class="collapsible open">
+    <div class="collapsible-header" onclick="this.parentElement.classList.toggle('open')">
+      <span class="collapsible-arrow">&#9654;</span>
+      <span class="collapsible-tag tag-pipeline">Pipeline</span>
+      <span class="collapsible-title">8 Forgiveness Phases</span>
+    </div>
+    <div class="collapsible-body"><div class="collapsible-content">
+
+      <table class="data-table">
+        <tr><th>Phase</th><th>Name</th><th>What It Forgives</th><th>Guard</th></tr>
+        <tr>
+          <td>1</td>
+          <td><strong>Proper Noun Forgiveness</strong></td>
+          <td>Subs/omissions on proper nouns (names, places) where phonetic similarity &ge; 0.4</td>
+          <td>NL API detection &rarr; <code>refLowercaseSet</code> &rarr; Free Dictionary API (200 = skip, 404 = allow)</td>
+        </tr>
+        <tr>
+          <td>1.5</td>
+          <td><strong>Inflectional Morphology Leniency</strong></td>
+          <td>Subs differing only by inflectional suffix: -s, -es, -ed, -d, -ing, -er, -est, -ly</td>
+          <td><code>longer.startsWith(shorter) &amp;&amp; shorter.length &ge; 3</code>. Bidirectional (dropped/added).</td>
+        </tr>
+        <tr>
+          <td>2&ndash;6b</td>
+          <td><strong>OOV Detection &amp; Recovery</strong></td>
+          <td>Out-of-vocabulary words: phonetic forgiveness (0.6 threshold), <code>&lt;unknown&gt;</code> reassignment, omission recovery, OOV time credit</td>
+          <td>CMUdict phoneme lookup for OOV detection; scan radius &plusmn;3 ref positions</td>
+        </tr>
+        <tr>
+          <td>7</td>
+          <td><strong>Function Word Forgiveness</strong></td>
+          <td>Single-letter function words ("a", "I") omitted in the blast radius of a struggle</td>
+          <td>V0 or Pk must have heard the word correctly</td>
+        </tr>
+        <tr>
+          <td>7b</td>
+          <td><strong>Trust Pk Override</strong></td>
+          <td>All disagreed subs where Parakeet heard correct &rarr; forgiven. This makes Parakeet the primary correctness engine.</td>
+          <td>Fragment guard: near-miss insertions in <code>pkInsGroups[refIdx/refIdx+1]</code> indicate RNNT reconstruction &rarr; skip override</td>
+        </tr>
+        <tr>
+          <td>8</td>
+          <td><strong>Post-Struggle Leniency</strong></td>
+          <td>One word of grace after a confirmed error (prevRefWasError + Pk confirms)</td>
+          <td>Dual cross-validator override (V0 + Pk both correct) bypasses prevRefWasError requirement</td>
+        </tr>
+        <tr>
+          <td>8b</td>
+          <td><strong>End-of-Reading Detection</strong></td>
+          <td>Trailing words where no engine produced a near-miss &rarr; <code>_notAttempted</code> (not scored)</td>
+          <td>Omissions only marked if a not-attempted sub exists after them (positive evidence of post-reading speech)</td>
+        </tr>
+        <tr>
+          <td>9</td>
+          <td><strong>Self-Correction Detection</strong></td>
+          <td>Words that resolved correct but had failed attempts (near-miss evidence, repetitions, false starts)</td>
+          <td>Runs AFTER all forgiveness passes so <code>entry.forgiven</code> is finalized</td>
+        </tr>
+      </table>
+
+      <div class="callout callout-green">
+        <strong>Scoring impact:</strong> Forgiven substitutions and omissions count as correct in both WCPM and accuracy.
+        <code>_notAttempted</code> entries are excluded entirely from scoring denominators.
+        Self-corrections (<code>_selfCorrected</code>) are informational only &mdash; they don't change scores.
+      </div>
+    </div></div>
+  </div>
+</div>
+
+<div class="divider"></div>
+
+<!-- ═══════════ 12 SPEED MAP ═══════════ -->
+<div class="section" id="speedmap">
+  <div class="section-header">
+    <span class="section-num">12</span>
     <h2 class="section-title">Word Speed Map</h2>
   </div>
 
@@ -1832,15 +1956,15 @@ ffmpeg -y -i input.wav -ac <span class="num">1</span> -ar <span class="num">1600
         Upper fence = Q3 + 1.5 &times; IQR. Words with normalized duration &gt; fence AND phonemes &gt; 3 are flagged.</p>
       </div>
 
-      <p><code>js/diagnostics.js:1704&ndash;1999</code> &middot; <code>js/phoneme-counter.js</code></p>
+      <p><code>js/diagnostics.js:1528&ndash;1839</code> &middot; <code>js/phoneme-counter.js</code></p>
     </div></div>
   </div>
 </div>
 
-<!-- ═══════════ 12 METRICS ═══════════ -->
+<!-- ═══════════ 13 METRICS ═══════════ -->
 <div class="section" id="metrics">
   <div class="section-header">
-    <span class="section-num">12</span>
+    <span class="section-num">13</span>
     <h2 class="section-title">Metrics Calculation</h2>
   </div>
 
@@ -1863,7 +1987,8 @@ ffmpeg -y -i input.wav -ac <span class="num">1</span> -ar <span class="num">1600
       <div class="callout callout-green">
         <strong>ORF Standard:</strong> Regular insertions are NOT counted as errors. However, <strong>confirmed insertions</strong>
         (all available engines independently heard the same extra word at the same boundary) ARE counted
-        as errors via <code>insertionErrors</code>. Forgiven substitutions and omissions count as correct.
+        as errors via <code>insertionErrors</code>. All forgiven substitutions (proper noun, inflectional, OOV, Pk trust, post-struggle)
+        and forgiven omissions count as correct. <code>_notAttempted</code> entries are excluded from both numerator and denominator.
         <code>totalErrors = wordErrors + omissions + longPauseErrors + insertionErrors</code>.
       </div>
 
@@ -1886,10 +2011,10 @@ ffmpeg -y -i input.wav -ac <span class="num">1</span> -ar <span class="num">1600
   </div>
 </div>
 
-<!-- ═══════════ 13 UI ═══════════ -->
+<!-- ═══════════ 14 UI ═══════════ -->
 <div class="section" id="ui">
   <div class="section-header">
-    <span class="section-num">13</span>
+    <span class="section-num">14</span>
     <h2 class="section-title">UI Rendering</h2>
   </div>
 
@@ -1901,26 +2026,30 @@ ffmpeg -y -i input.wav -ac <span class="num">1</span> -ar <span class="num">1600
     </div>
     <div class="collapsible-body"><div class="collapsible-content">
       <p><code>renderNewAnalyzedWords()</code> is the primary rendering function. Each alignment entry is routed through
-      <code>classifyWord()</code> into one of 9 semantic buckets that separate scoring logic (metrics.js) from display logic (ui.js).
+      <code>classifyWord()</code> into one of <strong>11 semantic buckets</strong> that separate scoring logic (metrics.js) from display logic (ui.js).
       The legacy word-by-word rendering was removed (archived in <code>docs/legacy/legacy-word-miscue-ui.md</code>).</p>
 
       <table class="data-table">
-        <tr><th>Bucket</th><th>Background</th><th>Text</th><th>Description</th></tr>
-        <tr><td><span class="hw hw-correct">correct</span></td><td>#c8e6c9</td><td>#2e7d32</td><td>Word read correctly, confirmed by engines</td></tr>
-        <tr><td><span style="background:#c8e6c9;color:#4caf50;padding:0.1em 0.35em;border-radius:3px;font-weight:600;font-size:0.85em;border:1px dashed #4caf50">oov-excluded</span></td><td>#c8e6c9</td><td>#4caf50</td><td>Out-of-vocabulary word excluded from assessment (phonetic forgiveness or &lt;unknown&gt; recovery)</td></tr>
-        <tr><td><span style="background:#c8e6c9;color:#4caf50;padding:0.1em 0.35em;border-radius:3px;font-weight:600;font-size:0.85em;border:1px dashed #4caf50">function-word-forgiven</span></td><td>#c8e6c9</td><td>#4caf50</td><td>Single-letter function word ("a", "I") omission adjacent to struggle &mdash; forgiven as collateral damage</td></tr>
-        <tr><td><span style="background:#dcedc8;color:#558b2f;padding:0.1em 0.35em;border-radius:3px;font-weight:600;font-size:0.85em;border:1px dashed #558b2f">struggle-correct</span></td><td>#dcedc8</td><td>#558b2f</td><td>V1 compound (multi-token) but confirmed correct by another engine; or recovered/post-struggle leniency word</td></tr>
-        <tr><td><span class="hw hw-omission">omitted</span></td><td>#e0e0e0</td><td>#757575</td><td>Student skipped the word (strikethrough)</td></tr>
-        <tr><td><span style="background:#ffe0b2;color:#e65100;padding:0.1em 0.35em;border-radius:3px;font-weight:600;font-size:0.85em">attempted-struggled</span></td><td>#ffe0b2</td><td>#e65100</td><td>Student attempted but produced wrong word with decoding difficulty</td></tr>
-        <tr><td><span style="background:#ffcdd2;color:#c62828;padding:0.1em 0.35em;border-radius:3px;font-weight:600;font-size:0.85em">definite-struggle</span></td><td>#ffcdd2</td><td>#c62828</td><td>Clear substitution error, confirmed by multiple engines</td></tr>
-        <tr><td><span style="background:#bbdefb;color:#1565c0;padding:0.1em 0.35em;border-radius:3px;font-weight:600;font-size:0.85em">confirmed-substitution</span></td><td>#bbdefb</td><td>#1565c0</td><td>Substitution with engine consensus on the wrong word</td></tr>
-        <tr><td><span style="background:#e1bee7;color:#6a1b9a;padding:0.1em 0.35em;border-radius:3px;font-weight:600;font-size:0.85em;font-weight:700">confirmed-insertion</span></td><td>#e1bee7</td><td>#6a1b9a</td><td>Extra word confirmed by all engines (counts as error, "+" prefix)</td></tr>
+        <tr><th>Bucket</th><th>Color</th><th>Description</th></tr>
+        <tr><td><span class="hw hw-correct">correct</span></td><td>#2e7d32</td><td>Word read correctly, confirmed by engines</td></tr>
+        <tr><td><span style="background:#c8e6c9;color:#4caf50;padding:0.1em 0.35em;border-radius:3px;font-weight:600;font-size:0.85em;border:1px dashed #4caf50">pk-trust-forgiven</span></td><td>#4caf50</td><td>Parakeet Trust override: V1 wrong but Parakeet heard correct (Phase 7b)</td></tr>
+        <tr><td><span style="background:#c8e6c9;color:#4caf50;padding:0.1em 0.35em;border-radius:3px;font-weight:600;font-size:0.85em;border:1px dashed #4caf50">oov-excluded</span></td><td>#4caf50</td><td>Out-of-vocabulary word excluded from assessment (phonetic forgiveness or &lt;unknown&gt; recovery)</td></tr>
+        <tr><td><span style="background:#c8e6c9;color:#4caf50;padding:0.1em 0.35em;border-radius:3px;font-weight:600;font-size:0.85em;border:1px dashed #4caf50">function-word-forgiven</span></td><td>#4caf50</td><td>Single-letter function word ("a", "I") omission adjacent to struggle &mdash; forgiven as collateral damage</td></tr>
+        <tr><td><span style="background:#c8e6c9;color:#4caf50;padding:0.1em 0.35em;border-radius:3px;font-weight:600;font-size:0.85em;border:1px dashed #4caf50">inflectional-forgiven</span></td><td>#4caf50</td><td>Ref/hyp differ only by inflectional suffix (-s, -ed, -ing, etc.) &mdash; not a reading error</td></tr>
+        <tr><td><span style="background:#dcedc8;color:#558b2f;padding:0.1em 0.35em;border-radius:3px;font-weight:600;font-size:0.85em;border:1px dashed #558b2f">struggle-correct</span></td><td>#558b2f</td><td>V1 compound (multi-token) but confirmed correct by another engine; or recovered/post-struggle leniency word</td></tr>
+        <tr><td><span class="hw hw-omission">omitted</span></td><td>#757575</td><td>Student skipped the word (strikethrough)</td></tr>
+        <tr><td><span style="background:#f5f5f5;color:#bdbdbd;padding:0.1em 0.35em;border-radius:3px;font-weight:600;font-size:0.85em;font-style:italic">not-attempted</span></td><td>#bdbdbd</td><td>Trailing words past end-of-reading boundary (gray italic, excluded from scoring)</td></tr>
+        <tr><td><span style="background:#ffe0b2;color:#e65100;padding:0.1em 0.35em;border-radius:3px;font-weight:600;font-size:0.85em">attempted-struggled</span></td><td>#e65100</td><td>Student attempted but produced wrong word with decoding difficulty</td></tr>
+        <tr><td><span style="background:#ffcdd2;color:#c62828;padding:0.1em 0.35em;border-radius:3px;font-weight:600;font-size:0.85em">definite-struggle</span></td><td>#c62828</td><td>Clear substitution error, confirmed by multiple engines</td></tr>
+        <tr><td><span style="background:#bbdefb;color:#1565c0;padding:0.1em 0.35em;border-radius:3px;font-weight:600;font-size:0.85em">confirmed-substitution</span></td><td>#1565c0</td><td>Substitution with engine consensus on the wrong word</td></tr>
+        <tr><td><span style="background:#e1bee7;color:#6a1b9a;padding:0.1em 0.35em;border-radius:3px;font-weight:600;font-size:0.85em;font-weight:700">confirmed-insertion</span></td><td>#6a1b9a</td><td>Extra word confirmed by all engines (counts as error, "+" prefix)</td></tr>
       </table>
 
       <div class="callout callout-blue">
         <strong>Legacy removed:</strong> The old word-by-word rendering with <code>.word-correct</code>, <code>.word-substitution</code>,
-        <code>.word-omission</code>, etc. CSS classes was removed. The new bucket system uses <code>.word-bucket-*</code> classes
-        and cleanly separates what-to-display from how-it-scores.
+        <code>.word-omission</code>, etc. CSS classes was removed. The new 11-bucket system uses <code>.word-bucket-*</code> classes
+        and cleanly separates what-to-display from how-it-scores. Four forgiveness buckets (pk-trust, oov, function-word,
+        inflectional) all share the same green dashed appearance.
       </div>
 
       <div class="subsection">
@@ -1928,7 +2057,7 @@ ffmpeg -y -i input.wav -ac <span class="num">1</span> -ar <span class="num">1600
       </div>
       <ul>
         <li><strong>Custom tooltips</strong> replace native <code>title</code> for mobile support. Shows diagnostics, timestamps (3 sources), cross-validation status, NL annotations.</li>
-        <li><strong>Click-to-play</strong> word audio using cross-validator timestamps. Shared <code>Audio</code> element with <code>ObjectURL</code> from <code>appState.audioBlob</code>.</li>
+        <li><strong>Click-to-play</strong> word audio using Parakeet timestamps (primary) or Reverb (fallback). Shared <code>Audio</code> element with <code>ObjectURL</code> from <code>appState.audioBlob</code>.</li>
         <li><strong>Collapsible sections:</strong> STT Transcript View, Prosody Metrics &mdash; both follow the same toggle pattern.</li>
         <li><strong>STT Transcript View:</strong> Shows what each engine detected. Three source rows color-coded: Reverb v1 (blue), Reverb v0 (green), Parakeet (purple). Model disagreements highlighted.</li>
         <li><strong>Word Speed Map:</strong> Inline passage with tier-colored words + distribution bar + "include preceding pauses" toggle.</li>
@@ -1941,10 +2070,10 @@ ffmpeg -y -i input.wav -ac <span class="num">1</span> -ar <span class="num">1600
 
 <div class="divider"></div>
 
-<!-- ═══════════ 14 OCR ═══════════ -->
+<!-- ═══════════ 15 OCR ═══════════ -->
 <div class="section" id="ocr">
   <div class="section-header">
-    <span class="section-num">14</span>
+    <span class="section-num">15</span>
     <h2 class="section-title">OCR Integration</h2>
   </div>
 
@@ -1974,15 +2103,15 @@ ffmpeg -y -i input.wav -ac <span class="num">1</span> -ar <span class="num">1600
 
       <p>Image preprocessing: resize to 2048px max, Unicode normalization (NFKC, smart quotes, em-dashes, zero-width chars).</p>
 
-      <p><code>js/ocr-api.js</code> (557 lines) &middot; <code>js/passage-trimmer.js</code> (238 lines)</p>
+      <p><code>js/ocr-api.js</code> (600 lines) &middot; <code>js/passage-trimmer.js</code> (242 lines)</p>
     </div></div>
   </div>
 </div>
 
-<!-- ═══════════ 15 ENGAGEMENT ═══════════ -->
+<!-- ═══════════ 16 ENGAGEMENT ═══════════ -->
 <div class="section" id="engagement">
   <div class="section-header">
-    <span class="section-num">15</span>
+    <span class="section-num">16</span>
     <h2 class="section-title">Engagement &amp; Gamification</h2>
   </div>
 
@@ -2001,7 +2130,7 @@ ffmpeg -y -i input.wav -ac <span class="num">1</span> -ar <span class="num">1600
         <tr><td><strong>Future You</strong></td><td class="file-path">js/future-you.js</td><td>Audio stitching of correctly-read segments into seamless karaoke-style playback with word-by-word highlighting</td></tr>
         <tr><td><strong>Celeration Chart</strong></td><td class="file-path">js/celeration-chart.js</td><td>Reading rate trend visualization over multiple sessions</td></tr>
         <tr><td><strong>Maze Game</strong></td><td class="file-path">js/maze-game.js + maze-generator.js</td><td>Procedurally generated maze with speech-recognition gates (uses <code>/deepgram-maze</code> endpoint for keyterm boosting)</td></tr>
-        <tr><td><strong>Rhythm Remix</strong></td><td class="file-path">js/rhythm-remix.js</td><td>Music/rhythm game tied to reading content</td></tr>
+        <tr><td><strong>Rhythm Remix</strong></td><td class="file-path">js/rhythm-remix.js</td><td>Bouncing-ball reading playback with lo-fi beats. Study Beats FM DJ intro via Gemini TTS. Mountain Range canvas visualization.</td></tr>
         <tr><td><strong>Movie Trailer</strong></td><td class="file-path">js/movie-trailer.js</td><td>Auto-generated narrative clips from passage content</td></tr>
         <tr><td><strong>Illustrator</strong></td><td class="file-path">js/illustrator.js</td><td>Visual companion generation for passages</td></tr>
         <tr><td><strong>Student Playback</strong></td><td class="file-path">js/student-playback.js</td><td>Student-mode audio replay with controls</td></tr>
@@ -2011,17 +2140,18 @@ ffmpeg -y -i input.wav -ac <span class="num">1</span> -ar <span class="num">1600
       <code>js/effect-engine.js</code> (visual/audio effects) &middot;
       <code>js/sprite-animator.js</code> (character animation) &middot;
       <code>js/noun-emoji-map.js</code> (visual noun annotation) &middot;
-      <code>js/lofi-engine.js</code> (reduced-feature mode)</p>
+      <code>js/lofi-engine.js</code> (Web Audio lo-fi synth with 7 styles, drum variants, tape wobble, bitcrusher) &middot;
+      <code>js/mountain-range.js</code> (canvas word-peak visualization, 180px fixed height)</p>
     </div></div>
   </div>
 </div>
 
 <div class="divider"></div>
 
-<!-- ═══════════ 16 FILE MAP ═══════════ -->
+<!-- ═══════════ 17 FILE MAP ═══════════ -->
 <div class="section" id="filemap">
   <div class="section-header">
-    <span class="section-num">16</span>
+    <span class="section-num">17</span>
     <h2 class="section-title">File Map</h2>
   </div>
 
@@ -2036,18 +2166,18 @@ ffmpeg -y -i input.wav -ac <span class="num">1</span> -ar <span class="num">1600
       <div class="subsection-title">Core Pipeline</div>
       <table class="data-table">
         <tr><th>File</th><th>Lines</th><th>Role</th></tr>
-        <tr><td class="file-path">js/app.js</td><td class="line-count">2,987</td><td>Pipeline orchestrator &mdash; entry point for <code>runAnalysis()</code>, 3-way verdict, OOV forgiveness, post-struggle leniency</td></tr>
-        <tr><td class="file-path">js/alignment.js</td><td class="line-count">870</td><td>NW alignment + compound / abbreviation / number / contraction merge + spillover consolidation</td></tr>
-        <tr><td class="file-path">js/diagnostics.js</td><td class="line-count">2,256</td><td>All detectors, near-miss resolution, fragment absorption, prosody, word speed tiers</td></tr>
-        <tr><td class="file-path">js/ui.js</td><td class="line-count">2,801</td><td>Bucket-based rendering (9 buckets), tooltips, click-to-play, word speed map, STT transcript view</td></tr>
+        <tr><td class="file-path">js/app.js</td><td class="line-count">4,109</td><td>Pipeline orchestrator &mdash; entry point for <code>runAnalysis()</code>, 3-way verdict, 8 forgiveness phases, end-of-reading, self-correction</td></tr>
+        <tr><td class="file-path">js/alignment.js</td><td class="line-count">748</td><td>NW alignment + compound / abbreviation / number / contraction merge + spillover consolidation</td></tr>
+        <tr><td class="file-path">js/diagnostics.js</td><td class="line-count">2,091</td><td>All detectors, near-miss resolution, fragment absorption, prosody, word speed tiers</td></tr>
+        <tr><td class="file-path">js/ui.js</td><td class="line-count">2,777</td><td>Bucket-based rendering (11 buckets), tooltips, click-to-play, word speed map, STT transcript view</td></tr>
         <tr><td class="file-path">js/kitchen-sink-merger.js</td><td class="line-count">206</td><td>Reverb dual-pass + Parakeet orchestrator with fallback chain</td></tr>
-        <tr><td class="file-path">js/cross-validator.js</td><td class="line-count">95</td><td>Engine-agnostic routing: selects Parakeet or Deepgram</td></tr>
-        <tr><td class="file-path">js/text-normalize.js</td><td class="line-count">75</td><td><code>normalizeText()</code> + <code>DISFLUENCIES</code> set</td></tr>
-        <tr><td class="file-path">js/word-equivalences.js</td><td class="line-count">412</td><td>Canonical form mapping &mdash; 17 equivalence groups (contractions, homophones, numbers, abbreviations, etc.)</td></tr>
-        <tr><td class="file-path">js/number-words.js</td><td class="line-count">150</td><td><code>numberToWordForms()</code> &mdash; generates spoken forms for 0&ndash;9999</td></tr>
+        <tr><td class="file-path">js/cross-validator.js</td><td class="line-count">106</td><td>Engine-agnostic routing: selects Parakeet or Deepgram</td></tr>
+        <tr><td class="file-path">js/text-normalize.js</td><td class="line-count">140</td><td><code>normalizeText()</code> + <code>splitHyphenParts()</code> + <code>splitReferenceForDisplay()</code> + <code>DISFLUENCIES</code> set</td></tr>
+        <tr><td class="file-path">js/word-equivalences.js</td><td class="line-count">503</td><td>Canonical form mapping &mdash; 20+ equivalence groups (titles, contractions, homophones, numbers, abbreviations, etc.)</td></tr>
+        <tr><td class="file-path">js/number-words.js</td><td class="line-count">407</td><td><code>numberToWordForms()</code> &mdash; generates spoken forms for 0&ndash;999,999 + decimals + ordinals</td></tr>
         <tr><td class="file-path">js/nl-api.js</td><td class="line-count">171</td><td>Google NL API + <code>levenshteinRatio()</code> + word tier classification (proper/sight/academic/function)</td></tr>
-        <tr><td class="file-path">js/metrics.js</td><td class="line-count">113</td><td>WCPM + accuracy (with confirmed insertion errors) + WCPM range (conservative/optimistic)</td></tr>
-        <tr><td class="file-path">js/miscue-registry.js</td><td class="line-count">702</td><td>Single source of truth for all miscue/error types, forgiveness rules, detector locations</td></tr>
+        <tr><td class="file-path">js/metrics.js</td><td class="line-count">129</td><td>WCPM + accuracy (with confirmed insertion errors, forgiven words, not-attempted exclusion) + WCPM range</td></tr>
+        <tr><td class="file-path">js/miscue-registry.js</td><td class="line-count">823</td><td>Single source of truth for all miscue/error types, forgiveness rules, detector locations</td></tr>
       </table>
 
       <div class="subsection-title">ASR Engine Clients</div>
@@ -2057,7 +2187,7 @@ ffmpeg -y -i input.wav -ac <span class="num">1</span> -ar <span class="num">1600
         <tr><td class="file-path">js/deepgram-api.js</td><td class="line-count">86</td><td>Deepgram Nova-3 client</td></tr>
         <tr><td class="file-path">js/parakeet-api.js</td><td class="line-count">76</td><td>Parakeet TDT client</td></tr>
         <tr><td class="file-path">js/stt-api.js</td><td class="line-count">218</td><td>STT engine abstraction layer</td></tr>
-        <tr><td class="file-path">js/ocr-api.js</td><td class="line-count">557</td><td>Hybrid OCR &mdash; Cloud Vision + Gemini assembly/correction with hallucination guards</td></tr>
+        <tr><td class="file-path">js/ocr-api.js</td><td class="line-count">600</td><td>Hybrid OCR &mdash; Cloud Vision + Gemini assembly/correction with hallucination guards</td></tr>
       </table>
 
       <div class="subsection-title">Audio &amp; Recording</div>
@@ -2075,7 +2205,8 @@ ffmpeg -y -i input.wav -ac <span class="num">1</span> -ar <span class="num">1600
         <tr><th>File</th><th>Lines</th><th>Role</th></tr>
         <tr><td class="file-path">js/phoneme-counter.js</td><td class="line-count">93</td><td>CMUdict lookup + syllable-based fallback</td></tr>
         <tr><td class="file-path">js/syllable-counter.js</td><td class="line-count">711</td><td>Heuristic syllable counter (fallback when CMUdict misses)</td></tr>
-        <tr><td class="file-path">js/passage-trimmer.js</td><td class="line-count">238</td><td>Reference text trimming to match attempted words (Levenshtein-aware)</td></tr>
+        <tr><td class="file-path">js/syllable-analysis.js</td><td class="line-count">483</td><td>Syllable-level analysis of near-miss fragments &mdash; <code>syllabifyWord()</code> + <code>analyzeSyllableCoverage()</code></td></tr>
+        <tr><td class="file-path">js/passage-trimmer.js</td><td class="line-count">242</td><td>Reference text trimming to match attempted words (Levenshtein-aware)</td></tr>
         <tr><td class="file-path">js/vad-processor.js</td><td class="line-count">269</td><td>Silero VAD integration for ghost word detection</td></tr>
         <tr><td class="file-path">js/vad-gap-analyzer.js</td><td class="line-count">289</td><td>VAD acoustic analysis of diagnosed pauses and hesitations</td></tr>
       </table>
@@ -2083,18 +2214,19 @@ ffmpeg -y -i input.wav -ac <span class="num">1</span> -ar <span class="num">1600
       <div class="subsection-title">Engagement &amp; Gamification</div>
       <table class="data-table">
         <tr><th>File</th><th>Lines</th><th>Role</th></tr>
-        <tr><td class="file-path">js/future-you.js</td><td class="line-count">383</td><td>Karaoke playback &mdash; stitches correct segments with word highlighting</td></tr>
+        <tr><td class="file-path">js/future-you.js</td><td class="line-count">380</td><td>Karaoke playback &mdash; stitches correct segments with word highlighting</td></tr>
         <tr><td class="file-path">js/celeration-chart.js</td><td class="line-count">819</td><td>Reading rate trend visualization over time</td></tr>
         <tr><td class="file-path">js/maze-game.js</td><td class="line-count">713</td><td>Interactive maze with speech-recognition gates</td></tr>
         <tr><td class="file-path">js/maze-generator.js</td><td class="line-count">675</td><td>Procedural maze generation</td></tr>
-        <tr><td class="file-path">js/rhythm-remix.js</td><td class="line-count">1,113</td><td>Music/rhythm engagement game</td></tr>
+        <tr><td class="file-path">js/rhythm-remix.js</td><td class="line-count">1,483</td><td>Bouncing-ball reading orchestrator with Study Beats FM DJ (Gemini TTS)</td></tr>
         <tr><td class="file-path">js/movie-trailer.js</td><td class="line-count">410</td><td>Auto-generated narrative clips</td></tr>
         <tr><td class="file-path">js/illustrator.js</td><td class="line-count">503</td><td>Visual companion generation for passages</td></tr>
         <tr><td class="file-path">js/gamification.js</td><td class="line-count">49</td><td>Engagement hooks and scoring</td></tr>
         <tr><td class="file-path">js/effect-engine.js</td><td class="line-count">259</td><td>Visual/audio effect rendering</td></tr>
         <tr><td class="file-path">js/sprite-animator.js</td><td class="line-count">168</td><td>Character sprite animation</td></tr>
         <tr><td class="file-path">js/noun-emoji-map.js</td><td class="line-count">113</td><td>Visual noun &rarr; emoji annotation mapping</td></tr>
-        <tr><td class="file-path">js/lofi-engine.js</td><td class="line-count">834</td><td>Reduced-feature mode for low-bandwidth environments</td></tr>
+        <tr><td class="file-path">js/lofi-engine.js</td><td class="line-count">1,828</td><td>Web Audio lo-fi synth with 7 styles (STYLE_CONFIG), drum variants, tape wobble, bitcrusher, reverb</td></tr>
+        <tr><td class="file-path">js/mountain-range.js</td><td class="line-count">606</td><td>Canvas word-peak visualization for Rhythm Remix (180px fixed height)</td></tr>
       </table>
 
       <div class="subsection-title">Infrastructure</div>
@@ -2105,7 +2237,7 @@ ffmpeg -y -i input.wav -ac <span class="num">1</span> -ar <span class="num">1600
         <tr><td class="file-path">js/dashboard.js</td><td class="line-count">39</td><td>Dashboard summary view scaffolding</td></tr>
         <tr><td class="file-path">js/debug-logger.js</td><td class="line-count">102</td><td>Debug logging and downloadable JSON export</td></tr>
         <tr><td class="file-path">js/file-handler.js</td><td class="line-count">19</td><td>File I/O utilities</td></tr>
-        <tr><td class="file-path">js/benchmarks.js</td><td class="line-count">50</td><td>Performance measurement</td></tr>
+        <tr><td class="file-path">js/benchmarks.js</td><td class="line-count">50</td><td>Hasbrouck-Tindal 2017 ORF norms (grades 1&ndash;8, fall/winter/spring percentiles)</td></tr>
         <tr style="border-top:2px solid var(--border-light)">
           <td class="file-path">services/reverb/server.py</td><td class="line-count">582</td><td>FastAPI server &mdash; Reverb, Deepgram proxy, Parakeet, maze endpoint</td></tr>
         <tr><td class="file-path">data/cmudict-phoneme-counts.json</td><td class="line-count">125K entries</td><td>CMUdict word &rarr; phoneme count lookup (1.6MB)</td></tr>

@@ -1,28 +1,39 @@
 /**
- * Cross-Validator Orchestrator
+ * Second-Engine Orchestrator (Parakeet — Primary Correctness Engine)
  *
- * Engine-agnostic cross-validation of Reverb transcript against a second ASR engine
- * using Needleman-Wunsch sequence alignment.
+ * Engine-agnostic orchestration of a second ASR engine alongside Reverb.
+ * With "Trust Pk" enabled (ON by default), Parakeet is the PRIMARY correctness
+ * engine — it overrides Reverb on every disagreed word. Reverb's role becomes:
+ *   1. Disfluency detection (V1 verbatim vs V0 clean comparison)
+ *   2. Providing the initial transcript that Parakeet corrects
+ *   3. Timestamps for words Parakeet doesn't cover
+ *
+ * Parakeet provides:
+ *   - Final word-correctness verdicts (overrides Reverb when they disagree)
+ *   - Primary timestamps (TDT duration head, sub-second accuracy)
+ *   - CTC-constrained output (cannot hallucinate words)
  *
  * Currently supported engines: Deepgram Nova-3, Parakeet TDT 0.6B v3
  * Engine selection via localStorage key 'orf_cross_validator' (default: 'parakeet').
  *
- * Cross-validation statuses:
+ * Per-word statuses:
  *   confirmed  — both engines produced the same word (text match, fuzzy match, or near-match)
- *   disagreed  — both engines heard something, but different words (mismatch, edit distance > 1)
- *   unconfirmed — only Reverb produced a word; cross-validator had nothing at this position
- *   unavailable — cross-validator service was offline
+ *   disagreed  — both engines heard something, but different words. With Trust Pk ON,
+ *                Parakeet's verdict wins and the word is forgiven (counted as correct).
+ *   unconfirmed — only Reverb produced a word; Parakeet had nothing at this position
+ *   unavailable — second engine service was offline
  *
  * Near-match resolution (edit distance ≤ 1):
  *   Long words (≥ 5 chars): A single-character difference is phonetic parsing noise or BPE
- *   spelling variation (e.g., "jumped"/"jumpt"). Confirmed; cross-validator word used.
+ *   spelling variation (e.g., "jumped"/"jumpt"). Confirmed; Parakeet word used.
  *   Short words (2-4 chars): A single character IS the phonemic difference — "cat"/"bat" is
  *   a real consonant substitution, "went"/"want" a real vowel error. Marked as disagreed
- *   so downstream scoring counts these as potential errors. Reverb's word kept.
+ *   so downstream scoring counts these as potential errors. Reverb's word kept unless
+ *   Trust Pk overrides.
  *
  * Requirements covered:
- * - XVAL-01: Cross-validator called for cross-validation
- * - XVAL-02: Reverb <-> cross-validator disagreement flags words via 'disagreed' status
+ * - XVAL-01: Second engine called for every assessment
+ * - XVAL-02: Reverb <-> Parakeet disagreement flags words via 'disagreed' status
  * - XVAL-03: Graceful fallback when service unavailable
  */
 

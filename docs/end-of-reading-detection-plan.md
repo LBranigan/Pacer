@@ -69,12 +69,22 @@ In `computeWCPM()` / `computeWCPMRange()` (metrics.js):
 - Exclude `_notAttempted` from correct word count
 - No timing adjustment needed (these words are at the very end, past the student's reading)
 
+### Confirmed Insertion Cleanup
+
+Insertions that fall between not-attempted ref entries have `_confirmedInsertion` cleared and `_notAttempted` set — proctor speech fragments shouldn't count as confirmed insertion errors.
+
+### Long Pause Exclusion
+
+Long pauses (3s+) detected in the proctor speech zone are excluded from the error count. Implementation: find `lastAttemptedHypIdx` (the `hypIndex` of the last non-insertion, non-not-attempted entry), then filter `diagnostics.longPauses` to only include pauses with `afterWordIndex <= lastAttemptedHypIdx`.
+
 ### UI Rendering
 
 - New bucket: `'not-attempted'`
-- Visual: grayed out, distinct from all other states
-- Tooltip: "Not attempted — detected as post-reading speech"
-- Insertions between not-attempted ref entries: leave as-is (regular insertions don't count as errors anyway)
+- **Completely hidden from analyzed words view** — not-attempted words and their surrounding insertions are skipped in the rendering loop (no visual clutter from post-reading speech)
+- Insertions in the not-attempted zone filtered from both `insertionsBefore` and `insertionsAfter` arrays
+- Word speed map: not-attempted entries get tier `'no-data'`, alignmentType `'not-attempted'`
+- `classifyWord()` checks `_notAttempted` first (before confirmed-insertion)
+- Morphological root squiggle skipped for not-attempted bucket
 
 ## Edge Cases
 
@@ -87,18 +97,21 @@ In `computeWCPM()` / `computeWCPMRange()` (metrics.js):
 | Student stops at 100, proctor matches 101 accidentally, 102-103 are non-near-miss subs | — | — | — | Walk stops at 101 | 102-103 trimmed, 101 preserved (conservative) |
 | Student reads nothing (ambient noise only) | all unrelated | all unrelated | all unrelated | NO for all | All not-attempted (correct — assessment invalid) |
 
-## Files to Modify
+## Files Modified
 
-1. **`js/app.js`** — Add detection phase after post-struggle leniency, before metrics
-2. **`js/metrics.js`** — `computeAccuracy()`, `computeWCPM()`, `computeWCPMRange()` exclude `_notAttempted`
-3. **`js/ui.js`** — New bucket rendering for not-attempted words
-4. **`js/miscue-registry.js`** — Add `endOfReadingDetection` entry
+1. **`js/app.js`** — Phase 8 detection block after post-struggle leniency; long pause filtering before `computeAccuracy()`
+2. **`js/metrics.js`** — `computeAccuracy()`, `computeWCPM()`, `computeWCPMRange()` all exclude `_notAttempted`
+3. **`js/ui.js`** — `classifyWord()` bucket, rendering skip (`continue`), insertion filters, morphological squiggle skip
+4. **`js/diagnostics.js`** — `computeWordSpeedTiers()` handles `_notAttempted` as tier `'no-data'`
+5. **`js/miscue-registry.js`** — `endOfReadingDetection` entry
+6. **`style.css`** — `.word-bucket-not-attempted` (unused in practice since entries are hidden, but defined for completeness)
 
 ## What This Does NOT Fix
 
 - **Trailing omissions from running out of time**: These remain as omission errors (pre-existing behavior, separate issue)
 - **Mid-passage proctor interruptions**: Only detects end-of-reading, not mid-passage noise
 - **OCR capturing non-passage text**: The trimmer still does its best; this is a safety net
+- **Start-of-reading proctor speech**: Not needed — the passage trimmer handles the start well via DP alignment. The end problem is specific to OCR footer text that the trimmer can't fully exclude. A forward-walking mirror would risk false positives on students who genuinely struggle on early words.
 
 ## Invariants
 

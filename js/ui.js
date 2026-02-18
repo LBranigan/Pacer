@@ -490,12 +490,8 @@ function renderNewAnalyzedWords(container, alignment, sttLookup, diagnostics, tr
         return (h.length >= 2 && refN.startsWith(h)) || isNearMiss(ins.hyp, entry.ref);
       });
       if (hasRelatedIns) return 'struggle-correct';
-      // V0 (clean model) disagreed — pronunciation was messy enough to confuse one engine
-      if (entry._v0Type === 'substitution') return 'struggle-correct';
       // Parakeet omitted this word — audio was unclear enough that the cross-validator missed it entirely
       if (entry._pkType === 'omission') return 'struggle-correct';
-      // V0 fragmented this word (compound merge reconstructed it) — Reverb couldn't produce it cleanly
-      if (entry._v0Compound) return 'struggle-correct';
       return 'correct';
     }
 
@@ -505,7 +501,7 @@ function renderNewAnalyzedWords(container, alignment, sttLookup, diagnostics, tr
       if (entry._isStruggle) {
         const refN = norm(entry.ref);
         // Did any engine hear the correct word?
-        if (norm(entry._xvalWord) === refN || norm(entry._v0Word) === refN) return 'attempted-struggled';
+        if (norm(entry._xvalWord) === refN) return 'attempted-struggled';
         return 'definite-struggle';
       }
       // <unknown> CTC token = ASR detected speech but couldn't decode → definite struggle
@@ -513,16 +509,12 @@ function renderNewAnalyzedWords(container, alignment, sttLookup, diagnostics, tr
       const refN = norm(entry.ref);
       // Did the cross-validators hear the correct word?
       const xvalCorrect = norm(entry._xvalWord) === refN;
-      const v0Correct = norm(entry._v0Word) === refN;
-      // V0 heard correct → V1's verbatimicity decode diverged, student said it right
-      if (v0Correct) return 'struggle-correct';
-      // Only Parakeet correct → attempted but struggled
+      // Parakeet correct → attempted but struggled (V0 excluded from scoring)
       if (xvalCorrect) return 'attempted-struggled';
       // Is any engine's word a near-miss (morphological/phonetic)?
       if (entry.ref && (
           (entry.hyp && isNearMiss(entry.hyp, entry.ref)) ||
-          (entry._xvalWord && isNearMiss(entry._xvalWord, entry.ref)) ||
-          (entry._v0Word && isNearMiss(entry._v0Word, entry.ref)))) return 'definite-struggle';
+          (entry._xvalWord && isNearMiss(entry._xvalWord, entry.ref)))) return 'definite-struggle';
       // Check trailing insertions (e.g., "oreo" after "editorial")
       if (group.insertionsAfter.some(ins => ins.hyp && isNearMiss(ins.hyp, entry.ref))) return 'definite-struggle';
       const postIns = nextGroup ? nextGroup.insertionsBefore : [];
@@ -530,9 +522,8 @@ function renderNewAnalyzedWords(container, alignment, sttLookup, diagnostics, tr
       // Confirmed substitution: all engines must agree on the SAME wrong word.
       // Different words/fragments across engines = struggle, not a clean substitution.
       const v1 = norm(entry.hyp);
-      const v0 = entry._v0Word ? norm(entry._v0Word) : null;
       const pk = entry._xvalWord ? norm(entry._xvalWord) : null;
-      if ((v0 && v0 !== v1) || (pk && pk !== v1)) return 'definite-struggle';
+      if (pk && pk !== v1) return 'definite-struggle';
       return 'confirmed-substitution';
     }
 
