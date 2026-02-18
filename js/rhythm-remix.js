@@ -7,8 +7,8 @@
  * @module rhythm-remix
  */
 
-import { LofiEngine } from './lofi-engine.js?v=20260219z';
-import { MountainRange } from './mountain-range.js?v=20260219z';
+import { LofiEngine } from './lofi-engine.js?v=20260219z2';
+import { MountainRange } from './mountain-range.js?v=20260219z2';
 import { getAudioBlob } from './audio-store.js';
 import { getAssessment, getStudents } from './storage.js';
 import { getPunctuationPositions } from './diagnostics.js';
@@ -232,8 +232,8 @@ function updateSpring(dt) {
 // ── WPM to BPM mapping ──────────────────────────────────────────────────────
 
 function wcpmToBpm(wcpm) {
-  const raw = 60 + ((wcpm - 40) * 30 / 140);
-  return Math.max(55, Math.min(100, raw)) * styleTempoMultiplier();
+  // BPM ≈ WPM, clamped to musically reasonable range
+  return Math.max(55, Math.min(160, wcpm)) * styleTempoMultiplier();
 }
 
 /** Zelda styles play at 1.5x BPM to feel energetic. */
@@ -246,9 +246,8 @@ function styleTempoMultiplier() {
 // ── Adaptive tempo — beat tracks reading pace ────────────────────────────────
 
 function adaptiveWpmToBpm(wpm) {
-  // 30-180 WPM → 50-110 BPM (wider range than wcpmToBpm)
-  const raw = 50 + ((wpm - 30) * 60 / 150);
-  return Math.max(50, Math.min(110, raw)) * styleTempoMultiplier();
+  // BPM ≈ WPM, clamped to musically reasonable range
+  return Math.max(55, Math.min(160, wpm)) * styleTempoMultiplier();
 }
 
 function updateAdaptiveTempo(toIdx) {
