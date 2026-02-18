@@ -7,8 +7,8 @@
  * @module rhythm-remix
  */
 
-import { LofiEngine } from './lofi-engine.js?v=20260219z2';
-import { MountainRange } from './mountain-range.js?v=20260219z2';
+import { LofiEngine } from './lofi-engine.js?v=20260219z3';
+import { MountainRange } from './mountain-range.js?v=20260219z3';
 import { getAudioBlob } from './audio-store.js';
 import { getAssessment, getStudents } from './storage.js';
 import { getPunctuationPositions } from './diagnostics.js';
@@ -98,9 +98,6 @@ let celebrationsEnabled = false;
 let melodyEnabled = false;
 let adaptiveHarmonyEnabled = false;
 
-/** Adaptive tempo state. */
-const ADAPTIVE_WINDOW = 4;    // spoken words in rolling window
-let recentWordTimes = [];      // [{ start, end }, ...]
 let playbackRate = 1;          // from speed selector
 
 /** Overlay streak: correct words in a row → richer beat. */
@@ -241,32 +238,6 @@ function styleTempoMultiplier() {
   const sel = document.getElementById('styleSelect');
   const style = sel ? sel.value : '';
   return (style === 'zelda' || style === 'zelda-piano') ? 1.5 : 1;
-}
-
-// ── Adaptive tempo — beat tracks reading pace ────────────────────────────────
-
-function adaptiveWpmToBpm(wpm) {
-  // BPM ≈ WPM, clamped to musically reasonable range
-  return Math.max(55, Math.min(160, wpm)) * styleTempoMultiplier();
-}
-
-function updateAdaptiveTempo(toIdx) {
-  if (!lofi || toIdx < 0 || toIdx >= wordSequence.length) return;
-  const w = wordSequence[toIdx];
-  if (!w || w.startTime < 0) return; // skip omissions
-
-  recentWordTimes.push({ start: w.startTime, end: w.endTime });
-  if (recentWordTimes.length > ADAPTIVE_WINDOW) recentWordTimes.shift();
-  if (recentWordTimes.length < 3) return; // not enough data
-
-  const firstStart = recentWordTimes[0].start;
-  const lastEnd = recentWordTimes[recentWordTimes.length - 1].end;
-  const span = lastEnd - firstStart;
-  if (span < 0.5) return; // ASR artifact / bunched timestamps
-
-  const localWPM = (recentWordTimes.length - 1) / span * 60;
-  const localBPM = adaptiveWpmToBpm(localWPM);
-  lofi.setTempoSmoothed(localBPM * playbackRate);
 }
 
 // ── Overlay streak — correct words build richer beat ─────────────────────────
@@ -469,7 +440,6 @@ function playDJIntroThenReading() {
  */
 function startReadingPlayback() {
   if (!audioEl) return;
-  recentWordTimes = []; // reset adaptive tempo for fresh playback
   correctStreak = 0;    // reset overlay streak
   audioEl.play().then(() => {
     isPlaying = true;
@@ -642,10 +612,6 @@ function onWordChange(fromIdx, toIdx) {
     } else if (isCorrect) {
       lofi.notifyWordEvent('correct');
     }
-    // Self-correction: pipeline-detected self-correction (always plays, not gated by celebrations)
-    if (w.selfCorrected) {
-      lofi.notifyWordEvent('self-correction');
-    }
   }
 
   // ── Melodic contour: map word to pitch ──
@@ -674,9 +640,6 @@ function onWordChange(fromIdx, toIdx) {
     const fluency = harmonyHistory.filter(Boolean).length / harmonyHistory.length;
     lofi.setHarmonyMood(fluency);
   }
-
-  // ── Adaptive tempo: beat tracks reading pace ──
-  updateAdaptiveTempo(toIdx);
 
   // ── Overlay streak: correct words build richer beat ──
   updateOverlayStreak(w);
@@ -1141,13 +1104,16 @@ function animationLoop(timestamp) {
   if (lofi && waveformFrameSkip === 0) {
     const bpmEl = document.getElementById('bpmDisplay');
     if (bpmEl) {
-      let text = Math.round(lofi.currentBpm) + ' bpm';
+      const bpm = Math.round(lofi.currentBpm);
       const ol = lofi.overlayLevel;
-      if (ol >= 1.5) text += ' · +8';
-      else if (ol >= 1.0) text += ' · +6';
-      else if (ol >= 0.65) text += ' · +4';
-      else if (ol >= 0.35) text += ' · +2';
-      bpmEl.textContent = text;
+      let bonus = '';
+      if (ol >= 1.5) bonus = '+8';
+      else if (ol >= 1.0) bonus = '+6';
+      else if (ol >= 0.65) bonus = '+4';
+      else if (ol >= 0.35) bonus = '+2';
+      bpmEl.innerHTML = bpm + ' bpm' + (bonus
+        ? ' <span style="color:#a8d8a8;margin-left:0.3em;">' + bonus + '</span>'
+        : '');
     }
   }
 
@@ -1337,11 +1303,8 @@ function wireControls() {
       const rate = parseFloat(speedSelect.value) || 1;
       playbackRate = rate;
       if (audioEl) audioEl.playbackRate = rate;
-      // If adaptive tempo has data, let next updateAdaptiveTempo compose with new rate.
-      // Otherwise set tempo directly from WCPM baseline.
-      if (recentWordTimes.length < 3 && lofi && assessment) {
-        const baseBpm = wcpmToBpm(assessment.wcpm || 80);
-        lofi.setTempo(baseBpm * rate);
+      if (lofi && assessment) {
+        lofi.setTempo(wcpmToBpm(assessment.wcpm || 80) * rate);
       }
     });
   }
