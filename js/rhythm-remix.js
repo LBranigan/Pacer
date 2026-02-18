@@ -214,10 +214,10 @@ function wcpmToBpm(wcpm) {
 function buildDJPrompt(studentName) {
   const name = studentName || 'our next reader';
   return (
-    `You're a cool, upbeat radio DJ. Say this line quick and smooth — ` +
-    `confident, not whispered. Think FM morning show energy, warm but punchy. ` +
-    `One quick line, under 5 seconds total.\n\n` +
-    `"Study Beats FM — let's go, ${name}!"`
+    `You're a laid-back late-night radio DJ. Say this line smooth and chill — ` +
+    `relaxed, warm, like you're smiling. Not hyped, not whispered. ` +
+    `Quick and easy, under 3 seconds.\n\n` +
+    `"Study Beats FM... ${name}."`
   );
 }
 
@@ -334,7 +334,7 @@ function playDJIntroThenReading() {
     djSourceNode = audioCtx.createBufferSource();
     djSourceNode.buffer = decoded;
     djGainNode = audioCtx.createGain();
-    djGainNode.gain.value = 0.8; // DJ voice balanced with beat
+    djGainNode.gain.value = 0.55; // DJ voice sits behind the beat
     djSourceNode.connect(djGainNode);
     djGainNode.connect(audioCtx.destination);
 
