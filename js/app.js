@@ -922,6 +922,7 @@ async function runAnalysis() {
   }
 
   const xvalRecoveredOmissions = [];
+  const xvalPromotedSubstitutions = [];
   const threeWayTable = [];
 
   for (let ri = 0; ri < v1Ref.length; ri++) {
@@ -1000,6 +1001,10 @@ async function runAnalysis() {
       status = 'recovered';
       const recoveryTs = parakeetTs;
       xvalRecoveredOmissions.push({ refIndex: ri, entry: v1Entry, timestamps: recoveryTs });
+    } else if (v1Omitted && pkType === 'substitution') {
+      // V1 omitted but Parakeet heard a different word → promote to substitution
+      status = 'disagreed';
+      xvalPromotedSubstitutions.push({ refIndex: ri, entry: v1Entry, timestamps: parakeetTs, pkHyp: pkEntry.hyp });
     } else if (v1Correct && pkCorrect) {
       // Both scoring engines correct → confirmed
       status = 'confirmed';
@@ -1285,7 +1290,48 @@ async function runAnalysis() {
     splicePositions.push(insertIdx);
   }
 
-  if (xvalRecoveredOmissions.length > 0) {
+  // ── Omission → substitution promotion (Pk heard a different word) ──
+  for (const promo of xvalPromotedSubstitutions) {
+    const entry = promo.entry;
+    const ts = promo.timestamps;
+    if (!ts) continue;
+
+    const promotedWord = {
+      word: promo.pkHyp,
+      startTime: ts.startTime,
+      endTime: ts.endTime,
+      crossValidation: 'disagreed',
+      _xvalStartTime: ts.startTime,
+      _xvalEndTime: ts.endTime,
+      _xvalWord: promo.pkHyp,
+      _reverbStartTime: null,
+      _reverbEndTime: null,
+      _pkPromoted: true
+    };
+
+    const xvStart = parseT(ts.startTime);
+    let insertIdx = transcriptWords.length;
+    for (let k = 0; k < transcriptWords.length; k++) {
+      if (parseT(transcriptWords[k].startTime) > xvStart) {
+        insertIdx = k;
+        break;
+      }
+    }
+    transcriptWords.splice(insertIdx, 0, promotedWord);
+
+    entry.type = 'substitution';
+    entry.hyp = promo.pkHyp;
+    entry.hypIndex = insertIdx;
+    entry._pkPromoted = true;
+
+    const lookupKey = promo.pkHyp.toLowerCase().replace(/[^a-z'-]/g, '').replace(/\./g, '').replace(/['\u2018\u2019\u201B`]/g, '');
+    if (!sttLookup.has(lookupKey)) sttLookup.set(lookupKey, []);
+    sttLookup.get(lookupKey).push(promotedWord);
+
+    splicePositions.push(insertIdx);
+  }
+
+  if (xvalRecoveredOmissions.length > 0 || xvalPromotedSubstitutions.length > 0) {
     const lastRefIdx = alignment.reduce((acc, e, i) => e.ref != null ? i : acc, -1);
     if (lastRefIdx >= 0 && alignment[lastRefIdx]._recovered) {
       alignment[lastRefIdx]._isLastRefWord = true;
@@ -1298,7 +1344,7 @@ async function runAnalysis() {
       splicePositions.sort((a, b) => a - b);
       for (const entry of alignment) {
         if (entry.hypIndex == null || entry.hypIndex < 0) continue;
-        if (entry._recovered) continue;
+        if (entry._recovered || entry._pkPromoted) continue;
         let displacement = 0;
         for (const pos of splicePositions) {
           if (pos <= entry.hypIndex + displacement) displacement++;
@@ -1308,17 +1354,34 @@ async function runAnalysis() {
       }
     }
 
-    const recoveredList = xvalRecoveredOmissions.filter(r => r.timestamps).map(r => ({
-      word: r.timestamps.word,
-      start: r.timestamps.startTime,
-      end: r.timestamps.endTime
-    }));
-    addStage('omission_recovery', {
-      recoveredCount: recoveredList.length,
-      recovered: recoveredList
-    });
-    console.log(`[omission-recovery] Recovered ${recoveredList.length} omissions via 3-way cross-validation:`,
-      recoveredList.map(r => r.word));
+    if (xvalRecoveredOmissions.length > 0) {
+      const recoveredList = xvalRecoveredOmissions.filter(r => r.timestamps).map(r => ({
+        word: r.timestamps.word,
+        start: r.timestamps.startTime,
+        end: r.timestamps.endTime
+      }));
+      addStage('omission_recovery', {
+        recoveredCount: recoveredList.length,
+        recovered: recoveredList
+      });
+      console.log(`[omission-recovery] Recovered ${recoveredList.length} omissions via 3-way cross-validation:`,
+        recoveredList.map(r => r.word));
+    }
+
+    if (xvalPromotedSubstitutions.length > 0) {
+      const promotedList = xvalPromotedSubstitutions.filter(r => r.timestamps).map(r => ({
+        ref: r.entry.ref,
+        pkHeard: r.pkHyp,
+        start: r.timestamps.startTime,
+        end: r.timestamps.endTime
+      }));
+      addStage('omission_to_substitution_promotion', {
+        promotedCount: promotedList.length,
+        promoted: promotedList
+      });
+      console.log(`[omission-promotion] Promoted ${promotedList.length} omissions to substitutions via Parakeet:`,
+        promotedList.map(r => `${r.ref}→${r.pkHeard}`));
+    }
   }
 
   // Cross-validator abbreviation confirmation
