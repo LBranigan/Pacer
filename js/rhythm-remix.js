@@ -7,8 +7,8 @@
  * @module rhythm-remix
  */
 
-import { LofiEngine } from './lofi-engine.js?v=20260219z3';
-import { MountainRange } from './mountain-range.js?v=20260219z3';
+import { LofiEngine } from './lofi-engine.js?v=20260219z4';
+import { MountainRange } from './mountain-range.js?v=20260219z4';
 import { getAudioBlob } from './audio-store.js';
 import { getAssessment, getStudents } from './storage.js';
 import { getPunctuationPositions } from './diagnostics.js';
@@ -55,6 +55,11 @@ let wordSequence = [];   // { text, type, startTime, endTime, el, isStruggle, is
 let wordRects = [];      // cached positions relative to ball-canvas
 let currentWordIdx = -1;
 let previousWordIdx = -1;
+
+/** Teleprompter: 2-line scrolling window. */
+let lineGroups = [];     // array of arrays: lineGroups[lineIdx] = [wordIdx, ...]
+let currentLinePair = 0; // which pair of lines is visible (0 = lines 0-1, 1 = lines 2-3, ...)
+let isScrolling = false; // true during scroll animation
 
 let audioCtx = null;
 let lofi = null;
@@ -230,14 +235,7 @@ function updateSpring(dt) {
 
 function wcpmToBpm(wcpm) {
   // BPM ≈ WPM, clamped to musically reasonable range
-  return Math.max(55, Math.min(160, wcpm)) * styleTempoMultiplier();
-}
-
-/** Zelda styles play at 1.5x BPM to feel energetic. */
-function styleTempoMultiplier() {
-  const sel = document.getElementById('styleSelect');
-  const style = sel ? sel.value : '';
-  return (style === 'zelda' || style === 'zelda-piano') ? 1.5 : 1;
+  return Math.max(55, Math.min(160, wcpm));
 }
 
 // ── Overlay streak — correct words build richer beat ─────────────────────────
@@ -441,6 +439,10 @@ function playDJIntroThenReading() {
 function startReadingPlayback() {
   if (!audioEl) return;
   correctStreak = 0;    // reset overlay streak
+  currentLinePair = 0;  // reset teleprompter scroll
+  isScrolling = false;
+  const wa = document.getElementById('word-area');
+  if (wa) wa.scrollTop = 0;
   audioEl.play().then(() => {
     isPlaying = true;
     setVinylPlaying(true);
@@ -473,6 +475,112 @@ function cacheWordRects() {
       h: r.height,
     };
   });
+}
+
+// ── Teleprompter: line detection & scrolling ─────────────────────────────────
+
+/**
+ * Scan word element positions and group into visual lines.
+ * Words sharing the same Y position (±4px) belong to the same line.
+ */
+function detectLines() {
+  lineGroups = [];
+  if (wordSequence.length === 0) return;
+
+  let currentLineTop = -Infinity;
+  for (let i = 0; i < wordSequence.length; i++) {
+    const el = wordSequence[i].el;
+    if (!el) continue;
+    const top = el.offsetTop;
+    if (Math.abs(top - currentLineTop) > 4) {
+      lineGroups.push([i]);
+      currentLineTop = top;
+    } else {
+      lineGroups[lineGroups.length - 1].push(i);
+    }
+  }
+}
+
+/**
+ * Get the line index for a given word index.
+ */
+function getLineForWord(wordIdx) {
+  for (let l = 0; l < lineGroups.length; l++) {
+    const group = lineGroups[l];
+    if (wordIdx >= group[0] && wordIdx <= group[group.length - 1]) return l;
+  }
+  return -1;
+}
+
+/**
+ * Set word area height to show exactly 2 lines with overflow hidden.
+ */
+function setupTeleprompterHeight() {
+  const wordArea = document.getElementById('word-area');
+  if (!wordArea || lineGroups.length === 0) return;
+
+  const firstEl = wordSequence[0] && wordSequence[0].el;
+  if (!firstEl) return;
+  const style = getComputedStyle(wordArea);
+  const padTop = parseFloat(style.paddingTop) || 0;
+  const padBottom = parseFloat(style.paddingBottom) || 0;
+
+  // Measure height of 2 lines: from top of line 0 to bottom of line 1
+  const line0Top = firstEl.offsetTop;
+  let line1Bottom;
+  if (lineGroups.length >= 2) {
+    const lastIdx = lineGroups[1][lineGroups[1].length - 1];
+    const el1 = wordSequence[lastIdx] && wordSequence[lastIdx].el;
+    line1Bottom = el1 ? (el1.offsetTop + el1.offsetHeight) : (line0Top + 80);
+  } else {
+    const lastIdx = lineGroups[0][lineGroups[0].length - 1];
+    const el0 = wordSequence[lastIdx] && wordSequence[lastIdx].el;
+    line1Bottom = el0 ? (el0.offsetTop + el0.offsetHeight) : (line0Top + 40);
+  }
+
+  const twoLineHeight = (line1Bottom - line0Top) + padTop + padBottom;
+  wordArea.style.height = twoLineHeight + 'px';
+  wordArea.style.minHeight = twoLineHeight + 'px';
+  wordArea.style.overflow = 'hidden';
+
+  currentLinePair = 0;
+  wordArea.scrollTop = 0;
+}
+
+/**
+ * Scroll to the correct line pair when the ball enters a new 2-line group.
+ */
+function teleprompterScroll(wordIdx) {
+  if (isScrolling || lineGroups.length <= 2) return;
+  const wordArea = document.getElementById('word-area');
+  if (!wordArea) return;
+
+  const lineIdx = getLineForWord(wordIdx);
+  if (lineIdx < 0) return;
+
+  const pairForLine = Math.floor(lineIdx / 2);
+  if (pairForLine === currentLinePair) return;
+
+  currentLinePair = pairForLine;
+  const targetLineIdx = pairForLine * 2;
+  if (targetLineIdx >= lineGroups.length) return;
+
+  const firstWordIdx = lineGroups[targetLineIdx][0];
+  const firstEl = wordSequence[firstWordIdx] && wordSequence[firstWordIdx].el;
+  if (!firstEl) return;
+
+  const padTop = parseFloat(getComputedStyle(wordArea).paddingTop) || 0;
+  const targetScroll = firstEl.offsetTop - padTop;
+
+  isScrolling = true;
+  wordArea.scrollTo({ top: targetScroll, behavior: 'smooth' });
+
+  // Re-cache rects after scroll animation settles
+  setTimeout(() => {
+    cacheWordRects();
+    sizeCanvas();
+    isScrolling = false;
+  }, 350);
 }
 
 // ── Canvas sizing ────────────────────────────────────────────────────────────
@@ -643,6 +751,9 @@ function onWordChange(fromIdx, toIdx) {
 
   // ── Overlay streak: correct words build richer beat ──
   updateOverlayStreak(w);
+
+  // ── Teleprompter scroll ──
+  teleprompterScroll(toIdx);
 
   // ── Mountain range: reveal peak ──
   if (mountainRange) {
@@ -1285,13 +1396,7 @@ function wireControls() {
   if (styleSelect) {
     styleSelect.addEventListener('change', () => {
       const val = styleSelect.value;
-      if (lofi) {
-        lofi.setStyle(val);
-        // Re-apply tempo with style-specific multiplier (Zelda = 1.5x)
-        if (assessment && assessment.wcpm) {
-          lofi.setTempo(wcpmToBpm(assessment.wcpm) * playbackRate);
-        }
-      }
+      if (lofi) lofi.setStyle(val);
       localStorage.setItem('orf_remix_style', val);
     });
   }
@@ -1572,11 +1677,26 @@ function initRhythmRemix() {
   // Setup canvases
   if (ballCanvas) ballCtx = ballCanvas.getContext('2d');
   if (vizCanvas) vizCtx = vizCanvas.getContext('2d');
+  // Teleprompter: detect lines and set 2-line height before caching rects
+  detectLines();
+  setupTeleprompterHeight();
   sizeCanvas();
   cacheWordRects();
 
-  // ResizeObserver
+  // ResizeObserver — re-detect lines on resize (guarded to prevent loop)
+  let lastObservedWidth = wordArea ? wordArea.offsetWidth : 0;
   const ro = new ResizeObserver(() => {
+    if (!wordArea) return;
+    const w = wordArea.offsetWidth;
+    // Only re-layout on width changes (height changes come from our own setup)
+    if (w === lastObservedWidth) {
+      sizeCanvas();
+      cacheWordRects();
+      return;
+    }
+    lastObservedWidth = w;
+    detectLines();
+    setupTeleprompterHeight();
     sizeCanvas();
     cacheWordRects();
   });
