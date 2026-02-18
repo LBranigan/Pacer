@@ -1047,7 +1047,7 @@ function renderNewAnalyzedWords(container, alignment, sttLookup, diagnostics, tr
   container.appendChild(wordsDiv);
 }
 
-export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, diagnostics, transcriptWords, tierBreakdown, referenceText, audioBlob, rawSttSources, readability) {
+export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, diagnostics, transcriptWords, tierBreakdown, referenceText, audioBlob, rawSttSources, readability, benchmark) {
   const wordsDiv = document.getElementById('resultWords');
   const newWordsDiv = document.getElementById('newAnalyzedWords');
   const plainDiv = document.getElementById('resultPlain');
@@ -1056,6 +1056,8 @@ export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, di
   wordsDiv.innerHTML = ''; plainDiv.textContent = ''; jsonDiv.textContent = '';
   if (newWordsDiv) newWordsDiv.innerHTML = '';
   if (prosodyContainer) { prosodyContainer.innerHTML = ''; prosodyContainer.style.display = 'none'; }
+  const insightContainer = document.getElementById('insightContainer');
+  if (insightContainer) { insightContainer.innerHTML = ''; insightContainer.style.display = 'none'; }
 
   // Click-to-play word audio setup
   if (window._wordAudioEl) { window._wordAudioEl.pause(); URL.revokeObjectURL(window._wordAudioEl.src); }
@@ -1208,6 +1210,52 @@ export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, di
     readBox.title = tipLines.join('\n');
 
     metricsBar.appendChild(readBox);
+  }
+
+  // Hasbrouck-Tindal benchmark status
+  if (benchmark && benchmark.norms) {
+    const bmBox = document.createElement('div');
+    bmBox.className = 'metric-box metric-box-benchmark';
+    bmBox.style.borderColor = benchmark.color;
+    bmBox.style.background = benchmark.color + '18'; // color at ~10% opacity
+
+    const val = document.createElement('span');
+    val.className = 'metric-value';
+    val.style.color = benchmark.color;
+    val.textContent = benchmark.label;
+
+    const lbl = document.createElement('span');
+    lbl.className = 'metric-label';
+    lbl.textContent = 'Grade ' + benchmark.grade + ' · ' + benchmark.season.charAt(0).toUpperCase() + benchmark.season.slice(1);
+
+    bmBox.appendChild(val);
+    bmBox.appendChild(lbl);
+
+    // Hover tooltip with percentile breakdown
+    const n = benchmark.norms;
+    const wcpmVal = benchmark.wcpm;
+    const pctLines = [
+      'Hasbrouck & Tindal (2017) ORF Norms',
+      'Grade ' + benchmark.grade + ', ' + benchmark.season,
+      '',
+      '90th percentile: ' + n.p90 + ' WCPM',
+      '75th percentile: ' + n.p75 + ' WCPM',
+      '50th percentile: ' + n.p50 + ' WCPM',
+      '25th percentile: ' + n.p25 + ' WCPM',
+      '10th percentile: ' + n.p10 + ' WCPM',
+      '',
+      'Student: ' + wcpmVal + ' WCPM',
+    ];
+    // Show which percentile range
+    if (wcpmVal >= n.p90) pctLines.push('Above 90th percentile');
+    else if (wcpmVal >= n.p75) pctLines.push('75th-90th percentile range');
+    else if (wcpmVal >= n.p50) pctLines.push('50th-75th percentile range');
+    else if (wcpmVal >= n.p25) pctLines.push('25th-50th percentile range');
+    else if (wcpmVal >= n.p10) pctLines.push('10th-25th percentile range');
+    else pctLines.push('Below 10th percentile');
+    bmBox.title = pctLines.join('\n');
+
+    metricsBar.appendChild(bmBox);
   }
 
   plainDiv.appendChild(metricsBar);
