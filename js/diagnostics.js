@@ -322,11 +322,24 @@ export function absorbMispronunciationFragments(alignment, transcriptWords) {
   if (subs.length === 0) return;
 
   // Check each insertion: if it's a short fragment temporally inside a substitution's window, absorb it
-  for (const entry of alignment) {
+  const _fragClean = s => (s || '').toLowerCase().replace(/[^a-z]/g, '');
+  for (let ai = 0; ai < alignment.length; ai++) {
+    const entry = alignment[ai];
     if (entry.type !== 'insertion') continue;
     if (entry._partOfStruggle) continue;
     const hyp = entry.hyp || '';
     if (hyp.replace(/[^a-zA-Z]/g, '').length > MAX_FRAG_LEN) continue;
+
+    // Guard: if this insertion is a prefix of the next non-insertion entry's ref,
+    // it's a false start of that word, not a BPE fragment of the previous sub.
+    const ch = _fragClean(hyp);
+    if (ch.length >= 2) {
+      let nextRef = null;
+      for (let nj = ai + 1; nj < alignment.length; nj++) {
+        if (alignment[nj].type !== 'insertion') { nextRef = alignment[nj]; break; }
+      }
+      if (nextRef && nextRef.ref && _fragClean(nextRef.ref).startsWith(ch)) continue;
+    }
 
     if (entry.hypIndex == null || entry.hypIndex < 0) continue;
     const tw = transcriptWords[entry.hypIndex];
