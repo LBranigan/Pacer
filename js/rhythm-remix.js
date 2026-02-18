@@ -7,8 +7,8 @@
  * @module rhythm-remix
  */
 
-import { LofiEngine } from './lofi-engine.js?v=20260219z6';
-import { MountainRange } from './mountain-range.js?v=20260219z6';
+import { LofiEngine } from './lofi-engine.js?v=20260219z7';
+import { MountainRange } from './mountain-range.js?v=20260219z7';
 import { getAudioBlob } from './audio-store.js';
 import { getAssessment, getStudents } from './storage.js';
 import { getPunctuationPositions } from './diagnostics.js';
@@ -747,62 +747,10 @@ function onWordChange(fromIdx, toIdx) {
   // ── Teleprompter scroll (may re-cache wordRects) ──
   teleprompterScroll(toIdx);
 
-  // Read rect AFTER scroll so positions are fresh
-  const rect = wordRects[toIdx];
-
   // ── Mountain range: reveal peak ──
   if (mountainRange) {
     mountainRange.revealPeak(toIdx, w);
   }
-
-  if (!rect) return;
-
-  // Determine ball color based on word type
-  ball.scTransition = false;
-  ball.scTransitionStart = 0;
-  if (w.isOmission) {
-    ball.color = WORD_COLORS.omission;
-    ball.glowColor = WORD_COLORS.omission;
-  } else if (w.selfCorrected) {
-    // Start amber (struggle), will transition to green on landing
-    ball.color = WORD_COLORS.struggle;
-    ball.glowColor = WORD_COLORS.struggle;
-    ball.scTransition = true;
-  } else if (w.isStruggle) {
-    ball.color = WORD_COLORS.struggle;
-    ball.glowColor = WORD_COLORS.struggle;
-  } else if (w.type === 'substitution') {
-    ball.color = WORD_COLORS.substitution;
-    ball.glowColor = WORD_COLORS.substitution;
-  } else if (w.type === 'correct' || w.forgiven) {
-    ball.color = WORD_COLORS.correct;
-    ball.glowColor = WORD_COLORS.correct;
-  } else {
-    ball.color = WORD_COLORS.default;
-    ball.glowColor = WORD_COLORS.default;
-  }
-
-  // Set travel endpoints
-  ball.travelStartX = ball.x || rect.cx;
-  ball.travelStartY = ball.y || rect.cy;
-  ball.travelEndX = rect.cx;
-  ball.travelEndY = rect.cy;
-
-  // Travel duration: proportional to gap, minimum 100ms, max 300ms
-  const gap = (fromIdx >= 0 && wordSequence[fromIdx].endTime > 0 && w.startTime > 0)
-    ? Math.max(0, w.startTime - wordSequence[fromIdx].endTime)
-    : 0.15;
-  ball.travelDuration = Math.max(0.1, Math.min(0.3, gap));
-  ball.travelStart = audioCtx ? audioCtx.currentTime : performance.now() / 1000;
-
-  // For omissions: fast high arc, no dwell
-  if (w.isOmission) {
-    ball.travelDuration = 0.08;
-  }
-
-  ball.phase = 'traveling';
-  ball.wobbleTime = 0;
-
 }
 
 // ── Ball physics update ──────────────────────────────────────────────────────
@@ -1180,19 +1128,13 @@ function animationLoop(timestamp) {
     }
   }
 
-  // 3. Update ball physics
-  updateBallPhysics(dt);
-
-  // 4. Update beat density (only when not in a pause)
+  // 3. Update beat density (only when not in a pause)
   if (!inPause) updateBeatDensity(newIdx);
 
-  // 5. Update word CSS
+  // 4. Update word CSS
   updateWordClasses(currentWordIdx);
 
-  // 6. Draw ball frame
-  drawFrame(dt);
-
-  // 7. Draw visualizer
+  // 5. Draw visualizer
   drawVisualizer();
 
   // 8. Update waveform visualization (throttled to every 3rd frame)

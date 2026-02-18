@@ -260,13 +260,7 @@ body::before {
 }
 
 #ball-canvas {
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  pointer-events: none;
-  z-index: 2;
+  display: none;
 }
 
 /* --- Word Spans --- */
@@ -278,24 +272,20 @@ body::before {
   font-size: 1.4rem;
   font-weight: 500;
   color: var(--rm-muted);
-  transition: all 0.3s ease;
-  position: relative;
+  transition: color 0.4s ease, opacity 0.4s ease;
   cursor: default;
   user-select: none;
 }
 
-/* Upcoming: barely visible */
+/* Upcoming: dim, waiting to be spoken */
 .word-span.upcoming {
-  opacity: 0.3;
+  opacity: 0.25;
 }
 
-/* Active: glowing accent */
+/* Active: currently being spoken — lights up to white */
 .word-span.active {
-  color: var(--rm-accent);
-  background: rgba(232, 168, 124, 0.1);
-  box-shadow: 0 0 16px var(--rm-accent-glow), 0 0 4px var(--rm-accent-glow);
-  transform: scale(1.08);
-  animation: wordPulse 1.6s ease-in-out infinite;
+  color: #f0ece4;
+  opacity: 1;
 }
 
 /* Completed correctly: sage green */
@@ -304,48 +294,28 @@ body::before {
   opacity: 1;
 }
 
-/* Error: warm amber with wavy underline */
+/* Error: warm amber */
 .word-span.done-error {
   color: var(--rm-error);
-  text-decoration: underline;
-  text-decoration-style: wavy;
-  text-decoration-color: var(--rm-error);
-  text-underline-offset: 4px;
-  text-decoration-thickness: 1.5px;
   opacity: 1;
 }
 
-/* Struggle: amber with pulse */
+/* Struggle: amber */
 .word-span.done-struggle {
   color: var(--rm-error);
   opacity: 1;
-  animation: strugglePulse 2s ease-in-out infinite;
 }
 
-/* Omission: muted dashed underline */
+/* Omission: stays dim */
 .word-span.done-omission {
   color: var(--rm-muted);
-  text-decoration: underline;
-  text-decoration-style: dashed;
-  text-decoration-color: var(--rm-muted);
-  text-underline-offset: 4px;
-  text-decoration-thickness: 1px;
-  opacity: 0.5;
+  opacity: 0.35;
 }
 
-/* Self-corrected: persistent rainbow gradient text */
+/* Self-corrected: sage green (same as correct) */
 .word-span.done-self-corrected {
+  color: var(--rm-correct);
   opacity: 1;
-  background: linear-gradient(
-    90deg,
-    #ff6b6b, #ffa94d, #ffd43b, #69db7c,
-    #4dabf7, #da77f2, #ff6b6b
-  );
-  background-size: 200% 100%;
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
-  animation: rainbowShift 2s linear infinite;
 }
 
 /* ============================================================
