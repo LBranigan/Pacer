@@ -7,8 +7,8 @@
  * @module rhythm-remix
  */
 
-import { LofiEngine } from './lofi-engine.js?v=20260218d';
-import { MountainRange } from './mountain-range.js?v=20260218d';
+import { LofiEngine } from './lofi-engine.js?v=20260218e';
+import { MountainRange } from './mountain-range.js?v=20260218e';
 import { getAudioBlob } from './audio-store.js';
 import { getAssessment, getStudents } from './storage.js';
 import { getPunctuationPositions } from './diagnostics.js';
@@ -87,8 +87,8 @@ let savedDensity = 'normal'; // density to restore after pause ends
 /** Sentence-aligned chord toggle state. */
 let sentenceAlignedEnabled = false;
 
-/** Toggle states for new features (celebrations default ON). */
-let celebrationsEnabled = true;
+/** Toggle states for new features (all default OFF). */
+let celebrationsEnabled = false;
 let melodyEnabled = false;
 let adaptiveHarmonyEnabled = false;
 
@@ -334,7 +334,7 @@ function playDJIntroThenReading() {
     djSourceNode = audioCtx.createBufferSource();
     djSourceNode.buffer = decoded;
     djGainNode = audioCtx.createGain();
-    djGainNode.gain.value = 0.55; // DJ voice sits behind the beat
+    djGainNode.gain.value = 0.35; // DJ voice well behind the beat
     djSourceNode.connect(djGainNode);
     djGainNode.connect(audioCtx.destination);
 
@@ -443,12 +443,12 @@ function setupAudio() {
 
   // Voice chain: audioElement -> mediaElementSource -> voiceGain -> destination
   voiceGain = audioCtx.createGain();
-  voiceGain.gain.value = 0.8;
+  voiceGain.gain.value = 0.65;
   voiceGain.connect(audioCtx.destination);
 
   // Beat chain: lofiEngine.output -> beatGain -> destination
   beatGain = audioCtx.createGain();
-  beatGain.gain.value = 0.5;
+  beatGain.gain.value = 0.60;
   beatGain.connect(audioCtx.destination);
 
   // Analyser for visualizer (fed by both voice and beat)
@@ -633,10 +633,6 @@ function onWordChange(fromIdx, toIdx) {
   ball.phase = 'traveling';
   ball.wobbleTime = 0;
 
-  // Auto-scroll the word into view
-  if (w.el) {
-    w.el.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' });
-  }
 }
 
 // ── Ball physics update ──────────────────────────────────────────────────────
