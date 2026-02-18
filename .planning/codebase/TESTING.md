@@ -1,246 +1,136 @@
 # Testing Patterns
 
-**Analysis Date:** 2026-02-06
+**Analysis Date:** 2026-02-18
 
 ## Test Framework
 
-**Runner:**
-- None detected - no Jest, Vitest, Mocha, or other test framework present
-- No `test/` directory
-- No `.test.js` or `.spec.js` files found
+**Runner:** None detected.
 
-**Assertion Library:**
-- None detected
+No `jest.config.*`, `vitest.config.*`, `mocha`, or any test runner configuration file exists in the project root or any subdirectory.
 
-**Run Commands:**
-```bash
-# No test commands available
-```
+**Assertion Library:** None.
+
+**Test Files:** None found. No `*.test.js`, `*.spec.js`, `__tests__/` directories, or equivalent exist anywhere in the codebase.
+
+**Run Commands:** No test commands defined. `package.json` is not present — project has no npm scripts.
 
 ## Test File Organization
 
-**Location:**
-- No formal tests present
+No test files exist. The project has no testing infrastructure.
 
-**Naming:**
-- N/A
+## How the Codebase Is Verified Today
 
-**Structure:**
-```
-No test files detected
-```
+In the absence of automated tests, correctness is validated through these mechanisms:
 
-## Test Structure
+**1. Debug Logger (`js/debug-logger.js`):**
+- Every pipeline run produces a structured JSON log downloadable as `orf-debug-TIMESTAMP.json`
+- Log includes all pipeline stages, warnings, and errors with timestamps
+- `addStage(name, data)` called at each significant pipeline step in `js/app.js`
+- Used for manual post-hoc inspection of pipeline behavior
 
-**Suite Organization:**
-- No formal test suites
+**2. The 6-Column Alignment Table (UI step 1):**
+- `js/ui.js` renders a `# / Ref / V1 / V0 / Parakeet / Verdict` table after every assessment
+- This is a manual verification tool — teachers and developers can visually inspect each word's alignment decisions
+- Color-coded engine outputs make per-word disagreements immediately visible
 
-**Patterns:**
-- Testing appears to be manual/integration-based
-- Debug logger (`js/debug-logger.js`) captures runtime state for post-hoc analysis
-- Debug log downloadable as JSON for inspection
+**3. Miscue Registry (`js/miscue-registry.js`):**
+- Acts as a specification document for what each detector is supposed to do
+- Includes `example` field per miscue type showing expected input → output
+- No executable examples — documentation only
 
-**Manual testing artifacts:**
+**4. `Calibration tests/` Directory:**
+- A directory named `Calibration tests` exists at the project root
+- Contents not explored (audio/assessment data for manual regression testing)
+
+**5. PLAN.md / docs/ design documents:**
+- Architecture decisions recorded in `docs/` and `PLAN.md` (not automated tests)
+- Used for design review, not automated verification
+
+## Critical Untested Areas
+
+Every module in `js/` is untested by automated tooling. The highest-risk areas are:
+
+**`js/alignment.js`** — Needleman-Wunsch with graded substitution, compound merge, spillover consolidation. No unit tests for edge cases in DP traceback or compound-word patterns.
+
+**`js/text-normalize.js`** — Hyphen-split logic used in 5 synchronized places. Any drift between the 5 consumers is not caught automatically. High regression risk.
+
+**`js/diagnostics.js`** — 2115-line module with 20+ exported functions. Near-miss resolution, struggle detection, word speed tiers — all manually verified only.
+
+**`js/metrics.js`** — WCPM and accuracy formulas. Edge cases (all omissions, zero elapsed time, forgiven substitutions) have no regression tests.
+
+**`js/storage.js`** — Migration chain (v1→v6). Each migration step is straightforward but untested; a missed field rename could silently corrupt stored assessments.
+
+## Adding Tests (Guidance for Future Work)
+
+The modules are ES modules (`export function ...`) and contain no browser-specific code in the algorithmic core. They are testable with any ES module-compatible test runner (Vitest recommended for zero-config ESM support).
+
+**High-value test targets (in priority order):**
+
+1. `js/text-normalize.js` — `normalizeText()`, `splitHyphenParts()`: Pure functions with well-defined inputs and outputs. Cover hyphen edge cases, OCR line-break merge, single-letter prefix join.
+
+2. `js/alignment.js` — `alignWords()`: Pure function. Cover: exact match, substitution, omission, insertion, compound merge (Pattern A + B), reversed compound, spillover consolidation.
+
+3. `js/metrics.js` — `computeWCPM()`, `computeAccuracy()`: Pure functions. Cover: zero elapsed time, all correct, all omitted, forgiven subs, `_notAttempted` exclusion.
+
+4. `js/diagnostics.js` — `isNearMiss()`, `getPunctuationPositions()`, `parseTime()`: These are pure and small enough to test in isolation before tackling the larger orchestrators.
+
+**Example test structure (Vitest):**
 ```javascript
-// Debug logging used for verification
-initDebugLog();
-addStage('audio_padding', { applied: true, paddingMs: 500 });
-addWarning('Audio padding failed', err.message);
-finalizeDebugLog(assessmentData);
-saveDebugLog(); // Downloads JSON
+// text-normalize.test.js
+import { describe, it, expect } from 'vitest';
+import { normalizeText, splitHyphenParts } from '../js/text-normalize.js';
+
+describe('normalizeText', () => {
+  it('joins single-letter hyphen prefix', () => {
+    expect(normalizeText('e-mail')).toEqual(['email']);
+  });
+  it('splits multi-letter hyphen compound', () => {
+    expect(normalizeText('soft-on-skin')).toEqual(['soft', 'on', 'skin']);
+  });
+  it('merges trailing-hyphen OCR line breaks', () => {
+    expect(normalizeText('spread- sheet')).toEqual(['spreadsheet']);
+  });
+});
+
+describe('splitHyphenParts', () => {
+  it('returns null for words without hyphens', () => {
+    expect(splitHyphenParts('hello')).toBeNull();
+  });
+  it('returns join for single-letter prefix', () => {
+    expect(splitHyphenParts('e-mail')).toEqual({ type: 'join', parts: ['e', 'mail'] });
+  });
+  it('returns split for multi-letter prefix', () => {
+    expect(splitHyphenParts('soft-spoken')).toEqual({ type: 'split', parts: ['soft', 'spoken'] });
+  });
+});
+```
+
+**Recommended setup:**
+```bash
+npm init -y
+npm install --save-dev vitest
+# vitest.config.js: { test: { environment: 'jsdom' } }  # only if needed for DOM
+npx vitest run
 ```
 
 ## Mocking
 
-**Framework:**
-- None detected
-
-**Patterns:**
-- No mocks in codebase
-- Real services used during development (Google Cloud STT, Reverb Docker service, Deepgram API)
+No mocking infrastructure exists. If tests were added:
 
 **What to Mock:**
-- N/A - no test infrastructure
+- `fetch` calls in API modules (`js/reverb-api.js`, `js/parakeet-api.js`, `js/deepgram-api.js`, `js/ocr-api.js`)
+- `localStorage` in `js/storage.js`, `js/cross-validator.js`, `js/kitchen-sink-merger.js`
+- `FileReader` in `blobToBase64()` helpers
 
 **What NOT to Mock:**
-- N/A - no test infrastructure
-
-## Fixtures and Factories
-
-**Test Data:**
-- No fixtures directory or factory functions detected
-
-**Location:**
-- N/A
-
-**Pattern:**
-- Manual testing likely uses real audio files and passages
-- Reference texts entered via UI (`#transcript` textarea in `index.html`)
-- Audio captured via browser MediaRecorder API (`js/recorder.js`)
+- `js/alignment.js`, `js/text-normalize.js`, `js/metrics.js`, `js/diagnostics.js` — pure computation, no mocking needed
 
 ## Coverage
 
-**Requirements:**
-- None enforced
+**Requirements:** None enforced.
 
-**View Coverage:**
-```bash
-# No coverage tooling
-```
-
-**Current state:**
-- No formal unit test coverage
-- System tested end-to-end via UI
-- Debug logger provides runtime validation
-
-## Test Types
-
-**Unit Tests:**
-- None present
-
-**Integration Tests:**
-- None present in automated form
-- Manual integration testing via browser UI
-
-**E2E Tests:**
-- None present
-
-## Testing Approach (Inferred)
-
-**Manual verification workflow:**
-1. User records or uploads audio via UI
-2. Reference passage entered manually or via OCR
-3. Click "Analyze" button to run full pipeline
-4. System processes through multiple stages:
-   - Audio padding: `js/audio-padding.js`
-   - ASR transcription: Kitchen Sink pipeline (Reverb + Deepgram)
-   - Word alignment: `js/alignment.js`
-   - Disfluency detection: `js/disfluency-detector.js`
-   - Diagnostics: `js/diagnostics.js`
-   - Metrics calculation: `js/metrics.js`
-5. Results displayed in UI via `js/ui.js`
-6. Debug log downloadable for detailed inspection
-
-**Validation mechanisms:**
-- Console logging with structured prefixes: `[ORF]`, `[Pipeline]`, `[reverb]`
-- Debug logger tracks all pipeline stages: `addStage(name, data)`
-- Version tracking for cache verification: `CODE_VERSION` constant
-- Safety checks built into pipeline: `js/safety-checker.js`
-
-**Production safeguards:**
-- Error handling with fallback behavior (graceful degradation)
-- Input validation via FastAPI Pydantic models (Python backend)
-- Frozen configuration constants prevent runtime mutation
-- Service worker for offline resilience
-
-## Common Patterns
-
-**Async Testing:**
-- N/A - no async test patterns (no test framework)
-
-**Error Testing:**
-- N/A - no error test patterns (no test framework)
-
-**Runtime verification:**
-```javascript
-// Typical error handling pattern that would need testing
-try {
-  const result = await someAsyncOperation();
-  addStage('operation_success', result);
-  return result;
-} catch (err) {
-  console.warn('[ORF] Operation failed:', err.message);
-  addError('Operation failed', { error: err.message });
-  return fallbackValue;
-}
-```
-
-**Validation pattern (would be testable):**
-```javascript
-// Pure function suitable for unit testing
-export function computeAccuracy(alignmentResult, options = {}) {
-  let correctCount = 0, substitutions = 0, omissions = 0;
-  for (const w of alignmentResult) {
-    switch (w.type) {
-      case 'correct': correctCount++; break;
-      case 'substitution': substitutions++; break;
-      case 'omission': omissions++; break;
-    }
-  }
-  const totalRefWords = correctCount + substitutions + omissions;
-  const accuracy = totalRefWords === 0 ? 0 : Math.round((correctCount / totalRefWords) * 1000) / 10;
-  return { accuracy, correctCount, totalRefWords, substitutions, omissions };
-}
-```
-
-## Testability Characteristics
-
-**Well-structured for testing:**
-- Pure functions in `js/metrics.js`: `computeWCPM()`, `computeAccuracy()`
-- Stateless utilities: `js/word-equivalences.js`, `js/text-normalize.js`
-- Clear input/output contracts with JSDoc type annotations
-- Modular design: each file has single responsibility
-- Configuration separated from implementation
-
-**Challenges for testing:**
-- Heavy browser API dependencies: `MediaRecorder`, `AudioContext`, `localStorage`, `IndexedDB`
-- External service integration: Google Cloud STT, Deepgram, Docker-hosted Reverb
-- Complex pipeline orchestration in `js/app.js`
-- No dependency injection - services imported directly
-- Global state in some modules: `_model` singleton (Python), `debugLog` (JS)
-
-**Testable modules (if tests were added):**
-- `js/alignment.js` - Pure diff algorithm
-- `js/metrics.js` - Pure calculations
-- `js/word-equivalences.js` - Pure lookups
-- `js/diagnostics.js` - Analysis functions (given mock data)
-- `js/text-normalize.js` - String transformations
-
-**Requires mocking for testing:**
-- `js/stt-api.js` - HTTP calls to Google Cloud
-- `js/reverb-api.js` - HTTP calls to local Docker service
-- `js/deepgram-api.js` - HTTP calls to Deepgram
-- `js/recorder.js` - MediaRecorder API
-- `js/storage.js` - localStorage API
-- `js/vad-processor.js` - ONNX Runtime + Web Audio API
-- `services/reverb/server.py` - PyTorch + CUDA GPU
-
-## Recommendations (if adding tests)
-
-**Start with:**
-1. Unit tests for pure functions:
-   - `js/metrics.js`: `computeWCPM()`, `computeAccuracy()`
-   - `js/word-equivalences.js`: `getCanonical()`, `getAllEquivalents()`
-   - `js/text-normalize.js`: `normalizeText()`, `filterDisfluencies()`
-   - `js/diagnostics.js`: `isNearMiss()`, `parseTime()`
-
-2. Integration tests for pipeline stages (with mocked I/O):
-   - `js/alignment.js`: Word alignment with known inputs
-   - `js/disfluency-detector.js`: Disfluency detection patterns
-   - `js/confidence-classifier.js`: Confidence classification logic
-
-3. E2E tests (Playwright/Cypress):
-   - Record → Analyze → View Results workflow
-   - Student management (add/delete/history)
-   - OCR passage extraction
-   - Audio playback synchronization
-
-**Framework recommendation:**
-- **Vitest** - Fast, ESM-native, works with browser APIs via `happy-dom` or `jsdom`
-- **Jest** - Mature ecosystem, good mocking support
-- **Playwright** - For E2E tests requiring real browser + Media APIs
-
-**Mocking strategy:**
-- Mock external APIs: `fetch()` calls to Google/Deepgram/Reverb
-- Mock browser APIs: `MediaRecorder`, `AudioContext`, `localStorage`
-- Use real implementations for pure functions (no mocking needed)
-
-**Coverage goals:**
-- Pure functions: 100% (easy to test)
-- API/service layers: 80%+ (mock HTTP)
-- UI rendering: 60%+ (E2E tests)
-- Overall target: 70%+ line coverage
+**Current coverage:** 0% automated.
 
 ---
 
-*Testing analysis: 2026-02-06*
+*Testing analysis: 2026-02-18*

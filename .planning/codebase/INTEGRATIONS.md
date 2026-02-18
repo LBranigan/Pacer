@@ -1,159 +1,147 @@
 # External Integrations
 
-**Analysis Date:** 2026-02-06
+**Analysis Date:** 2026-02-18
 
 ## APIs & External Services
 
-**Speech-to-Text (Primary):**
-- Reverb ASR - Local self-hosted service for verbatim transcription with disfluency detection
-  - SDK/Client: `rev-reverb==0.1.0` (Python), `js/reverb-api.js` (browser)
-  - Endpoint: `http://localhost:8765/ensemble` (dual-pass v=1.0 verbatim + v=0.0 clean)
-  - Auth: None (local service)
-  - Model: `reverb_asr_v1` via WeNet (HuggingFace model download)
+**ASR / Transcription:**
+- Reverb ASR (rev-reverb) - Dual-pass verbatim/clean transcription for disfluency detection
+  - Access: Local Docker container via `http://localhost:8765/ensemble`
+  - Client: `js/reverb-api.js`
+  - Auth: None (local), or Bearer token via `ORF_AUTH_TOKEN` env var
+- Parakeet TDT 0.6B v3 (NVIDIA NeMo) - Primary correctness engine, sub-second word timestamps
+  - Access: Same backend at `http://localhost:8765/parakeet`
+  - Client: `js/parakeet-api.js`
+  - Auth: Same Bearer token as above
+  - Requires: `nemo_toolkit[asr]` installed on backend host
+- Deepgram Nova-3 - Alternative secondary ASR engine (optional)
+  - Access: Proxied via backend at `http://localhost:8765/deepgram` (no direct browser CORS)
+  - Client: `js/deepgram-api.js`
+  - Auth: `DEEPGRAM_API_KEY` env var on backend
 
-**Speech-to-Text (Cross-Validation):**
-- Deepgram Nova-3 - Cloud API for cross-validation against Reverb
-  - SDK/Client: `deepgram-sdk>=5.0.0,<6.0.0` (Python), `js/deepgram-api.js` (browser)
-  - Endpoint: `http://localhost:8765/deepgram` (proxy through local backend)
-  - Auth: `DEEPGRAM_API_KEY` environment variable
-  - Direct API: Not used (browser cannot call Deepgram directly due to CORS)
+**Google Cloud AI:**
+- Google Cloud Vision API - Book page OCR (`DOCUMENT_TEXT_DETECTION`)
+  - Endpoint: `https://vision.googleapis.com/v1/images:annotate?key={apiKey}`
+  - Client: `js/ocr-api.js` (`extractTextFromImage`, `extractTextHybrid`)
+  - Auth: GCP API key entered by user in UI, stored in localStorage
+- Google Cloud Natural Language API - POS tagging, entity detection, proper noun classification
+  - Endpoints: `https://language.googleapis.com/v1/documents:analyzeSyntax`, `analyzeEntities`
+  - Client: `js/nl-api.js` (`analyzePassageText`)
+  - Auth: Same GCP API key as Vision
+  - Caching: Results cached in `sessionStorage` with text hash key
 
-**Speech-to-Text (Legacy):**
-- Google Cloud Speech-to-Text - Historical integration, still present in code but replaced by Kitchen Sink pipeline
-  - SDK/Client: Direct REST API calls via `fetch()` in `js/stt-api.js`
-  - Endpoints: `https://speech.googleapis.com/v1/speech:recognize`, `https://speech.googleapis.com/v1/speech:longrunningrecognize`
-  - Auth: User-provided API key via browser input (stored in `keys/GoogSTT API key.txt`)
-  - Models: `latest_long` (primary), `default` (confidence oracle in ensemble mode)
-  - Status: Code present but Kitchen Sink pipeline (`runKitchenSinkPipeline()`) is now default
+**Google Gemini:**
+- Gemini 2.0 Flash (`gemini-2.0-flash`) - OCR text assembly and artifact correction
+  - Endpoint: `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={key}`
+  - Client: `js/ocr-api.js` (`assembleWithGemini`, `correctWithGemini`)
+  - Auth: Gemini API key entered by user in UI
+- Gemini 2.5 Flash TTS (`gemini-2.5-flash-preview-tts`) - Movie Trailer voiceover synthesis
+  - Endpoint: `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-tts:generateContent`
+  - Client: `js/movie-trailer.js` (`callGeminiTTS`)
+  - Auth: Same Gemini API key
+  - Voice: `Charon` (deep/authoritative narrator)
+- Gemini 2.5 Flash TTS - Rhythm Remix DJ intro ("Study Beats FM")
+  - Client: `js/rhythm-remix.js`
+  - Auth: `orf_gemini_key` from localStorage
+  - Voice: `Kore`
 
-**Natural Language API:**
-- Google Cloud Natural Language API - Syntax and entity analysis for passage text
-  - SDK/Client: Direct REST API calls via `fetch()` in `js/nl-api.js`
-  - Endpoints: `https://language.googleapis.com/v1/documents:analyzeSyntax`, `https://language.googleapis.com/v1/documents:analyzeEntities`
-  - Auth: Same Google Cloud API key as STT
-  - Purpose: POS tagging, proper noun detection, word tier classification (sight/academic/function/proper)
-  - Caching: sessionStorage by text hash
-
-**OCR:**
-- Google Cloud Vision API - Text extraction from photographed book pages
-  - SDK/Client: Direct REST API calls via `fetch()` in `js/ocr-api.js`
-  - Endpoint: `https://vision.googleapis.com/v1/images:annotate`
-  - Auth: Same Google Cloud API key as STT
-  - Features: `DOCUMENT_TEXT_DETECTION`
-  - Usage: Optional - allows photographing passage instead of manual typing
-
-**Voice Activity Detection:**
-- Silero VAD - Ghost word detection (hallucinated words where ASR heard speech but VAD detected silence)
-  - SDK/Client: `@ricky0123/vad-web@0.0.29` via CDN (ONNX model via WASM)
-  - Endpoint: Browser-local inference (no API calls)
-  - Auth: None
-  - Integration: `js/vad-processor.js` processes audio blobs to flag ghost words
+**Dictionary:**
+- Free Dictionary API - Guards proper noun forgiveness (distinguishes common words from exotic names)
+  - Endpoint: `https://api.dictionaryapi.dev/api/v2/entries/en/{word}`
+  - Client: inline in `js/app.js` (~line 1692, `isCommonDictionaryWord()`)
+  - Auth: None (public API)
+  - Caching: Responses cached in `sessionStorage` (key: `dict_{word}`)
 
 ## Data Storage
 
-**Databases:**
-- None - all storage is browser-local
+**Primary Data Store:**
+- localStorage (`orf_data`) - Student roster and assessment results
+  - Schema: `{ version: 6, students: [], assessments: [] }`
+  - Versioned with migration path v1→v6
+  - Client: `js/storage.js`
 
-**Client Storage:**
-- localStorage - Student records and assessment metadata
-  - Key: `orf_data` (JSON object with version, students[], assessments[])
-  - Implementation: `js/storage.js`
-- IndexedDB - Audio blob storage for playback
-  - Database: `orf_audio`, Store: `blobs`
-  - Implementation: `js/audio-store.js`
-- sessionStorage - NL API response caching
-  - Keys: `nl_<hash>` (passage text hash)
-  - Implementation: `js/nl-api.js`
+**Audio Storage:**
+- IndexedDB (`orf_audio` database, `blobs` object store) - Audio blobs per assessment
+  - Client: `js/audio-store.js`
+  - Keys: assessment IDs
+
+**NL API Cache:**
+- sessionStorage - NL API passage annotations keyed by text hash
+  - Client: `js/nl-api.js`
 
 **File Storage:**
-- Local filesystem only - no cloud storage
-- API keys stored in `keys/` directory (not committed to git)
+- None (no server-side file storage; audio stays in browser IndexedDB)
 
 **Caching:**
-- Service Worker - PWA offline support
-  - Implementation: `sw.js`
-  - Registration: `js/app.js` line 32-36
-- sessionStorage - NL API response caching (see above)
+- Service Worker Cache (`orf-v72`) - Offline-capable PWA shell cache
+  - Config: `sw.js`
+  - Strategy: cache-first with runtime caching for GET requests
+  - Bypasses: `googleapis.com` URLs, `backend-config.json`
 
 ## Authentication & Identity
 
 **Auth Provider:**
-- None - single-user local application
+- None (no user authentication)
+- API keys entered manually by teacher/admin in the UI, stored in localStorage
+- Backend auth: optional Bearer token (`ORF_AUTH_TOKEN` / `orf_backend_token`) for protecting the Docker backend when exposed over a tunnel
 
-**API Key Management:**
-- Google Cloud API key (user-provided via browser input)
-  - Input: `index.html` line 24 (`#apiKey` field)
-  - Stored: Browser DOM only (not persisted)
-  - Backup storage: `keys/GoogSTT API key.txt` (local file, not accessed by code)
-- Deepgram API key (server-side environment variable)
-  - Variable: `DEEPGRAM_API_KEY` in `services/reverb/.env`
-  - Access: Backend only (`services/reverb/server.py`)
-- HuggingFace token (server-side environment variable)
-  - Variable: `HF_TOKEN` for model download
-  - Access: Docker git config at build time
-  - Storage: `services/reverb/.env`
+## Voice Activity Detection
+
+**Silero VAD (ONNX):**
+- Runtime: `onnxruntime-web@1.22.0` (WASM, loaded from jsDelivr CDN)
+- Wrapper: `@ricky0123/vad-web@0.0.29` (loaded from jsDelivr CDN)
+- Client: `js/vad-processor.js`
+- Purpose: Ghost word detection — flags ASR-reported words in segments VAD identifies as silence
 
 ## Monitoring & Observability
 
 **Error Tracking:**
-- Console logging only (`console.log`, `console.warn`, `console.error`, `console.table`)
-- No external error tracking service
+- None (no external error tracking service)
 
 **Logs:**
-- Browser console - client-side operations
-- Python uvicorn stdout - server-side ASR operations
-- Debug logger: `js/debug-logger.js` (in-memory diagnostic log, not sent externally)
+- `console.warn` / `console.log` with `[module-name]` prefixes throughout pipeline
+- `js/debug-logger.js` — optional structured debug logging module
 
 ## CI/CD & Deployment
 
 **Hosting:**
-- Local development server (`python -m http.server 8080`)
-- PWA installable via `manifest.json` (runs from browser cache)
+- GitHub Pages (`https://lbranigan.github.io`) — static HTML/JS/CSS
+- No build step; source files deployed directly
 
 **CI Pipeline:**
-- None - no automated testing or deployment
+- None detected
 
-**Deployment Process:**
-- Manual: Run `start_services.bat` (Windows) or `start_services.sh` (Linux)
-  1. Starts Reverb ASR service in WSL via conda environment
-  2. Starts Python http.server on port 8080
-  3. Opens browser to `http://localhost:8080/index.html`
+**Backend Deployment:**
+- Docker container (`services/reverb/Dockerfile`) with NVIDIA GPU runtime
+- Start scripts: `start_services.sh` (Linux), `start_services.bat` (Windows)
+- Model cache persisted in Docker named volume `reverb-cache`
+- Base image: `pytorch/pytorch:2.4.0-cuda11.8-cudnn9-runtime`
 
 ## Environment Configuration
 
-**Required env vars (backend):**
-- `DEEPGRAM_API_KEY` - Deepgram Nova-3 API key (optional, for cross-validation)
-- `HF_TOKEN` - HuggingFace token for Reverb model download
+**Required env vars (backend Docker container):**
+- `HF_TOKEN` - HuggingFace token for Reverb/Parakeet model download
+- `DEEPGRAM_API_KEY` - Optional; enables `/deepgram` proxy endpoint
+- `ORF_AUTH_TOKEN` - Optional; enables Bearer token auth on all endpoints
+- `ORF_CORS_ORIGINS` - Optional; overrides default allowed CORS origins
 
-**Required user input (frontend):**
-- Google Cloud API key (entered in browser UI, not persisted)
+**Required user config (localStorage / UI input):**
+- GCP API key (Google Cloud Vision + Natural Language APIs)
+- Gemini API key (OCR hybrid, Movie Trailer, Rhythm Remix DJ)
+- Backend URL (auto-populated from `backend-config.json` on non-localhost)
 
 **Secrets location:**
-- `services/reverb/.env` - Backend environment variables (DEEPGRAM_API_KEY, HF_TOKEN)
-- `keys/` directory - Local API key backups (not accessed by code, manual reference only)
-- Note: `.env` and `keys/` are NOT committed to git (.gitignore entry assumed)
+- `env.js` (gitignored) — dev-only API key file, never committed
+- Docker: env vars passed via `docker-compose.yml` environment section
 
 ## Webhooks & Callbacks
 
 **Incoming:**
-- None - no webhook endpoints
+- None
 
 **Outgoing:**
-- None - no webhook calls to external services
-
-## Model Downloads
-
-**HuggingFace:**
-- Reverb ASR model (`reverb_asr_v1`) downloaded on first request
-  - Auth: `HF_TOKEN` environment variable
-  - Client: `wenet.load_model()` in `services/reverb/server.py`
-  - Storage: HuggingFace cache directory (managed by `wenet` library)
-
-**ONNX Models:**
-- Silero VAD model downloaded by `@ricky0123/vad-web` on first use
-  - Auth: None (public CDN)
-  - Storage: Browser cache
+- None
 
 ---
 
-*Integration audit: 2026-02-06*
+*Integration audit: 2026-02-18*

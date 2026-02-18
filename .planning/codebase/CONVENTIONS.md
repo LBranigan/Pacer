@@ -1,360 +1,178 @@
 # Coding Conventions
 
-**Analysis Date:** 2026-02-06
+**Analysis Date:** 2026-02-18
 
 ## Naming Patterns
 
 **Files:**
-- Kebab-case for all JavaScript files: `word-equivalences.js`, `disfluency-detector.js`, `vad-processor.js`
-- Descriptive compound names: `kitchen-sink-merger.js`, `confidence-classifier.js`
-- Python files: Snake_case: `server.py`
+- kebab-case for all JS modules: `text-normalize.js`, `kitchen-sink-merger.js`, `cross-validator.js`
+- kebab-case for HTML pages: `rhythm-remix.html`, `orf_assessment.html` (legacy underscore in a few older files)
+- kebab-case for CSS: `rhythm-remix.css`, `style.css`
 
 **Functions:**
-- camelCase for all functions: `computeWCPM()`, `alignWords()`, `parseTime()`
-- Prefix patterns:
-  - `get` for retrieval: `getCanonical()`, `getStudents()`, `getDebugLog()`
-  - `compute` for calculations: `computeAccuracy()`, `computeWCPMRange()`
-  - `detect` for analysis: `detectDisfluencies()`, `detectLongPauses()`
-  - `build` for construction: `buildHypToRefMap()`, `buildReferenceSet()`
-  - `apply` for transformations: `applySafetyChecks()`, `applyCorroborationOverride()`
-  - `init` for initialization: `initRecorder()`, `initDebugLog()`, `initDashboard()`
-  - `is` for boolean checks: `isNearMiss()`, `isReverbAvailable()`
-  - `add` for mutations: `addStudent()`, `addStage()`, `addWarning()`
-  - `flag` for marking: `flagGhostWords()`
+- camelCase for all exported and internal functions: `normalizeText()`, `alignWords()`, `computeWCPM()`
+- Verb-noun pattern for action functions: `computeWCPM`, `detectStruggleWords`, `buildHypToRefMap`, `parseTime`
+- Boolean-returning functions use `is` prefix: `isNearMiss()`, `isKitchenSinkEnabled()`, `isParakeetAvailable()`
+- Async API-calling functions use `send` prefix: `sendToParakeet()`, `sendToReverb()`, `sendToCrossValidator()`
 
 **Variables:**
-- camelCase for local variables: `alignmentResult`, `elapsedSeconds`, `referenceText`
-- SCREAMING_SNAKE_CASE for constants: `CODE_VERSION`, `STORAGE_KEY`, `DIFF_DELETE`, `EDGE_TOLERANCE_MS`
-- Object constants frozen with `Object.freeze()`: `CONFIDENCE_THRESHOLDS`, `SAFETY_FLAGS`, `SEVERITY_LEVELS`
-- Private/internal variables prefixed with underscore: `_model`, `_deepgram_client`, `_partOfStruggle`, `_isSelfCorrection`, `_disfluency`, `_vadAnalysis`
+- camelCase for local variables: `refWords`, `hypWords`, `insertionsConsumed`
+- SCREAMING_SNAKE_CASE for module-level constants: `PHONEME_FLOOR`, `GAP_PENALTY`, `FILLER_WORDS`, `ENGINE_KEY`
+- Single-letter loop variables: `i`, `j`, `m`, `n`, `k` (standard for DP matrices and tight loops)
+- Private module state uses underscore prefix: `_phonemeCounts`, `_loadPromise`, `_tooltipEl`, `_highlightedSpans`
+- Internal (non-exported) private metadata on objects uses underscore prefix: `_isStruggle`, `_notAttempted`, `_pkTrustOverride`, `_confirmedInsertion`, `_xvalWord`, `_reverbStartTime`
 
-**Types:**
-- PascalCase for classes: `SpriteAnimator`, `VADProcessor`
-- Pydantic models in Python: `EnsembleRequest`, `DeepgramRequest`, `Word`
+**Types/Classes:**
+- PascalCase for class names: `LoFiEngine` (in `js/lofi-engine.js`)
+- Object keys stay camelCase: `{ startTime, endTime, crossValidation }`
+
+**Constants:**
+- Module-level config constants: SCREAMING_SNAKE_CASE at top of file
+- Named sets use plural + `_SET` or descriptive name: `DISFLUENCIES`, `SIGHT_WORDS`, `FUNCTION_POS`, `PROPER_ENTITY_TYPES`
 
 ## Code Style
 
 **Formatting:**
-- No formal config file detected (no `.prettierrc`, `.eslintrc`)
-- Indentation: 2 spaces (JavaScript), 4 spaces (Python per PEP 8)
-- String quotes: Single quotes in JavaScript (`'text'`), double quotes in Python (`"text"`)
-- Template literals for interpolation: `` `[ORF] Code version: ${CODE_VERSION}` ``
-- Semicolons: Always used in JavaScript (not optional-semicolon style)
+- No Prettier/ESLint config detected — style is enforced by convention only
+- 2-space indentation throughout all JS files
+- Single quotes for strings in most files; template literals for interpolation
+- Trailing commas in multi-line array/object literals
+- Arrow functions for short callbacks; `function` keyword for named functions
+- Semicolons required
 
 **Linting:**
-- No ESLint or standard linter config detected
-- Code follows consistent style through manual convention
+- No lint tooling configured. Consistency maintained manually.
 
 ## Import Organization
 
-**Order:**
-1. Framework/library imports (Python): `fastapi`, `torch`, `wenet`, `deepgram`
-2. External library imports: None visible in JS (vanilla JS + CDN-loaded ONNX/VAD)
-3. Local module imports (relative paths): `import { alignWords } from './alignment.js';`
+**Order (observed pattern):**
+1. Relative module imports grouped by functional area
+2. No third-party npm imports — all dependencies are browser-native or CDN-loaded in HTML
 
-**Path Aliases:**
-- None - all imports use relative paths: `'./module-name.js'`
-- Always include `.js` extension in imports
+**Path style:**
+- Always relative: `import { foo } from './bar.js'`
+- Always includes `.js` extension (required for ES modules in browser)
+- No path aliases; direct relative paths only
 
-**Pattern:**
-```javascript
-// Group by feature area, alphabetize within groups
-import { initRecorder, setOnComplete as recorderSetOnComplete } from './recorder.js';
-import { initFileHandler, setOnComplete as fileHandlerSetOnComplete } from './file-handler.js';
-import { sendToSTT, sendToAsyncSTT, sendChunkedSTT, sendEnsembleSTT } from './stt-api.js';
-import { alignWords } from './alignment.js';
-import { getCanonical } from './word-equivalences.js';
-```
-
-**Renamed imports:**
-- Use `as` for collision avoidance: `setOnComplete as recorderSetOnComplete`
+**Named exports only:**
+- No default exports observed — all exports are named: `export function foo()`, `export const BAR`
+- Imports always use named destructuring: `import { foo, bar } from './module.js'`
 
 ## Error Handling
 
+**Strategy:** Graceful degradation over throwing errors to the user.
+
 **Patterns:**
-- Try-catch with fallback behavior:
+- API calls return `null` on failure (never throw to caller): `sendToParakeet()` returns `null` if unavailable
+- Availability checks before use: `isParakeetAvailable()` called before `sendToParakeet()`
+- `try/catch` used at API boundaries with `console.warn` or `console.error` logging:
 ```javascript
 try {
-  const padResult = await padAudioWithSilence(appState.audioBlob);
-  paddedAudioBlob = padResult.blob;
-  addStage('audio_padding', { applied: true, paddingMs: 500 });
-} catch (err) {
-  console.warn('[ORF] Audio padding failed:', err.message);
-  paddedAudioBlob = appState.audioBlob;
-  addStage('audio_padding', { applied: false, error: err.message });
+  const resp = await fetch(`${BACKEND_URL}/health`, { signal: AbortSignal.timeout(3000) });
+  if (!resp.ok) return false;
+  const data = await resp.json();
+  return data.parakeet_configured === true;
+} catch {
+  return false;
 }
 ```
+- Guard clauses at function entry: `if (!text || typeof text !== 'string') return [];`
+- Null-safe chaining: `sw._reverbStartTime || sw.startTime`
+- Empty array/object returns for "no data" cases: `return []`, `return {}`
 
-- Graceful degradation for optional features:
-```python
-def get_deepgram_client():
-    global _deepgram_client
-    if _deepgram_client is None:
-        api_key = os.environ.get("DEEPGRAM_API_KEY")
-        if not api_key:
-            return None  # Graceful degradation
-        _deepgram_client = DeepgramClient(api_key=api_key)
-    return _deepgram_client
-```
-
-- FastAPI automatic HTTP exceptions:
-```python
-@app.post("/ensemble")
-async def ensemble(req: EnsembleRequest):
-    # Validation errors return 422 automatically
-    # Unhandled exceptions return 500
-```
-
-**Error propagation:**
-- JavaScript: Async functions throw, caller catches
-- Python: FastAPI middleware handles exceptions
-- No custom error classes - using built-in `Error` and `HTTPException`
+**Debug logging:**
+- All pipeline stages log via `debug-logger.js` (`js/debug-logger.js`): `addStage()`, `addWarning()`, `addError()`
+- Internal `console.log` tagged with module prefix: `console.log('[phoneme-counter] ...')`, `console.log('[ORF] ...')`
+- Structured debug JSON saved to downloadable file via `saveDebugLog()` — not thrown to UI
 
 ## Logging
 
-**Framework:** Console API + custom debug logger
+**Framework:** `debug-logger.js` module for structured pipeline logging; `console.*` for lightweight module-level messages.
 
 **Patterns:**
-- Structured console logging with prefixes:
-```javascript
-console.log('[ORF] Code version:', CODE_VERSION);
-console.warn('[ORF] Audio padding failed:', err.message);
-console.error('[ORF Debug]', message, data);
-```
-
-- Debug logger for assessment tracking (see `js/debug-logger.js`):
-```javascript
-initDebugLog();
-addStage('start', { codeVersion: CODE_VERSION, timestamp: new Date().toISOString() });
-addWarning('message', { data });
-addError('message', { data });
-finalizeDebugLog(assessmentData);
-```
-
-- Python logging with print statements (simple service):
-```python
-print("[reverb] Loading model reverb_asr_v1...")
-print(f"[reverb] GPU verified: {device_name} ({vram_mb:.0f}MB)")
-```
-
-**When to Log:**
-- Startup/initialization: Code version, service registration
-- Major pipeline stages: `addStage('audio_padding', { ... })`
-- Warnings: Feature failures with fallback (not fatal)
-- Errors: Unexpected failures requiring attention
-- Debug mode: Pipeline state snapshots (mostly commented out in production)
+- Pipeline stages: `addStage('stageName', { data })` — serialized via `JSON.parse(JSON.stringify(data))` (deep clone)
+- Warnings: `addWarning(message, data)` — also echoes to `console.warn`
+- Errors: `addError(message, data)` — also echoes to `console.error`
+- Module init: `console.log('[module-name] description', value)` at load time
+- All `console.log` calls in app logic use `[ORF]` prefix: `console.log('[ORF] Code version:', CODE_VERSION)`
 
 ## Comments
 
 **When to Comment:**
-- File-level purpose headers:
-```javascript
-/**
- * Word-level alignment engine using diff-match-patch.
- * Diffs STT transcript against reference text to classify each word.
- */
-```
+- Every exported function gets a JSDoc block with `@param` and `@returns`
+- Non-obvious algorithms get inline explanation (e.g., NW traceback, spillover consolidation)
+- Section dividers use Unicode box-drawing: `// ── Section Name ──────────────────────`
+- Module-level file header is either a `/** ... */` JSDoc block or a `// filename.js — description` one-liner
+- Inline comments explain "why" not "what": `// Prefer diagonal for ties (minimizes gaps)`
+- Data shape assumptions documented where they'd surprise a reader
 
-- Algorithm explanations:
-```javascript
-// Pad audio with 500ms silence to help ASR resolve final word
-// (Models use lookahead window; if audio ends abruptly, last word suffers)
-```
-
-- Non-obvious business logic:
-```javascript
-// Proper noun forgiveness: count as correct if flagged as forgiven
-if (w.forgiven) {
-  correctCount++;
-  forgiven++;
-}
-```
-
-- Deprecation notices:
-```javascript
-// NOTE: Removed phonetic-utils imports - no longer needed
-// after removing unreliable fragment/repetition detection
-```
-
-**JSDoc/TSDoc:**
-- Used for public API functions:
-```javascript
-/**
- * Compute Words Correct Per Minute (WCPM).
- * @param {Array<{type: string}>} alignmentResult - From alignWords()
- * @param {number} elapsedSeconds - Reading duration in seconds
- * @returns {{ wcpm: number, correctCount: number, elapsedSeconds: number }}
- */
-export function computeWCPM(alignmentResult, elapsedSeconds) { ... }
-```
-
-- Includes type annotations (no TypeScript, JSDoc provides type hints)
-- Python uses docstrings:
-```python
-def parse_ctm(ctm_text: str) -> list:
-    """
-    Parse CTM format output from Reverb ASR.
-
-    CTM format: <file> <channel> <start> <duration> <word> <confidence>
-
-    Args:
-        ctm_text: Raw CTM output from model.transcribe(format="ctm")
-
-    Returns:
-        List of word dictionaries with word, start_time, end_time, confidence
-    """
-```
+**JSDoc usage:**
+- Present on all exported public-API functions
+- Pattern: description paragraph, then `@param {Type} name - description`, then `@returns {Type} description`
+- Types use JSDoc inline notation: `{string}`, `{number}`, `{Array<{type: string}>}`, `{Promise<boolean>}`
 
 ## Function Design
 
-**Size:**
-- Most functions 20-100 lines
-- Large orchestrator functions (e.g., `runAnalysis()` in `js/app.js`) up to 300 lines
-- Single-purpose helpers kept small: `parseTime()` is 3 lines
+**Size:** Functions range from 5–100 lines. Large algorithmic functions (NW fill, diagnostics orchestrator) can reach 200+ lines with clear internal section comments.
 
 **Parameters:**
-- Positional parameters for core data: `alignWords(referenceText, transcriptWords)`
-- Options object for configuration: `computeAccuracy(alignmentResult, options = {})`
-- Named parameters in Python: `def parse_ctm(ctm_text: str) -> list`
+- Positional parameters for primary data; optional config as last `options = {}` argument
+- Example: `computeAccuracy(alignmentResult, options = {})`
+- Long parameter lists avoided — prefer passing the canonical data structures (alignment array, transcriptWords array)
 
 **Return Values:**
-- Objects for multiple values: `return { wcpm, correctCount, elapsedSeconds };`
-- Null for "not found": `return info ? info.detector : null;`
-- Arrays for collections: `return words;`
-- Boolean for predicates: `return prefixLen >= 3;`
-
-**Async patterns:**
-- `async`/`await` throughout: `export async function sendToSTT(blob, encoding)`
-- No callbacks (except legacy `setOnComplete` for recorder)
-- FastAPI async handlers: `async def ensemble(req: EnsembleRequest)`
+- Pure computation functions return plain objects: `{ wcpm, correctCount, elapsedSeconds }`
+- Boolean-returning predicates used for checks
+- Functions that can fail return `null` (not throws): `getPhonemeCount()` returns `null` if not in CMUdict
 
 ## Module Design
 
 **Exports:**
-- Named exports only (no default exports): `export function alignWords() {}`
-- Export at declaration site (not end-of-file export block)
-- Constants exported explicitly: `export const SEVERITY_LEVELS = { ... };`
+- Each module exports only its public API (named exports)
+- Internal helpers are non-exported `function` declarations
+- Module-level mutable state is module-private (no export): `let _phonemeCounts = null`
 
 **Barrel Files:**
-- Not used - each module imported directly
-- No `index.js` files aggregating exports
+- No barrel/index files. Consumers import directly from the module that owns the function.
 
-**Module patterns:**
-- Single-purpose modules: `js/alignment.js` does word alignment, nothing else
-- Shared utilities: `js/word-equivalences.js`, `js/text-normalize.js`
-- Singleton pattern for stateful resources: `_model` in Python, `debugLog` in `js/debug-logger.js`
-- Service workers: `sw.js` registered conditionally
+## Data Object Conventions
 
-**Configuration modules:**
-- Separate config from implementation:
-  - `js/disfluency-config.js` → used by `js/disfluency-detector.js`
-  - `js/confidence-config.js` → used by `js/confidence-classifier.js`
-  - `js/safety-config.js` → used by `js/safety-checker.js`
-- All thresholds defined as frozen constants: `Object.freeze({ ... })`
-
-## Registry Pattern
-
-**Miscue Registry** (`js/miscue-registry.js`):
-- Single source of truth for all reading error types
-- Structured metadata:
-```javascript
-export const MISCUE_REGISTRY = {
-  omission: {
-    description: 'Student skipped a word from the reference text',
-    detector: 'alignment.js → alignWords()',
-    countsAsError: true,
-    config: null,
-    example: { reference: 'the big dog', spoken: 'the dog', result: '"big" is an omission' },
-    uiClass: 'word-omission'
-  },
-  // ... all other types
-};
-```
-- Utility functions: `getErrorTypes()`, `getDiagnosticTypes()`, `getMiscueInfo(type)`
-- **Critical rule:** When adding/modifying miscue types, MUST update registry
-
-## Version Tracking
-
-**Code version constant:**
-```javascript
-const CODE_VERSION = 'v37-2026-02-06';
-console.log('[ORF] Code version:', CODE_VERSION);
-```
-
-**UI version display:**
-```html
-<div id="version">v 2026-02-06 19:45</div>
-```
-
-**Caching strategy:**
-- Service worker for offline support
-- Debug logger includes version for verification
-
-## Data Structures
-
-**Alignment format:**
+**Alignment entry shape:**
 ```javascript
 {
-  ref: 'word',           // Reference text word
-  hyp: 'word',           // Hypothesis (spoken) word
-  type: 'correct',       // 'correct' | 'substitution' | 'omission' | 'insertion' | 'struggle'
-  compound: true,        // Optional: merged compound word
-  parts: ['every', 'one'], // Optional: original parts before merge
-  forgiven: true,        // Optional: error forgiven (proper noun)
-  _partOfStruggle: true, // Optional: insertion claimed by struggle
-  _isSelfCorrection: true // Optional: near-miss self-correction
+  ref: string | null,      // normalized reference word (null for insertions)
+  hyp: string | null,      // normalized hypothesis word (null for omissions)
+  type: 'correct' | 'substitution' | 'omission' | 'insertion',
+  hypIndex: number,        // index into original transcriptWords array
+  // Optional flags (underscore prefix = internal metadata):
+  _isStruggle: true,       // compound struggle
+  _notAttempted: true,     // post-reading, excluded from scoring
+  _pkTrustOverride: true,  // Parakeet correctness override applied
+  forgiven: true,          // word counted as correct despite mismatch
+  compound: true,          // ASR-split compound word
+  parts: string[]          // compound word fragments
 }
 ```
 
-**Word metadata:**
+**Spread-and-override for object extension:**
 ```javascript
-{
-  word: 'text',
-  start_time: 1.2,
-  end_time: 1.5,
-  confidence: 0.95,
-  _disfluency: { fragments: [...], ... }, // Optional
-  _vadAnalysis: { speechPercent: 80, label: 'speech detected' }, // Optional
-  _flags: ['possible_insertion'] // Optional: safety/confidence flags
-}
+result.push({
+  ref: current.ref,
+  hyp: combined,
+  type: 'correct',
+  compound: true,
+  hypIndex: current.hypIndex,
+  parts: [...],
+  ...(isAbbrExpansion && { _abbreviationExpansion: true })
+});
 ```
 
-**Storage schema:**
-```javascript
-{
-  version: 5,
-  students: [{ id: 'uuid', name: 'Name', grade: 3 }],
-  assessments: [{
-    id: 'uuid',
-    studentId: 'uuid',
-    date: 'ISO8601',
-    wcpm: 120,
-    accuracy: 95.5,
-    alignment: [...],
-    sttWords: [...],
-    audioRef: 'uuid',
-    gamification: { ... },
-    nlAnnotations: { ... }
-  }]
-}
-```
+## Version Management
 
-**Migration pattern:**
-```javascript
-function migrate(data) {
-  if (!data.version) data.version = 1;
-  if (data.version === 1) {
-    // Add v2 fields
-    data.version = 2;
-  }
-  if (data.version === 2) {
-    // Add v3 fields
-    data.version = 3;
-  }
-  // ...
-}
-```
+- `js/app.js` top of file: `const CODE_VERSION = 'v39-2026-02-07'`
+- `index.html` `#version` element updated on every change: `v YYYY-MM-DD HH:MM`
+- Cache-busting query strings on all module imports: `import './module.js?v=...'`
 
 ---
 
-*Convention analysis: 2026-02-06*
+*Convention analysis: 2026-02-18*
