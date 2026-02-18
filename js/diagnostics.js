@@ -239,12 +239,23 @@ export function resolveNearMissClusters(alignment) {
     // Collect unclaimed consecutive insertions immediately after this entry
     const afterIns = [];
     if (isSub) {
+      // Find the next non-insertion entry (to guard against false-start absorption)
+      let nextNonIns = null;
+      for (let j = i + 1; j < alignment.length; j++) {
+        if (alignment[j].type !== 'insertion') { nextNonIns = alignment[j]; break; }
+      }
       for (let j = i + 1; j < alignment.length; j++) {
         const e = alignment[j];
         if (e.type !== 'insertion') break;
         if (e._partOfStruggle) break;
         const ch = clean(e.hyp);
         if (ch.length < 2) break;
+        // Guard: if this insertion is a prefix of the next word's ref,
+        // it's a false start of that word, not a retry of the previous one.
+        // Example: "curly" [sub for "curtley"] + "tr" + "treated" — "tr" is
+        // the start of "treated", not a decoding attempt at "curtley".
+        if (nextNonIns && nextNonIns.ref && ch.length >= 2 &&
+            clean(nextNonIns.ref).startsWith(ch)) break;
         afterIns.push(e);
         if (afterIns.length >= 3) break;
       }

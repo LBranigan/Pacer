@@ -857,13 +857,12 @@ function renderNewAnalyzedWords(container, alignment, sttLookup, diagnostics, tr
       if (hesitation._vadAnalysis?.speechPercent >= 30) span.classList.add('word-hesitation-vad');
     }
 
-    // Morphological root squiggle: word is not correct + V1 or V0 produced a proper prefix of the ref
+    // Morphological root squiggle: word is not correct + V1 produced a proper prefix of the ref
     if (bucket !== 'correct' && bucket !== 'struggle-correct' && bucket !== 'omitted' && bucket !== 'not-attempted' && !isConfIns) {
       const refN = norm(entry.ref);
       const hypN = norm(entry.hyp);
-      const v0N = norm(entry._v0Word);
       const hasRoot = (w) => w.length >= 3 && w !== refN && refN.startsWith(w);
-      if (hasRoot(hypN) || hasRoot(v0N)) span.classList.add('word-morph-root');
+      if (hasRoot(hypN)) span.classList.add('word-morph-root');
     }
     // Self-correction bracket is on the word-group wrapper (see needsGroup above)
     // Build per-engine evidence strings from raw attempt snapshots
@@ -872,9 +871,6 @@ function renderNewAnalyzedWords(container, alignment, sttLookup, diagnostics, tr
     const v1Ev = entry._recovered ? '(omitted)'
       : entry._v1RawAttempt?.length > 0 ? entry._v1RawAttempt.join(' + ')
       : (entry.hyp || '\u2014');
-    const v0Ev = (entry._recovered && entry._v0Type === 'omission') ? '(omitted)'
-      : entry._v0Attempt?.length > 0 ? entry._v0Attempt.join(' + ')
-      : (entry._v0Word || (entry._v0Type === 'omission' ? '(omitted)' : '\u2014'));
     const pkEv = entry._xvalAttempt?.length > 0
       ? entry._xvalAttempt.join(' + ')
       : (entry._xvalWord || '\u2014');
@@ -890,12 +886,7 @@ function renderNewAnalyzedWords(container, alignment, sttLookup, diagnostics, tr
       tip.push(`All engines heard: "${entry.hyp}"`);
     } else {
       tip.push(`V1: ${v1Ev}`);
-      tip.push(`V0: ${v0Ev}`);
       tip.push(`Pk: ${pkEv}`);
-      // V0 fusion: ASR joined adjacent ref words into one token, resolved by contraction merge
-      if (entry._v0Type === 'correct' && entry._v0Word && norm(entry._v0Word) !== norm(entry.ref)) {
-        tip.push(`V0 fused: "${entry._v0Word}" covers multiple ref words (ASR artifact, resolved)`);
-      }
     }
     if (bucket === 'struggle-correct' && entry.compound) {
       tip.push(`V1 produced fragments: [${entry.parts?.join(', ')}]`);
