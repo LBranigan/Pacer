@@ -1047,7 +1047,7 @@ function renderNewAnalyzedWords(container, alignment, sttLookup, diagnostics, tr
   container.appendChild(wordsDiv);
 }
 
-export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, diagnostics, transcriptWords, tierBreakdown, referenceText, audioBlob, rawSttSources) {
+export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, diagnostics, transcriptWords, tierBreakdown, referenceText, audioBlob, rawSttSources, readability) {
   const wordsDiv = document.getElementById('resultWords');
   const newWordsDiv = document.getElementById('newAnalyzedWords');
   const plainDiv = document.getElementById('resultPlain');
@@ -1167,6 +1167,47 @@ export function displayAlignmentResults(alignment, wcpm, accuracy, sttLookup, di
       tierRow.appendChild(span);
     }
     metricsBar.appendChild(tierRow);
+  }
+
+  // Passage readability / grade-level estimate
+  if (readability) {
+    const readBox = document.createElement('div');
+    readBox.className = 'metric-box metric-box-readability';
+
+    const val = document.createElement('span');
+    val.className = 'metric-value readability-grade';
+    val.textContent = 'Grade ' + readability.band;
+
+    const lbl = document.createElement('span');
+    lbl.className = 'metric-label';
+    lbl.textContent = readability.label;
+
+    readBox.appendChild(val);
+    readBox.appendChild(lbl);
+
+    // Hover tooltip with formula breakdown
+    const f = readability.formulas;
+    const s = readability.stats;
+    const tipLines = [
+      'Passage Complexity (median of 3 formulas)',
+      '',
+      'Flesch-Kincaid: ' + f.fleschKincaid + ' grade',
+      'Coleman-Liau: ' + f.colemanLiau + ' grade',
+      'Dale-Chall: ' + f.daleChallRaw + ' raw \u2192 ~grade ' + f.daleChallGrade,
+      '',
+      s.words + ' words, ' + s.sentences + ' sentences',
+      s.syllablesPerWord + ' syllables/word, ' + s.avgSentenceLength + ' words/sentence',
+      s.difficultWords + ' difficult words (' + s.pctDifficult + '%)',
+    ];
+    if (s.difficultWordList && s.difficultWordList.length > 0) {
+      tipLines.push('');
+      tipLines.push('Hard words: ' + s.difficultWordList.join(', '));
+    }
+    tipLines.push('');
+    tipLines.push('\u00b1 2 grade levels on short passages');
+    readBox.title = tipLines.join('\n');
+
+    metricsBar.appendChild(readBox);
   }
 
   plainDiv.appendChild(metricsBar);

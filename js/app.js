@@ -24,6 +24,7 @@ import { canRunMaze } from './maze-generator.js';
 import { loadPhonemeData, getPhonemeCount, getPhonemeCountWithFallback } from './phoneme-counter.js';
 import { generateMovieTrailer } from './movie-trailer.js';
 import { syllabifyWord, analyzeSyllableCoverage, analyzeFragmentsCoverage } from './syllable-analysis.js';
+import { analyzeReadability } from './readability.js';
 
 // Code version for cache verification
 const CODE_VERSION = 'v39-2026-02-07';
@@ -2723,8 +2724,10 @@ async function runAnalysis() {
   ).length;
   const accuracy = computeAccuracy(alignment, { forgivenessEnabled: !!nlAnnotations, longPauseCount });
   const tierBreakdown = nlAnnotations ? computeTierBreakdown(alignment) : null;
+  const readability = await analyzeReadability(referenceText);
 
   addStage('metrics_computed', {
+    readability: readability ? { band: readability.band, median: readability.median, formulas: readability.formulas } : null,
     wcpm: wcpm?.wcpmMin ?? null,
     accuracy: accuracy.accuracy,
     totalRefWords: accuracy.totalRefWords,
@@ -2941,7 +2944,8 @@ async function runAnalysis() {
       parakeetAlignment: parakeetAlignment || [],
       v0Alignment: v0Alignment || [],
       threeWayTable: threeWayTable || []
-    }
+    },
+    readability                             // Passage readability / grade-level estimate
   );
 
   // Log UI bucket classification (runs after displayAlignmentResults stamps _uiBucket)
