@@ -206,11 +206,11 @@ const DRUM_PATTERNS = {
     hatO:    new Array(32).fill(0),
   },
   trap: {
-    // Trap: heavy kick, snare on 3, rolling hi-hats
-    kick:    [1,0,0,0, 0,0,0,1, 1,0,0,0, 0,0,0,1, 1,0,0,0, 0,0,0,1, 1,0,0,0, 0,0,0,1],
-    snare:   [0,0,0,0, 1,0,0,0, 0,0,0,0, 1,0,0,0, 0,0,0,0, 1,0,0,0, 0,0,0,0, 1,0,0,0],
+    // Trap: double kicks, hard claps, rolling hi-hats with open hat accents
+    kick:    [1,0,0,1, 0,0,0,1, 1,0,1,0, 0,0,0,1, 1,0,0,1, 0,0,0,1, 1,0,1,0, 0,0,0,1],
+    snare:   [0,0,0,0, 1,0,0,0, 0,0,0,0, 1,0,0,1, 0,0,0,0, 1,0,0,0, 0,0,0,0, 1,0,0,1],
     hatC:    [1,1,1,1, 1,1,1,1, 1,1,1,1, 1,1,1,1, 1,1,1,1, 1,1,1,1, 1,1,1,1, 1,1,1,1],
-    hatO:    [0,0,0,1, 0,0,1,0, 0,0,0,1, 0,0,1,0, 0,0,0,1, 0,0,1,0, 0,0,0,1, 0,0,1,0],
+    hatO:    [0,0,1,0, 0,0,1,1, 0,0,1,0, 0,1,0,0, 0,0,1,0, 0,0,1,1, 0,0,1,0, 0,1,0,0],
   }
 };
 
@@ -272,10 +272,10 @@ const STYLE_CONFIG = {
     kickStyle: 'none',      snareStyle: 'none',      hatStyle: 'none',
   },
   trap: {
-    padType: 'sawtooth',    padFilterCutoff: 1500,   padAttack: 0.05, padRelease: 0.3,
-    bassType: 'sine',       bassFilterCutoff: 250,
-    reverbWet: 0.15,        warmthCutoff: 5000,
-    tapeWobbleDepth: 0.0,   crusherBits: 14,
+    padType: 'sawtooth',    padFilterCutoff: 900,    padAttack: 0.02, padRelease: 0.15,
+    bassType: 'sine',       bassFilterCutoff: 180,
+    reverbWet: 0.08,        warmthCutoff: 3500,
+    tapeWobbleDepth: 0.0,   crusherBits: 10,
     kickStyle: '808',       snareStyle: 'clap',      hatStyle: 'trap',
   },
 };
@@ -1243,27 +1243,43 @@ export class LofiEngine {
   _playTrapKick(time) {
     const ctx = this._ctx;
 
+    // Main 808 body — starts high, sweeps deep
     const osc = ctx.createOscillator();
     osc.type = 'sine';
-    osc.frequency.setValueAtTime(160, time);
-    osc.frequency.exponentialRampToValueAtTime(35, time + 0.15);
+    osc.frequency.setValueAtTime(180, time);
+    osc.frequency.exponentialRampToValueAtTime(28, time + 0.2);
+
+    // Sub layer for extra weight
+    const sub = ctx.createOscillator();
+    sub.type = 'sine';
+    sub.frequency.setValueAtTime(80, time);
+    sub.frequency.exponentialRampToValueAtTime(30, time + 0.3);
 
     const gain = ctx.createGain();
-    gain.gain.setValueAtTime(1.0, time);
-    gain.gain.setValueAtTime(0.6, time + 0.1);
-    gain.gain.exponentialRampToValueAtTime(0.001, time + 0.5);
+    gain.gain.setValueAtTime(1.2, time);
+    gain.gain.setValueAtTime(0.8, time + 0.08);
+    gain.gain.exponentialRampToValueAtTime(0.001, time + 0.7);
 
-    // Distortion for punch
+    const subGain = ctx.createGain();
+    subGain.gain.setValueAtTime(0.6, time);
+    subGain.gain.exponentialRampToValueAtTime(0.001, time + 0.6);
+
+    // Heavy distortion for punch
     const dist = ctx.createWaveShaper();
-    dist.curve = createSaturationCurve(2.0, 1024);
+    dist.curve = createSaturationCurve(4.0, 1024);
 
     osc.connect(dist);
+    sub.connect(subGain);
+    subGain.connect(gain);
     dist.connect(gain);
     gain.connect(this._nodes.drumBus);
 
     osc.start(time);
-    osc.stop(time + 0.55);
-    this._trackSource(osc, time + 0.6);
+    sub.start(time);
+    osc.stop(time + 0.75);
+    sub.stop(time + 0.65);
+    this._trackSource(osc, time + 0.8);
+    this._trackSource(sub, time + 0.7);
   }
 
   /**
@@ -1292,12 +1308,12 @@ export class LofiEngine {
    */
   _playClap(time) {
     const ctx = this._ctx;
-    const burstCount = 3;
-    const burstGap = 0.015;
+    const burstCount = 4;
+    const burstGap = 0.012;
 
     for (let b = 0; b < burstCount; b++) {
       const t = time + b * burstGap;
-      const dur = 0.03;
+      const dur = 0.04;
       const buf = ctx.createBuffer(1, ctx.sampleRate * dur, ctx.sampleRate);
       const data = buf.getChannelData(0);
       for (let i = 0; i < data.length; i++) {
@@ -1308,22 +1324,22 @@ export class LofiEngine {
 
       const bp = ctx.createBiquadFilter();
       bp.type = 'bandpass';
-      bp.frequency.value = 1500;
-      bp.Q.value = 0.7;
+      bp.frequency.value = 1800;
+      bp.Q.value = 0.5;
 
       const g = ctx.createGain();
-      g.gain.setValueAtTime(0.6, t);
-      g.gain.exponentialRampToValueAtTime(0.001, t + 0.08);
+      g.gain.setValueAtTime(0.85, t);
+      g.gain.exponentialRampToValueAtTime(0.001, t + 0.1);
 
       src.connect(bp);
       bp.connect(g);
       g.connect(this._nodes.drumBus);
       src.start(t);
-      this._trackSource(src, t + 0.1);
+      this._trackSource(src, t + 0.12);
     }
 
-    // Tail noise
-    const tailDur = 0.12;
+    // Heavier tail with reverb-like decay
+    const tailDur = 0.18;
     const tailBuf = ctx.createBuffer(1, ctx.sampleRate * tailDur, ctx.sampleRate);
     const tailData = tailBuf.getChannelData(0);
     for (let i = 0; i < tailData.length; i++) tailData[i] = Math.random() * 2 - 1;
@@ -1332,18 +1348,18 @@ export class LofiEngine {
 
     const tailBP = ctx.createBiquadFilter();
     tailBP.type = 'bandpass';
-    tailBP.frequency.value = 1200;
-    tailBP.Q.value = 0.5;
+    tailBP.frequency.value = 1400;
+    tailBP.Q.value = 0.4;
 
     const tailG = ctx.createGain();
-    tailG.gain.setValueAtTime(0.4, time + burstCount * burstGap);
-    tailG.gain.exponentialRampToValueAtTime(0.001, time + 0.2);
+    tailG.gain.setValueAtTime(0.6, time + burstCount * burstGap);
+    tailG.gain.exponentialRampToValueAtTime(0.001, time + 0.3);
 
     tailSrc.connect(tailBP);
     tailBP.connect(tailG);
     tailG.connect(this._nodes.drumBus);
     tailSrc.start(time + burstCount * burstGap);
-    this._trackSource(tailSrc, time + 0.25);
+    this._trackSource(tailSrc, time + 0.35);
   }
 
   /**
@@ -1440,21 +1456,21 @@ export class LofiEngine {
    */
   _playTrapHat(time, decayTime, volume) {
     const ctx = this._ctx;
-    const fundamental = 60;
-    const ratios = [2, 3, 4.16, 5.43, 6.79, 8.21];
+    const fundamental = 80;
+    const ratios = [2, 3, 4.16, 5.43, 6.79, 8.21, 10.5];
 
     const hatGain = ctx.createGain();
-    hatGain.gain.setValueAtTime(volume, time);
+    hatGain.gain.setValueAtTime(volume * 1.4, time);
     hatGain.gain.exponentialRampToValueAtTime(0.001, time + decayTime);
 
     const hp = ctx.createBiquadFilter();
     hp.type = 'highpass';
-    hp.frequency.value = 9000;
+    hp.frequency.value = 10000;
 
     const bp = ctx.createBiquadFilter();
     bp.type = 'bandpass';
-    bp.frequency.value = 12000;
-    bp.Q.value = 1.5;
+    bp.frequency.value = 13000;
+    bp.Q.value = 2.0;
 
     hp.connect(bp);
     bp.connect(hatGain);
