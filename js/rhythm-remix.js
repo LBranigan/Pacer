@@ -334,7 +334,7 @@ function playDJIntroThenReading() {
     djSourceNode = audioCtx.createBufferSource();
     djSourceNode.buffer = decoded;
     djGainNode = audioCtx.createGain();
-    djGainNode.gain.value = 1.2; // DJ voice slightly louder than student
+    djGainNode.gain.value = 0.8; // DJ voice balanced with beat
     djSourceNode.connect(djGainNode);
     djGainNode.connect(audioCtx.destination);
 
