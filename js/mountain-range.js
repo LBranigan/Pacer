@@ -1,8 +1,13 @@
 /**
- * Mountain Range Waveform Visualization
+ * Waveform Visualization
  *
- * Builds a topographic "mountain range" in real-time as the student reads.
- * Each word becomes a peak whose height reflects duration, colored by correctness.
+ * Renders a student's recorded audio as a color-coded bar waveform.
+ * Each word's segment is colored by reading correctness — green for correct,
+ * amber for struggled, purple for omitted. A playhead with glow tracks
+ * the current position. Stars twinkle behind on a dark gradient sky.
+ *
+ * Keeps the same public API as the earlier mountain-range visualization
+ * for compatibility with rhythm-remix.js.
  *
  * @module mountain-range
  */
@@ -12,37 +17,7 @@
 const REDUCED_MOTION =
   window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-function easeOutCubic(t) { return 1 - (1 - t) * (1 - t) * (1 - t); }
-
-/** Catmull-Rom interpolation between p1 and p2 (p0/p3 are neighbors). */
-function catmullRom(p0, p1, p2, p3, t, tension = 0.5) {
-  const t2 = t * t, t3 = t2 * t;
-  const s = (1 - tension) / 2;
-  const b1 = 2 * t3 - 3 * t2 + 1;
-  const b2 = t3 - 2 * t2 + t;
-  const b3 = -2 * t3 + 3 * t2;
-  const b4 = t3 - t2;
-  return {
-    x: b1 * p1.x + b2 * s * (p2.x - p0.x) + b3 * p2.x + b4 * s * (p3.x - p1.x),
-    y: b1 * p1.y + b2 * s * (p2.y - p0.y) + b3 * p2.y + b4 * s * (p3.y - p1.y),
-  };
-}
-
-// ── Color Palette ────────────────────────────────────────────────────────────
-
-const PEAK_COLORS = {
-  correct:      '#a8d8a8',
-  substitution: '#e8a87c',
-  struggle:     '#d4875c',
-  omission:     '#c4b5d4',
-};
-
-function peakColor(peak) {
-  if (peak.isStruggle) return PEAK_COLORS.struggle;
-  if (peak.type === 'omission') return PEAK_COLORS.omission;
-  if (peak.type === 'substitution' && !peak.forgiven) return PEAK_COLORS.substitution;
-  return PEAK_COLORS.correct;
-}
+function easeOutQuad(t) { return 1 - (1 - t) * (1 - t); }
 
 function hexToRgba(hex, alpha) {
   const r = parseInt(hex.slice(1, 3), 16);
@@ -51,32 +26,46 @@ function hexToRgba(hex, alpha) {
   return `rgba(${r},${g},${b},${alpha})`;
 }
 
-function lighten(hex, amount = 0.35) {
-  const r = parseInt(hex.slice(1, 3), 16);
-  const g = parseInt(hex.slice(3, 5), 16);
-  const b = parseInt(hex.slice(5, 7), 16);
-  const lr = Math.min(255, r + (255 - r) * amount);
-  const lg = Math.min(255, g + (255 - g) * amount);
-  const lb = Math.min(255, b + (255 - b) * amount);
-  return `rgb(${lr|0},${lg|0},${lb|0})`;
+// ── Constants ────────────────────────────────────────────────────────────────
+
+const BAR_WIDTH = 2;
+const BAR_GAP = 1;
+const BAR_STRIDE = BAR_WIDTH + BAR_GAP; // 3px per bar
+const WAVEFORM_CENTER = 0.50;           // center line at 50% of canvas height
+const MAX_AMP_FRAC = 0.38;             // max bar height as fraction of canvas height
+const MIRROR_SCALE = 0.55;             // mirror bars are 55% of top bars
+const REVEAL_DURATION = 0.30;          // seconds for bar scale-up
+const REVEAL_STAGGER = 0.012;          // seconds delay between bars in a word
+const FLASH_DURATION = 0.18;           // seconds for brightness flash on reveal
+const TRANS_ZONE = BAR_STRIDE * 3;     // played/unplayed fade zone width (px)
+const HI_RES_PEAKS = 2000;             // peak resolution for resize-safe storage
+const MAX_PARTICLES = 25;
+
+// ── Colors ───────────────────────────────────────────────────────────────────
+
+const COLORS = {
+  correct:      '#a8d8a8',
+  substitution: '#e8a87c',
+  struggle:     '#d4875c',
+  omission:     '#c4b5d4',
+  unrevealed:   '#1E1B2E',
+};
+
+function wordColor(w) {
+  if (w.isStruggle) return COLORS.struggle;
+  if (w.type === 'omission') return COLORS.omission;
+  if (w.type === 'substitution' && !w.forgiven) return COLORS.substitution;
+  return COLORS.correct;
 }
 
-// ── Sky Gradient Stops ───────────────────────────────────────────────────────
+// ── Sky Gradient ─────────────────────────────────────────────────────────────
 
 const SKY_STOPS = [
-  [0,    '#0d0b14'],
-  [0.30, '#1a1535'],
-  [0.55, '#2d1f45'],
-  [0.75, '#5c3355'],
-  [0.90, '#a85c40'],
-  [1.00, '#e8a87c'],
-];
-
-// ── Background Layer Configs ─────────────────────────────────────────────────
-
-const LAYERS = [
-  { heightScale: 0.40, alpha: 0.25, parallax: -0.15, color: '#2a1f3d' },
-  { heightScale: 0.65, alpha: 0.45, parallax: -0.07, color: '#3d2850' },
+  [0,    '#08060F'],
+  [0.30, '#0F0D1A'],
+  [0.60, '#161225'],
+  [0.85, '#1F1830'],
+  [1.00, '#16131F'],
 ];
 
 // ── Stars ────────────────────────────────────────────────────────────────────
@@ -86,8 +75,8 @@ function generateStars(count, w, h) {
   for (let i = 0; i < count; i++) {
     stars.push({
       x: Math.random() * w,
-      y: Math.random() * h * 0.6,
-      size: 1 + Math.random() * 1.5,
+      y: Math.random() * h,
+      size: 0.8 + Math.random() * 1.2,
       phase: Math.random() * Math.PI * 2,
       freq: 0.5 + Math.random() * 1.5,
     });
@@ -95,9 +84,19 @@ function generateStars(count, w, h) {
   return stars;
 }
 
-// ── Summit Particles ─────────────────────────────────────────────────────────
+// ── Rounded-bar helper ───────────────────────────────────────────────────────
 
-const MAX_PARTICLES = 40;
+function drawRoundedBar(ctx, x, y, w, h) {
+  if (h < 1) { ctx.fillRect(x, y, w, Math.max(h, 0.5)); return; }
+  const r = Math.min(w / 2, h / 2);
+  if (ctx.roundRect) {
+    ctx.beginPath();
+    ctx.roundRect(x, y, w, h, r);
+    ctx.fill();
+  } else {
+    ctx.fillRect(x, y, w, h);
+  }
+}
 
 // ── Main Class ───────────────────────────────────────────────────────────────
 
@@ -111,9 +110,9 @@ export class MountainRange {
     this._canvas = canvas;
     this._ctx = canvas.getContext('2d');
     this._wordCount = wordCount;
-    this._fixedHeight = 180; // never changes
+    this._fixedHeight = 180;
 
-    // Force container dimensions via inline style (immune to CSS cache)
+    // Force container dimensions (immune to CSS cache)
     const parent = canvas.parentElement;
     if (parent) {
       parent.style.height = this._fixedHeight + 'px';
@@ -123,81 +122,156 @@ export class MountainRange {
       parent.style.position = 'relative';
     }
 
-    // Peak data
-    this._peaks = new Array(wordCount);
+    // Word data
+    this._words = new Array(wordCount);
     for (let i = 0; i < wordCount; i++) {
-      this._peaks[i] = {
-        duration: 0, type: 'correct', isStruggle: false, forgiven: false,
-        revealed: false, revealT: 0,
+      this._words[i] = {
+        revealed: false, type: 'correct', isStruggle: false,
+        forgiven: false, startTime: -1, endTime: -1, isOmission: false,
       };
     }
 
-    this._maxDuration = 0;
+    // Audio data
+    this._hiResPeaks = null;        // Float32Array[HI_RES_PEAKS]
+    this._audioPeaks = null;        // Float32Array[barCount] — downsampled
+    this._totalDuration = 0;
+
+    // Bar state
+    this._barCount = 0;
+    this._barData = [];             // { colorMain, revealed, revealStart, omissionMarker }
+    this._offsetX = 0;              // horizontal offset to center waveform
+
+    // Playhead
+    this._playheadTime = 0;
+
+    // Visual state
     this._stars = [];
     this._particles = [];
-    this._starAlpha = 0.15;       // brightens in finale
+    this._starAlpha = 0.20;
+    this._elapsed = 0;
     this._finaleActive = false;
     this._finaleT = 0;
-    this._horizonGlow = 0;
+    this._finaleFrameId = null;
     this._exportBtn = null;
-    this._currentIdx = -1;        // parallax tracking
-    this._elapsed = 0;
 
     this._resize();
-    this._stars = generateStars(45, this._w, this._h);
-
-    // Draw initial sky + stars scene
+    this._stars = generateStars(50, this._w, this._h);
     this._draw(0);
 
     // ResizeObserver — only for width changes
     this._ro = new ResizeObserver(() => {
       const oldW = this._w;
       this._resize();
-      if (this._w !== oldW) this._draw(0);
+      if (this._w !== oldW) {
+        this._rebuildBars();
+        this._draw(0);
+      }
     });
     if (parent) this._ro.observe(parent);
   }
 
   // ── Public API ───────────────────────────────────────────────────────────
 
+  /**
+   * Provide raw audio data for waveform peak rendering.
+   * Call once after decoding the audio blob.
+   * @param {Float32Array} channelData — mono PCM samples
+   * @param {number} duration — total audio duration in seconds
+   */
+  setAudioData(channelData, duration) {
+    this._totalDuration = duration;
+
+    // Pre-compute high-resolution peaks (downsample to HI_RES_PEAKS buckets)
+    const samplesPerBucket = Math.max(1, Math.floor(channelData.length / HI_RES_PEAKS));
+    this._hiResPeaks = new Float32Array(HI_RES_PEAKS);
+    for (let i = 0; i < HI_RES_PEAKS; i++) {
+      let max = 0;
+      const start = i * samplesPerBucket;
+      const end = Math.min(start + samplesPerBucket, channelData.length);
+      for (let j = start; j < end; j++) {
+        const abs = Math.abs(channelData[j]);
+        if (abs > max) max = abs;
+      }
+      this._hiResPeaks[i] = max;
+    }
+
+    // Normalize to 0–1
+    let globalMax = 0;
+    for (let i = 0; i < HI_RES_PEAKS; i++) {
+      if (this._hiResPeaks[i] > globalMax) globalMax = this._hiResPeaks[i];
+    }
+    if (globalMax > 0) {
+      for (let i = 0; i < HI_RES_PEAKS; i++) this._hiResPeaks[i] /= globalMax;
+    }
+
+    this._rebuildBars();
+    this._draw(0);
+  }
+
+  /** Update playhead position each animation frame. */
+  setPlayhead(currentTime) {
+    this._playheadTime = currentTime;
+  }
+
   /** Called when the bouncing ball reaches word `index`. */
   revealPeak(index, word) {
     if (index < 0 || index >= this._wordCount) return;
-    const p = this._peaks[index];
-    p.revealed = true;
-    p.revealT = 0;
-    p.type = word.type || 'correct';
-    p.isStruggle = !!word.isStruggle;
-    p.forgiven = !!word.forgiven;
+    const w = this._words[index];
+    w.revealed = true;
+    w.type = word.type || 'correct';
+    w.isStruggle = !!word.isStruggle;
+    w.forgiven = !!word.forgiven;
+    w.isOmission = word.isOmission || word.type === 'omission';
+    w.startTime = (word.startTime > 0) ? word.startTime : -1;
+    w.endTime = (word.endTime > 0) ? word.endTime : -1;
 
-    if (word.isOmission || word.type === 'omission') {
-      p.type = 'omission';
-      p.duration = 0;
-    } else {
-      const dur = (word.endTime > 0 && word.startTime > 0)
-        ? Math.max(0, word.endTime - word.startTime) : 0.3;
-      p.duration = dur;
-      if (dur > this._maxDuration) this._maxDuration = dur;
+    // Map word time range to bar indices
+    if (w.startTime > 0 && w.endTime > 0 && this._totalDuration > 0 && this._barCount > 0) {
+      const startBar = Math.floor(w.startTime / this._totalDuration * this._barCount);
+      let endBar = Math.ceil(w.endTime / this._totalDuration * this._barCount);
+      if (endBar <= startBar) endBar = startBar + 1;
+      endBar = Math.min(endBar, this._barCount);
+      const col = wordColor(w);
+      for (let b = startBar; b < endBar; b++) {
+        this._barData[b].colorMain = col;
+        this._barData[b].revealed = true;
+        this._barData[b].revealStart = this._elapsed + (b - startBar) * REVEAL_STAGGER;
+      }
+
+      // Spawn particles at the word center
+      if (!REDUCED_MOTION) {
+        const cx = this._offsetX + ((startBar + endBar) / 2) * BAR_STRIDE;
+        const cy = this._h * WAVEFORM_CENTER;
+        for (let k = 0; k < 3; k++) {
+          if (this._particles.length >= MAX_PARTICLES) break;
+          this._particles.push({
+            x: cx, y: cy,
+            vx: (Math.random() - 0.5) * 20,
+            vy: -15 - Math.random() * 25,
+            life: 0.5 + Math.random() * 0.3,
+            maxLife: 0.8,
+            size: 1 + Math.random() * 1.5,
+            color: col,
+          });
+        }
+      }
     }
 
-    this._currentIdx = index;
-
-    // Spawn summit particles
-    if (!REDUCED_MOTION) {
-      const cx = this._peakX(index);
-      const cy = this._h - this._peakHeight(p) * p.revealT; // starts at baseline
-      const col = peakColor(p);
-      for (let k = 0; k < 4; k++) {
-        if (this._particles.length >= MAX_PARTICLES) break;
-        this._particles.push({
-          x: cx, y: cy,
-          vx: (Math.random() - 0.5) * 30,
-          vy: -20 - Math.random() * 30,
-          life: 0.5 + Math.random() * 0.3,
-          maxLife: 0.8,
-          size: 1.5 + Math.random() * 1.5,
-          color: col,
-        });
+    // Omission indicator: mark bars in the gap where the word should have been
+    if (w.isOmission && this._barCount > 0 && this._totalDuration > 0) {
+      let prevEnd = -1, nextStart = -1;
+      for (let i = index - 1; i >= 0; i--) {
+        if (this._words[i].endTime > 0) { prevEnd = this._words[i].endTime; break; }
+      }
+      for (let i = index + 1; i < this._wordCount; i++) {
+        if (this._words[i].startTime > 0) { nextStart = this._words[i].startTime; break; }
+      }
+      if (prevEnd > 0 && nextStart > 0) {
+        const gapMid = (prevEnd + nextStart) / 2;
+        const midBar = Math.floor(gapMid / this._totalDuration * this._barCount);
+        for (let b = Math.max(0, midBar - 1); b <= Math.min(this._barCount - 1, midBar + 1); b++) {
+          this._barData[b].omissionMarker = true;
+        }
       }
     }
   }
@@ -206,18 +280,10 @@ export class MountainRange {
   update(dt, beatPhase) {
     this._elapsed += dt;
 
-    // Animate reveal
-    for (const p of this._peaks) {
-      if (p.revealed && p.revealT < 1) {
-        p.revealT = Math.min(1, p.revealT + dt / 0.5);
-      }
-    }
-
     // Finale fade
     if (this._finaleActive) {
       this._finaleT = Math.min(1, this._finaleT + dt);
-      this._starAlpha = 0.15 + 0.45 * easeOutCubic(this._finaleT);
-      this._horizonGlow = easeOutCubic(this._finaleT) * 0.3;
+      this._starAlpha = 0.20 + 0.45 * easeOutQuad(this._finaleT);
     }
 
     // Update particles
@@ -225,7 +291,7 @@ export class MountainRange {
       const p = this._particles[i];
       p.x += p.vx * dt;
       p.y += p.vy * dt;
-      p.vy += 30 * dt;
+      p.vy += 25 * dt;
       p.life -= dt;
       if (p.life <= 0) this._particles.splice(i, 1);
     }
@@ -235,18 +301,16 @@ export class MountainRange {
 
   /** Called when audio playback ends. */
   drawFinale() {
-    // Reveal any unrevealed peaks (trailing omissions)
-    for (const p of this._peaks) {
-      if (!p.revealed) {
-        p.revealed = true;
-        p.revealT = 1;
+    this._playheadTime = this._totalDuration;
+    for (const bar of this._barData) {
+      if (!bar.revealed) {
+        bar.revealed = true;
+        bar.revealStart = this._elapsed;
       }
     }
     this._finaleActive = true;
     this._finaleT = 0;
 
-    // Run a short self-driven animation for the finale effects
-    // (the main animation loop has stopped by now)
     let last = performance.now();
     const finaleLoop = (ts) => {
       const dt = Math.min((ts - last) / 1000, 0.05);
@@ -257,14 +321,11 @@ export class MountainRange {
       }
     };
     this._finaleFrameId = requestAnimationFrame(finaleLoop);
-
-    // Show export button
     this._showExportButton();
   }
 
-  /** Returns PNG data URL of the current canvas. */
+  /** Returns PNG data URL at 2x resolution. */
   getExportDataURL() {
-    // Render at 2x for quality
     const w = this._w * 2;
     const h = this._h * 2;
     const offscreen = document.createElement('canvas');
@@ -272,10 +333,7 @@ export class MountainRange {
     offscreen.height = h;
     const ctx = offscreen.getContext('2d');
     ctx.scale(2, 2);
-
-    // Draw the full scene once at current state (no animation)
     this._drawToCtx(ctx, this._w, this._h, 0, true);
-
     return offscreen.toDataURL('image/png');
   }
 
@@ -293,7 +351,6 @@ export class MountainRange {
   _resize() {
     const parent = this._canvas.parentElement;
     if (!parent) return;
-    // Width from parent; height is ALWAYS fixed (never read from DOM)
     const w = Math.round(parent.clientWidth) || 680;
     const h = this._fixedHeight;
     if (w === this._w && h === this._h) return;
@@ -303,22 +360,60 @@ export class MountainRange {
     this._canvas.height = h;
     this._canvas.style.width = w + 'px';
     this._canvas.style.height = h + 'px';
-    // Regenerate stars for new dimensions
-    this._stars = generateStars(45, w, h);
+    this._stars = generateStars(50, w, h);
   }
 
-  _peakX(i) {
-    return (i + 0.5) / this._wordCount * this._w;
-  }
+  /** Recompute bar count, downsample peaks, and re-apply word colors. */
+  _rebuildBars() {
+    this._barCount = Math.floor(this._w / BAR_STRIDE);
+    this._offsetX = Math.max(0, (this._w - this._barCount * BAR_STRIDE) / 2);
 
-  _peakHeight(peak) {
-    if (peak.type === 'omission' || peak.duration <= 0) {
-      return this._h * 0.70 * 0.10; // valley
+    // Reset bar data
+    this._barData = new Array(this._barCount);
+    for (let i = 0; i < this._barCount; i++) {
+      this._barData[i] = {
+        colorMain: COLORS.unrevealed,
+        revealed: false,
+        revealStart: 0,
+        omissionMarker: false,
+      };
     }
-    const maxD = Math.max(this._maxDuration, 0.5);
-    const norm = Math.log(1 + peak.duration) / Math.log(1 + maxD);
-    const clamped = 0.15 + norm * 0.85; // min 15% of max height
-    return clamped * this._h * 0.70;
+
+    // Downsample hiResPeaks → audioPeaks
+    if (this._hiResPeaks) {
+      const ratio = HI_RES_PEAKS / this._barCount;
+      this._audioPeaks = new Float32Array(this._barCount);
+      for (let i = 0; i < this._barCount; i++) {
+        const start = Math.floor(i * ratio);
+        const end = Math.min(Math.ceil((i + 1) * ratio), HI_RES_PEAKS);
+        let max = 0;
+        for (let j = start; j < end; j++) {
+          if (this._hiResPeaks[j] > max) max = this._hiResPeaks[j];
+        }
+        this._audioPeaks[i] = max;
+      }
+    } else {
+      // No audio data: flat bars
+      this._audioPeaks = new Float32Array(this._barCount).fill(0.3);
+    }
+
+    // Re-apply already-revealed words to new bar positions
+    if (this._totalDuration > 0) {
+      for (let idx = 0; idx < this._wordCount; idx++) {
+        const w = this._words[idx];
+        if (!w.revealed || w.startTime <= 0 || w.endTime <= 0) continue;
+        const startBar = Math.floor(w.startTime / this._totalDuration * this._barCount);
+        let endBar = Math.ceil(w.endTime / this._totalDuration * this._barCount);
+        if (endBar <= startBar) endBar = startBar + 1;
+        endBar = Math.min(endBar, this._barCount);
+        const col = wordColor(w);
+        for (let b = startBar; b < endBar; b++) {
+          this._barData[b].colorMain = col;
+          this._barData[b].revealed = true;
+          this._barData[b].revealStart = 0; // instant on resize
+        }
+      }
+    }
   }
 
   _draw(beatPhase) {
@@ -326,7 +421,7 @@ export class MountainRange {
   }
 
   /**
-   * Core draw routine — renders to any 2D context at given dimensions.
+   * Core draw routine.
    * @param {CanvasRenderingContext2D} ctx
    * @param {number} w  - logical width
    * @param {number} h  - logical height
@@ -342,21 +437,12 @@ export class MountainRange {
     ctx.fillStyle = sky;
     ctx.fillRect(0, 0, w, h);
 
-    // ── Horizon glow (finale) ──────────────────────────────────────────
-    if (this._horizonGlow > 0) {
-      const glow = ctx.createRadialGradient(w / 2, h, 0, w / 2, h, h * 0.6);
-      glow.addColorStop(0, `rgba(232, 168, 124, ${this._horizonGlow})`);
-      glow.addColorStop(1, 'transparent');
-      ctx.fillStyle = glow;
-      ctx.fillRect(0, 0, w, h);
-    }
-
     // ── Stars ──────────────────────────────────────────────────────────
-    const alpha = isExport ? 0.5 : this._starAlpha;
+    const sAlpha = isExport ? 0.5 : this._starAlpha;
     for (const star of this._stars) {
       const twinkle = REDUCED_MOTION ? 1
         : 0.5 + 0.5 * Math.sin(this._elapsed * star.freq * 2 + star.phase);
-      ctx.globalAlpha = alpha * twinkle;
+      ctx.globalAlpha = sAlpha * twinkle;
       ctx.fillStyle = '#fff';
       ctx.beginPath();
       ctx.arc(star.x, star.y, star.size, 0, Math.PI * 2);
@@ -364,24 +450,90 @@ export class MountainRange {
     }
     ctx.globalAlpha = 1;
 
-    // ── Build control points ───────────────────────────────────────────
-    const points = this._buildControlPoints(w, h, 1.0, 0, beatPhase, isExport);
+    if (this._barCount === 0 || !this._audioPeaks) return;
 
-    // ── Background / midground layers ──────────────────────────────────
-    for (const layer of LAYERS) {
-      const lp = this._buildControlPoints(w, h, layer.heightScale, layer.parallax, beatPhase, isExport);
-      ctx.globalAlpha = layer.alpha;
-      this._drawMountainLayer(ctx, lp, w, h, layer.color, layer.color);
+    const centerY = h * WAVEFORM_CENTER;
+    const maxAmp = h * MAX_AMP_FRAC;
+
+    // ── Subtle center line ─────────────────────────────────────────────
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.03)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(0, centerY);
+    ctx.lineTo(w, centerY);
+    ctx.stroke();
+
+    // Playhead X position in pixels
+    const playheadX = this._totalDuration > 0
+      ? (this._playheadTime / this._totalDuration) * this._barCount * BAR_STRIDE + this._offsetX
+      : -1;
+
+    // Beat breathing
+    const breathe = (REDUCED_MOTION || isExport) ? 0
+      : Math.sin(beatPhase * Math.PI * 2) * 1.5;
+
+    // ── Pass 1: Glow layer (blurred behind bars) ───────────────────────
+    if (!isExport) {
+      ctx.save();
+      ctx.filter = 'blur(5px)';
+      ctx.globalAlpha = 0.30;
+      this._drawBarsPass(ctx, centerY, maxAmp, playheadX, breathe, true);
+      ctx.restore();
+      ctx.filter = 'none';
       ctx.globalAlpha = 1;
     }
 
-    // ── Foreground mountains (per-peak coloring) ───────────────────────
-    this._drawForegroundMountains(ctx, points, w, h, beatPhase, isExport);
+    // ── Subtle highlight behind played region ──────────────────────────
+    if (playheadX > 0 && !isExport) {
+      const hl = ctx.createLinearGradient(this._offsetX, 0, playheadX, 0);
+      hl.addColorStop(0, 'rgba(255, 255, 255, 0.01)');
+      hl.addColorStop(0.9, 'rgba(255, 255, 255, 0.03)');
+      hl.addColorStop(1, 'rgba(255, 255, 255, 0.01)');
+      ctx.fillStyle = hl;
+      ctx.fillRect(this._offsetX, centerY - maxAmp, playheadX - this._offsetX, maxAmp * 2);
+    }
+
+    // ── Pass 2: Sharp bars ─────────────────────────────────────────────
+    this._drawBarsPass(ctx, centerY, maxAmp, playheadX, breathe, false);
+
+    // ── Playhead ───────────────────────────────────────────────────────
+    if (playheadX > 0 && playheadX < w && !isExport) {
+      // Radial glow
+      const glowR = 28;
+      const glow = ctx.createRadialGradient(playheadX, centerY, 0, playheadX, centerY, glowR);
+      glow.addColorStop(0, 'rgba(255, 255, 255, 0.20)');
+      glow.addColorStop(0.5, 'rgba(255, 255, 255, 0.06)');
+      glow.addColorStop(1, 'transparent');
+      ctx.fillStyle = glow;
+      ctx.fillRect(playheadX - glowR, centerY - glowR, glowR * 2, glowR * 2);
+
+      // Bright line
+      ctx.save();
+      ctx.shadowColor = '#fff';
+      ctx.shadowBlur = 4;
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.85)';
+      ctx.fillRect(playheadX - 0.5, centerY - maxAmp - 5, 1.5, (maxAmp + 5) * 2);
+      ctx.restore();
+    }
+
+    // ── Omission markers ───────────────────────────────────────────────
+    for (let i = 0; i < this._barCount; i++) {
+      if (!this._barData[i].omissionMarker) continue;
+      const x = this._offsetX + i * BAR_STRIDE + BAR_WIDTH / 2;
+      ctx.strokeStyle = hexToRgba(COLORS.omission, 0.55);
+      ctx.lineWidth = 1;
+      ctx.setLineDash([3, 3]);
+      ctx.beginPath();
+      ctx.moveTo(x, centerY - maxAmp * 0.45);
+      ctx.lineTo(x, centerY + maxAmp * 0.45 * MIRROR_SCALE);
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
 
     // ── Particles ──────────────────────────────────────────────────────
     if (!isExport) {
       for (const p of this._particles) {
-        ctx.globalAlpha = Math.max(0, p.life / p.maxLife) * 0.7;
+        ctx.globalAlpha = Math.max(0, p.life / p.maxLife) * 0.6;
         ctx.fillStyle = p.color;
         ctx.beginPath();
         ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
@@ -392,193 +544,75 @@ export class MountainRange {
   }
 
   /**
-   * Build an array of {x, y} control points for the mountain spline.
-   * @param {number} w - canvas width
-   * @param {number} h - canvas height
-   * @param {number} heightScale - multiplier for peak heights (1.0 for foreground)
-   * @param {number} parallaxShift - horizontal parallax offset as fraction
-   * @param {number} beatPhase - 0–1 beat phase for breathing
-   * @param {boolean} isExport
+   * Draw all bars in a single pass.
+   * Called twice: once with blur (glow), once sharp.
    */
-  _buildControlPoints(w, h, heightScale, parallaxShift, beatPhase, isExport) {
-    const baseline = h;
-    const progress = this._currentIdx >= 0
-      ? this._currentIdx / Math.max(1, this._wordCount - 1) : 0;
-    const shiftX = parallaxShift * progress * w;
+  _drawBarsPass(ctx, centerY, maxAmp, playheadX, breathe, isGlow) {
+    for (let i = 0; i < this._barCount; i++) {
+      const bar = this._barData[i];
+      const peak = this._audioPeaks[i];
+      const x = this._offsetX + i * BAR_STRIDE;
 
-    // Breathing offset (subtle ±1.5px)
-    const breathe = (REDUCED_MOTION || isExport) ? 0
-      : Math.sin(beatPhase * Math.PI * 2) * 1.5;
-
-    const pts = [];
-    for (let i = 0; i < this._wordCount; i++) {
-      const p = this._peaks[i];
-      const x = this._peakX(i) + shiftX;
-      const rawH = this._peakHeight(p) * heightScale;
-      const animH = rawH * (p.revealed ? easeOutCubic(p.revealT) : 0);
-      const y = baseline - animH + breathe;
-      pts.push({ x, y, peak: p });
-    }
-    return pts;
-  }
-
-  /**
-   * Draw a single-color mountain layer using Catmull-Rom.
-   */
-  _drawMountainLayer(ctx, points, w, h, fillColor, _unused) {
-    if (points.length < 2) return;
-    ctx.beginPath();
-    ctx.moveTo(0, h); // bottom-left
-    ctx.lineTo(points[0].x, points[0].y);
-
-    for (let i = 0; i < points.length - 1; i++) {
-      const p0 = points[Math.max(0, i - 1)];
-      const p1 = points[i];
-      const p2 = points[i + 1];
-      const p3 = points[Math.min(points.length - 1, i + 2)];
-      const steps = 8;
-      for (let s = 1; s <= steps; s++) {
-        const t = s / steps;
-        const pt = catmullRom(p0, p1, p2, p3, t);
-        ctx.lineTo(pt.x, pt.y);
-      }
-    }
-
-    ctx.lineTo(w, h); // bottom-right
-    ctx.closePath();
-    ctx.fillStyle = fillColor;
-    ctx.fill();
-  }
-
-  /**
-   * Draw the foreground mountains with per-peak gradient coloring + snow caps.
-   */
-  _drawForegroundMountains(ctx, points, w, h, beatPhase, isExport) {
-    if (points.length < 2) return;
-
-    // First, draw the full mountain silhouette with a segment-by-segment approach
-    // Each peak-to-peak segment is colored by a gradient between the two peaks' colors
-    ctx.save();
-
-    // Build the full path for clipping
-    const pathPoints = [{ x: 0, y: h }];
-    pathPoints.push({ x: points[0].x, y: points[0].y });
-    for (let i = 0; i < points.length - 1; i++) {
-      const p0 = points[Math.max(0, i - 1)];
-      const p1 = points[i];
-      const p2 = points[i + 1];
-      const p3 = points[Math.min(points.length - 1, i + 2)];
-      const steps = 8;
-      for (let s = 1; s <= steps; s++) {
-        const pt = catmullRom(p0, p1, p2, p3, s / steps);
-        pathPoints.push(pt);
-      }
-    }
-    pathPoints.push({ x: w, y: h });
-
-    // Draw mountain fill — iterate segments and fill vertical strips
-    for (let i = 0; i < points.length; i++) {
-      const p = points[i].peak;
-      if (!p.revealed) continue;
-
-      const col = peakColor(p);
-      const colLight = lighten(col, 0.35);
-      const cx = points[i].x;
-      const cy = points[i].y;
-
-      // Vertical gradient for this peak's region
-      const grad = ctx.createLinearGradient(cx, cy, cx, h);
-      grad.addColorStop(0, colLight);
-      grad.addColorStop(1, col);
-
-      // Define the horizontal region for this peak
-      const halfSpan = (w / this._wordCount) / 2;
-      const left = cx - halfSpan - 2;
-      const right = cx + halfSpan + 2;
-
-      ctx.save();
-      ctx.beginPath();
-      ctx.rect(left, 0, right - left, h);
-      ctx.clip();
-
-      // Draw the full mountain path within this clip region
-      ctx.beginPath();
-      ctx.moveTo(pathPoints[0].x, pathPoints[0].y);
-      for (let j = 1; j < pathPoints.length; j++) {
-        ctx.lineTo(pathPoints[j].x, pathPoints[j].y);
-      }
-      ctx.closePath();
-      ctx.fillStyle = grad;
-      ctx.fill();
-      ctx.restore();
-    }
-
-    // ── Summit glow ──────────────────────────────────────────────────
-    for (let i = 0; i < points.length; i++) {
-      const p = points[i].peak;
-      if (!p.revealed || p.revealT < 0.5) continue;
-      const col = peakColor(p);
-      const cx = points[i].x;
-      const cy = points[i].y;
-      const glowR = 15 + this._peakHeight(p) * 0.15;
-      const glow = ctx.createRadialGradient(cx, cy, 0, cx, cy, glowR);
-      glow.addColorStop(0, hexToRgba(col, 0.2));
-      glow.addColorStop(1, 'transparent');
-      ctx.fillStyle = glow;
-      ctx.beginPath();
-      ctx.arc(cx, cy, glowR, 0, Math.PI * 2);
-      ctx.fill();
-    }
-
-    // ── Snow caps on tallest peaks ───────────────────────────────────
-    if (this._maxDuration > 0) {
-      const snowThreshold = this._h * 0.70 * 0.85;
-      for (let i = 0; i < points.length; i++) {
-        const p = points[i].peak;
-        if (!p.revealed || p.type === 'omission') continue;
-        const peakH = this._peakHeight(p) * easeOutCubic(p.revealT);
-        if (peakH < snowThreshold) continue;
-
-        // Draw a white highlight along the top of the peak
-        ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-
-        // Sample the spline around this peak's summit (±half a segment)
-        const prevI = Math.max(0, i - 1);
-        const nextI = Math.min(points.length - 1, i + 1);
-        const p0 = points[Math.max(0, prevI - 1)] || points[prevI];
-        const p1 = points[prevI];
-        const p2 = points[i];
-        const p3 = points[nextI];
-        const p4 = points[Math.min(points.length - 1, nextI + 1)] || points[nextI];
-
-        // Draw from prevI→i (last 4 steps) and i→nextI (first 4 steps)
-        const segs = 4;
-        let started = false;
-        for (let s = segs; s <= segs * 2; s++) {
-          const t = (s - segs) / segs;
-          // i-1 to i segment (second half)
-          const pt0 = catmullRom(p0, p1, p2, p3, 0.5 + t * 0.5);
-          if (!started) { ctx.moveTo(pt0.x, pt0.y); started = true; }
-          else ctx.lineTo(pt0.x, pt0.y);
+      // ── Amplitude ──
+      let amp;
+      if (bar.revealed) {
+        const since = this._elapsed - bar.revealStart;
+        if (since < REVEAL_DURATION && since >= 0) {
+          const frac = easeOutQuad(since / REVEAL_DURATION);
+          amp = (maxAmp * 0.04) + (peak * maxAmp - maxAmp * 0.04) * frac;
+        } else {
+          amp = peak * maxAmp;
         }
-        for (let s = 0; s <= segs; s++) {
-          const t = s / segs;
-          // i to i+1 segment (first half)
-          const pt1 = catmullRom(p1, p2, p3, p4, t * 0.5);
-          ctx.lineTo(pt1.x, pt1.y);
-        }
-        ctx.stroke();
+        amp += breathe;
+      } else {
+        amp = maxAmp * 0.04; // tiny unrevealed stub
       }
-    }
+      amp = Math.max(amp, 0.5);
 
-    ctx.restore();
+      // ── Played/unplayed opacity ──
+      const barCenterX = x + BAR_WIDTH / 2;
+      let playedFrac;
+      if (playheadX < 0) {
+        playedFrac = 1; // no playhead active
+      } else if (barCenterX <= playheadX - TRANS_ZONE / 2) {
+        playedFrac = 1;
+      } else if (barCenterX >= playheadX + TRANS_ZONE / 2) {
+        playedFrac = 0;
+      } else {
+        playedFrac = 1 - (barCenterX - (playheadX - TRANS_ZONE / 2)) / TRANS_ZONE;
+      }
+
+      // ── Reveal flash ──
+      let flash = 0;
+      if (bar.revealed && !isGlow) {
+        const since = this._elapsed - bar.revealStart;
+        if (since > 0 && since < FLASH_DURATION) {
+          flash = 0.25 * (1 - since / FLASH_DURATION);
+        }
+      }
+
+      ctx.fillStyle = bar.colorMain;
+
+      // ── Top half ──
+      const topAlpha = isGlow
+        ? (0.08 + playedFrac * 0.22)
+        : Math.min(1, 0.25 + playedFrac * 0.75 + flash);
+      ctx.globalAlpha = topAlpha;
+      drawRoundedBar(ctx, x, centerY - amp, BAR_WIDTH, amp);
+
+      // ── Bottom half (mirror/reflection) ──
+      const mirrorAmp = amp * MIRROR_SCALE;
+      const botAlpha = isGlow
+        ? (0.04 + playedFrac * 0.10)
+        : Math.min(1, 0.06 + playedFrac * 0.19 + flash * 0.5);
+      ctx.globalAlpha = botAlpha;
+      drawRoundedBar(ctx, x, centerY + 1, BAR_WIDTH, mirrorAmp);
+    }
+    ctx.globalAlpha = 1;
   }
 
   _showExportButton() {
     if (this._exportBtn) return;
-
     const container = this._canvas.parentElement;
     if (!container) return;
 
@@ -588,16 +622,13 @@ export class MountainRange {
     btn.style.opacity = '0';
     container.appendChild(btn);
 
-    // Fade in
-    requestAnimationFrame(() => {
-      btn.style.opacity = '1';
-    });
+    requestAnimationFrame(() => { btn.style.opacity = '1'; });
 
     btn.addEventListener('click', () => {
       const dataUrl = this.getExportDataURL();
       const a = document.createElement('a');
       a.href = dataUrl;
-      a.download = 'reading-mountain-range.png';
+      a.download = 'reading-waveform.png';
       a.click();
     });
 

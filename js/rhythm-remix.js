@@ -7,8 +7,8 @@
  * @module rhythm-remix
  */
 
-import { LofiEngine } from './lofi-engine.js?v=20260218e';
-import { MountainRange } from './mountain-range.js?v=20260218e';
+import { LofiEngine } from './lofi-engine.js?v=20260218f';
+import { MountainRange } from './mountain-range.js?v=20260218f';
 import { getAudioBlob } from './audio-store.js';
 import { getAssessment, getStudents } from './storage.js';
 import { getPunctuationPositions } from './diagnostics.js';
@@ -74,8 +74,12 @@ let ballCtx = null;
 let vizCanvas = null;
 let vizCtx = null;
 
-/** Mountain range visualization. */
+/** Mountain range / waveform visualization. */
 let mountainRange = null;
+
+/** Decoded audio data for waveform visualization (survives replay). */
+let waveformChannelData = null;
+let waveformDuration = 0;
 
 /** Assessment data loaded at init. */
 let assessment = null;
@@ -1017,8 +1021,9 @@ function animationLoop(timestamp) {
   // 7. Draw visualizer
   drawVisualizer();
 
-  // 8. Update mountain range
+  // 8. Update waveform visualization
   if (mountainRange) {
+    mountainRange.setPlayhead(ct);
     const beatPhase = (lofi && typeof lofi.getBeatPhase === 'function') ? lofi.getBeatPhase() : 0;
     mountainRange.update(dt, beatPhase);
   }
@@ -1135,12 +1140,15 @@ function onAudioEnded() {
         audioEl.currentTime = 0;
         currentWordIdx = -1;
         previousWordIdx = -1;
-        // Reset mountain range
+        // Reset waveform visualization
         if (mountainRange) {
           mountainRange.dispose();
           const mtCanvas = document.getElementById('mountain-canvas');
           if (mtCanvas) {
             mountainRange = new MountainRange(mtCanvas, wordSequence.length);
+            if (waveformChannelData) {
+              mountainRange.setAudioData(waveformChannelData, waveformDuration);
+            }
           }
         }
         // Reset word classes
@@ -1265,6 +1273,21 @@ async function loadAudio() {
   audioUrl = URL.createObjectURL(blob);
   audioEl.src = audioUrl;
   audioEl.addEventListener('ended', onAudioEnded);
+
+  // Decode audio for waveform visualization (separate from playback)
+  try {
+    const tmpCtx = new (window.AudioContext || window.webkitAudioContext)();
+    const arrBuf = await blob.arrayBuffer();
+    const decoded = await tmpCtx.decodeAudioData(arrBuf);
+    waveformChannelData = new Float32Array(decoded.getChannelData(0));
+    waveformDuration = decoded.duration;
+    tmpCtx.close();
+    if (mountainRange) {
+      mountainRange.setAudioData(waveformChannelData, waveformDuration);
+    }
+  } catch (e) {
+    console.warn('[Waveform] Audio decode for visualization failed:', e);
+  }
 }
 
 function setStatus(msg) {
