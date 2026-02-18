@@ -10,12 +10,12 @@
 
 // ─── Frequency table (Hz) ───────────────────────────────────────────────────
 const NOTE = {
-  A1: 55, C2: 65.41, D2: 73.42, G2: 98.00, A2: 110.00,
-  C3: 130.81, D3: 146.83, E3: 164.81, F3: 174.61, G3: 196.00,
+  A1: 55, Eb2: 77.78, C2: 65.41, D2: 73.42, F2: 87.31, G2: 98.00, Ab2: 103.83, A2: 110.00, Bb2: 116.54,
+  B2: 123.47, C3: 130.81, D3: 146.83, Eb3: 155.56, E3: 164.81, F3: 174.61, G3: 196.00, Ab3: 207.65,
   A3: 220.00, Bb3: 233.08, B3: 246.94, C4: 261.63, Db4: 277.18,
   D4: 293.66, Eb4: 311.13, E4: 329.63, F4: 349.23, Gb4: 369.99,
   G4: 392.00, Ab4: 415.30, A4: 440.00, Bb4: 466.16, B4: 493.88,
-  B2: 123.47, C5: 523.25, D5: 554.37
+  C5: 523.25, D5: 554.37
 };
 
 // ─── Chord definitions ──────────────────────────────────────────────────────
@@ -83,6 +83,19 @@ const CHORD_SETS = {
         scale: [NOTE.C4, NOTE.D4, NOTE.E4, NOTE.G4, NOTE.A4, NOTE.B4] },
       { name: 'Am',    notes: [NOTE.A2, NOTE.C3, NOTE.E3], root: NOTE.A1,
         scale: [NOTE.A3, NOTE.B3, NOTE.C4, NOTE.D4, NOTE.E4, NOTE.G4] },
+    ]
+  },
+  zelda: {
+    // Heroic I-bVII-IV-V in Bb major
+    chords: [
+      { name: 'Bb',   notes: [NOTE.Bb3, NOTE.D4, NOTE.F4], root: NOTE.Bb2,
+        scale: [NOTE.D4, NOTE.Eb4, NOTE.F4, NOTE.G4, NOTE.A4, NOTE.Bb4] },
+      { name: 'Ab',   notes: [NOTE.Ab3, NOTE.C4, NOTE.Eb4], root: NOTE.Ab2,
+        scale: [NOTE.Eb4, NOTE.F4, NOTE.G4, NOTE.Ab4, NOTE.Bb4, NOTE.C5] },
+      { name: 'Eb',   notes: [NOTE.Eb3, NOTE.G3, NOTE.Bb3], root: NOTE.Eb2,
+        scale: [NOTE.Eb4, NOTE.F4, NOTE.G4, NOTE.Ab4, NOTE.Bb4, NOTE.C5] },
+      { name: 'F',    notes: [NOTE.F3, NOTE.A3, NOTE.C4], root: NOTE.F2,
+        scale: [NOTE.C4, NOTE.D4, NOTE.F4, NOTE.G4, NOTE.A4, NOTE.Bb4] },
     ]
   },
   classical: {
@@ -185,9 +198,11 @@ const DRUM_PATTERNS = {
     hatO:    new Array(32).fill(0),
   },
   bossa: {
-    // Bossa nova pattern: syncopated kick, rim clicks (via snare), gentle hats
-    kick:    [1,0,0,0, 0,0,1,0, 0,0,0,0, 0,0,1,0, 1,0,0,0, 0,0,1,0, 0,0,0,0, 0,0,1,0],
-    snare:   [0,0,1,0, 0,1,0,0, 0,0,1,0, 0,1,0,0, 0,0,1,0, 0,1,0,0, 0,0,1,0, 0,1,0,0],
+    // Authentic bossa nova: surdo kick + 3-2 clave cross-stick + steady 8th hats
+    // Bar 1 (16 steps): kick on 1, &2, 4 | clave 3-side: 1, &1, &2
+    // Bar 2 (16 steps): kick on 2, &3, 4 | clave 2-side: 2, 3
+    kick:    [1,0,0,0, 0,1,0,0, 0,0,0,0, 1,0,0,0, 0,0,0,0, 1,0,0,0, 0,1,0,0, 1,0,0,0],
+    snare:   [1,0,1,0, 0,0,1,0, 0,0,0,0, 0,0,0,0, 0,0,0,0, 1,0,0,0, 1,0,0,0, 0,0,0,0],
     hatC:    [1,0,1,0, 1,0,1,0, 1,0,1,0, 1,0,1,0, 1,0,1,0, 1,0,1,0, 1,0,1,0, 1,0,1,0],
     hatO:    new Array(32).fill(0),
   },
@@ -197,6 +212,13 @@ const DRUM_PATTERNS = {
     snare:   [0,0,1,0, 0,0,1,0, 0,0,1,0, 0,0,1,1, 0,0,1,0, 0,0,1,0, 0,0,1,0, 0,0,1,1],
     hatC:    [1,1,1,1, 1,1,1,1, 1,1,1,1, 1,1,1,1, 1,1,1,1, 1,1,1,1, 1,1,1,1, 1,1,1,1],
     hatO:    [0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,1],
+  },
+  zelda: {
+    // Steady march: kick on 1/3, snare on 2/4, 8th-note hats (every other step)
+    kick:    [1,0,0,0, 0,0,0,0, 1,0,0,0, 0,0,0,0, 1,0,0,0, 0,0,0,0, 1,0,0,0, 0,0,0,0],
+    snare:   [0,0,0,0, 1,0,0,0, 0,0,0,0, 1,0,0,0, 0,0,0,0, 1,0,0,0, 0,0,0,0, 1,0,0,0],
+    hatC:    [1,0,1,0, 1,0,1,0, 1,0,1,0, 1,0,1,0, 1,0,1,0, 1,0,1,0, 1,0,1,0, 1,0,1,0],
+    hatO:    new Array(32).fill(0),
   },
   classical: {
     // No drums — pure piano
@@ -217,17 +239,109 @@ const DRUM_PATTERNS = {
 // Trap hi-hat roll pattern: 0 = single hit, 3/4 = triplet/quadruplet roll
 const TRAP_HAT_ROLLS = [0,0,0,3, 0,0,0,0, 0,0,3,0, 0,4,0,0, 0,0,0,3, 0,0,0,0, 0,0,3,0, 0,4,0,0];
 
+// ─── Sample manifest ─────────────────────────────────────────────────────
+// Maps style → drum slot → filename. Loaded at init, falls back to synthesis.
+const SAMPLE_BASE_PATH = 'rhythm%20remix/samples';
+const SAMPLE_MANIFEST = {
+  trap:     { kick: 'kick.wav', snare: 'clap.wav', hatClosed: 'hat-closed.wav', hatOpen: 'hat-open.wav' },
+  lofi:     { kick: 'kick.wav', snare: 'snare.wav', hatClosed: 'hat-closed.wav', hatOpen: 'hat-open.wav' },
+  jazzhop:  { kick: 'kick.wav', snare: 'snare.wav', hatClosed: 'hat-closed.wav', hatOpen: 'hat-open.wav' },
+  bossa:    { kick: 'kick.wav', snare: 'rim.wav',   hatClosed: 'hat-closed.wav', hatOpen: 'hat-open.wav' },
+  chiptune: { kick: 'kick.wav', snare: 'snare.wav', hatClosed: 'hat-closed.wav', hatOpen: 'hat-open.wav' },
+  zelda:    { kick: 'kick.wav', snare: 'snare.wav', hatClosed: 'hat-closed.wav', hatOpen: 'hat-open.wav' },
+};
+
 // Bass patterns (beat index → play root note). Per-style.
 const BASS_PATTERNS = {
   lofi:      [1,0,1,0, 1,0,1,0, 1,0,1,0, 1,0,1,0, 1,0,1,0, 1,0,1,0, 1,0,1,0, 1,0,1,0],
   jazzhop:   [1,0,0,1, 1,0,0,1, 1,0,0,1, 1,0,0,1, 1,0,0,1, 1,0,0,1, 1,0,0,1, 1,0,0,1],
   ambient:   [1,0,0,0, 0,0,0,0, 1,0,0,0, 0,0,0,0, 1,0,0,0, 0,0,0,0, 1,0,0,0, 0,0,0,0],
-  bossa:     [1,0,0,0, 0,0,1,0, 0,0,1,0, 0,0,0,0, 1,0,0,0, 0,0,1,0, 0,0,1,0, 0,0,0,0],
+  bossa:     [1,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,1,0, 0,0,0,0, 1,0,0,0, 0,0,0,0, 0,0,1,0],
   chiptune:  [1,0,1,0, 1,0,1,0, 1,0,1,0, 1,0,1,0, 1,0,1,0, 1,0,1,0, 1,0,1,0, 1,0,1,0],
+  zelda:     [1,0,0,0, 0,0,1,0, 1,0,0,0, 0,0,1,0, 1,0,0,0, 0,0,1,0, 1,0,0,0, 0,0,1,0],
   classical: [1,0,0,0, 1,0,0,0, 1,0,0,0, 1,0,0,0, 1,0,0,0, 1,0,0,0, 1,0,0,0, 1,0,0,0],
   trap:      [1,0,0,0, 0,0,0,1, 1,0,0,0, 0,0,0,1, 1,0,0,0, 0,0,0,1, 1,0,0,0, 0,0,0,1],
 };
 
+
+// ─── Overlay drum patterns (complementary — fill gaps in main patterns) ────
+// Ghost kicks and snares on beats where the main pattern is silent.
+const OVERLAY_DRUM_PATTERNS = {
+  lofi: {
+    // Ghost kick on "and-of-2"; ghost snares on upbeats around main snare
+    kick:  [0,0,0,0, 0,1,0,0, 0,0,0,0, 0,1,0,0, 0,0,0,0, 0,1,0,0, 0,0,0,0, 0,1,0,0],
+    snare: [0,1,0,1, 0,0,0,0, 0,1,0,1, 0,0,0,0, 0,1,0,1, 0,0,0,0, 0,1,0,1, 0,0,0,0],
+    // L2: denser ghost hits
+    kickL2:  [0,0,0,1, 0,1,0,0, 0,0,0,1, 0,1,0,0, 0,0,0,1, 0,1,0,0, 0,0,0,1, 0,1,0,0],
+    snareL2: [0,1,0,1, 0,1,0,0, 0,1,0,1, 0,1,0,0, 0,1,0,1, 0,1,0,0, 0,1,0,1, 0,1,0,0],
+    // L3: syncopated fill — nearly every gap
+    kickL3:  [0,0,0,1, 0,1,0,1, 0,0,0,1, 0,1,0,1, 0,0,0,1, 0,1,0,1, 0,0,0,1, 0,1,0,1],
+    snareL3: [0,1,0,1, 0,1,0,1, 0,1,0,1, 0,1,0,0, 0,1,0,1, 0,1,0,1, 0,1,0,1, 0,1,0,0],
+    // L4 (+20): maximum density
+    kickL4:  [0,1,0,1, 0,1,0,1, 0,1,0,1, 0,1,0,1, 0,1,0,1, 0,1,0,1, 0,1,0,1, 0,1,0,1],
+    snareL4: [0,1,0,1, 0,1,0,1, 0,1,0,1, 0,1,0,1, 0,1,0,1, 0,1,0,1, 0,1,0,1, 0,1,0,1],
+  },
+  jazzhop: {
+    kick:  [0,0,0,1, 0,1,0,0, 0,0,0,1, 0,1,0,0, 0,0,0,1, 0,1,0,0, 0,0,0,1, 0,1,0,0],
+    snare: [0,1,0,0, 0,1,0,0, 0,1,0,0, 0,0,0,0, 0,1,0,0, 0,1,0,0, 0,1,0,0, 0,0,0,0],
+  },
+  ambient: {
+    kick:  new Array(32).fill(0),
+    snare: new Array(32).fill(0),
+  },
+  bossa: {
+    // Overlay fills gaps in new authentic bossa pattern
+    // Main kick: 0,5,12,20,25,28 | Main snare: 0,2,6,20,24
+    // L1: ghost kicks between surdo hits, extra rim accents
+    kick:  [0,0,0,0, 0,0,0,0, 1,0,0,0, 0,0,0,0, 0,0,1,0, 0,0,0,0, 0,0,0,0, 0,0,0,0],
+    snare: [0,0,0,0, 0,0,0,0, 0,0,1,0, 0,1,0,0, 0,0,0,0, 0,0,1,0, 0,0,0,0, 0,1,0,0],
+    // L2: more ghost kicks + denser rim
+    kickL2:  [0,0,1,0, 0,0,0,0, 1,0,0,0, 0,0,0,0, 0,0,1,0, 0,0,0,0, 0,0,1,0, 0,0,0,0],
+    snareL2: [0,0,0,1, 0,0,0,0, 0,0,1,0, 0,1,0,1, 0,0,1,0, 0,0,1,0, 0,0,0,1, 0,1,0,0],
+    // L3: dense syncopated — nearly every gap filled
+    kickL3:  [0,0,1,0, 0,0,0,1, 1,0,1,0, 0,0,0,1, 0,0,1,0, 0,0,0,1, 0,0,1,0, 0,0,0,1],
+    snareL3: [0,0,0,1, 0,1,0,1, 0,0,1,0, 0,1,0,1, 0,1,0,1, 0,0,1,0, 0,0,0,1, 0,1,0,1],
+    // L4 (+20): maximum density — every available gap
+    kickL4:  [0,0,1,1, 0,0,0,1, 1,0,1,1, 0,0,0,1, 0,0,1,1, 0,0,0,1, 0,0,1,1, 0,0,0,1],
+    snareL4: [0,0,0,1, 0,1,0,1, 1,0,1,1, 0,1,0,1, 0,1,0,1, 0,0,1,1, 0,0,0,1, 0,1,0,1],
+  },
+  chiptune: {
+    kick:  [0,0,0,1, 0,1,0,0, 0,0,0,1, 0,1,0,0, 0,0,0,1, 0,1,0,0, 0,0,0,1, 0,1,0,0],
+    snare: [0,1,0,0, 0,1,0,0, 0,1,0,0, 0,1,0,0, 0,1,0,0, 0,1,0,0, 0,1,0,0, 0,1,0,0],
+    // L2: syncopated ghost hits
+    kickL2:  [0,0,0,1, 0,1,0,1, 0,0,0,1, 0,1,0,1, 0,0,0,1, 0,1,0,1, 0,0,0,1, 0,1,0,1],
+    snareL2: [0,1,0,0, 0,1,0,1, 0,1,0,0, 0,1,0,1, 0,1,0,0, 0,1,0,1, 0,1,0,0, 0,1,0,1],
+    // L3: dense 8-bit fills
+    kickL3:  [0,0,1,1, 0,1,0,1, 0,0,1,1, 0,1,0,1, 0,0,1,1, 0,1,0,1, 0,0,1,1, 0,1,0,1],
+    snareL3: [0,1,0,1, 0,1,0,1, 0,1,0,1, 0,1,0,0, 0,1,0,1, 0,1,0,1, 0,1,0,1, 0,1,0,0],
+    // L4: maximum chiptune chaos
+    kickL4:  [0,1,1,1, 0,1,0,1, 0,1,1,1, 0,1,0,1, 0,1,1,1, 0,1,0,1, 0,1,1,1, 0,1,0,1],
+    snareL4: [0,1,0,1, 0,1,1,1, 0,1,0,1, 0,1,1,0, 0,1,0,1, 0,1,1,1, 0,1,0,1, 0,1,1,0],
+  },
+  zelda: {
+    // Ghost hits filling gaps in march pattern
+    kick:  [0,0,0,0, 0,1,0,0, 0,0,0,0, 0,1,0,0, 0,0,0,0, 0,1,0,0, 0,0,0,0, 0,1,0,0],
+    snare: [0,0,1,0, 0,0,0,0, 0,0,1,0, 0,0,0,0, 0,0,1,0, 0,0,0,0, 0,0,1,0, 0,0,0,0],
+    // L2: more syncopation
+    kickL2:  [0,0,0,1, 0,1,0,0, 0,0,0,1, 0,1,0,0, 0,0,0,1, 0,1,0,0, 0,0,0,1, 0,1,0,0],
+    snareL2: [0,0,1,0, 0,0,0,1, 0,0,1,0, 0,0,0,1, 0,0,1,0, 0,0,0,1, 0,0,1,0, 0,0,0,1],
+    // L3: denser march fills
+    kickL3:  [0,0,1,1, 0,1,0,0, 0,0,1,1, 0,1,0,0, 0,0,1,1, 0,1,0,0, 0,0,1,1, 0,1,0,0],
+    snareL3: [0,0,1,0, 0,0,1,1, 0,0,1,0, 0,0,1,1, 0,0,1,0, 0,0,1,1, 0,0,1,0, 0,0,1,1],
+    // L4: full march — never frantic
+    kickL4:  [0,0,1,1, 0,1,0,1, 0,0,1,1, 0,1,0,1, 0,0,1,1, 0,1,0,1, 0,0,1,1, 0,1,0,1],
+    snareL4: [0,1,1,0, 0,0,1,1, 0,1,1,0, 0,0,1,1, 0,1,1,0, 0,0,1,1, 0,1,1,0, 0,0,1,1],
+  },
+  classical: {
+    kick:  new Array(32).fill(0),
+    snare: new Array(32).fill(0),
+  },
+  trap: {
+    // Extra 808 ghost kicks and off-beat clap accents
+    kick:  [0,0,1,0, 0,0,0,0, 0,1,0,0, 0,0,0,0, 0,0,1,0, 0,0,0,0, 0,1,0,0, 0,0,0,0],
+    snare: [0,0,0,0, 0,0,0,1, 0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,1, 0,0,0,0, 0,0,0,0],
+  },
+};
 
 // ─── Per-style synthesis config ─────────────────────────────────────────────
 // Controls timbre, signal chain, and drum routing for each style.
@@ -265,6 +379,13 @@ const STYLE_CONFIG = {
     bassType: 'square',     bassFilterCutoff: 600,
     reverbWet: 0.1,         warmthCutoff: 10000,
     tapeWobbleDepth: 0.0,   crusherBits: 8,
+    kickStyle: 'chip',      snareStyle: 'chip',      hatStyle: 'chip',
+  },
+  zelda: {
+    padType: 'square',      padFilterCutoff: 3500,   padAttack: 0.01, padRelease: 0.1,
+    bassType: 'square',     bassFilterCutoff: 600,
+    reverbWet: 0.30,        warmthCutoff: 7000,
+    tapeWobbleDepth: 0.0,   crusherBits: 10,
     kickStyle: 'chip',      snareStyle: 'chip',      hatStyle: 'chip',
   },
   classical: {
@@ -348,7 +469,10 @@ export class LofiEngine {
   constructor(audioContext) {
     this._ctx = audioContext;
     this._bpm = 75;
+    this._targetBpm = undefined; // set by setTempoSmoothed()
+    this._overlayLevel = 0;      // 0-1, complementary second track
     this._style = 'lofi';
+    this._pianoOverlay = false;
     this._density = 'normal';
     this._playing = false;
     this._paused = false;
@@ -380,8 +504,12 @@ export class LofiEngine {
     this._adaptiveHarmonyEnabled = false;
     this._harmonyMood = 'bright'; // bright | warm | tender
 
+    // Sample playback: style → slot → AudioBuffer (loaded async)
+    this._samples = {};
+
     this._buildGraph();
     this._buildCrackleBuffers();
+    this._loadSamples(); // async, non-blocking — synthesis fallback until loaded
   }
 
   // ─── Public API ─────────────────────────────────────────────────────────
@@ -416,8 +544,11 @@ export class LofiEngine {
    */
   getBeatPhase() {
     if (!this._ctx || !this._playing) return 0;
+    const now = this._ctx.currentTime;
     const beatDur = 60 / this._bpm;
-    return (this._ctx.currentTime % beatDur) / beatDur;
+    const beatStart = this._nextBeatTime - beatDur;
+    const elapsed = now - beatStart;
+    return Math.max(0, Math.min(1, elapsed / beatDur));
   }
 
   /**
@@ -426,6 +557,39 @@ export class LofiEngine {
    */
   setTempo(bpm) {
     this._bpm = Math.max(40, Math.min(200, bpm));
+    this._targetBpm = undefined; // cancel any smoothed target
+  }
+
+  /**
+   * Set a tempo target that the engine moves toward one beat at a time.
+   * Asymmetric smoothing: speeds up faster than it slows down.
+   * @param {number} targetBpm
+   */
+  setTempoSmoothed(targetBpm) {
+    this._targetBpm = Math.max(40, Math.min(200, targetBpm));
+  }
+
+  /**
+   * Set the overlay layer level — controls how rich the existing instruments sound.
+   * More notes in chords, more drum hits, denser patterns.
+   * @param {number} level - 0.0 to 1.5
+   */
+  setOverlayLevel(level) {
+    this._overlayLevel = Math.max(0, Math.min(1.5, level));
+    if (this._nodes.overlayBus && this._ctx) {
+      const now = this._ctx.currentTime;
+      this._nodes.overlayBus.gain.cancelScheduledValues(now);
+      // Minimum 0.6 when active so overlay drums are clearly audible at all levels
+      const busGain = this._overlayLevel > 0
+        ? Math.min(1.0, 0.6 + this._overlayLevel * 0.3)
+        : 0;
+      this._nodes.overlayBus.gain.setTargetAtTime(busGain, now, 0.15);
+    }
+  }
+
+  /** @returns {number} Current overlay level 0-1. */
+  get overlayLevel() {
+    return this._overlayLevel;
   }
 
   /**
@@ -433,8 +597,18 @@ export class LofiEngine {
    * @param {'lofi'|'jazzhop'|'ambient'|'bossa'|'chiptune'|'classical'|'trap'} name
    */
   setStyle(name) {
-    if (!CHORD_SETS[name]) return;
-    this._style = name;
+    // Compound styles: "bossa-piano", "chiptune-piano", "jazzhop-piano"
+    const pianoSuffix = '-piano';
+    if (name.endsWith(pianoSuffix)) {
+      const base = name.slice(0, -pianoSuffix.length);
+      if (!CHORD_SETS[base]) return;
+      this._style = base;
+      this._pianoOverlay = true;
+    } else {
+      if (!CHORD_SETS[name]) return;
+      this._style = name;
+      this._pianoOverlay = false;
+    }
     this._applyStyleConfig();
   }
 
@@ -774,11 +948,20 @@ export class LofiEngine {
     n.masterGain = ctx.createGain();
     n.masterGain.gain.value = 0.85;
 
-    // ── Saturation (last in chain before master) ──
+    // ── Bus compressor (glue before master) ──
+    n.busCompressor = ctx.createDynamicsCompressor();
+    n.busCompressor.threshold.value = -18;
+    n.busCompressor.knee.value = 8;
+    n.busCompressor.ratio.value = 3;
+    n.busCompressor.attack.value = 0.006;
+    n.busCompressor.release.value = 0.15;
+    n.busCompressor.connect(n.masterGain);
+
+    // ── Saturation (last in chain before compressor) ──
     n.saturation = ctx.createWaveShaper();
     n.saturation.curve = createSaturationCurve(1.5, 8192);
     n.saturation.oversample = '2x';
-    n.saturation.connect(n.masterGain);
+    n.saturation.connect(n.busCompressor);
 
     // ── Reverb ──
     n.reverb = ctx.createConvolver();
@@ -837,7 +1020,11 @@ export class LofiEngine {
 
     n.padBus = ctx.createGain();
     n.padBus.gain.value = 0.35;
-    n.padBus.connect(n.mixBus);
+    // Sidechain ducker on pad bus (gain dips on kick hits)
+    n.padDucker = ctx.createGain();
+    n.padDucker.gain.value = 1.0;
+    n.padBus.connect(n.padDucker);
+    n.padDucker.connect(n.mixBus);
 
     // LFO on pad filter for movement
     n.padFilter = ctx.createBiquadFilter();
@@ -857,7 +1044,11 @@ export class LofiEngine {
 
     n.bassBus = ctx.createGain();
     n.bassBus.gain.value = 0.55;
-    n.bassBus.connect(n.mixBus);
+    // Sidechain ducker on bass bus (gain dips on kick hits)
+    n.bassDucker = ctx.createGain();
+    n.bassDucker.gain.value = 1.0;
+    n.bassBus.connect(n.bassDucker);
+    n.bassDucker.connect(n.mixBus);
 
     // ── Vinyl crackle (separate path, very low volume) ──
     n.crackleBus = ctx.createGain();
@@ -867,6 +1058,86 @@ export class LofiEngine {
     n.crackleFilter.frequency.value = 1000;
     n.crackleBus.connect(n.crackleFilter);
     n.crackleFilter.connect(n.saturation); // crackle bypasses reverb/bitcrusher
+
+    // ── Overlay layer bus (complementary second track) ──
+    n.overlayBus = ctx.createGain();
+    n.overlayBus.gain.value = 0;
+    n.overlayBus.connect(n.mixBus);
+
+    // Pre-render noise buffers (reused per hit, varied via playbackRate)
+    const shakerDur = 0.04;
+    const shakerSamples = Math.ceil(ctx.sampleRate * shakerDur);
+    n.shakerBuf = ctx.createBuffer(1, shakerSamples, ctx.sampleRate);
+    const shakerData = n.shakerBuf.getChannelData(0);
+    for (let i = 0; i < shakerSamples; i++) {
+      shakerData[i] = (Math.random() * 2 - 1) * Math.exp(-i / (shakerSamples * 0.3));
+    }
+
+    const ghostSnareDur = 0.08;
+    const ghostSnareSamples = Math.ceil(ctx.sampleRate * ghostSnareDur);
+    n.ghostSnareBuf = ctx.createBuffer(1, ghostSnareSamples, ctx.sampleRate);
+    const gsData = n.ghostSnareBuf.getChannelData(0);
+    for (let i = 0; i < ghostSnareSamples; i++) {
+      gsData[i] = (Math.random() * 2 - 1) * Math.exp(-i / (ghostSnareSamples * 0.25));
+    }
+  }
+
+  // ─── Sample Loading ────────────────────────────────────────────────────
+
+  /**
+   * Load all drum samples asynchronously. Non-blocking — synthesis fallback
+   * works until samples finish loading. Silent failure on missing files.
+   */
+  async _loadSamples() {
+    for (const [style, slots] of Object.entries(SAMPLE_MANIFEST)) {
+      this._samples[style] = {};
+      for (const [slot, filename] of Object.entries(slots)) {
+        const url = `${SAMPLE_BASE_PATH}/${style}/${filename}`;
+        try {
+          const resp = await fetch(url);
+          if (!resp.ok) continue;
+          const arrayBuf = await resp.arrayBuffer();
+          this._samples[style][slot] = await this._ctx.decodeAudioData(arrayBuf);
+        } catch (e) {
+          // Silent: synthesis fallback handles it
+        }
+      }
+    }
+  }
+
+  /**
+   * Play a loaded sample at the given time. Returns true if played, false if
+   * no sample loaded (caller should fall back to synthesis).
+   * @param {string} slot - 'kick', 'snare', 'hatClosed', 'hatOpen'
+   * @param {number} time - AudioContext time
+   * @param {number} [volume=1.0] - gain multiplier
+   * @param {number} [pitchShift=0] - cents of random pitch humanization
+   * @returns {boolean}
+   */
+  _playSample(slot, time, volume = 1.0, pitchShift = 0) {
+    const style = this._style || 'lofi';
+    const buf = this._samples[style]?.[slot];
+    if (!buf) return false;
+
+    const ctx = this._ctx;
+    const src = ctx.createBufferSource();
+    src.buffer = buf;
+
+    // Subtle pitch humanization (±pitchShift cents)
+    if (pitchShift > 0) {
+      const cents = (Math.random() * 2 - 1) * pitchShift;
+      src.playbackRate.value = Math.pow(2, cents / 1200);
+    }
+
+    const gain = ctx.createGain();
+    gain.gain.value = volume;
+    src.connect(gain);
+    gain.connect(this._nodes.drumBus);
+
+    src.start(time);
+    this._activeSources.add(src);
+    src.onended = () => this._activeSources.delete(src);
+    return true;
   }
 
   // ─── Scheduler ──────────────────────────────────────────────────────────
@@ -892,6 +1163,17 @@ export class LofiEngine {
   }
 
   _advanceBeat() {
+    // Smoothed tempo: move toward target BPM per beat
+    if (this._targetBpm !== undefined && this._targetBpm !== this._bpm) {
+      const diff = this._targetBpm - this._bpm;
+      if (Math.abs(diff) < 0.5) {
+        this._bpm = this._targetBpm;
+      } else {
+        // Asymmetric: speed up faster (0.35) than slow down (0.20)
+        const alpha = diff > 0 ? 0.35 : 0.20;
+        this._bpm += diff * alpha;
+      }
+    }
     const secondsPerBeat = 60.0 / this._bpm;
     this._nextBeatTime += secondsPerBeat;
     this._currentBeat = (this._currentBeat + 1) % 32;
@@ -954,6 +1236,7 @@ export class LofiEngine {
         else if (drumCfg.kickStyle === 'soft') this._playKickSoft(time);
         else if (drumCfg.kickStyle === 'chip') this._playChipKick(time);
         else this._playKick(time);
+        this._duckSidechain(time);
       }
 
       // Snare: not in sparse
@@ -1019,12 +1302,42 @@ export class LofiEngine {
       const attackTime = cfg.padAttack;
       const releaseTime = cfg.padRelease;
 
-      if (style === 'chiptune') {
-        this._playChipPad(time, chord.notes, padDuration, padVol);
+      // Extend chord notes based on overlay level — same signal chain, more notes
+      let padNotes = chord.notes;
+      const ol = this._overlayLevel;
+      if (ol > 0) {
+        padNotes = [...chord.notes];
+        const octUp = chord.notes.map(f => f * 2); // octave-up doublings
+        if (ol >= 1.5) {
+          // Level 4 (+20): all doublings + 9th + two octaves up root/5th
+          padNotes.push(...octUp);
+          if (chord.scale && chord.scale.length >= 2) {
+            padNotes.push(chord.scale[1] * 2); // 9th, octave up
+          }
+          padNotes.push(chord.notes[0] * 4); // root two octaves up
+          if (chord.notes.length >= 3) padNotes.push(chord.notes[2] * 4); // 5th two octaves up
+        } else if (ol >= 1.0) {
+          // Level 3 (+15): all octave doublings + 9th extension
+          padNotes.push(...octUp);
+          if (chord.scale && chord.scale.length >= 2) {
+            padNotes.push(chord.scale[1] * 2); // 9th, octave up
+          }
+        } else if (ol >= 0.65) {
+          // Level 2 (+10): all octave-up doublings
+          padNotes.push(...octUp);
+        } else {
+          // Level 1 (+5): root + 5th doubled up an octave
+          padNotes.push(octUp[0]);
+          if (octUp.length >= 3) padNotes.push(octUp[2]);
+        }
+      }
+
+      if (style === 'chiptune' || style === 'zelda') {
+        this._playChipPad(time, padNotes, padDuration, padVol);
       } else if (style === 'classical') {
-        this._playArpeggio(time, chord.notes, padDuration, padVol, secondsPerBeat);
+        this._playArpeggio(time, padNotes, padDuration, padVol, secondsPerBeat);
       } else {
-        this._playChordPad(time, chord.notes, padDuration, padVol, attackTime, releaseTime);
+        this._playChordPad(time, padNotes, padDuration, padVol, attackTime, releaseTime);
       }
     }
 
@@ -1039,11 +1352,51 @@ export class LofiEngine {
         : style === 'trap' ? secondsPerBeat * 2.5
         : style === 'bossa' ? secondsPerBeat * 1.2
         : secondsPerBeat * 0.8;
-      if (style === 'chiptune') {
+      if (style === 'chiptune' || style === 'zelda') {
         this._playChipBass(time, chord.root, secondsPerBeat * 0.6);
       } else {
         this._playBass(time, chord.root, bassDur, bassVol);
       }
+    }
+
+    // ── Overlay layer (complementary octave-up track) ──
+    if (this._overlayLevel > 0) {
+      this._scheduleOverlay(time, beat, chord, secondsPerBeat);
+    }
+  }
+
+  // ─── Sidechain Ducking ──────────────────────────────────────────────────
+
+  /**
+   * Duck pad and bass buses on kick hits for that professional "pump" effect.
+   * Style-aware parameters: trap = short/deep, lofi = medium/pumpy, bossa = subtle.
+   */
+  _duckSidechain(time) {
+    const n = this._nodes;
+    if (!n.padDucker || !n.bassDucker) return;
+
+    const style = this._style || 'lofi';
+    // Style-specific duck parameters: [duckDepth, attackMs, releaseMs]
+    const params = {
+      trap:      [0.15, 5, 100],   // Deep, fast — 808 pump
+      lofi:      [0.25, 8, 180],   // Medium depth, longer release — vinyl pump
+      jazzhop:   [0.30, 8, 160],   // Subtle
+      bossa:     [0.50, 10, 120],  // Very subtle
+      ambient:   [0.35, 10, 250],  // Gentle, slow release
+      classical: [0.45, 8, 150],   // Moderate
+      chiptune:  [0.20, 3, 80],    // Tight, retro
+      zelda:     [0.25, 5, 100],   // SNES dungeon pump
+    };
+    const [depth, atkMs, relMs] = params[style] || params.lofi;
+    const atk = atkMs / 1000;
+    const rel = relMs / 1000;
+
+    // Duck both pad and bass buses
+    for (const ducker of [n.padDucker, n.bassDucker]) {
+      ducker.gain.cancelScheduledValues(time);
+      ducker.gain.setValueAtTime(1.0, time);
+      ducker.gain.linearRampToValueAtTime(depth, time + atk);
+      ducker.gain.linearRampToValueAtTime(1.0, time + atk + rel);
     }
   }
 
@@ -1053,6 +1406,7 @@ export class LofiEngine {
    * Deep 808-style kick drum.
    */
   _playKick(time) {
+    if (this._playSample('kick', time, 0.9, 8)) return;
     const ctx = this._ctx;
 
     // Triangle oscillator for the body (starts at 150Hz, sweeps to 55Hz)
@@ -1091,6 +1445,7 @@ export class LofiEngine {
    * @param {string} style - 'jazzhop' gets a brush-like lower filter
    */
   _playSnare(time, style) {
+    if (this._playSample('snare', time, 0.85, 12)) return;
     const ctx = this._ctx;
     const noiseLen = 0.15;
 
@@ -1141,6 +1496,7 @@ export class LofiEngine {
    * Closed hi-hat — 6 detuned square oscillators at metallic frequency ratios.
    */
   _playHiHatClosed(time) {
+    if (this._playSample('hatClosed', time, 0.7, 15)) return;
     this._playHiHat(time, 0.05, 0.2);
   }
 
@@ -1148,6 +1504,7 @@ export class LofiEngine {
    * Open hi-hat — same as closed but longer decay.
    */
   _playHiHatOpen(time) {
+    if (this._playSample('hatOpen', time, 0.75, 10)) return;
     this._playHiHat(time, 0.3, 0.35);
   }
 
@@ -1327,12 +1684,713 @@ export class LofiEngine {
     this._trackSource(osc2, time + duration + 0.1);
   }
 
+  // ─── Overlay Layer ────────────────────────────────────────────────────
+  // Makes existing instruments play MORE: thicker chords, denser drums,
+  // wider arpeggios. Same sounds, more of them.
+
+  /**
+   * Schedule overlay content for one beat: extra drum hits + extended chords.
+   */
+  _scheduleOverlay(time, beat, chord, secondsPerBeat) {
+    const level = this._overlayLevel;
+    const style = this._style;
+    const mainDrums = DRUM_PATTERNS[style] || DRUM_PATTERNS.lofi;
+    const overlayEntry = OVERLAY_DRUM_PATTERNS[style] || OVERLAY_DRUM_PATTERNS.lofi;
+
+    // ── Pick level-appropriate overlay pattern ──
+    let kickPat, snarePat;
+    if (level >= 1.5 && overlayEntry.kickL4) {
+      kickPat = overlayEntry.kickL4;
+      snarePat = overlayEntry.snareL4;
+    } else if (level >= 1.0 && overlayEntry.kickL3) {
+      kickPat = overlayEntry.kickL3;
+      snarePat = overlayEntry.snareL3;
+    } else if (level >= 0.65 && overlayEntry.kickL2) {
+      kickPat = overlayEntry.kickL2;
+      snarePat = overlayEntry.snareL2;
+    } else {
+      kickPat = overlayEntry.kick;
+      snarePat = overlayEntry.snare;
+    }
+
+    // ── Extra drum hits on complementary beats ──
+    if (kickPat[beat] && !mainDrums.kick[beat]) {
+      this._playOverlayKick(time);
+    }
+    if (snarePat[beat] && !mainDrums.snare[beat]) {
+      this._playOverlaySnare(time);
+    }
+
+    // ── Style-specific musical overlays ──
+    if (style === 'lofi') {
+      this._scheduleLofiOverlay(time, beat, chord, secondsPerBeat, level);
+    } else if (style === 'bossa') {
+      this._scheduleBossaOverlay(time, beat, chord, secondsPerBeat, level);
+    } else if (style === 'classical') {
+      this._scheduleClassicalOverlay(time, beat, chord, secondsPerBeat, level);
+    } else if (style === 'chiptune') {
+      this._scheduleChiptuneOverlay(time, beat, chord, secondsPerBeat, level);
+    } else if (style === 'zelda') {
+      this._scheduleZeldaOverlay(time, beat, chord, secondsPerBeat, level);
+    } else {
+      // Generic styles: basic shaker at higher levels
+      if (level > 0.4 && beat % 2 === 1) {
+        this._playOverlayShaker(time);
+      }
+    }
+
+    // Piano overlay flag: layer classical piano enhancements on any style
+    if (this._pianoOverlay && style !== 'classical') {
+      this._scheduleClassicalOverlay(time, beat, chord, secondsPerBeat, level);
+    }
+  }
+
+  /**
+   * Bossa-specific overlay: walking bass, chord comping, melodic scale fills.
+   * All routed through existing bassBus/padFilter — same sound, more notes.
+   */
+  _scheduleBossaOverlay(time, beat, chord, secondsPerBeat, level) {
+    const mainBass = BASS_PATTERNS.bossa;
+    const root = chord.root;
+    const notes = chord.notes;
+    const scale = chord.scale || [];
+    const cfg = STYLE_CONFIG.bossa;
+
+    // ── Level 1+: Walking bass fills (through bassBus) ──
+    // Main bass: positions 0,14,20,30. Fill gaps with chord passing tones.
+    const bassWalk1 = [0,0,0,0, 0,0,1,0, 0,0,1,0, 0,0,0,0, 0,0,0,0, 0,0,1,0, 0,0,1,0, 0,0,0,0];
+    const bassWalk2 = [0,0,1,0, 0,0,1,0, 1,0,1,0, 0,0,0,0, 0,0,1,0, 0,0,1,0, 1,0,1,0, 0,0,0,0];
+    const bassWalk3 = [0,0,1,0, 1,0,1,0, 1,0,1,0, 1,0,0,0, 0,0,1,0, 0,0,1,0, 1,0,1,0, 1,0,0,0];
+    const bassWalk4 = [0,1,1,1, 1,0,1,1, 1,1,1,0, 1,0,0,1, 0,1,1,1, 1,0,1,1, 1,1,1,0, 1,0,0,1];
+
+    const bassPat = level >= 1.5 ? bassWalk4 : level >= 1.0 ? bassWalk3 : level >= 0.65 ? bassWalk2 : bassWalk1;
+    if (bassPat[beat] && !mainBass[beat]) {
+      // Pick a passing tone: cycle through chord's 3rd, 5th, root octave up
+      const passingTones = [root * 2, notes[1] ? notes[1] / 2 : root * 1.5, root * 1.5];
+      const bassNote = passingTones[beat % passingTones.length];
+      this._playBass(time, bassNote, secondsPerBeat * 0.9, 0.45);
+    }
+
+    // ── Level 1+: Extra rim clicks (through drumBus — same tap sound) ──
+    // Main snare (clave): 0,2,6,20,24. Add more taps in gaps.
+    const mainSnare = DRUM_PATTERNS.bossa.snare;
+    const rim1 = [0,0,0,0, 1,0,0,0, 0,0,1,0, 0,0,1,0, 0,0,1,0, 0,0,0,0, 0,0,1,0, 0,0,1,0];
+    const rim2 = [0,0,0,1, 1,0,0,1, 0,0,1,0, 0,1,1,0, 0,0,1,0, 0,0,0,1, 0,0,1,0, 0,1,1,0];
+    const rim3 = [0,0,0,1, 1,0,0,1, 1,0,1,0, 0,1,1,1, 0,1,1,0, 0,0,0,1, 0,0,1,1, 0,1,1,0];
+    const rim4 = [0,1,0,1, 1,0,1,1, 1,0,1,1, 0,1,1,1, 0,1,1,1, 0,1,0,1, 0,1,1,1, 0,1,1,1];
+    const rimPat = level >= 1.5 ? rim4 : level >= 1.0 ? rim3 : level >= 0.65 ? rim2 : rim1;
+    if (rimPat[beat] && !mainSnare[beat]) {
+      this._playRimClick(time);
+    }
+
+    // ── Level 1+: Chord comping stabs (through padFilter — same sound) ──
+    // Short rhythmic chord hits on syncopated beats, like a piano player comping
+    const comp1 = [0,0,0,0, 0,0,0,1, 0,0,0,0, 0,0,0,1, 0,0,0,0, 0,0,0,1, 0,0,0,0, 0,0,0,1];
+    const comp2 = [0,0,0,1, 0,0,0,1, 0,0,0,1, 0,0,0,1, 0,0,0,1, 0,0,0,1, 0,0,0,1, 0,0,0,1];
+    const comp3 = [0,0,0,1, 0,0,1,1, 0,0,0,1, 0,0,1,1, 0,0,0,1, 0,0,1,1, 0,0,0,1, 0,0,1,1];
+    const comp4 = [0,0,1,1, 0,0,1,1, 0,1,0,1, 0,0,1,1, 0,0,1,1, 0,0,1,1, 0,1,0,1, 0,0,1,1];
+
+    const compPat = level >= 1.5 ? comp4 : level >= 1.0 ? comp3 : level >= 0.65 ? comp2 : comp1;
+    if (compPat[beat]) {
+      const stabDur = secondsPerBeat * 1.5;
+      this._playChordPad(time, notes, stabDur, 0.6, cfg.padAttack * 0.5, 0.2);
+    }
+
+    // ── Level 1+: Melodic scale fills (individual notes through padFilter) ──
+    if (scale.length >= 3) {
+      const melody1 = [0,0,0,0, 1,0,0,0, 0,0,0,0, 0,0,1,0, 0,0,0,0, 1,0,0,0, 0,0,0,0, 0,0,1,0];
+      const melody2 = [0,0,0,0, 1,0,1,0, 0,1,0,0, 0,0,1,0, 0,0,0,0, 1,0,1,0, 0,1,0,0, 0,0,1,0];
+      const melody3 = [0,1,0,0, 1,0,1,0, 0,1,0,0, 1,0,1,0, 0,1,0,0, 1,0,1,0, 0,1,0,0, 1,0,1,0];
+      const melody4 = [0,1,0,1, 1,0,1,0, 1,1,0,1, 1,0,1,0, 0,1,0,1, 1,0,1,0, 1,1,0,1, 1,0,1,0];
+      const melPat = level >= 1.5 ? melody4 : level >= 1.0 ? melody3 : level >= 0.65 ? melody2 : melody1;
+
+      if (melPat[beat]) {
+        const scaleIdx = beat % scale.length;
+        this._playMelodyNote(time, scale[scaleIdx], secondsPerBeat * 0.8, 0.3);
+      }
+    }
+
+    // ── Level 2+: Extra shaker subdivisions ──
+    if (level >= 0.65) {
+      this._playShaker(time + secondsPerBeat * 0.25);
+      this._playShaker(time + secondsPerBeat * 0.75);
+    }
+    if (level >= 1.0) {
+      this._playShaker(time + secondsPerBeat * 0.5);
+    }
+  }
+
+  /**
+   * Lo-fi-specific overlay: walking bass fills, chord comping, Rhodes keys, melodic fills.
+   * All routed through existing bassBus/padFilter — same warm lo-fi sound, more notes.
+   */
+  _scheduleLofiOverlay(time, beat, chord, secondsPerBeat, level) {
+    const mainBass = BASS_PATTERNS.lofi; // [1,0,1,0, 1,0,1,0, ...]
+    const root = chord.root;
+    const notes = chord.notes;
+    const scale = chord.scale || [];
+    const cfg = STYLE_CONFIG.lofi;
+
+    // ── Walking bass fills (through bassBus) ──
+    // Main bass hits even steps. Fill odd steps with passing tones.
+    const bassWalk1 = [0,0,0,1, 0,0,0,1, 0,0,0,1, 0,0,0,1, 0,0,0,1, 0,0,0,1, 0,0,0,1, 0,0,0,1];
+    const bassWalk2 = [0,1,0,1, 0,1,0,1, 0,1,0,1, 0,1,0,1, 0,1,0,1, 0,1,0,1, 0,1,0,1, 0,1,0,1];
+    const bassWalk3 = [0,1,0,1, 0,1,0,1, 0,1,0,1, 0,1,1,1, 0,1,0,1, 0,1,0,1, 0,1,0,1, 0,1,1,1];
+    const bassWalk4 = [0,1,1,1, 0,1,1,1, 0,1,1,1, 0,1,1,1, 0,1,1,1, 0,1,1,1, 0,1,1,1, 0,1,1,1];
+
+    const bassPat = level >= 1.5 ? bassWalk4 : level >= 1.0 ? bassWalk3 : level >= 0.65 ? bassWalk2 : bassWalk1;
+    if (bassPat[beat] && !mainBass[beat]) {
+      const passingTones = [root * 2, notes[1] ? notes[1] / 2 : root * 1.5, root * 1.5];
+      const bassNote = passingTones[beat % passingTones.length];
+      this._playBass(time, bassNote, secondsPerBeat * 0.7, 0.4);
+    }
+
+    // ── Chord comping stabs (short pad hits for rhythmic texture) ──
+    const comp1 = [0,0,0,0, 0,0,0,1, 0,0,0,0, 0,0,0,1, 0,0,0,0, 0,0,0,1, 0,0,0,0, 0,0,0,1];
+    const comp2 = [0,0,0,1, 0,0,0,1, 0,0,0,0, 0,0,0,1, 0,0,0,1, 0,0,0,1, 0,0,0,0, 0,0,0,1];
+    const comp3 = [0,0,0,1, 0,0,0,1, 0,0,0,1, 0,0,0,1, 0,0,0,1, 0,0,0,1, 0,0,0,1, 0,0,0,1];
+    const comp4 = [0,0,0,1, 0,1,0,1, 0,0,0,1, 0,1,0,1, 0,0,0,1, 0,1,0,1, 0,0,0,1, 0,1,0,1];
+
+    const compPat = level >= 1.5 ? comp4 : level >= 1.0 ? comp3 : level >= 0.65 ? comp2 : comp1;
+    if (compPat[beat]) {
+      this._playChordPad(time, notes, secondsPerBeat * 1.2, 0.45, cfg.padAttack * 0.3, 0.25);
+    }
+
+    // ── L1+ Rhodes: simple syncopated chords (warm harmonic bed) ──
+    const rh1 = [0,0,0,0, 0,1,0,0, 0,0,0,0, 0,1,0,0, 0,0,0,0, 0,1,0,0, 0,0,0,0, 0,1,0,0];
+    const rh2 = [0,0,0,0, 0,1,0,0, 0,0,0,1, 0,1,0,0, 0,0,0,0, 0,1,0,0, 0,0,0,1, 0,1,0,0];
+    const rh3 = [0,0,0,1, 0,1,0,0, 0,0,0,1, 0,1,0,0, 0,0,0,1, 0,1,0,0, 0,0,0,1, 0,1,0,0];
+    const rh4 = [0,0,0,1, 0,1,0,1, 0,0,0,1, 0,1,0,0, 0,0,0,1, 0,1,0,1, 0,0,0,1, 0,1,0,0];
+
+    const rhPat = level >= 1.5 ? rh4 : level >= 1.0 ? rh3 : level >= 0.65 ? rh2 : rh1;
+    if (rhPat[beat]) {
+      const rhodesChord = notes.map(f => f * 2);
+      this._playRhodes(time, rhodesChord, secondsPerBeat * 1.5, 0.25);
+    }
+
+    // ── L2+ Vibraphone: dreamy melodic notes (new instrument at +10) ──
+    if (level >= 0.65 && scale.length >= 3) {
+      const S = scale.length;
+      // Gentle melodic phrases — stepwise, lots of space
+      const vibB = [-1,-1,-1,-1,  -1,-1, 0,-1,  -1,-1,-1,-1,  -1,-1, 2,-1,
+                    -1,-1,-1,-1,  -1,-1, 4,-1,  -1,-1,-1,-1,  -1,-1, 2,-1];
+      const vibC = [-1,-1, 0,-1,  -1, 2,-1,-1,  -1,-1, 4,-1,  -1, 2,-1, 0,
+                    -1,-1, 1,-1,  -1, 3,-1,-1,  -1,-1, 2,-1,  -1, 0,-1,-1];
+      const vibD = [-1, 0,-1, 2,  -1, 4,-1, 3,  -1, 2,-1, 0,  -1, 1,-1, 2,
+                    -1, 4,-1, 3,  -1, 1,-1, 0,  -1, 2,-1, 4,  -1, 3,-1, 0];
+
+      const vibP = level >= 1.5 ? vibD : level >= 1.0 ? vibC : vibB;
+      const vibDeg = vibP[beat];
+      if (vibDeg >= 0) {
+        this._playVibraphone(time, scale[vibDeg % S], secondsPerBeat * 2.0, 0.22);
+      }
+    }
+
+    // ── L3+ Tape strings: warm swelling pads (new instrument at +15) ──
+    if (level >= 1.0) {
+      // Slow sustained chord swells — only trigger every 8 beats
+      const strTrig = [1,0,0,0, 0,0,0,0, 1,0,0,0, 0,0,0,0, 1,0,0,0, 0,0,0,0, 1,0,0,0, 0,0,0,0];
+      const strTrigD = [1,0,0,0, 0,0,0,0, 1,0,0,0, 0,0,0,0, 1,0,0,0, 0,0,1,0, 1,0,0,0, 0,0,1,0];
+      const sPat = level >= 1.5 ? strTrigD : strTrig;
+      if (sPat[beat]) {
+        this._playTapeStrings(time, notes, secondsPerBeat * 6, 0.2);
+      }
+    }
+
+    // ── L4+ Kalimba: percussive melodic plucks (new instrument at +20) ──
+    if (level >= 1.5 && scale.length >= 3) {
+      const S = scale.length;
+      // Rhythmic plucked pattern — syncopated, playful
+      const kalP = [-1, 0,-1, 2,  -1,-1, 4,-1,   0,-1, 2,-1,  -1, 4,-1, 2,
+                    -1, 0,-1,-1,   2,-1, 0,-1,  -1, 4,-1, 2,   0,-1, 2, 4];
+      const kalDeg = kalP[beat];
+      if (kalDeg >= 0) {
+        this._playKalimba(time, scale[kalDeg % S] * 2, secondsPerBeat * 0.6, 0.25);
+      }
+    }
+  }
+
+  /**
+   * Chiptune-specific overlay: chip bass walks, chip arpeggio stabs, chip lead melody,
+   * and a triangle-wave NES lead. All square/triangle waves through existing signal chain.
+   */
+  _scheduleChiptuneOverlay(time, beat, chord, secondsPerBeat, level) {
+    const mainBass = BASS_PATTERNS.chiptune; // [1,0,1,0, ...]
+    const root = chord.root;
+    const notes = chord.notes;
+    const scale = chord.scale || [];
+
+    // ── Bass walk (gentle, fills gaps in main bass pattern) ──
+    const bassWalk = [0,1,0,1, 0,1,0,1, 0,1,0,1, 0,1,0,1, 0,1,0,1, 0,1,0,1, 0,1,0,1, 0,1,0,1];
+    if (bassWalk[beat] && !mainBass[beat]) {
+      const passingTones = [root * 2, notes[1] ? notes[1] / 2 : root * 1.5, root * 1.5];
+      this._playChipBass(time, passingTones[beat % passingTones.length], secondsPerBeat * 0.5);
+    }
+
+    if (scale.length < 3) return;
+    const S = scale.length;
+
+    // ── L1+ Triangle lead: gentle Zelda overworld melody ──
+    // Sparse, singable phrases with stepwise motion and rests to breathe
+    const leadA = [-1,-1,-1, 0,  -1,-1,-1, 2,  -1,-1,-1, 4,  -1,-1, 2,-1,
+                   -1,-1,-1, 0,  -1,-1, 2,-1,  -1,-1,-1,-1,  -1,-1, 0,-1];
+    const leadB = [-1,-1, 0,-1,  -1, 2,-1, 4,  -1,-1, 3,-1,  -1, 1,-1,-1,
+                   -1,-1, 2,-1,  -1, 4,-1, 3,  -1,-1, 1,-1,  -1, 0,-1,-1];
+    const leadC = [-1, 0,-1, 2,  -1, 3,-1, 4,  -1, 3,-1, 2,  -1, 0,-1,-1,
+                   -1, 2,-1, 4,  -1, 3,-1, 1,  -1, 0,-1, 2,  -1, 1,-1,-1];
+    const leadD = [-1, 0, 1, 2,  -1, 4,-1, 3,   2,-1, 0,-1,  -1, 2, 3, 4,
+                   -1, 3, 2, 1,  -1, 0,-1, 2,   4,-1, 3,-1,  -1, 1, 0,-1];
+
+    const lead = level >= 1.5 ? leadD : level >= 1.0 ? leadC : level >= 0.65 ? leadB : leadA;
+    const deg = lead[beat];
+    if (deg >= 0) {
+      this._playChipLead(time, scale[deg % S], secondsPerBeat * 0.8, 0.18);
+    }
+
+    // ── L2+ Harp arpeggios: fairy fountain broken chords ──
+    if (level >= 0.65) {
+      // Gentle ascending triads, one note at a time — like Zelda fairy fountain
+      const harpA = [-1,-1,-1,-1,  -1,-1,-1,-1,   0,-1,-1,-1,  -1,-1, 2,-1,
+                     -1,-1,-1,-1,   4,-1,-1,-1,  -1,-1,-1,-1,   2,-1,-1,-1];
+      const harpB = [-1,-1, 0,-1,  -1,-1, 2,-1,  -1,-1, 4,-1,  -1,-1, 2,-1,
+                     -1,-1, 0,-1,  -1,-1, 4,-1,  -1,-1, 2,-1,  -1,-1, 0,-1];
+      const harpC = [-1, 0,-1, 2,  -1, 4,-1, 2,  -1, 0,-1, 4,  -1, 2,-1, 0,
+                     -1, 4,-1, 2,  -1, 0,-1, 2,  -1, 4,-1, 0,  -1, 2,-1,-1];
+
+      const harp = level >= 1.5 ? harpC : level >= 1.0 ? harpB : harpA;
+      const hDeg = harp[beat];
+      if (hDeg >= 0) {
+        // High octave, short plucky notes, quiet
+        this._playChipLead(time, scale[hDeg % S] * 4, secondsPerBeat * 0.3, 0.10);
+      }
+    }
+
+    // ── L3+ SNES string pad: sustained chord swells every 8 beats ──
+    if (level >= 1.0 && beat % 8 === 0) {
+      const padNotes = notes.map(f => f * 2);
+      this._playChipPad(time, padNotes, secondsPerBeat * 6, 0.30);
+    }
+
+    // ── L4+ Counter-melody: octave-up duet responding in lead's rests ──
+    if (level >= 1.5) {
+      const ctr = [-1,-1,-1,-1,   4,-1,-1,-1,  -1,-1,-1,-1,   2,-1,-1, 0,
+                   -1,-1,-1,-1,  -1,-1, 4,-1,  -1, 3,-1,-1,   0,-1,-1,-1];
+      const cDeg = ctr[beat];
+      if (cDeg >= 0) {
+        this._playChipLead(time, scale[cDeg % S] * 2, secondsPerBeat * 0.6, 0.13);
+      }
+    }
+  }
+
+  /**
+   * Zelda-style overlay — heroic melodies with triplets, gallops, and dotted rhythms.
+   * Uses chip instruments. Encodes 5 techniques from the Zelda theme analysis:
+   * 1. Triplet/16th clash  2. Galloping effect  3. Strong downbeats
+   * 4. Rhythmic evolution  5. Dotted rhythm delay
+   */
+  _scheduleZeldaOverlay(time, beat, chord, secondsPerBeat, level) {
+    const mainBass = BASS_PATTERNS.zelda;
+    const root = chord.root;
+    const notes = chord.notes;
+    const scale = chord.scale || [];
+    const spb = secondsPerBeat; // shorthand for sub-beat math
+
+    // ── Bass walk (fills gaps in main bass) ──
+    const bassWalk = [0,1,0,0, 0,0,0,1, 0,1,0,0, 0,0,0,1, 0,1,0,0, 0,0,0,1, 0,1,0,0, 0,0,0,1];
+    if (bassWalk[beat] && !mainBass[beat]) {
+      const passingTones = [root * 2, notes[1] ? notes[1] / 2 : root * 1.5, root * 1.5];
+      this._playChipBass(time, passingTones[beat % passingTones.length], spb * 0.5);
+    }
+
+    if (scale.length < 3) return;
+    const S = scale.length;
+
+    // ── Main melody: root/fifth on strong downbeats (Technique 3) ──
+    // Always plays; density scales with level
+    const melA = [ 0,-1,-1, 2,  -1,-1,-1,-1,   4,-1,-1, 3,  -1,-1,-1,-1,
+                   0,-1,-1, 2,  -1,-1, 4,-1,  -1,-1, 3,-1,  -1,-1,-1,-1];
+    const melB = [ 0,-1, 1, 2,  -1,-1, 3,-1,   4,-1, 3, 2,  -1,-1, 0,-1,
+                   0,-1, 2,-1,  -1, 4,-1, 3,  -1,-1, 1,-1,  -1, 0,-1,-1];
+    const melC = [ 0, 1, 2, 3,  -1, 4,-1, 3,   2,-1, 0,-1,   4, 3, 2, 1,
+                   0,-1, 2, 4,  -1, 3,-1, 1,   0,-1, 2,-1,  -1, 4, 3,-1];
+    const melD = [ 0, 1, 2, 3,   4, 3, 2, 0,   2, 3, 4, 3,   2, 1, 0, 2,
+                   0, 2, 4, 3,   1, 0, 2, 4,   3, 2, 1, 0,   2, 4, 3, 1];
+
+    const mel = level >= 1.5 ? melD : level >= 1.0 ? melC : level >= 0.65 ? melB : melA;
+    const deg = mel[beat];
+    if (deg >= 0) {
+      this._playChipLead(time, scale[deg % S], spb * 0.8, 0.20);
+    }
+
+    // ── Galloping arpeggios (Techniques 2 & 5: dotted-8th + 16th) ──
+    // Always plays; density scales with level
+    const galA = [-1,-1,-1,-1,  -1,-1,-1,-1,  -1,-1,-1,-1,  -1,-1,-1,-1,
+                  -1,-1,-1,-1,  -1,-1,-1,-1,   2,-1,-1,-1,  -1,-1,-1,-1];
+    const galB = [-1,-1,-1,-1,   2,-1,-1,-1,  -1,-1,-1,-1,  -1,-1,-1,-1,
+                  -1,-1,-1,-1,   4,-1,-1,-1,   2,-1,-1,-1,  -1,-1,-1,-1];
+    const galC = [-1,-1,-1,-1,   2,-1,-1,-1,  -1,-1,-1,-1,   4,-1,-1,-1,
+                   0,-1,-1,-1,   3,-1,-1,-1,   2,-1,-1,-1,   5,-1,-1,-1];
+    const galD = [ 0,-1,-1,-1,   2,-1,-1,-1,   4,-1,-1,-1,   3,-1,-1,-1,
+                   0,-1,-1,-1,   3,-1,-1,-1,   2,-1,-1,-1,   5,-1,-1,-1];
+
+    const gal = level >= 1.5 ? galD : level >= 1.0 ? galC : level >= 0.65 ? galB : galA;
+    const gDeg = gal[beat];
+    if (gDeg >= 0) {
+      this._playChipLead(time, scale[gDeg % S] * 2, spb * 0.6, 0.12);
+      const next = (gDeg + 2) % S;
+      this._playChipLead(time + spb * 0.75, scale[next] * 2, spb * 0.2, 0.10);
+    }
+
+    // ── Triplet ornaments (Techniques 1 & 4: triplet/16th clash) ──
+    // Always plays; density scales with level
+    const triA = [-1,-1,-1,-1,  -1,-1,-1,-1,  -1,-1,-1,-1,   0,-1,-1,-1,
+                  -1,-1,-1,-1,  -1,-1,-1,-1,  -1,-1,-1,-1,   2,-1,-1,-1];
+    const triB = [-1,-1,-1,-1,  -1,-1, 0,-1,  -1,-1,-1,-1,   2,-1,-1,-1,
+                  -1,-1,-1,-1,  -1,-1, 3,-1,  -1,-1,-1,-1,   0,-1,-1,-1];
+    const triC = [-1,-1, 0,-1,  -1,-1, 2,-1,  -1,-1, 4,-1,   3,-1,-1,-1,
+                  -1,-1, 1,-1,  -1,-1, 3,-1,  -1,-1, 0,-1,   2,-1,-1,-1];
+    const triD = [ 0,-1, 2,-1,  -1,-1, 4,-1,   3,-1, 1,-1,   0,-1, 2,-1,
+                   4,-1, 3,-1,  -1,-1, 1,-1,   0,-1, 2,-1,   4,-1, 3,-1];
+
+    const tri = level >= 1.5 ? triD : level >= 1.0 ? triC : level >= 0.65 ? triB : triA;
+    const tDeg = tri[beat];
+    if (tDeg >= 0) {
+      for (let i = 0; i < 3; i++) {
+        const note = (tDeg + i) % S;
+        this._playChipLead(time + i * spb / 3, scale[note] * 2, spb * 0.25, 0.09);
+      }
+    }
+
+    // ── +10: Counter-melody + pad swells every 8 beats ──
+    if (level >= 0.65) {
+      const ctr = [-1,-1,-1,-1,   3,-1,-1,-1,  -1,-1,-1,-1,  -1,-1, 1,-1,
+                   -1,-1,-1,-1,  -1,-1,-1, 4,  -1,-1,-1,-1,   0,-1,-1,-1];
+      const cDeg = ctr[beat];
+      if (cDeg >= 0) {
+        this._playChipLead(time, scale[cDeg % S] * 2, spb * 0.6, 0.13);
+      }
+      if (beat % 8 === 0) {
+        const padNotes = notes.map(f => f * 2);
+        this._playChipPad(time, padNotes, spb * 6, 0.25);
+      }
+    }
+
+    // ── +15: Harmonic 3rds doubling melody + resolution arpeggios + pad every 4 ──
+    if (level >= 1.0) {
+      // Harmony voice: melody doubled a 3rd above for richness
+      if (deg >= 0) {
+        const harmony = (deg + 2) % S; // a 3rd above in the scale
+        this._playChipLead(time, scale[harmony] * 2, spb * 0.7, 0.11);
+      }
+
+      // Resolution arpeggios: descending chord tones landing on root (satisfying cadence)
+      const resA = [-1,-1,-1,-1,  -1,-1,-1,-1,  -1,-1,-1,-1,  -1,-1,-1, 4,
+                    -1,-1,-1,-1,  -1,-1,-1,-1,  -1,-1,-1,-1,  -1,-1,-1, 2];
+      const resDeg = resA[beat];
+      if (resDeg >= 0) {
+        // Descending 4-note arpeggio resolving to root over 1 beat
+        for (let i = 0; i < 4; i++) {
+          const rd = (resDeg - i + S) % S;
+          this._playChipLead(time + i * spb * 0.25, scale[rd], spb * 0.3, 0.14);
+        }
+      }
+
+      // Pad swells every 4 beats (denser than +10's every 8)
+      if (beat % 4 === 0) {
+        const padNotes = notes.map(f => f * 2);
+        this._playChipPad(time, padNotes, spb * 3, 0.20);
+      }
+
+      // Chip noise accents on strong beats for percussive texture
+      if (beat % 8 === 0) {
+        this._playChipNoise(time, spb * 0.15, 0.06);
+      }
+    }
+
+    // ── +20: Fanfare unisons + continuous pads + cadential resolution ──
+    if (level >= 1.5) {
+      // Fanfare: octave-doubled melody for power
+      if (deg >= 0) {
+        this._playChipLead(time, scale[deg % S] * 0.5, spb * 0.8, 0.15); // octave below
+        this._playChipLead(time, scale[deg % S] * 2, spb * 0.8, 0.10);   // octave above
+      }
+
+      // Continuous pad chord changes every 2 beats — full harmonic bed
+      if (beat % 2 === 0) {
+        const fullPad = [...notes, ...notes.map(f => f * 2)]; // doubled voicing
+        this._playChipPad(time, fullPad, spb * 1.8, 0.15);
+      }
+
+      // Cadential bass resolution: fifth → root on phrase endings
+      const cadBass = [-1,-1,-1,-1,  -1,-1,-1,-1,  -1,-1,-1,-1,  -1,-1, 1,-1,
+                       -1,-1,-1,-1,  -1,-1,-1,-1,  -1,-1,-1,-1,  -1,-1, 1,-1];
+      if (cadBass[beat] === 1) {
+        // Fifth of chord (approximated as root * 1.5), resolving to root next beat
+        this._playChipBass(time, root * 3, spb * 0.4);
+        this._playChipBass(time + spb * 0.5, root * 2, spb * 0.6);
+      }
+
+      // Sweep arpeggio: full ascending scale run every 16 beats
+      if (beat % 16 === 14) {
+        for (let i = 0; i < S; i++) {
+          this._playChipLead(time + i * spb * 0.15, scale[i] * 2, spb * 0.2, 0.08);
+        }
+      }
+    }
+  }
+
+  /**
+   * Chip lead — triangle wave, classic NES channel 3.
+   * Pure triangle with fast attack/decay for melodic lines.
+   */
+  _playChipLead(time, freq, duration, volume) {
+    const ctx = this._ctx;
+    const osc = ctx.createOscillator();
+    osc.type = 'triangle';
+    osc.frequency.value = freq;
+
+    // Vibrato LFO (subtle pitch wobble — classic NES feel)
+    const vib = ctx.createOscillator();
+    vib.type = 'sine';
+    vib.frequency.value = 6;
+    const vibGain = ctx.createGain();
+    vibGain.gain.value = 3; // ±3 Hz
+    vib.connect(vibGain);
+    vibGain.connect(osc.frequency);
+
+    const gain = ctx.createGain();
+    gain.gain.setValueAtTime(0.0001, time);
+    gain.gain.linearRampToValueAtTime(volume, time + 0.005);
+    gain.gain.setValueAtTime(volume, time + duration * 0.6);
+    gain.gain.linearRampToValueAtTime(0.0001, time + duration);
+
+    osc.connect(gain);
+    gain.connect(this._nodes.padFilter);
+
+    osc.start(time);
+    vib.start(time);
+    const stopTime = time + duration + 0.02;
+    osc.stop(stopTime);
+    vib.stop(stopTime);
+    this._trackSource(osc, stopTime + 0.05);
+    this._trackSource(vib, stopTime + 0.05);
+  }
+
+  /**
+   * Chip noise burst — short filtered noise for percussive texture.
+   * Like NES noise channel used for hats/effects.
+   */
+  _playChipNoise(time, duration, volume) {
+    const ctx = this._ctx;
+    const buf = ctx.createBuffer(1, Math.ceil(ctx.sampleRate * duration), ctx.sampleRate);
+    const data = buf.getChannelData(0);
+    // 1-bit style noise (quantized)
+    for (let i = 0; i < data.length; i++) {
+      data[i] = Math.random() > 0.5 ? 1 : -1;
+    }
+
+    const src = ctx.createBufferSource();
+    src.buffer = buf;
+
+    const bp = ctx.createBiquadFilter();
+    bp.type = 'bandpass';
+    bp.frequency.value = 4000;
+    bp.Q.value = 2;
+
+    const gain = ctx.createGain();
+    gain.gain.setValueAtTime(volume, time);
+    gain.gain.exponentialRampToValueAtTime(0.001, time + duration);
+
+    src.connect(bp);
+    bp.connect(gain);
+    gain.connect(this._nodes.drumBus);
+
+    src.start(time);
+    this._activeSources.add(src);
+    src.onended = () => this._activeSources.delete(src);
+  }
+
+  /**
+   * Classical-specific overlay: walking bass, counter-arpeggios, melodic scale runs.
+   * All routed through existing bassBus/padBus — same piano sound, more notes.
+   */
+  _scheduleClassicalOverlay(time, beat, chord, secondsPerBeat, level) {
+    const mainBass = BASS_PATTERNS.classical; // [1,0,0,0, 1,0,0,0, ...]
+    const root = chord.root;
+    const notes = chord.notes;
+    const scale = chord.scale || [];
+
+    // ── Level 1+: Walking bass (through bassBus) ──
+    // Main bass: every 4 beats. Fill with chord tones + passing notes.
+    const bassWalk1 = [0,0,1,0, 0,0,1,0, 0,0,1,0, 0,0,1,0, 0,0,1,0, 0,0,1,0, 0,0,1,0, 0,0,1,0];
+    const bassWalk2 = [0,1,1,0, 0,1,1,0, 0,1,1,0, 0,1,1,0, 0,1,1,0, 0,1,1,0, 0,1,1,0, 0,1,1,0];
+    const bassWalk3 = [0,1,1,1, 0,1,1,1, 0,1,1,1, 0,1,1,1, 0,1,1,1, 0,1,1,1, 0,1,1,1, 0,1,1,1];
+    const bassWalk4 = [0,1,1,1, 1,1,1,1, 0,1,1,1, 1,1,1,1, 0,1,1,1, 1,1,1,1, 0,1,1,1, 1,1,1,1];
+
+    const bassPat = level >= 1.5 ? bassWalk4 : level >= 1.0 ? bassWalk3 : level >= 0.65 ? bassWalk2 : bassWalk1;
+    if (bassPat[beat] && !mainBass[beat]) {
+      const passingTones = [root * 2, notes[1] ? notes[1] / 2 : root * 1.5, root * 1.5];
+      const bassNote = passingTones[beat % passingTones.length];
+      this._playBass(time, bassNote, secondsPerBeat * 1.5, 0.45);
+    }
+
+    // ── Level 1+: Counter-arpeggio stabs (short arpeggios on off-beats) ──
+    // Re-trigger the arpeggio as short rhythmic figures between the main 8-beat arp
+    const arp1 = [0,0,0,0, 1,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0, 1,0,0,0, 0,0,0,0, 0,0,0,0];
+    const arp2 = [0,0,0,0, 1,0,0,0, 0,0,0,0, 1,0,0,0, 0,0,0,0, 1,0,0,0, 0,0,0,0, 1,0,0,0];
+    const arp3 = [0,0,0,0, 1,0,0,0, 0,0,1,0, 1,0,0,0, 0,0,0,0, 1,0,0,0, 0,0,1,0, 1,0,0,0];
+    const arp4 = [0,0,1,0, 1,0,0,0, 0,0,1,0, 1,0,1,0, 0,0,1,0, 1,0,0,0, 0,0,1,0, 1,0,1,0];
+
+    const arpPat = level >= 1.5 ? arp4 : level >= 1.0 ? arp3 : level >= 0.65 ? arp2 : arp1;
+    if (arpPat[beat]) {
+      // Short 2-beat arpeggio with octave-up notes for contrast
+      const upNotes = notes.map(f => f * 2);
+      this._playArpeggio(time, upNotes, secondsPerBeat * 2, 0.4, secondsPerBeat);
+    }
+
+    // ── Level 1+: Melodic scale fills (individual piano notes) ──
+    const melody1 = [0,0,0,0, 0,0,1,0, 0,0,0,0, 0,0,1,0, 0,0,0,0, 0,0,1,0, 0,0,0,0, 0,0,1,0];
+    const melody2 = [0,0,0,1, 0,0,1,0, 0,0,0,1, 0,0,1,0, 0,0,0,1, 0,0,1,0, 0,0,0,1, 0,0,1,0];
+    const melody3 = [0,1,0,1, 0,0,1,0, 0,1,0,1, 0,0,1,0, 0,1,0,1, 0,0,1,0, 0,1,0,1, 0,0,1,0];
+    const melody4 = [1,1,0,1, 0,1,1,1, 1,1,0,1, 0,1,1,1, 1,1,0,1, 0,1,1,1, 1,1,0,1, 0,1,1,1];
+
+    const melPat = level >= 1.5 ? melody4 : level >= 1.0 ? melody3 : level >= 0.65 ? melody2 : melody1;
+    if (melPat[beat] && scale.length >= 3) {
+      const scaleIdx = beat % scale.length;
+      this._playMelodyNote(time, scale[scaleIdx], secondsPerBeat * 1.2, 0.22);
+    }
+
+    // ── Level 2+: Chord comping (short sustained chord hits) ──
+    if (level >= 0.65) {
+      const comp2 = [0,0,0,0, 0,0,0,1, 0,0,0,0, 0,0,0,1, 0,0,0,0, 0,0,0,1, 0,0,0,0, 0,0,0,1];
+      const comp3 = [0,0,0,1, 0,0,0,1, 0,0,0,0, 0,0,0,1, 0,0,0,1, 0,0,0,1, 0,0,0,0, 0,0,0,1];
+      const comp4 = [0,0,0,1, 0,0,0,1, 0,0,0,1, 0,0,0,1, 0,0,0,1, 0,0,0,1, 0,0,0,1, 0,0,0,1];
+      const compPat = level >= 1.5 ? comp4 : level >= 1.0 ? comp3 : comp2;
+      if (compPat[beat]) {
+        const cfg = STYLE_CONFIG.classical;
+        this._playChordPad(time, notes, secondsPerBeat * 1.5, 0.5, cfg.padAttack * 0.3, 0.3);
+      }
+    }
+
+    // ── Level 3+: Descending counter-melody (scale runs down) ──
+    if (level >= 1.0 && scale.length >= 4) {
+      const desc3 = [0,0,0,0, 0,1,0,0, 0,0,0,0, 0,1,0,0, 0,0,0,0, 0,1,0,0, 0,0,0,0, 0,1,0,0];
+      const desc4 = [0,0,0,0, 0,1,0,0, 0,0,0,1, 0,1,0,0, 0,0,0,0, 0,1,0,0, 0,0,0,1, 0,1,0,0];
+      const descPat = level >= 1.5 ? desc4 : desc3;
+      if (descPat[beat]) {
+        // Play a quick 3-note descending run
+        for (let i = 0; i < 3; i++) {
+          const idx = (scale.length - 1 - i) % scale.length;
+          const t = time + i * secondsPerBeat * 0.25;
+          this._playMelodyNote(t, scale[idx], secondsPerBeat * 0.6, 0.18);
+        }
+      }
+    }
+  }
+
+  /**
+   * Full-strength overlay kick — matches main kick quality.
+   */
+  _playOverlayKick(time) {
+    const ctx = this._ctx;
+    const osc1 = ctx.createOscillator();
+    osc1.type = 'triangle';
+    osc1.frequency.setValueAtTime(150, time);
+    osc1.frequency.exponentialRampToValueAtTime(55, time + 0.07);
+
+    const osc2 = ctx.createOscillator();
+    osc2.type = 'sine';
+    osc2.frequency.setValueAtTime(120, time);
+    osc2.frequency.exponentialRampToValueAtTime(40, time + 0.1);
+
+    const gain = ctx.createGain();
+    gain.gain.setValueAtTime(0.7, time);
+    gain.gain.exponentialRampToValueAtTime(0.001, time + 0.25);
+
+    osc1.connect(gain);
+    osc2.connect(gain);
+    gain.connect(this._nodes.overlayBus);
+
+    osc1.start(time);
+    osc2.start(time);
+    osc1.stop(time + 0.3);
+    osc2.stop(time + 0.3);
+    this._trackSource(osc1, time + 0.35);
+    this._trackSource(osc2, time + 0.35);
+  }
+
+  /**
+   * Full-strength overlay snare — noise body + tonal sine body.
+   */
+  _playOverlaySnare(time) {
+    const ctx = this._ctx;
+    const src = ctx.createBufferSource();
+    src.buffer = this._nodes.ghostSnareBuf;
+    src.playbackRate.value = 0.9 + Math.random() * 0.2;
+
+    const bp = ctx.createBiquadFilter();
+    bp.type = 'bandpass';
+    bp.frequency.value = 2500;
+    bp.Q.value = 0.8;
+
+    // Tonal body
+    const osc = ctx.createOscillator();
+    osc.type = 'sine';
+    osc.frequency.value = 200;
+    const oscGain = ctx.createGain();
+    oscGain.gain.setValueAtTime(0.15, time);
+    oscGain.gain.exponentialRampToValueAtTime(0.001, time + 0.08);
+    osc.connect(oscGain);
+
+    const gain = ctx.createGain();
+    gain.gain.value = 0.35;
+
+    src.connect(bp);
+    bp.connect(gain);
+    oscGain.connect(gain);
+    gain.connect(this._nodes.overlayBus);
+
+    src.start(time);
+    osc.start(time);
+    osc.stop(time + 0.1);
+    this._activeSources.add(src);
+    src.onended = () => this._activeSources.delete(src);
+    this._trackSource(osc, time + 0.12);
+  }
+
+  /**
+   * Shaker noise burst for rhythmic texture.
+   */
+  _playOverlayShaker(time) {
+    const ctx = this._ctx;
+    const src = ctx.createBufferSource();
+    src.buffer = this._nodes.shakerBuf;
+    src.playbackRate.value = 0.95 + Math.random() * 0.1;
+
+    const bp = ctx.createBiquadFilter();
+    bp.type = 'bandpass';
+    bp.frequency.value = 8000;
+    bp.Q.value = 1.5;
+
+    const gain = ctx.createGain();
+    gain.gain.value = 0.06;
+
+    src.connect(bp);
+    bp.connect(gain);
+    gain.connect(this._nodes.overlayBus);
+
+    src.start(time);
+    this._activeSources.add(src);
+    src.onended = () => this._activeSources.delete(src);
+  }
+
   // ─── Style-Specific Synthesis ───────────────────────────────────────────
 
   /**
    * Heavy 808 trap kick — longer sustain, deeper sub.
    */
   _playTrapKick(time) {
+    if (this._playSample('kick', time, 1.0, 5)) return;
     const ctx = this._ctx;
 
     // Main 808 body — deep sweep for that Metro Boomin thump
@@ -1378,6 +2436,7 @@ export class LofiEngine {
    * Soft kick for bossa — lighter, higher, faster decay.
    */
   _playKickSoft(time) {
+    if (this._playSample('kick', time, 0.6, 10)) return;
     const ctx = this._ctx;
     const osc = ctx.createOscillator();
     osc.type = 'triangle';
@@ -1399,6 +2458,7 @@ export class LofiEngine {
    * Trap clap — layered noise bursts (classic 808 clap).
    */
   _playClap(time) {
+    if (this._playSample('snare', time, 0.9, 8)) return;
     const ctx = this._ctx;
     const burstCount = 4;
     const burstGap = 0.012;
@@ -1466,6 +2526,7 @@ export class LofiEngine {
    * Bossa rim click — short triangle ping, wooden stick sound.
    */
   _playRimClick(time) {
+    if (this._playSample('snare', time, 0.7, 6)) return;
     const ctx = this._ctx;
     const osc = ctx.createOscillator();
     osc.type = 'triangle';
@@ -1486,6 +2547,7 @@ export class LofiEngine {
    * Chiptune kick — square wave pitch drop.
    */
   _playChipKick(time) {
+    if (this._playSample('kick', time, 0.85, 3)) return;
     const ctx = this._ctx;
     const osc = ctx.createOscillator();
     osc.type = 'square';
@@ -1507,6 +2569,7 @@ export class LofiEngine {
    * Chiptune snare — short noise burst, harsh.
    */
   _playChipSnare(time) {
+    if (this._playSample('snare', time, 0.8, 5)) return;
     const ctx = this._ctx;
     const dur = 0.06;
     const buf = ctx.createBuffer(1, ctx.sampleRate * dur, ctx.sampleRate);
@@ -1530,6 +2593,7 @@ export class LofiEngine {
    * Chiptune hi-hat — very short high-pitched square.
    */
   _playChipHat(time) {
+    if (this._playSample('hatClosed', time, 0.7, 5)) return;
     const ctx = this._ctx;
     const osc = ctx.createOscillator();
     osc.type = 'square';
@@ -1555,6 +2619,8 @@ export class LofiEngine {
    * Trap hi-hat — higher pitched, sharper.
    */
   _playTrapHat(time, decayTime, volume) {
+    const isOpen = decayTime >= 0.15;
+    if (this._playSample(isOpen ? 'hatOpen' : 'hatClosed', time, (volume || 0.25) * 2.8, 10)) return;
     const ctx = this._ctx;
     const fundamental = 80;
     const ratios = [2, 3, 4.16, 5.43, 6.79, 8.21, 10.5];
@@ -1603,6 +2669,8 @@ export class LofiEngine {
    * Soft hi-hat for bossa — gentler, lower volume.
    */
   _playHiHatSoft(time, decayTime, volume) {
+    const isOpen = decayTime >= 0.15;
+    if (this._playSample(isOpen ? 'hatOpen' : 'hatClosed', time, (volume || 0.2) * 2, 15)) return;
     this._playHiHat(time, decayTime, volume * 0.5);
   }
 
@@ -1958,6 +3026,214 @@ export class LofiEngine {
     osc2.stop(time + duration + 0.02);
     this._trackSource(osc, time + duration + 0.05);
     this._trackSource(osc2, time + duration + 0.05);
+  }
+
+  /**
+   * Rhodes electric piano — warm bell-like tone with subtle tremolo.
+   * Sine fundamental + detuned sine for warmth + amplitude tremolo LFO.
+   * Routed through padFilter for consistent lo-fi warmth.
+   */
+  _playRhodes(time, freqs, duration, volume) {
+    const ctx = this._ctx;
+    const vol = volume / freqs.length; // scale per-note volume
+
+    for (const freq of freqs) {
+      // Fundamental sine
+      const osc1 = ctx.createOscillator();
+      osc1.type = 'sine';
+      osc1.frequency.value = freq;
+
+      // Slightly detuned sine for chorus/warmth
+      const osc2 = ctx.createOscillator();
+      osc2.type = 'sine';
+      osc2.frequency.value = freq * 1.003; // ~5 cent detune
+
+      // Second harmonic (bell overtone)
+      const osc3 = ctx.createOscillator();
+      osc3.type = 'sine';
+      osc3.frequency.value = freq * 2;
+      const harm = ctx.createGain();
+      harm.gain.value = 0.12; // subtle bell
+
+      // Amplitude envelope: fast attack, medium decay, low sustain
+      const env = ctx.createGain();
+      env.gain.setValueAtTime(0.0001, time);
+      env.gain.linearRampToValueAtTime(vol, time + 0.008);
+      env.gain.setTargetAtTime(vol * 0.4, time + 0.008, 0.15); // decay to 40%
+      env.gain.setTargetAtTime(0.001, time + duration * 0.7, duration * 0.2);
+
+      // Tremolo LFO (~4.5Hz, subtle)
+      const lfo = ctx.createOscillator();
+      lfo.type = 'sine';
+      lfo.frequency.value = 4.5;
+      const lfoGain = ctx.createGain();
+      lfoGain.gain.value = vol * 0.15; // 15% depth
+
+      // Routing
+      const mix = ctx.createGain();
+      mix.gain.value = 1.0;
+
+      osc1.connect(mix);
+      osc2.connect(mix);
+      osc3.connect(harm);
+      harm.connect(mix);
+      mix.connect(env);
+      lfo.connect(lfoGain);
+      lfoGain.connect(env.gain); // modulate amplitude
+      env.connect(this._nodes.padFilter || this._nodes.padBus);
+
+      osc1.start(time);
+      osc2.start(time);
+      osc3.start(time);
+      lfo.start(time);
+      const stopTime = time + duration + 0.05;
+      osc1.stop(stopTime);
+      osc2.stop(stopTime);
+      osc3.stop(stopTime);
+      lfo.stop(stopTime);
+      this._trackSource(osc1, stopTime + 0.05);
+      this._trackSource(osc2, stopTime + 0.05);
+      this._trackSource(osc3, stopTime + 0.05);
+      this._trackSource(lfo, stopTime + 0.05);
+    }
+  }
+
+  /**
+   * Vibraphone — sine wave with slow tremolo and long sustain.
+   * Dreamy, bell-like mallet sound. Routed through padFilter for lo-fi warmth.
+   */
+  _playVibraphone(time, freq, duration, volume) {
+    const ctx = this._ctx;
+
+    // Pure sine fundamental
+    const osc = ctx.createOscillator();
+    osc.type = 'sine';
+    osc.frequency.value = freq;
+
+    // Soft 3rd harmonic (bell overtone)
+    const osc2 = ctx.createOscillator();
+    osc2.type = 'sine';
+    osc2.frequency.value = freq * 3;
+    const harmGain = ctx.createGain();
+    harmGain.gain.value = 0.06;
+    osc2.connect(harmGain);
+
+    // Envelope: soft attack, long sustain, gentle release
+    const env = ctx.createGain();
+    env.gain.setValueAtTime(0.0001, time);
+    env.gain.linearRampToValueAtTime(volume, time + 0.04);
+    env.gain.setTargetAtTime(volume * 0.6, time + 0.04, 0.3);
+    env.gain.setTargetAtTime(0.001, time + duration * 0.7, duration * 0.25);
+
+    // Slow tremolo (~3Hz — classic vibraphone motor speed)
+    const lfo = ctx.createOscillator();
+    lfo.type = 'sine';
+    lfo.frequency.value = 3;
+    const lfoGain = ctx.createGain();
+    lfoGain.gain.value = volume * 0.25;
+    lfo.connect(lfoGain);
+    lfoGain.connect(env.gain);
+
+    osc.connect(env);
+    harmGain.connect(env);
+    env.connect(this._nodes.padFilter || this._nodes.padBus);
+
+    osc.start(time);
+    osc2.start(time);
+    lfo.start(time);
+    const stopTime = time + duration + 0.05;
+    osc.stop(stopTime);
+    osc2.stop(stopTime);
+    lfo.stop(stopTime);
+    this._trackSource(osc, stopTime + 0.05);
+    this._trackSource(osc2, stopTime + 0.05);
+    this._trackSource(lfo, stopTime + 0.05);
+  }
+
+  /**
+   * Tape strings — warm filtered sawtooth with slow attack.
+   * Emulates lo-fi string section recorded to tape. Routed through padFilter.
+   */
+  _playTapeStrings(time, noteFreqs, duration, volume) {
+    const ctx = this._ctx;
+    const vol = volume / noteFreqs.length;
+
+    for (const freq of noteFreqs) {
+      // Sawtooth for rich harmonic content
+      const osc = ctx.createOscillator();
+      osc.type = 'sawtooth';
+      osc.frequency.value = freq;
+
+      // Detuned second voice for ensemble width
+      const osc2 = ctx.createOscillator();
+      osc2.type = 'sawtooth';
+      osc2.frequency.value = freq * 1.005;
+
+      // Heavy lowpass — makes it warm and tape-like
+      const lp = ctx.createBiquadFilter();
+      lp.type = 'lowpass';
+      lp.frequency.value = 1200;
+      lp.Q.value = 0.5;
+
+      // Slow swell envelope
+      const env = ctx.createGain();
+      env.gain.setValueAtTime(0.0001, time);
+      env.gain.linearRampToValueAtTime(vol, time + duration * 0.35);
+      env.gain.setValueAtTime(vol, time + duration * 0.6);
+      env.gain.linearRampToValueAtTime(0.0001, time + duration);
+
+      osc.connect(lp);
+      osc2.connect(lp);
+      lp.connect(env);
+      env.connect(this._nodes.padFilter || this._nodes.padBus);
+
+      osc.start(time);
+      osc2.start(time);
+      osc.stop(time + duration + 0.05);
+      osc2.stop(time + duration + 0.05);
+      this._trackSource(osc, time + duration + 0.1);
+      this._trackSource(osc2, time + duration + 0.1);
+    }
+  }
+
+  /**
+   * Kalimba — metallic plucked thumb piano.
+   * Sine with sharp attack, quick decay, and a subtle metallic overtone.
+   */
+  _playKalimba(time, freq, duration, volume) {
+    const ctx = this._ctx;
+
+    // Sine fundamental
+    const osc = ctx.createOscillator();
+    osc.type = 'sine';
+    osc.frequency.value = freq;
+
+    // Metallic overtone (slightly inharmonic — freq * 5.4 for that kalimba ring)
+    const osc2 = ctx.createOscillator();
+    osc2.type = 'sine';
+    osc2.frequency.value = freq * 5.4;
+    const metalGain = ctx.createGain();
+    metalGain.gain.setValueAtTime(0.08, time);
+    metalGain.gain.exponentialRampToValueAtTime(0.001, time + 0.15);
+    osc2.connect(metalGain);
+
+    // Pluck envelope: instant attack, fast decay to low sustain
+    const env = ctx.createGain();
+    env.gain.setValueAtTime(volume, time);
+    env.gain.setTargetAtTime(volume * 0.15, time + 0.005, 0.08);
+    env.gain.setTargetAtTime(0.001, time + duration * 0.5, duration * 0.3);
+
+    osc.connect(env);
+    metalGain.connect(env);
+    env.connect(this._nodes.padFilter || this._nodes.padBus);
+
+    osc.start(time);
+    osc2.start(time);
+    const stopTime = time + duration + 0.05;
+    osc.stop(stopTime);
+    osc2.stop(stopTime);
+    this._trackSource(osc, stopTime + 0.05);
+    this._trackSource(osc2, stopTime + 0.05);
   }
 
   // ─── Vinyl Crackle ──────────────────────────────────────────────────────

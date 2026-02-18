@@ -7,8 +7,8 @@
  * @module rhythm-remix
  */
 
-import { LofiEngine } from './lofi-engine.js?v=20260218p';
-import { MountainRange } from './mountain-range.js?v=20260218p';
+import { LofiEngine } from './lofi-engine.js?v=20260219y';
+import { MountainRange } from './mountain-range.js?v=20260219y';
 import { getAudioBlob } from './audio-store.js';
 import { getAssessment, getStudents } from './storage.js';
 import { getPunctuationPositions } from './diagnostics.js';
@@ -97,6 +97,14 @@ let sentenceAlignedEnabled = false;
 let celebrationsEnabled = false;
 let melodyEnabled = false;
 let adaptiveHarmonyEnabled = false;
+
+/** Adaptive tempo state. */
+const ADAPTIVE_WINDOW = 4;    // spoken words in rolling window
+let recentWordTimes = [];      // [{ start, end }, ...]
+let playbackRate = 1;          // from speed selector
+
+/** Overlay streak: correct words in a row → richer beat. */
+let correctStreak = 0;
 
 /** Adaptive harmony: rolling fluency window. */
 const HARMONY_WINDOW = 12;
@@ -226,6 +234,59 @@ function updateSpring(dt) {
 function wcpmToBpm(wcpm) {
   const raw = 60 + ((wcpm - 40) * 30 / 140);
   return Math.max(55, Math.min(100, raw));
+}
+
+// ── Adaptive tempo — beat tracks reading pace ────────────────────────────────
+
+function adaptiveWpmToBpm(wpm) {
+  // 30-180 WPM → 50-110 BPM (wider range than wcpmToBpm)
+  const raw = 50 + ((wpm - 30) * 60 / 150);
+  return Math.max(50, Math.min(110, raw));
+}
+
+function updateAdaptiveTempo(toIdx) {
+  if (!lofi || toIdx < 0 || toIdx >= wordSequence.length) return;
+  const w = wordSequence[toIdx];
+  if (!w || w.startTime < 0) return; // skip omissions
+
+  recentWordTimes.push({ start: w.startTime, end: w.endTime });
+  if (recentWordTimes.length > ADAPTIVE_WINDOW) recentWordTimes.shift();
+  if (recentWordTimes.length < 3) return; // not enough data
+
+  const firstStart = recentWordTimes[0].start;
+  const lastEnd = recentWordTimes[recentWordTimes.length - 1].end;
+  const span = lastEnd - firstStart;
+  if (span < 0.5) return; // ASR artifact / bunched timestamps
+
+  const localWPM = (recentWordTimes.length - 1) / span * 60;
+  const localBPM = adaptiveWpmToBpm(localWPM);
+  lofi.setTempoSmoothed(localBPM * playbackRate);
+}
+
+// ── Overlay streak — correct words build richer beat ─────────────────────────
+
+/**
+ * Update overlay level based on correct-word streak.
+ * Level 0: <2 correct  — base beat
+ * Level 1: 2+ correct  — overlay 0.35 (extra drums + chord doublings)
+ * Level 2: 4+ correct  — overlay 0.65 (thicker chords + shaker)
+ * Level 3: 6+ correct  — overlay 1.0  (full: extended chords + dense drums)
+ * Level 4: 8+ correct  — overlay 1.5  (double density: maximum musical depth)
+ */
+function updateOverlayStreak(w) {
+  if (!lofi) return;
+  const isCorrect = (w.type === 'correct' || w.forgiven) && !w.isOmission;
+  if (isCorrect) {
+    correctStreak++;
+  } else {
+    correctStreak = 0;
+  }
+  let level = 0;
+  if (correctStreak >= 8) level = 1.5;
+  else if (correctStreak >= 6) level = 1.0;
+  else if (correctStreak >= 4) level = 0.65;
+  else if (correctStreak >= 2) level = 0.35;
+  lofi.setOverlayLevel(level);
 }
 
 // ── Study Beats FM — DJ Intro via Gemini TTS ────────────────────────────────
@@ -402,6 +463,8 @@ function playDJIntroThenReading() {
  */
 function startReadingPlayback() {
   if (!audioEl) return;
+  recentWordTimes = []; // reset adaptive tempo for fresh playback
+  correctStreak = 0;    // reset overlay streak
   audioEl.play().then(() => {
     isPlaying = true;
     setVinylPlaying(true);
@@ -605,6 +668,12 @@ function onWordChange(fromIdx, toIdx) {
     const fluency = harmonyHistory.filter(Boolean).length / harmonyHistory.length;
     lofi.setHarmonyMood(fluency);
   }
+
+  // ── Adaptive tempo: beat tracks reading pace ──
+  updateAdaptiveTempo(toIdx);
+
+  // ── Overlay streak: correct words build richer beat ──
+  updateOverlayStreak(w);
 
   // ── Mountain range: reveal peak ──
   if (mountainRange) {
@@ -1062,7 +1131,21 @@ function animationLoop(timestamp) {
     }
   }
 
-  // 9. Update chord badge
+  // 9. Update BPM display (throttled with waveform)
+  if (lofi && waveformFrameSkip === 0) {
+    const bpmEl = document.getElementById('bpmDisplay');
+    if (bpmEl) {
+      let text = Math.round(lofi.currentBpm) + ' bpm';
+      const ol = lofi.overlayLevel;
+      if (ol >= 1.5) text += ' · +8';
+      else if (ol >= 1.0) text += ' · +6';
+      else if (ol >= 0.65) text += ' · +4';
+      else if (ol >= 0.35) text += ' · +2';
+      bpmEl.textContent = text;
+    }
+  }
+
+  // 10. Update chord badge
   updateChordBadge();
 
   animFrameId = requestAnimationFrame(animationLoop);
@@ -1240,9 +1323,11 @@ function wireControls() {
   if (speedSelect) {
     speedSelect.addEventListener('change', () => {
       const rate = parseFloat(speedSelect.value) || 1;
+      playbackRate = rate;
       if (audioEl) audioEl.playbackRate = rate;
-      // Adjust lofi tempo proportionally
-      if (lofi && assessment) {
+      // If adaptive tempo has data, let next updateAdaptiveTempo compose with new rate.
+      // Otherwise set tempo directly from WCPM baseline.
+      if (recentWordTimes.length < 3 && lofi && assessment) {
         const baseBpm = wcpmToBpm(assessment.wcpm || 80);
         lofi.setTempo(baseBpm * rate);
       }
