@@ -196,6 +196,18 @@ function bezierArc(p0x, p0y, p1x, p1y, t) {
   };
 }
 
+// ── Color lerp utility ──────────────────────────────────────────────────
+
+function lerpColor(a, b, t) {
+  const ah = parseInt(a.slice(1), 16), bh = parseInt(b.slice(1), 16);
+  const ar = ah >> 16, ag = (ah >> 8) & 0xff, ab = ah & 0xff;
+  const br = bh >> 16, bg = (bh >> 8) & 0xff, bb = bh & 0xff;
+  const r = Math.round(ar + (br - ar) * t);
+  const g = Math.round(ag + (bg - ag) * t);
+  const bl = Math.round(ab + (bb - ab) * t);
+  return '#' + ((1 << 24) | (r << 16) | (g << 8) | bl).toString(16).slice(1);
+}
+
 // ── Spring physics ───────────────────────────────────────────────────────────
 
 function updateSpring(dt) {
@@ -601,9 +613,16 @@ function onWordChange(fromIdx, toIdx) {
   if (!rect) return;
 
   // Determine ball color based on word type
+  ball.scTransition = false;
+  ball.scTransitionStart = 0;
   if (w.isOmission) {
     ball.color = WORD_COLORS.omission;
     ball.glowColor = WORD_COLORS.omission;
+  } else if (w.selfCorrected) {
+    // Start amber (struggle), will transition to green on landing
+    ball.color = WORD_COLORS.struggle;
+    ball.glowColor = WORD_COLORS.struggle;
+    ball.scTransition = true;
   } else if (w.isStruggle) {
     ball.color = WORD_COLORS.struggle;
     ball.glowColor = WORD_COLORS.struggle;
@@ -695,7 +714,11 @@ function updateBallPhysics(dt) {
 
     // Spawn arrival particles
     if (!prefersReducedMotion && w) {
-      if (w.type === 'correct' || w.forgiven) {
+      if (w.selfCorrected) {
+        // Struggle dissipating (amber, fast fade) + success emerging (green, longer)
+        spawnParticles(ball.x, ball.y, WORD_COLORS.struggle, 3, { vy: -60, spread: 25, life: 0.3, size: 2 });
+        spawnParticles(ball.x, ball.y, WORD_COLORS.correct, 5, { vy: -50, spread: 40, life: 0.6, size: 3 });
+      } else if (w.type === 'correct' || w.forgiven) {
         spawnParticles(ball.x, ball.y, WORD_COLORS.correct, 4, { vy: -50, spread: 30, life: 0.5, size: 2.5 });
       } else if (w.isStruggle || w.type === 'substitution') {
         spawnParticles(ball.x, ball.y, WORD_COLORS.struggle, 2, { vy: -30, spread: 15, life: 0.4, size: 2 });
@@ -714,6 +737,18 @@ function updateBallPhysics(dt) {
   if (ball.phase === 'dwelling' || ball.phase === 'wobbling') {
     updateSpring(dt);
     ball.y = ball.travelEndY + ball.springY;
+
+    // Self-correction color transition: amber → green over 0.4s
+    if (ball.scTransition && ball.phase === 'dwelling') {
+      if (!ball.scTransitionStart) ball.scTransitionStart = now;
+      const t = Math.min((now - ball.scTransitionStart) / 0.4, 1);
+      ball.color = lerpColor(WORD_COLORS.struggle, WORD_COLORS.correct, t);
+      ball.glowColor = ball.color;
+      if (t >= 1) {
+        ball.scTransition = false;
+        ball.scTransitionStart = 0;
+      }
+    }
 
     // Horizontal wobble for error/struggle words
     if (ball.phase === 'wobbling' && !prefersReducedMotion) {
@@ -770,12 +805,13 @@ function updateWordClasses(idx) {
 
     el.classList.remove(
       'active', 'done-correct', 'done-error', 'done-struggle',
-      'done-omission', 'upcoming'
+      'done-omission', 'done-self-corrected', 'upcoming'
     );
 
     if (i < idx) {
       // Past words
-      if (w.type === 'correct' || w.forgiven) el.classList.add('done-correct');
+      if (w.selfCorrected) el.classList.add('done-self-corrected');
+      else if (w.type === 'correct' || w.forgiven) el.classList.add('done-correct');
       else if (w.isOmission) el.classList.add('done-omission');
       else if (w.isStruggle) el.classList.add('done-struggle');
       else el.classList.add('done-error');
@@ -1101,7 +1137,8 @@ function onAudioEnded() {
     const w = wordSequence[i];
     if (!w.el) continue;
     w.el.classList.remove('active', 'upcoming');
-    if (w.type === 'correct' || w.forgiven) w.el.classList.add('done-correct');
+    if (w.selfCorrected) w.el.classList.add('done-self-corrected');
+    else if (w.type === 'correct' || w.forgiven) w.el.classList.add('done-correct');
     else if (w.isOmission) w.el.classList.add('done-omission');
     else if (w.isStruggle) w.el.classList.add('done-struggle');
     else w.el.classList.add('done-error');
@@ -1333,6 +1370,7 @@ function buildWordSequence(alignment, sttWords) {
       isStruggle: !!entry._isStruggle,
       isOmission: type === 'omission',
       forgiven: !!entry.forgiven,
+      selfCorrected: !!entry._selfCorrected,
       sentenceFinal: isSentenceFinal,
       gapAfter: 0, // filled below
     });

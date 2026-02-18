@@ -331,6 +331,11 @@ body::before {
   opacity: 0.5;
 }
 
+/* Self-corrected: amber flash → green settle */
+.word-span.done-self-corrected {
+  color: var(--rm-correct);
+  opacity: 1;
+  animation: scResolve 0.5s ease-out;
 }
 
 /* ============================================================
@@ -740,6 +745,12 @@ body::before {
   to   { opacity: 1; transform: translateY(0); }
 }
 
+@keyframes scResolve {
+  0%   { background: rgba(232, 168, 124, 0.25); color: var(--rm-error); }
+  60%  { background: rgba(168, 216, 168, 0.15); color: var(--rm-correct); }
+  100% { background: transparent; color: var(--rm-correct); }
+}
+
 /* ============================================================
    REDUCED MOTION
    ============================================================ */
@@ -755,6 +766,10 @@ body::before {
   }
 
   .word-span.done-struggle {
+    animation: none;
+  }
+
+  .word-span.done-self-corrected {
     animation: none;
   }
 
