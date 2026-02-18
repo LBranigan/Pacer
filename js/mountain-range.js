@@ -56,14 +56,14 @@ const SKY_STOPS = [
 function generateStars(count, w, h) {
   const stars = [];
   for (let i = 0; i < count; i++) {
-    const bright = Math.random() < 0.15; // 15% chance of a bright star
+    const bright = Math.random() < 0.25; // 25% chance of a bright star
     stars.push({
       x: Math.random() * w,
       y: Math.random() * h,
-      size: bright ? (1.2 + Math.random() * 1.0) : (0.7 + Math.random() * 1.0),
-      baseAlpha: bright ? (0.6 + Math.random() * 0.3) : (0.3 + Math.random() * 0.35),
+      size: bright ? (1.4 + Math.random() * 1.2) : (0.7 + Math.random() * 1.0),
+      baseAlpha: bright ? (0.7 + Math.random() * 0.3) : (0.35 + Math.random() * 0.4),
       phase: Math.random() * Math.PI * 2,
-      freq: bright ? (1.5 + Math.random() * 2.0) : (0.4 + Math.random() * 1.2),
+      freq: bright ? (2.5 + Math.random() * 3.0) : (1.0 + Math.random() * 2.0),
     });
   }
   return stars;
@@ -131,7 +131,7 @@ export class MountainRange {
     this._exportBtn = null;
 
     this._resize();
-    this._stars = generateStars(40, this._w, this._h);
+    this._stars = generateStars(65, this._w, this._h);
     this._draw(0);
 
     // ResizeObserver
@@ -291,7 +291,7 @@ export class MountainRange {
     this._canvas.height = h;
     this._canvas.style.width = w + 'px';
     this._canvas.style.height = h + 'px';
-    this._stars = generateStars(40, w, h);
+    this._stars = generateStars(65, w, h);
   }
 
   _rebuildBars() {
@@ -358,8 +358,9 @@ export class MountainRange {
     // ── Stars (bright twinkle) ──────────────────────────────────────────
     const t = this._elapsed;
     for (const star of this._stars) {
+      const raw = Math.sin(t * star.freq + star.phase);
       const twinkle = REDUCED_MOTION ? 1.0
-        : 0.3 + 0.7 * Math.sin(t * star.freq + star.phase);
+        : 0.15 + 0.85 * Math.max(0, raw);
       ctx.globalAlpha = star.baseAlpha * twinkle;
       ctx.fillStyle = '#fff';
       ctx.beginPath();
