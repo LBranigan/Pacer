@@ -7,8 +7,8 @@
  * @module rhythm-remix
  */
 
-import { LofiEngine } from './lofi-engine.js?v=20260219z5';
-import { MountainRange } from './mountain-range.js?v=20260219z5';
+import { LofiEngine } from './lofi-engine.js?v=20260219z6';
+import { MountainRange } from './mountain-range.js?v=20260219z6';
 import { getAudioBlob } from './audio-store.js';
 import { getAssessment, getStudents } from './storage.js';
 import { getPunctuationPositions } from './diagnostics.js';
@@ -59,7 +59,6 @@ let previousWordIdx = -1;
 /** Teleprompter: 2-line scrolling window. */
 let lineGroups = [];     // array of arrays: lineGroups[lineIdx] = [wordIdx, ...]
 let currentLinePair = 0; // which pair of lines is visible (0 = lines 0-1, 1 = lines 2-3, ...)
-let isScrolling = false; // true during scroll animation
 
 let audioCtx = null;
 let lofi = null;
@@ -440,7 +439,6 @@ function startReadingPlayback() {
   if (!audioEl) return;
   correctStreak = 0;    // reset overlay streak
   currentLinePair = 0;  // reset teleprompter scroll
-  isScrolling = false;
   const wa = document.getElementById('word-area');
   if (wa) wa.scrollTop = 0;
   audioEl.play().then(() => {
@@ -551,7 +549,7 @@ function setupTeleprompterHeight() {
  * Scroll to the correct line pair when the ball enters a new 2-line group.
  */
 function teleprompterScroll(wordIdx) {
-  if (isScrolling || lineGroups.length <= 2) return;
+  if (lineGroups.length <= 2) return;
   const wordArea = document.getElementById('word-area');
   if (!wordArea) return;
 
@@ -572,15 +570,10 @@ function teleprompterScroll(wordIdx) {
   const padTop = parseFloat(getComputedStyle(wordArea).paddingTop) || 0;
   const targetScroll = firstEl.offsetTop - padTop;
 
-  isScrolling = true;
-  wordArea.scrollTo({ top: targetScroll, behavior: 'smooth' });
-
-  // Re-cache rects after scroll animation settles
-  setTimeout(() => {
-    cacheWordRects();
-    sizeCanvas();
-    isScrolling = false;
-  }, 350);
+  // Instant scroll + immediate re-cache so ball targets are correct
+  wordArea.scrollTop = targetScroll;
+  cacheWordRects();
+  sizeCanvas();
 }
 
 // ── Canvas sizing ────────────────────────────────────────────────────────────
@@ -685,7 +678,6 @@ function onWordChange(fromIdx, toIdx) {
 
   previousWordIdx = fromIdx;
   const w = wordSequence[toIdx];
-  const rect = wordRects[toIdx];
 
   // Sentence-aligned chord: advance when leaving a sentence-final word
   if (sentenceAlignedEnabled && lofi && fromIdx >= 0) {
@@ -752,8 +744,11 @@ function onWordChange(fromIdx, toIdx) {
   // ── Overlay streak: correct words build richer beat ──
   updateOverlayStreak(w);
 
-  // ── Teleprompter scroll ──
+  // ── Teleprompter scroll (may re-cache wordRects) ──
   teleprompterScroll(toIdx);
+
+  // Read rect AFTER scroll so positions are fresh
+  const rect = wordRects[toIdx];
 
   // ── Mountain range: reveal peak ──
   if (mountainRange) {
