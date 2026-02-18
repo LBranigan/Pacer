@@ -37,6 +37,9 @@ button { padding: 0.6rem 1.4rem; border: none; border-radius: 4px; font-size: 1r
 .metric-box-readability { background: #e8f5e9; border-color: #a5d6a7; cursor: help; }
 .readability-grade { color: #2e7d32; font-size: 1.3rem; }
 
+/* Benchmark status box */
+.metric-box-benchmark { cursor: help; }
+
 /* Data quality warning */
 .data-quality-warning {
   background: #fff3e0; border: 2px solid #e65100; border-radius: 6px;
@@ -770,6 +773,49 @@ body.dev-mode .dev-mode-toggle {
   color: #999;
   border-top: 1px solid #eee;
   padding-top: 6px;
+}
+
+/* ─── AI Insight Panel ──────────────────────────────────────────────────── */
+#insightContainer {
+  margin-top: 1rem;
+}
+.insight-card {
+  border: 1px solid #d0d7de;
+  border-left: 4px solid #1976d2;
+  border-radius: 6px;
+  background: #f8fafe;
+  opacity: 0;
+  transition: opacity 0.4s ease;
+}
+.insight-card.insight-visible {
+  opacity: 1;
+}
+.insight-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.5rem 0.75rem;
+}
+.insight-header h4 {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #1976d2;
+  margin: 0;
+}
+.insight-spinner {
+  font-size: 0.85rem;
+  color: #888;
+  animation: insight-pulse 1.2s infinite;
+}
+@keyframes insight-pulse {
+  0%, 100% { opacity: 0.3; }
+  50% { opacity: 1; }
+}
+.insight-body {
+  padding: 0.25rem 0.75rem 0.75rem;
+  font-size: 0.9rem;
+  line-height: 1.55;
+  color: #333;
 }
 
 /* Prosody dedicated container */
