@@ -111,6 +111,17 @@ export class MountainRange {
     this._canvas = canvas;
     this._ctx = canvas.getContext('2d');
     this._wordCount = wordCount;
+    this._fixedHeight = 180; // never changes
+
+    // Force container dimensions via inline style (immune to CSS cache)
+    const parent = canvas.parentElement;
+    if (parent) {
+      parent.style.height = this._fixedHeight + 'px';
+      parent.style.minHeight = this._fixedHeight + 'px';
+      parent.style.flexShrink = '0';
+      parent.style.overflow = 'hidden';
+      parent.style.position = 'relative';
+    }
 
     // Peak data
     this._peaks = new Array(wordCount);
@@ -138,12 +149,13 @@ export class MountainRange {
     // Draw initial sky + stars scene
     this._draw(0);
 
-    // ResizeObserver
+    // ResizeObserver — only for width changes
     this._ro = new ResizeObserver(() => {
+      const oldW = this._w;
       this._resize();
-      this._draw(0);
+      if (this._w !== oldW) this._draw(0);
     });
-    this._ro.observe(canvas.parentElement);
+    if (parent) this._ro.observe(parent);
   }
 
   // ── Public API ───────────────────────────────────────────────────────────
@@ -281,20 +293,18 @@ export class MountainRange {
   _resize() {
     const parent = this._canvas.parentElement;
     if (!parent) return;
-    const rect = parent.getBoundingClientRect();
-    const w = Math.max(Math.round(rect.width), 200);
-    const h = Math.max(Math.round(rect.height), 120);
-    // Guard: skip if nothing actually changed
+    // Width from parent; height is ALWAYS fixed (never read from DOM)
+    const w = Math.round(parent.clientWidth) || 680;
+    const h = this._fixedHeight;
     if (w === this._w && h === this._h) return;
     this._w = w;
     this._h = h;
-    // Set canvas resolution (attribute) AND display size (CSS) explicitly
     this._canvas.width = w;
     this._canvas.height = h;
     this._canvas.style.width = w + 'px';
     this._canvas.style.height = h + 'px';
     // Regenerate stars for new dimensions
-    this._stars = generateStars(45, this._w, this._h);
+    this._stars = generateStars(45, w, h);
   }
 
   _peakX(i) {

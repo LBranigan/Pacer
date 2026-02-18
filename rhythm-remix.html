@@ -4,7 +4,10 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Rhythm Remix — Your Reading Beat</title>
-<link rel="stylesheet" href="css/rhythm-remix.css?v=20260218b">
+<link rel="stylesheet" href="css/rhythm-remix.css?v=20260218c">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
 </head>
 <body>
 
@@ -32,8 +35,8 @@
   </div>
 
   <!-- Mountain range visualization -->
-  <div class="mountain-container" id="mountainContainer">
-    <canvas id="mountain-canvas"></canvas>
+  <div class="mountain-container" id="mountainContainer" style="height:180px;min-height:180px;flex-shrink:0;overflow:hidden;position:relative;width:100%;max-width:680px;border-radius:16px;background:#0d0b14;">
+    <canvas id="mountain-canvas" style="display:block;"></canvas>
   </div>
 
   <!-- Audio visualizer bar -->
@@ -112,6 +115,6 @@
   <div id="remix-status"></div>
 </div>
 
-<script type="module" src="js/rhythm-remix.js?v=20260218b"></script>
+<script type="module" src="js/rhythm-remix.js?v=20260218c"></script>
 </body>
 </html>
