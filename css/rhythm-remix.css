@@ -331,11 +331,19 @@ body::before {
   opacity: 0.5;
 }
 
-/* Self-corrected: rainbow shimmer → settle to green */
+/* Self-corrected: persistent rainbow gradient text */
 .word-span.done-self-corrected {
-  color: var(--rm-correct);
   opacity: 1;
-  animation: scRainbow 0.9s ease-out;
+  background: linear-gradient(
+    90deg,
+    #ff6b6b, #ffa94d, #ffd43b, #69db7c,
+    #4dabf7, #da77f2, #ff6b6b
+  );
+  background-size: 200% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: rainbowShift 2s linear infinite;
 }
 
 /* ============================================================
@@ -745,15 +753,9 @@ body::before {
   to   { opacity: 1; transform: translateY(0); }
 }
 
-@keyframes scRainbow {
-  0%   { color: #ff6b6b; background: rgba(255, 107, 107, 0.15); }
-  15%  { color: #ffa94d; background: rgba(255, 169, 77, 0.12); }
-  30%  { color: #ffd43b; background: rgba(255, 212, 59, 0.12); }
-  45%  { color: #69db7c; background: rgba(105, 219, 124, 0.12); }
-  60%  { color: #4dabf7; background: rgba(77, 171, 247, 0.12); }
-  75%  { color: #da77f2; background: rgba(218, 119, 242, 0.12); }
-  90%  { color: var(--rm-correct); background: rgba(168, 216, 168, 0.08); }
-  100% { color: var(--rm-correct); background: transparent; }
+@keyframes rainbowShift {
+  0%   { background-position: 0% 50%; }
+  100% { background-position: 200% 50%; }
 }
 
 /* ============================================================
@@ -776,6 +778,10 @@ body::before {
 
   .word-span.done-self-corrected {
     animation: none;
+    background: none;
+    -webkit-background-clip: unset;
+    background-clip: unset;
+    color: var(--rm-correct);
   }
 
   .remix-play-btn:hover {
