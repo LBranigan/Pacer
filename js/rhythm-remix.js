@@ -7,8 +7,8 @@
  * @module rhythm-remix
  */
 
-import { LofiEngine } from './lofi-engine.js?v=20260218c';
-import { MountainRange } from './mountain-range.js?v=20260218c';
+import { LofiEngine } from './lofi-engine.js?v=20260218d';
+import { MountainRange } from './mountain-range.js?v=20260218d';
 import { getAudioBlob } from './audio-store.js';
 import { getAssessment, getStudents } from './storage.js';
 import { getPunctuationPositions } from './diagnostics.js';
@@ -87,9 +87,9 @@ let savedDensity = 'normal'; // density to restore after pause ends
 /** Sentence-aligned chord toggle state. */
 let sentenceAlignedEnabled = false;
 
-/** Toggle states for new features. */
-let celebrationsEnabled = false;
-let melodyEnabled = false;
+/** Toggle states for new features (celebrations + melody default ON). */
+let celebrationsEnabled = true;
+let melodyEnabled = true;
 let adaptiveHarmonyEnabled = false;
 
 /** Adaptive harmony: rolling fluency window. */
@@ -460,6 +460,11 @@ function setupAudio() {
   // Lo-fi engine
   lofi = new LofiEngine(audioCtx);
   lofi.output.connect(beatGain);
+
+  // Apply default-on toggle states
+  lofi.setCelebrations(celebrationsEnabled);
+  lofi.setMelody(melodyEnabled);
+  lofi.setAdaptiveHarmony(adaptiveHarmonyEnabled);
 
   // Set style from localStorage preference
   const validStyles = ['lofi', 'jazzhop', 'ambient', 'bossa', 'chiptune', 'classical', 'trap'];
