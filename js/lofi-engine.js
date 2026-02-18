@@ -1007,7 +1007,8 @@ export class LofiEngine {
 
     // ── Bass (skip in whisper) ──
     if (density !== 'whisper' && bassPat[beat]) {
-      const bassVol = (style === 'ambient' || style === 'classical') ? 0.3
+      const bassVol = style === 'classical' ? 0.55
+        : style === 'ambient' ? 0.3
         : style === 'trap' ? 1.0
         : style === 'bossa' ? 0.45
         : (density === 'full' ? 0.9 : 0.65);
@@ -1627,11 +1628,11 @@ export class LofiEngine {
 
       const gain = ctx.createGain();
       gain.gain.setValueAtTime(0.0001, noteTime);
-      gain.gain.linearRampToValueAtTime(volumeScale * 0.15 / noteFreqs.length, noteTime + 0.05);
+      gain.gain.linearRampToValueAtTime(volumeScale * 0.45, noteTime + 0.05);
       gain.gain.exponentialRampToValueAtTime(0.001, noteEnd);
 
       const gain2 = ctx.createGain();
-      gain2.gain.value = 0.1;
+      gain2.gain.value = 0.2;
 
       osc.connect(gain);
       osc2.connect(gain2);
