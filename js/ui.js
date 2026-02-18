@@ -868,7 +868,7 @@ function renderNewAnalyzedWords(container, alignment, sttLookup, diagnostics, tr
     // Build per-engine evidence strings from raw attempt snapshots
     // _v1RawAttempt/_v0Attempt/_xvalAttempt capture full attempt (insertions + hyp)
     // before any downstream mutations. Fall back to single-word fields when no fragments.
-    const v1Ev = entry._recovered ? '(omitted)'
+    const v1Ev = (entry._recovered || entry._pkPromoted) ? '(omitted)'
       : entry._v1RawAttempt?.length > 0 ? entry._v1RawAttempt.join(' + ')
       : (entry.hyp || '\u2014');
     const pkEv = entry._xvalAttempt?.length > 0
