@@ -7,8 +7,8 @@
  * @module rhythm-remix
  */
 
-import { LofiEngine } from './lofi-engine.js?v=20260219z8';
-import { MountainRange } from './mountain-range.js?v=20260219z8';
+import { LofiEngine } from './lofi-engine.js?v=20260219z9';
+import { MountainRange } from './mountain-range.js?v=20260219z9';
 import { getAudioBlob } from './audio-store.js';
 import { getAssessment, getStudents } from './storage.js';
 import { getPunctuationPositions } from './diagnostics.js';
@@ -232,33 +232,9 @@ function updateSpring(dt) {
 
 // ── WPM to BPM mapping ──────────────────────────────────────────────────────
 
-/** Genre-specific BPM ranges — each style stays in its natural sweet spot. */
-const GENRE_TEMPO = {
-  lofi:      { floor: 60, ceiling: 90  },
-  jazzhop:   { floor: 65, ceiling: 100 },
-  ambient:   { floor: 55, ceiling: 78  },
-  bossa:     { floor: 68, ceiling: 105 },
-  chiptune:  { floor: 85, ceiling: 125 },
-  classical: { floor: 58, ceiling: 100 },
-  trap:      { floor: 65, ceiling: 100 },
-  zelda:     { floor: 80, ceiling: 120 },
-};
-// Piano combos share base genre range
-['bossa-piano', 'jazzhop-piano', 'chiptune-piano', 'zelda-piano'].forEach(k => {
-  GENRE_TEMPO[k] = GENRE_TEMPO[k.replace('-piano', '')];
-});
-
 function wcpmToBpm(wcpm) {
-  // Sqrt normalization: more spread for struggling readers, compression at high end
-  const WCPM_MIN = 30, WCPM_MAX = 180;
-  const clamped = Math.max(WCPM_MIN, Math.min(WCPM_MAX, wcpm));
-  const t = (Math.sqrt(clamped) - Math.sqrt(WCPM_MIN))
-          / (Math.sqrt(WCPM_MAX) - Math.sqrt(WCPM_MIN));
-
-  const sel = document.getElementById('styleSelect');
-  const style = sel ? sel.value : 'lofi';
-  const g = GENRE_TEMPO[style] || GENRE_TEMPO.lofi;
-  return Math.round(g.floor + t * (g.ceiling - g.floor));
+  // BPM ≈ WPM, clamped to musically reasonable range
+  return Math.max(55, Math.min(160, wcpm));
 }
 
 // ── Overlay streak — correct words build richer beat ─────────────────────────
@@ -1357,13 +1333,7 @@ function wireControls() {
   if (styleSelect) {
     styleSelect.addEventListener('change', () => {
       const val = styleSelect.value;
-      if (lofi) {
-        lofi.setStyle(val);
-        // Re-apply tempo for new genre's BPM range
-        if (assessment && assessment.wcpm) {
-          lofi.setTempo(wcpmToBpm(assessment.wcpm) * playbackRate);
-        }
-      }
+      if (lofi) lofi.setStyle(val);
       localStorage.setItem('orf_remix_style', val);
     });
   }
