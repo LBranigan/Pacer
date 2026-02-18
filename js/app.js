@@ -152,7 +152,7 @@ function showRhythmRemixButton(studentId, assessmentId) {
     localStorage.setItem('orf_playback_student', studentId);
     localStorage.setItem('orf_playback_assessment', assessmentId);
     const base = window.location.href.replace(/[^/]*$/, '');
-    window.open(base + 'rhythm-remix.html', 'orf_remix', 'width=800,height=700');
+    window.open(base + 'rhythm-remix.html', 'orf_remix', 'width=820,height=960');
   });
 
   // Insert after the maze button, or after playback button, or after analyze button
