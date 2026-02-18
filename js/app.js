@@ -3170,9 +3170,9 @@ function updatePkTrustToggleUI() {
   pkTrustThumb.style.left = isOn ? '20px' : '2px';
 }
 
-/** Check if Pk Trust mode is enabled. */
+/** Check if Pk Trust mode is enabled (defaults to true). */
 export function isPkTrustEnabled() {
-  return localStorage.getItem('orf_trust_pk') === 'true';
+  return (localStorage.getItem('orf_trust_pk') || 'true') === 'true';
 }
 
 // Inflectional leniency toggle
