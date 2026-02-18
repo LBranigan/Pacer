@@ -19,8 +19,8 @@ const REDUCED_MOTION =
 const BAR_WIDTH = 3;
 const BAR_GAP = 1;
 const BAR_STRIDE = BAR_WIDTH + BAR_GAP;    // 4px per bar
-const WAVEFORM_CENTER = 0.50;
-const MAX_AMP_FRAC = 0.38;
+const WAVEFORM_CENTER = 0.58;
+const MAX_AMP_FRAC = 0.34;
 const MIRROR_SCALE = 0.50;
 const HI_RES_PEAKS = 2000;
 
@@ -59,8 +59,10 @@ function generateStars(count, w, h) {
     stars.push({
       x: Math.random() * w,
       y: Math.random() * h,
-      size: 0.6 + Math.random() * 1.0,
-      alpha: 0.15 + Math.random() * 0.25,
+      size: 0.7 + Math.random() * 1.3,
+      baseAlpha: 0.25 + Math.random() * 0.35,
+      phase: Math.random() * Math.PI * 2,
+      freq: 0.4 + Math.random() * 1.2,
     });
   }
   return stars;
@@ -128,7 +130,7 @@ export class MountainRange {
     this._exportBtn = null;
 
     this._resize();
-    this._stars = generateStars(30, this._w, this._h);
+    this._stars = generateStars(40, this._w, this._h);
     this._draw(0);
 
     // ResizeObserver
@@ -288,7 +290,7 @@ export class MountainRange {
     this._canvas.height = h;
     this._canvas.style.width = w + 'px';
     this._canvas.style.height = h + 'px';
-    this._stars = generateStars(30, w, h);
+    this._stars = generateStars(40, w, h);
   }
 
   _rebuildBars() {
@@ -352,11 +354,16 @@ export class MountainRange {
     ctx.fillStyle = sky;
     ctx.fillRect(0, 0, w, h);
 
-    // ── Stars (static, no animation) ────────────────────────────────────
+    // ── Stars (gentle twinkle) ──────────────────────────────────────────
     ctx.fillStyle = '#fff';
+    const t = this._elapsed;
     for (const star of this._stars) {
-      ctx.globalAlpha = star.alpha;
-      ctx.fillRect(star.x, star.y, star.size, star.size);
+      const twinkle = REDUCED_MOTION ? 1.0
+        : 0.5 + 0.5 * Math.sin(t * star.freq + star.phase);
+      ctx.globalAlpha = star.baseAlpha * twinkle;
+      ctx.beginPath();
+      ctx.arc(star.x, star.y, star.size * 0.5, 0, Math.PI * 2);
+      ctx.fill();
     }
     ctx.globalAlpha = 1;
 
