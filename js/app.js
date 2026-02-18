@@ -139,7 +139,7 @@ function showMazeButton(studentId, assessmentId, referenceText) {
   sel.insertAdjacentElement('afterend', btn);
 }
 
-function showRhythmRemixButton(studentId, assessmentId) {
+function showRhythmRemixButton(studentId, assessmentId, wordCount) {
   // Remove existing button if present
   const existing = document.getElementById('rhythmRemixBtn');
   if (existing) existing.remove();
@@ -151,8 +151,13 @@ function showRhythmRemixButton(studentId, assessmentId) {
   btn.addEventListener('click', () => {
     localStorage.setItem('orf_playback_student', studentId);
     localStorage.setItem('orf_playback_assessment', assessmentId);
+    // Estimate window height from word count: ~11 words per line, ~42px per line
+    const lines = Math.ceil((wordCount || 80) / 11);
+    const wordAreaH = Math.max(200, lines * 42 + 64); // 64px padding
+    const fixedH = 700; // vinyl + waveform + visualizer + controls + page padding
+    const winH = Math.min(1100, fixedH + wordAreaH);
     const base = window.location.href.replace(/[^/]*$/, '');
-    window.open(base + 'rhythm-remix.html', 'orf_remix', 'width=820,height=960');
+    window.open(base + 'rhythm-remix.html', 'orf_remix', `width=820,height=${winH}`);
   });
 
   // Insert after the maze button, or after playback button, or after analyze button
@@ -2979,7 +2984,8 @@ async function runAnalysis() {
     }
     showMazeButton(appState.selectedStudentId, assessmentId, referenceText);
     if (appState.audioBlob) {
-      showRhythmRemixButton(appState.selectedStudentId, assessmentId);
+      const refWordCount = referenceText ? referenceText.split(/\s+/).length : 80;
+      showRhythmRemixButton(appState.selectedStudentId, assessmentId, refWordCount);
     }
     if (nlAnnotations) {
       showIllustratorButton(appState.selectedStudentId, assessmentId);

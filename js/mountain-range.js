@@ -56,13 +56,14 @@ const SKY_STOPS = [
 function generateStars(count, w, h) {
   const stars = [];
   for (let i = 0; i < count; i++) {
+    const bright = Math.random() < 0.15; // 15% chance of a bright star
     stars.push({
       x: Math.random() * w,
       y: Math.random() * h,
-      size: 0.7 + Math.random() * 1.3,
-      baseAlpha: 0.25 + Math.random() * 0.35,
+      size: bright ? (1.2 + Math.random() * 1.0) : (0.7 + Math.random() * 1.0),
+      baseAlpha: bright ? (0.6 + Math.random() * 0.3) : (0.3 + Math.random() * 0.35),
       phase: Math.random() * Math.PI * 2,
-      freq: 0.4 + Math.random() * 1.2,
+      freq: bright ? (1.5 + Math.random() * 2.0) : (0.4 + Math.random() * 1.2),
     });
   }
   return stars;
@@ -354,13 +355,13 @@ export class MountainRange {
     ctx.fillStyle = sky;
     ctx.fillRect(0, 0, w, h);
 
-    // ── Stars (gentle twinkle) ──────────────────────────────────────────
-    ctx.fillStyle = '#fff';
+    // ── Stars (bright twinkle) ──────────────────────────────────────────
     const t = this._elapsed;
     for (const star of this._stars) {
       const twinkle = REDUCED_MOTION ? 1.0
-        : 0.5 + 0.5 * Math.sin(t * star.freq + star.phase);
+        : 0.3 + 0.7 * Math.sin(t * star.freq + star.phase);
       ctx.globalAlpha = star.baseAlpha * twinkle;
+      ctx.fillStyle = '#fff';
       ctx.beginPath();
       ctx.arc(star.x, star.y, star.size * 0.5, 0, Math.PI * 2);
       ctx.fill();
