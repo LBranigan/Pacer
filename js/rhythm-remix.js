@@ -7,8 +7,8 @@
  * @module rhythm-remix
  */
 
-import { LofiEngine } from './lofi-engine.js?v=20260218g';
-import { MountainRange } from './mountain-range.js?v=20260218g';
+import { LofiEngine } from './lofi-engine.js?v=20260218h';
+import { MountainRange } from './mountain-range.js?v=20260218h';
 import { getAudioBlob } from './audio-store.js';
 import { getAssessment, getStudents } from './storage.js';
 import { getPunctuationPositions } from './diagnostics.js';
@@ -64,6 +64,8 @@ let sourceNode = null;
 let voiceGain = null;
 let beatGain = null;
 let analyser = null;
+let vizData = null;       // reusable Uint8Array for visualizer (avoid GC)
+let waveformFrameSkip = 0; // throttle waveform to every 3rd frame
 
 let animFrameId = null;
 let isPlaying = false;
@@ -826,16 +828,7 @@ function drawBall(ctx) {
   }
   ball.radius = pulseRadius;
 
-  // Radial gradient: bright center -> accent edge
-  const grad = ctx.createRadialGradient(
-    ball.x - pulseRadius * 0.2, ball.y - pulseRadius * 0.2, pulseRadius * 0.1,
-    ball.x, ball.y, pulseRadius
-  );
-  grad.addColorStop(0, '#fff');
-  grad.addColorStop(0.4, ball.color);
-  grad.addColorStop(1, ball.glowColor);
-
-  ctx.fillStyle = grad;
+  ctx.fillStyle = ball.color;
   ctx.beginPath();
   ctx.arc(ball.x, ball.y, pulseRadius, 0, Math.PI * 2);
   ctx.fill();
@@ -916,28 +909,18 @@ const VIZ_COLORS = ['#e8a87c', '#d4a5c7', '#a8d8a8', '#c4b5d4'];
 function drawVisualizer() {
   if (!analyser || !vizCtx || !vizCanvas) return;
 
-  const data = new Uint8Array(analyser.frequencyBinCount);
-  analyser.getByteFrequencyData(data);
+  if (!vizData) vizData = new Uint8Array(analyser.frequencyBinCount);
+  analyser.getByteFrequencyData(vizData);
 
   vizCtx.clearRect(0, 0, vizCanvas.width, vizCanvas.height);
 
-  const barW = vizCanvas.width / data.length;
+  const barW = vizCanvas.width / vizData.length;
+  vizCtx.globalAlpha = 0.7;
 
-  for (let i = 0; i < data.length; i++) {
-    const h = (data[i] / 255) * vizCanvas.height * 0.9;
+  for (let i = 0; i < vizData.length; i++) {
+    const h = (vizData[i] / 255) * vizCanvas.height * 0.9;
     vizCtx.fillStyle = VIZ_COLORS[i % VIZ_COLORS.length];
-    vizCtx.globalAlpha = 0.7;
-    const x = i * barW + 1;
-    const w = Math.max(barW - 2, 1);
-    const y = vizCanvas.height - h;
-    vizCtx.beginPath();
-    // roundRect may not exist on older Safari, fallback to fillRect
-    if (vizCtx.roundRect) {
-      vizCtx.roundRect(x, y, w, h, 2);
-      vizCtx.fill();
-    } else {
-      vizCtx.fillRect(x, y, w, h);
-    }
+    vizCtx.fillRect(i * barW + 1, vizCanvas.height - h, Math.max(barW - 2, 1), h);
   }
   vizCtx.globalAlpha = 1;
 }
@@ -1021,11 +1004,15 @@ function animationLoop(timestamp) {
   // 7. Draw visualizer
   drawVisualizer();
 
-  // 8. Update waveform visualization
+  // 8. Update waveform visualization (throttled to every 3rd frame)
   if (mountainRange) {
     mountainRange.setPlayhead(ct);
-    const beatPhase = (lofi && typeof lofi.getBeatPhase === 'function') ? lofi.getBeatPhase() : 0;
-    mountainRange.update(dt, beatPhase);
+    waveformFrameSkip++;
+    if (waveformFrameSkip >= 3) {
+      waveformFrameSkip = 0;
+      const beatPhase = (lofi && typeof lofi.getBeatPhase === 'function') ? lofi.getBeatPhase() : 0;
+      mountainRange.update(dt * 3, beatPhase);
+    }
   }
 
   // 9. Update chord badge
