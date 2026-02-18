@@ -342,6 +342,8 @@ body::before {
   width: 100%;
   max-width: 680px;
   height: 180px;
+  min-height: 180px;
+  flex-shrink: 0;
   margin: 0.5rem 0;
   border-radius: var(--rm-radius);
   overflow: hidden;

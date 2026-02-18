@@ -99,7 +99,7 @@ let harmonyHistory = []; // recent word results: true = correct, false = error
 /** Study Beats FM — DJ intro state. */
 const GEMINI_TTS_MODEL = 'gemini-2.5-flash-preview-tts';
 const GEMINI_TTS_URL = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_TTS_MODEL}:generateContent`;
-const DJ_VOICE = 'Sulafat'; // "Warm" — smooth, late-night DJ vibe
+const DJ_VOICE = 'Kore'; // Upbeat, confident, punchy delivery
 let djIntroBuffer = null; // decoded AudioBuffer from Gemini TTS
 let djIntroLoading = false;
 let djIntroPlayed = false;
@@ -211,27 +211,24 @@ function wcpmToBpm(wcpm) {
 
 // ── Study Beats FM — DJ Intro via Gemini TTS ────────────────────────────────
 
-function buildDJPrompt(studentName, passagePreview) {
+function buildDJPrompt(studentName) {
   const name = studentName || 'our next reader';
-  const passage = passagePreview
-    ? passagePreview.replace(/\.{3}$/, '').trim()
-    : 'a great story';
   return (
-    `You are a late-night lo-fi radio DJ. Speak in one short sentence — smooth, ` +
-    `warm, and breathy. Add subtle vocal fry and a relaxed trailing "mmm" or sigh. ` +
-    `Deliver it slowly like you're half-asleep but smiling.\n\n` +
-    `"Study Beats FM... here's ${name}, reading '${passage}'."`
+    `You're a cool, upbeat radio DJ. Say this line quick and smooth — ` +
+    `confident, not whispered. Think FM morning show energy, warm but punchy. ` +
+    `One quick line, under 5 seconds total.\n\n` +
+    `"Study Beats FM — let's go, ${name}!"`
   );
 }
 
-async function fetchDJIntro(studentName, passagePreview) {
+async function fetchDJIntro(studentName) {
   const apiKey = localStorage.getItem('orf_gemini_key') || '';
   if (!apiKey) {
     console.log('[StudyBeatsFM] No Gemini API key — skipping DJ intro');
     return null;
   }
 
-  const text = buildDJPrompt(studentName, passagePreview);
+  const text = buildDJPrompt(studentName);
   console.log('[StudyBeatsFM] Generating DJ intro:', text);
 
   const body = JSON.stringify({
@@ -271,10 +268,17 @@ async function fetchDJIntro(studentName, passagePreview) {
       }
 
       const data = await resp.json();
-      if (data.promptFeedback?.blockReason) return null;
+      if (data.promptFeedback?.blockReason) {
+        console.warn('[StudyBeatsFM] Prompt blocked:', data.promptFeedback.blockReason);
+        return null;
+      }
 
       const audioPart = data.candidates?.[0]?.content?.parts?.find(p => p.inlineData);
-      if (!audioPart) return null;
+      if (!audioPart) {
+        console.warn('[StudyBeatsFM] No audio in response. Keys:', JSON.stringify(Object.keys(data)));
+        if (data.candidates?.[0]) console.warn('[StudyBeatsFM] Candidate parts:', JSON.stringify(data.candidates[0].content?.parts?.map(p => Object.keys(p))));
+        return null;
+      }
 
       // Decode base64 L16 PCM → WAV ArrayBuffer
       const b64 = audioPart.inlineData.data;
@@ -1419,14 +1423,16 @@ function initRhythmRemix() {
     disablePlayBtn();
     setStatus('Tuning in to Study Beats FM...');
     djIntroLoading = true;
-    fetchDJIntro(studentName, passagePreview).then(wavBuf => {
+    fetchDJIntro(studentName).then(wavBuf => {
       djIntroBuffer = wavBuf;
       djIntroLoading = false;
       const btn = document.getElementById('playBtn');
       if (btn) btn.disabled = false;
       setStatus(wavBuf ? 'Study Beats FM ready' : '');
-      if (wavBuf) console.log('[StudyBeatsFM] DJ intro ready');
-    }).catch(() => {
+      if (wavBuf) console.log('[StudyBeatsFM] DJ intro ready (' + wavBuf.byteLength + ' bytes)');
+      else console.warn('[StudyBeatsFM] DJ intro returned null — no audio generated');
+    }).catch(err => {
+      console.warn('[StudyBeatsFM] DJ intro fetch failed:', err);
       djIntroLoading = false;
       const btn = document.getElementById('playBtn');
       if (btn) btn.disabled = false;
