@@ -12,7 +12,7 @@ PACER is a **struggle detector**, not just an ORF scorer. The goal is to capture
 
 3. **Every word needs a story.** A word isn't just "correct" or "wrong" — it has a duration, a pace relative to the student's median, a cross-validation status, possibly a struggle path (hesitation / decoding / abandoned), possibly a self-correction, possibly a disfluency context. The richer the per-word data, the better the AI layer can reason about it later.
 
-4. **Multi-engine consensus over single-engine trust.** No single ASR engine is reliable enough for assessment. Reverb provides the primary transcript + disfluency detection; Parakeet/Deepgram cross-validates every word and provides accurate timestamps. When engines disagree, that disagreement itself is useful data (it suggests the word was ambiguous or poorly articulated).
+4. **Parakeet is the primary correctness engine.** With "Trust Pk" ON (the default), Parakeet overrides Reverb on every disagreed word — making it the final arbiter of word correctness. Reverb's role is disfluency detection (V1 verbatim vs V0 clean) and providing the initial transcript that Parakeet corrects. Parakeet also provides the primary timestamps (TDT duration head, sub-second accuracy). The code still uses the term "cross-validator" in filenames and variable names for historical reasons, but Parakeet's actual role is primary correctness engine, not a secondary checker.
 
 5. **The pipeline feeds an AI, not just a dashboard.** Every detection, flag, and annotation exists so that a downstream AI can eventually produce insight like: *"Jayden decoded most single-syllable words fluently but stalled on 4 of 6 multisyllabic words, producing the first syllable correctly before giving up. He self-corrected twice on sight words, suggesting he recognizes errors but loses confidence on longer words."* Design every feature with this end consumer in mind.
 
@@ -24,3 +24,17 @@ PACER is a **struggle detector**, not just an ORF scorer. The goal is to capture
 - This file is the single source of truth for all reading miscue types (omissions, substitutions, hesitations, etc.).
 - Each entry must include: description, detector location, countsAsError flag, config thresholds, and example.
 - If a miscue type is not in this registry, it does not exist in the system.
+
+## Rhythm Remix
+- Standalone page (`rhythm-remix.html`) for bouncing-ball reading playback with lo-fi beats.
+- **Lo-Fi Engine** (`js/lofi-engine.js`): Web Audio synth with 7 styles, each with unique timbre via `STYLE_CONFIG`. Styles differ in oscillator types, filter cutoffs, reverb, tape wobble, bitcrusher, and drum variants.
+- **Mountain Range** (`js/mountain-range.js`): Canvas visualization where each word = a peak. **Height is hardcoded to 180px in JS** (`this._fixedHeight`), never read from DOM — prevents flex-column collapse.
+- **Study Beats FM**: DJ intro via Gemini TTS (`gemini-2.5-flash-preview-tts`, voice `Kore`). Requires `orf_gemini_key` in localStorage.
+- **Cache busting**: All imports use `?v=` query strings. `rhythm-remix.html` has no-cache meta headers. When deploying changes, bump ALL version strings (HTML tags + ES module imports inside JS).
+
+## Cache Busting for GitHub Pages
+- Query string cache busting (`?v=...`) must be applied in **three places** for Rhythm Remix changes to propagate:
+  1. `rhythm-remix.html` `<link>` and `<script>` tags
+  2. ES module imports inside `js/rhythm-remix.js` (`import from './lofi-engine.js?v=...'`)
+  3. The files imported by those modules (if they also import others)
+- GitHub Pages CDN can take minutes to propagate. Users may need hard refresh (Ctrl+Shift+R).
