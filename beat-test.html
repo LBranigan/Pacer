@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Beat Tester</title>
+<style>
+  body { background: #1a1a2e; color: #eee; font-family: system-ui; display: flex; flex-direction: column; align-items: center; padding: 2rem; gap: 1rem; }
+  h1 { margin: 0; }
+  .controls { display: flex; gap: 1rem; align-items: center; flex-wrap: wrap; justify-content: center; }
+  select, button { font-size: 1.1rem; padding: 0.5rem 1.2rem; border-radius: 8px; border: none; cursor: pointer; }
+  button { background: #e67e22; color: #fff; font-weight: 700; }
+  button:hover { background: #d35400; }
+  select { background: #2a2a4a; color: #eee; }
+  .status { color: #888; font-size: 0.9rem; }
+  label { white-space: nowrap; }
+  .level-btn { background: #2a2a4a; color: #888; font-size: 0.95rem; padding: 0.4rem 1rem; transition: background 0.15s, color 0.15s; }
+  .level-btn.active { background: #e67e22; color: #fff; }
+</style>
+</head>
+<body>
+<h1>Beat Tester</h1>
+<div class="controls">
+  <select id="style">
+    <option value="lofi">Lo-Fi Chill</option>
+    <option value="jazzhop">Jazz Hop</option>
+    <option value="ambient">Ambient</option>
+    <option value="bossa">Bossa Nova</option>
+    <option value="chiptune">Chiptune 8-Bit</option>
+    <option value="classical">Classical Piano</option>
+    <option value="trap">Trap</option>
+    <option value="zelda">Zelda</option>
+    <option value="bossa-piano">Bossa + Piano</option>
+    <option value="jazzhop-piano">Jazz Hop + Piano</option>
+    <option value="chiptune-piano">Chiptune + Piano</option>
+    <option value="zelda-piano">Zelda + Piano</option>
+  </select>
+  <button id="playBtn">Play</button>
+  <button id="stopBtn">Stop</button>
+</div>
+<div class="controls">
+  <label>Volume: <input type="range" id="beatVol" min="0" max="100" value="70"></label>
+  <label>BPM: <span id="bpmLabel">75</span> <input type="range" id="bpmSlider" min="50" max="140" value="75"></label>
+</div>
+<div class="controls">
+  <span style="color:#888;font-size:0.85rem">Overlay:</span>
+  <button class="level-btn active" data-level="0">Base</button>
+  <button class="level-btn" data-level="0.35">+2</button>
+  <button class="level-btn" data-level="0.65">+4</button>
+  <button class="level-btn" data-level="1">+6</button>
+  <button class="level-btn" data-level="1.5">+8</button>
+</div>
+<div class="status" id="status">Ready</div>
+
+<script type="module">
+import { LofiEngine } from './js/lofi-engine.js?v=20260219z9';
+
+let ctx = null;
+let engine = null;
+
+function getEngine() {
+  if (!engine) {
+    ctx = new (window.AudioContext || window.webkitAudioContext)();
+    engine = new LofiEngine(ctx);
+    engine.output.connect(ctx.destination);
+  }
+  return engine;
+}
+
+document.getElementById('playBtn').addEventListener('click', () => {
+  const e = getEngine();
+  const style = document.getElementById('style').value;
+  e.setStyle(style);
+  e.output.gain.value = document.getElementById('beatVol').value / 100;
+  e.start();
+  document.getElementById('status').textContent = 'Playing: ' + style;
+});
+
+document.getElementById('stopBtn').addEventListener('click', () => {
+  if (engine) { engine.stop(); }
+  document.getElementById('status').textContent = 'Stopped';
+});
+
+document.getElementById('style').addEventListener('change', () => {
+  if (engine && engine._playing) {
+    const style = document.getElementById('style').value;
+    engine.setStyle(style);
+    document.getElementById('status').textContent = 'Playing: ' + style;
+  }
+});
+
+document.getElementById('beatVol').addEventListener('input', (e) => {
+  if (engine) engine.output.gain.value = e.target.value / 100;
+});
+
+document.getElementById('bpmSlider').addEventListener('input', (e) => {
+  document.getElementById('bpmLabel').textContent = e.target.value;
+  if (engine) engine.setTempo(Number(e.target.value));
+});
+
+// Level buttons
+document.querySelectorAll('.level-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.level-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    const level = parseFloat(btn.dataset.level);
+    if (engine) engine.setOverlayLevel(level);
+  });
+});
+</script>
+</body>
+</html>
