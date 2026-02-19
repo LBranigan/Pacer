@@ -35,10 +35,10 @@ const BASS_LEAN = 0.020;
 // 4-bar super-cycle over the 2-bar Gm7/Cm7 loop. Close voice-led voicings
 // in low-mid register. No resolution, no drama — frozen confidence.
 const BED_CHORDS = [
-  [48, 52, 55],  // C major  (C3 E3 G3)    — IV
-  [48, 53, 57],  // F major  (C3 F3 A3)    — VII
-  [50, 53, 58],  // Bb major (D3 F3 Bb3)   — III
-  [51, 55, 58],  // Eb major (Eb3 G3 Bb3)  — VI
+  [60, 64, 67],  // C major  (C4 E4 G4)    — IV
+  [60, 65, 69],  // F major  (C4 F4 A4)    — VII
+  [62, 65, 70],  // Bb major (D4 F4 Bb4)   — III
+  [63, 67, 70],  // Eb major (Eb4 G4 Bb4)  — VI
 ];
 
 export class KickItEngine {
@@ -172,12 +172,17 @@ export class KickItEngine {
     this._crackleGain.connect(this._master);
     this._crackleSource = null;
 
-    // ── Harmonic bed filter — dark, warm, sample-like ──
+    // ── Harmonic bed filter — warm but present ──
     this._bedFilter = ctx.createBiquadFilter();
     this._bedFilter.type = 'lowpass';
-    this._bedFilter.frequency.value = 600;
-    this._bedFilter.Q.value = 0.4;
+    this._bedFilter.frequency.value = 1200;
+    this._bedFilter.Q.value = 0.5;
     this._bedFilter.connect(this._gains.texture);
+    // Send bed through reverb for space
+    const bedReverb = ctx.createGain();
+    bedReverb.gain.value = 0.30;
+    this._bedFilter.connect(bedReverb);
+    bedReverb.connect(this._convolver);
 
     // ── Dub delay slapback ──
     this._dubDelay = ctx.createDelay(2);
@@ -530,31 +535,37 @@ export class KickItEngine {
     const bedChord = BED_CHORDS[barIndex % 4];
     const beat = 60 / this._bpm;
     const bar = beat * 4;
-    const dur = bar + 0.4; // slight overlap into next bar — chords ring
+    const dur = bar + 0.5; // overlap into next bar — chords ring
+
+    const G = 0.09; // per-voice gain
 
     for (const midi of bedChord) {
       const freq = mtof(midi);
 
-      // Two detuned sines per note — analog warmth, sample-like
-      for (const det of [-3, 3]) {
+      // Additive: fundamental (detuned pair) + octave harmonic (detuned pair)
+      const partials = [
+        [-3, 1, 1.0],   // fundamental, slight detune left
+        [+3, 1, 1.0],   // fundamental, slight detune right
+        [-1, 2, 0.35],  // octave harmonic, detune left
+        [+1, 2, 0.35],  // octave harmonic, detune right
+      ];
+
+      for (const [det, mult, gMult] of partials) {
         const osc = ctx.createOscillator();
         osc.type = 'sine';
-        osc.frequency.value = freq;
+        osc.frequency.value = freq * mult;
         osc.detune.value = det + (Math.random() - 0.5) * 2;
 
         const env = ctx.createGain();
-        // Slow attack (0.5s) — fades in like a sample
         env.gain.setValueAtTime(0, time);
-        env.gain.linearRampToValueAtTime(0.038, time + 0.5);
-        env.gain.setTargetAtTime(0.032, time + 0.8, 0.6);
-        // Gentle release — overlaps into next chord
-        env.gain.setTargetAtTime(0, time + dur - 0.3, 0.25);
+        env.gain.linearRampToValueAtTime(G * gMult, time + 0.2);
+        env.gain.setTargetAtTime(G * gMult * 0.8, time + 0.5, 0.8);
+        env.gain.setTargetAtTime(0, time + dur - 0.3, 0.3);
 
         osc.connect(env);
         env.connect(this._bedFilter);
-
         osc.start(time);
-        osc.stop(time + dur + 1.5);
+        osc.stop(time + dur + 2);
       }
     }
   }
