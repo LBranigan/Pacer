@@ -7,12 +7,13 @@
  * @module rhythm-remix
  */
 
-import { LofiEngine } from './lofi-engine.js?v=20260219a5';
-import { LofiV2Engine } from './lofi-v2-engine.js?v=20260219a5';
-import { StickerbrushEngine } from './stickerbrush-engine.js?v=20260219a5';
-import { StickerbrushV2Engine } from './stickerbrush-v2-engine.js?v=20260219a5';
-import { MythicEngine } from './mythic-engine.js?v=20260219a6';
-import { MountainRange } from './mountain-range.js?v=20260219a5';
+import { LofiEngine } from './lofi-engine.js?v=20260220a';
+import { LofiV2Engine } from './lofi-v2-engine.js?v=20260220a';
+import { StickerbrushEngine } from './stickerbrush-engine.js?v=20260220a';
+import { StickerbrushV2Engine } from './stickerbrush-v2-engine.js?v=20260220a';
+import { MythicEngine } from './mythic-engine.js?v=20260220a';
+import { KickItEngine } from './kickit-engine.js?v=20260220a';
+import { MountainRange } from './mountain-range.js?v=20260220a';
 import { getAudioBlob } from './audio-store.js';
 import { getAssessment, getStudents } from './storage.js';
 import { getPunctuationPositions } from './diagnostics.js';
@@ -71,6 +72,7 @@ let lofi2Engine = null;   // cached LofiV2Engine instance
 let stickerbrushEngine = null; // cached StickerbrushEngine
 let stickerbrush2Engine = null; // cached StickerbrushV2Engine
 let mythicEngine = null; // cached MythicEngine
+let kickitEngine = null; // cached KickItEngine
 let audioEl = null;
 let audioUrl = null;     // ObjectURL — revoked on cleanup
 let sourceNode = null;
@@ -246,6 +248,7 @@ const STYLE_BPM_RANGE = {
   stickerbrush:  { min: 70, max: 100 },   // DKC2 dreamy, original 94 BPM
   stickerbrush2: { min: 70, max: 100 },   // DKC2 A-minor arr., original 95 BPM
   mythic:        { min: 70, max: 105 },   // Aruarian-style, original 90 BPM
+  kickit:        { min: 75, max: 105 },   // ATCQ boom-bap, original 96 BPM
 };
 
 function wcpmToBpm(wcpm, style) {
@@ -288,6 +291,12 @@ function switchEngine(style) {
       mythicEngine.output.connect(beatGain);
     }
     lofi = mythicEngine;
+  } else if (style === 'kickit') {
+    if (!kickitEngine) {
+      kickitEngine = new KickItEngine(audioCtx);
+      kickitEngine.output.connect(beatGain);
+    }
+    lofi = kickitEngine;
   } else {
     lofiEngine.setStyle(style);
     lofi = lofiEngine;
@@ -670,7 +679,7 @@ function setupAudio() {
   lofiEngine.setAdaptiveHarmony(adaptiveHarmonyEnabled);
 
   // Set style from localStorage preference
-  const validStyles = ['stickerbrush', 'stickerbrush2', 'lofi2', 'classical', 'mythic'];
+  const validStyles = ['stickerbrush', 'stickerbrush2', 'lofi2', 'classical', 'mythic', 'kickit'];
   const savedStyle = localStorage.getItem('orf_remix_style');
   const initialStyle = (savedStyle && validStyles.includes(savedStyle)) ? savedStyle : 'stickerbrush';
 
@@ -1557,6 +1566,10 @@ function cleanup() {
   if (stickerbrush2Engine) {
     stickerbrush2Engine.dispose();
     stickerbrush2Engine = null;
+  }
+  if (kickitEngine) {
+    kickitEngine.dispose();
+    kickitEngine = null;
   }
   lofi = null;
   if (audioUrl) {

@@ -1,0 +1,868 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Kick It</title>
+<style>
+  body {
+    background: #0e0e18;
+    color: #c8c0b0;
+    font-family: 'Courier New', monospace;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 2rem;
+    gap: 1rem;
+    min-height: 100vh;
+  }
+  h1 { margin: 0; font-size: 2.2rem; color: #e8a020; letter-spacing: 0.08em; }
+  .subtitle { color: #6a6050; font-size: 0.85rem; margin-top: -0.4rem; }
+  .controls {
+    display: flex; gap: 1rem; align-items: center;
+    flex-wrap: wrap; justify-content: center;
+  }
+  button {
+    font-size: 1.1rem; padding: 0.5rem 1.4rem; border-radius: 8px;
+    border: 1px solid #3a3020; cursor: pointer;
+    background: #1a1a28; color: #a89870; font-family: inherit;
+    transition: background 0.2s, color 0.2s;
+  }
+  button:hover { background: #252530; }
+  .play-btn { background: #1e3a1e; color: #6a9e6a; border-color: #3a5e3a; }
+  .play-btn:hover { background: #2a4a2a; }
+  .stop-btn { background: #3a1e1e; color: #9e6a6a; border-color: #5e3a3a; }
+  .stop-btn:hover { background: #4a2a2a; }
+  .part-btn.active { background: #2a2010; color: #e8a020; border-color: #e8a020; }
+  .status { color: #5a5040; font-size: 0.9rem; min-height: 1.4em; }
+  label { white-space: nowrap; color: #6a6050; }
+  input[type="range"] { accent-color: #e8a020; }
+  .bar-info { font-size: 0.85rem; color: #5a5040; font-family: monospace; min-height: 1.4em; }
+</style>
+</head>
+<body>
+<h1>KICK IT</h1>
+<p class="subtitle">All Layers &mdash; Rhodes + Drums + Bass + Horns + Texture</p>
+<p class="subtitle">G minor &bull; ~96 BPM &bull; Gm7 &rarr; Cm7 &bull; 2-bar loop</p>
+
+<div class="controls">
+  <button class="play-btn" id="playBtn">Play</button>
+  <button class="stop-btn" id="stopBtn">Stop</button>
+</div>
+
+<div class="controls">
+  <button class="part-btn active" data-part="rhodes">Rhodes</button>
+  <button class="part-btn active" data-part="drums">Drums</button>
+  <button class="part-btn active" data-part="bass">Bass</button>
+  <button class="part-btn active" data-part="horns">Horns</button>
+  <button class="part-btn active" data-part="texture">Texture</button>
+</div>
+
+<div class="controls">
+  <label>Volume: <input type="range" id="volSlider" min="0" max="100" value="70"></label>
+  <label>BPM: <span id="bpmLabel">96</span> <input type="range" id="bpmSlider" min="80" max="115" value="96"></label>
+</div>
+
+<div class="bar-info" id="barInfo">Ready</div>
+<div class="status" id="status"></div>
+
+<script>
+// ══════════════════════════════════════════════════════════════
+// Kick It — Deep Classic Hip-Hop (Can I Kick It? inspired)
+// Key: G minor | Tempo: ~96 BPM
+// Progression: Gm7 → Cm7 (2-bar loop, i → iv)
+//
+// Layer 0: Rhodes EP chord stabs + vinyl crackle
+// Layer 1: Boom-bap drums (kick, snare, swung hats)
+// Layer 2: Bass (deep root notes + passing tones)
+// Layer 3: Horn stabs (muted jazz trumpet — sparse, call-and-response)
+// Layer 4: Texture (tape wobble, mains hum, reverse swells)
+// ══════════════════════════════════════════════════════════════
+
+function mtof(m) { return 440 * Math.pow(2, (m - 69) / 12); }
+
+const CHORDS = [
+  { name: 'Gm7', notes: [55, 58, 62, 65], bass: 43, passing: 46 },
+  { name: 'Cm7', notes: [60, 63, 67, 70], bass: 48, passing: null },
+];
+
+const HORN_PATTERN = [
+  [0,  2.5,  74,  1.0 ],
+  [1,  3.5,  70,  0.8 ],
+  [4,  3.75, 77,  0.7 ],
+];
+
+const SWING = 0.6;
+const BASS_LEAN = 0.020;
+
+// ── Audio state ──
+let ctx = null;
+let master = null;
+let preBus = null;       // pre-wobble bus (master + reverb merge here)
+let convolver = null;
+let reverbSend = null;
+let wobbleDepth = null;  // controls tape wobble intensity
+let playing = false;
+let schedTimer = null;
+let nextBarTime = 0;
+let currentBar = 0;
+let bpm = 96;
+let crackleBuf = null;
+let crackleSource = null;
+let crackleGain = null;
+let snareBuf = null;
+let hatBuf = null;
+let swellBuf = null;
+let drumGain = null;
+let bassGain = null;
+let hornGain = null;
+let textureGain = null;
+let dubDelay = null;
+let dubDelayFb = null;
+let dubDelaySend = null;
+let enabled = { rhodes: true, drums: true, bass: true, horns: true, texture: true };
+
+function initAudio() {
+  if (ctx) return;
+  ctx = new (window.AudioContext || window.webkitAudioContext)();
+
+  // ── Signal chain: everything → preBus → wobbleDelay → destination ──
+  // The wobble delay creates tape-style pitch warble on ALL audio.
+  preBus = ctx.createGain();
+  preBus.gain.value = 1.0;
+
+  const wobbleDelay = ctx.createDelay(0.05);
+  wobbleDelay.delayTime.value = 0.010;  // 10ms base — imperceptible as latency
+
+  const wobbleLFO = ctx.createOscillator();
+  wobbleDepth = ctx.createGain();
+  wobbleLFO.type = 'sine';
+  wobbleLFO.frequency.value = 0.18;     // slow, like a turntable with a slight warp
+  wobbleDepth.gain.value = 0.004;        // ±4ms → ~±7 cents pitch wobble (feel the warp)
+  wobbleLFO.connect(wobbleDepth);
+  wobbleDepth.connect(wobbleDelay.delayTime);
+  wobbleLFO.start();
+
+  preBus.connect(wobbleDelay);
+  wobbleDelay.connect(ctx.destination);
+
+  // Master gain — all musical layers route here
+  master = ctx.createGain();
+  master.gain.value = 0.5;
+  master.connect(preBus);
+
+  // Short room reverb (0.8s)
+  const irLen = Math.ceil(ctx.sampleRate * 0.8);
+  const irBuf = ctx.createBuffer(2, irLen, ctx.sampleRate);
+  for (let ch = 0; ch < 2; ch++) {
+    const d = irBuf.getChannelData(ch);
+    for (let i = 0; i < irLen; i++) {
+      d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / irLen, 3.0);
+    }
+  }
+  convolver = ctx.createConvolver();
+  convolver.buffer = irBuf;
+  reverbSend = ctx.createGain();
+  reverbSend.gain.value = 0.25;
+  convolver.connect(reverbSend);
+  reverbSend.connect(preBus);  // reverb also goes through wobble
+
+  // ── Layer gain nodes ──
+  drumGain = ctx.createGain();
+  drumGain.gain.value = 1;
+  drumGain.connect(master);
+  const drumReverb = ctx.createGain();
+  drumReverb.gain.value = 0.08;
+  drumGain.connect(drumReverb);
+  drumReverb.connect(convolver);
+
+  bassGain = ctx.createGain();
+  bassGain.gain.value = 1;
+  bassGain.connect(master);
+  const bassReverb = ctx.createGain();
+  bassReverb.gain.value = 0.06;
+  bassGain.connect(bassReverb);
+  bassReverb.connect(convolver);
+
+  hornGain = ctx.createGain();
+  hornGain.gain.value = 1;
+  hornGain.connect(master);
+  const hornReverb = ctx.createGain();
+  hornReverb.gain.value = 0.18;
+  hornGain.connect(hornReverb);
+  hornReverb.connect(convolver);
+
+  // Texture: hum + swells route here
+  textureGain = ctx.createGain();
+  textureGain.gain.value = 1;
+  textureGain.connect(master);
+
+  // ── Noise buffers ──
+  const snareLen = Math.ceil(ctx.sampleRate * 0.15);
+  snareBuf = ctx.createBuffer(1, snareLen, ctx.sampleRate);
+  const sd = snareBuf.getChannelData(0);
+  for (let i = 0; i < snareLen; i++) sd[i] = Math.random() * 2 - 1;
+
+  const hatLen = Math.ceil(ctx.sampleRate * 0.05);
+  hatBuf = ctx.createBuffer(1, hatLen, ctx.sampleRate);
+  const hd = hatBuf.getChannelData(0);
+  for (let i = 0; i < hatLen; i++) hd[i] = Math.random() * 2 - 1;
+
+  // Reverse swell noise (1s)
+  const swellLen = Math.ceil(ctx.sampleRate * 1.0);
+  swellBuf = ctx.createBuffer(1, swellLen, ctx.sampleRate);
+  const sw = swellBuf.getChannelData(0);
+  for (let i = 0; i < swellLen; i++) sw[i] = Math.random() * 2 - 1;
+
+  // ── Vinyl crackle ──
+  const crackleLen = ctx.sampleRate * 2;
+  crackleBuf = ctx.createBuffer(1, crackleLen, ctx.sampleRate);
+  const cd = crackleBuf.getChannelData(0);
+  for (let i = 0; i < crackleLen; i++) {
+    cd[i] = Math.random() < 0.015
+      ? (Math.random() * 2 - 1) * 0.35
+      : (Math.random() * 2 - 1) * 0.008;
+  }
+  crackleGain = ctx.createGain();
+  crackleGain.gain.value = 0.09;
+  const crackleBP = ctx.createBiquadFilter();
+  crackleBP.type = 'bandpass';
+  crackleBP.frequency.value = 4000;
+  crackleBP.Q.value = 0.7;
+  crackleBP.connect(crackleGain);
+  crackleGain.connect(master);
+  crackleGain._bp = crackleBP;
+
+  // ── Dub delay slapback — filtered echo catches horn stabs & snares ──
+  dubDelay = ctx.createDelay(2);
+  dubDelay.delayTime.value = (60 / bpm) * 0.75;  // dotted-eighth
+  dubDelayFb = ctx.createGain();
+  dubDelayFb.gain.value = 0.28;                   // ~3 audible repeats
+  dubDelaySend = ctx.createGain();
+  dubDelaySend.gain.value = 0.22;
+  const dubLP = ctx.createBiquadFilter();
+  dubLP.type = 'lowpass';
+  dubLP.frequency.value = 1800;                    // dark, lo-fi repeats
+  dubLP.Q.value = 0.5;
+  dubDelay.connect(dubLP);
+  dubLP.connect(dubDelayFb);
+  dubDelayFb.connect(dubDelay);
+  dubLP.connect(dubDelaySend);
+  dubDelaySend.connect(textureGain);
+  // Horn and drum layers feed the dub delay
+  hornGain.connect(dubDelay);
+  const drumDubSend = ctx.createGain();
+  drumDubSend.gain.value = 0.12;  // drums feed delay quietly (just snare ghost)
+  drumGain.connect(drumDubSend);
+  drumDubSend.connect(dubDelay);
+}
+
+function startCrackle() {
+  if (!crackleBuf) return;
+  crackleSource = ctx.createBufferSource();
+  crackleSource.buffer = crackleBuf;
+  crackleSource.loop = true;
+  crackleSource.connect(crackleGain._bp);
+  crackleSource.start(0);
+}
+
+function stopCrackle() {
+  if (crackleSource) {
+    try { crackleSource.stop(); } catch(e) {}
+    crackleSource = null;
+  }
+}
+
+function startTexture() {}
+function stopTexture() {}
+
+// ═══════════════════════════════════════════════════════════
+// LAYER 0 — Rhodes EP Synthesis
+// ═══════════════════════════════════════════════════════════
+function playRhodesStab(time, chord, velocity, duration) {
+  if (!enabled.rhodes) return;
+  chord.notes.forEach(note => {
+    const freq = mtof(note);
+    const gain = velocity * 0.05;
+
+    const filter = ctx.createBiquadFilter();
+    filter.type = 'lowpass';
+    filter.frequency.value = 1700 + Math.random() * 300;
+    filter.Q.value = 0.5;
+    filter.connect(master);
+    filter.connect(convolver);
+
+    const wobble = ctx.createOscillator();
+    const wobbleAmt = ctx.createGain();
+    wobble.type = 'sine';
+    wobble.frequency.value = 0.22 + Math.random() * 0.12;
+    wobbleAmt.gain.value = 3;
+    wobble.connect(wobbleAmt);
+    wobble.start(time);
+    wobble.stop(time + duration + 1.2);
+
+    const osc1 = ctx.createOscillator();
+    const env1 = ctx.createGain();
+    osc1.type = 'sine';
+    osc1.frequency.value = freq;
+    wobbleAmt.connect(osc1.detune);
+    env1.gain.setValueAtTime(0, time);
+    env1.gain.linearRampToValueAtTime(gain, time + 0.004);
+    env1.gain.setTargetAtTime(gain * 0.4, time + 0.015, 0.07);
+    env1.gain.setTargetAtTime(gain * 0.18, time + 0.1, 0.15);
+    env1.gain.setTargetAtTime(0, time + duration, 0.1);
+    osc1.connect(env1);
+    env1.connect(filter);
+    osc1.start(time);
+    osc1.stop(time + duration + 0.8);
+
+    const osc2 = ctx.createOscillator();
+    const env2 = ctx.createGain();
+    osc2.type = 'sine';
+    osc2.frequency.value = freq * 2;
+    wobbleAmt.connect(osc2.detune);
+    const bellGain = gain * 0.22;
+    env2.gain.setValueAtTime(0, time);
+    env2.gain.linearRampToValueAtTime(bellGain, time + 0.003);
+    env2.gain.setTargetAtTime(bellGain * 0.12, time + 0.01, 0.04);
+    env2.gain.setTargetAtTime(0, time + duration * 0.6, 0.06);
+    osc2.connect(env2);
+    env2.connect(filter);
+    osc2.start(time);
+    osc2.stop(time + duration + 0.5);
+
+    const trem = ctx.createOscillator();
+    const tremAmt = ctx.createGain();
+    trem.type = 'sine';
+    trem.frequency.value = 4.5;
+    tremAmt.gain.value = gain * 0.1;
+    trem.connect(tremAmt);
+    tremAmt.connect(env1.gain);
+    trem.start(time);
+    trem.stop(time + duration + 0.8);
+  });
+}
+
+// ═══════════════════════════════════════════════════════════
+// LAYER 1 — Boom-Bap Drums (THE KNOCK)
+// ═══════════════════════════════════════════════════════════
+
+function playKick(time, vel) {
+  const t = time + (Math.random() - 0.5) * 0.03;
+  const v = vel || 1.0;
+
+  const osc = ctx.createOscillator();
+  const env = ctx.createGain();
+  osc.type = 'sine';
+  osc.frequency.setValueAtTime(75, t);
+  osc.frequency.exponentialRampToValueAtTime(40, t + 0.12);
+  env.gain.setValueAtTime(0.45 * v, t);
+  env.gain.setTargetAtTime(0.001, t + 0.05, 0.12);
+  osc.connect(env);
+  env.connect(drumGain);
+  osc.start(t);
+  osc.stop(t + 0.5);
+
+  const sub = ctx.createOscillator();
+  const subEnv = ctx.createGain();
+  sub.type = 'sine';
+  sub.frequency.setValueAtTime(40, t);
+  sub.frequency.exponentialRampToValueAtTime(28, t + 0.15);
+  subEnv.gain.setValueAtTime(0.25 * v, t);
+  subEnv.gain.setTargetAtTime(0.001, t + 0.06, 0.14);
+  sub.connect(subEnv);
+  subEnv.connect(drumGain);
+  sub.start(t);
+  sub.stop(t + 0.55);
+
+  const click = ctx.createOscillator();
+  const clickEnv = ctx.createGain();
+  click.type = 'sine';
+  click.frequency.setValueAtTime(180, t);
+  click.frequency.exponentialRampToValueAtTime(60, t + 0.02);
+  clickEnv.gain.setValueAtTime(0.12 * v, t);
+  clickEnv.gain.exponentialRampToValueAtTime(0.001, t + 0.03);
+  click.connect(clickEnv);
+  clickEnv.connect(drumGain);
+  click.start(t);
+  click.stop(t + 0.05);
+}
+
+function playSnare(time) {
+  const late = 0.030 + Math.random() * 0.010;
+  const jitter = (Math.random() - 0.5) * 0.024;
+  const t = time + late + jitter;
+
+  const src = ctx.createBufferSource();
+  const bp = ctx.createBiquadFilter();
+  const env = ctx.createGain();
+  src.buffer = snareBuf;
+  bp.type = 'bandpass';
+  bp.frequency.value = 1300;
+  bp.Q.value = 0.7;
+  env.gain.setValueAtTime(0.18, t);
+  env.gain.exponentialRampToValueAtTime(0.001, t + 0.13);
+  src.connect(bp);
+  bp.connect(env);
+  env.connect(drumGain);
+  src.start(t);
+
+  const body = ctx.createOscillator();
+  const bodyEnv = ctx.createGain();
+  body.type = 'sine';
+  body.frequency.setValueAtTime(190, t);
+  body.frequency.exponentialRampToValueAtTime(130, t + 0.05);
+  bodyEnv.gain.setValueAtTime(0.16, t);
+  bodyEnv.gain.exponentialRampToValueAtTime(0.001, t + 0.08);
+  body.connect(bodyEnv);
+  bodyEnv.connect(drumGain);
+  body.start(t);
+  body.stop(t + 0.12);
+}
+
+function playHat(time, accent) {
+  const t = time + (Math.random() - 0.5) * 0.02;
+  const vel = accent
+    ? 0.7 + Math.random() * 0.3
+    : 0.25 + Math.random() * 0.3;
+  const baseGain = 0.045;
+
+  const src = ctx.createBufferSource();
+  const hp = ctx.createBiquadFilter();
+  const env = ctx.createGain();
+  src.buffer = hatBuf;
+  hp.type = 'highpass';
+  hp.frequency.value = 8000;
+  env.gain.setValueAtTime(baseGain * vel, t);
+  env.gain.exponentialRampToValueAtTime(0.0001, t + 0.04);
+  src.connect(hp);
+  hp.connect(env);
+  env.connect(drumGain);
+  src.start(t);
+}
+
+function scheduleDrums(time, barIndex) {
+  if (!enabled.drums) return;
+  const beat = 60 / bpm;
+  const chordIdx = barIndex % 2;
+
+  if (chordIdx === 0) {
+    playKick(time, 1.0);
+    playKick(time + beat * (1 + SWING), 0.7);
+  } else {
+    playKick(time, 1.0);
+    playKick(time + beat * 2, 0.75);
+  }
+
+  playSnare(time + beat * 1);
+  playSnare(time + beat * 3);
+
+  for (let i = 0; i < 4; i++) {
+    playHat(time + beat * i, true);
+    playHat(time + beat * (i + SWING), false);
+  }
+}
+
+// ═══════════════════════════════════════════════════════════
+// LAYER 2 — Bass (THE WEIGHT)
+// ═══════════════════════════════════════════════════════════
+
+function playBassNote(time, midiNote, duration, vel) {
+  const t = time + BASS_LEAN;
+  const freq = mtof(midiNote);
+  const v = vel || 1.0;
+
+  const filter = ctx.createBiquadFilter();
+  filter.type = 'lowpass';
+  filter.frequency.value = 300;
+  filter.Q.value = 0.4;
+  filter.connect(bassGain);
+
+  const osc = ctx.createOscillator();
+  const env = ctx.createGain();
+  osc.type = 'sine';
+  osc.frequency.value = freq;
+  osc.detune.setValueAtTime(-20, t);
+  osc.detune.exponentialRampToValueAtTime(0.01, t + 0.08);
+  const gain = 0.28 * v;
+  env.gain.setValueAtTime(0, t);
+  env.gain.linearRampToValueAtTime(gain, t + 0.010);
+  env.gain.setTargetAtTime(gain * 0.85, t + 0.03, 0.08);
+  env.gain.setTargetAtTime(gain * 0.7, t + 0.15, 0.3);
+  env.gain.setTargetAtTime(0, t + duration, 0.08);
+  osc.connect(env);
+  env.connect(filter);
+  osc.start(t);
+  osc.stop(t + duration + 0.6);
+
+  const sub = ctx.createOscillator();
+  const subEnv = ctx.createGain();
+  sub.type = 'sine';
+  sub.frequency.value = freq / 2;
+  sub.detune.setValueAtTime(-20, t);
+  sub.detune.exponentialRampToValueAtTime(0.01, t + 0.08);
+  const subGain = gain * 0.35;
+  subEnv.gain.setValueAtTime(0, t);
+  subEnv.gain.linearRampToValueAtTime(subGain, t + 0.015);
+  subEnv.gain.setTargetAtTime(subGain * 0.8, t + 0.05, 0.1);
+  subEnv.gain.setTargetAtTime(0, t + duration, 0.1);
+  sub.connect(subEnv);
+  subEnv.connect(filter);
+  sub.start(t);
+  sub.stop(t + duration + 0.6);
+
+  const tri = ctx.createOscillator();
+  const triEnv = ctx.createGain();
+  tri.type = 'triangle';
+  tri.frequency.value = freq;
+  tri.detune.setValueAtTime(-20, t);
+  tri.detune.exponentialRampToValueAtTime(0.01, t + 0.08);
+  const triGain = gain * 0.12;
+  triEnv.gain.setValueAtTime(0, t);
+  triEnv.gain.linearRampToValueAtTime(triGain, t + 0.008);
+  triEnv.gain.setTargetAtTime(triGain * 0.3, t + 0.02, 0.04);
+  triEnv.gain.setTargetAtTime(0, t + duration * 0.5, 0.06);
+  tri.connect(triEnv);
+  triEnv.connect(filter);
+  tri.start(t);
+  tri.stop(t + duration + 0.4);
+}
+
+function scheduleBass(time, barIndex) {
+  if (!enabled.bass) return;
+  const beat = 60 / bpm;
+  const chordIdx = barIndex % 2;
+  const chord = CHORDS[chordIdx];
+
+  if (chordIdx === 0) {
+    playBassNote(time, chord.bass, beat * 3.2, 1.0);
+    playBassNote(time + beat * 3.5, chord.passing, beat * 0.5, 0.65);
+  } else {
+    playBassNote(time, chord.bass, beat * 3.8, 1.0);
+  }
+}
+
+// ═══════════════════════════════════════════════════════════
+// LAYER 3 — Horn Stabs (STYLE)
+// ═══════════════════════════════════════════════════════════
+
+function playHornStab(time, midiNote, vel) {
+  const freq = mtof(midiNote);
+  const t = time + (Math.random() - 0.5) * 0.015;
+  const v = vel || 1.0;
+  const dur = 0.18 + Math.random() * 0.06;
+
+  const filter = ctx.createBiquadFilter();
+  filter.type = 'lowpass';
+  filter.frequency.value = 2400;
+  filter.Q.value = 0.5;
+  filter.connect(hornGain);
+
+  const osc1 = ctx.createOscillator();
+  const env1 = ctx.createGain();
+  osc1.type = 'sine';
+  osc1.frequency.value = freq;
+  osc1.detune.setValueAtTime(40, t);
+  osc1.detune.exponentialRampToValueAtTime(0.01, t + 0.025);
+  const gain = 0.055 * v;
+  env1.gain.setValueAtTime(0, t);
+  env1.gain.linearRampToValueAtTime(gain, t + 0.004);
+  env1.gain.setTargetAtTime(gain * 0.55, t + 0.012, 0.025);
+  env1.gain.setTargetAtTime(0, t + dur, 0.035);
+  osc1.connect(env1);
+  env1.connect(filter);
+  osc1.start(t);
+  osc1.stop(t + dur + 0.25);
+
+  const osc2 = ctx.createOscillator();
+  const env2 = ctx.createGain();
+  const bp = ctx.createBiquadFilter();
+  osc2.type = 'square';
+  osc2.frequency.value = freq;
+  osc2.detune.setValueAtTime(40, t);
+  osc2.detune.exponentialRampToValueAtTime(0.01, t + 0.025);
+  bp.type = 'bandpass';
+  bp.frequency.value = 900;
+  bp.Q.value = 1.8;
+  const buzzGain = gain * 0.18;
+  env2.gain.setValueAtTime(0, t);
+  env2.gain.linearRampToValueAtTime(buzzGain, t + 0.005);
+  env2.gain.setTargetAtTime(buzzGain * 0.4, t + 0.01, 0.02);
+  env2.gain.setTargetAtTime(0, t + dur, 0.025);
+  osc2.connect(bp);
+  bp.connect(env2);
+  env2.connect(filter);
+  osc2.start(t);
+  osc2.stop(t + dur + 0.2);
+
+  const osc3 = ctx.createOscillator();
+  const env3 = ctx.createGain();
+  osc3.type = 'sine';
+  osc3.frequency.value = freq * 2;
+  osc3.detune.setValueAtTime(40, t);
+  osc3.detune.exponentialRampToValueAtTime(0.01, t + 0.025);
+  const octGain = gain * 0.10;
+  env3.gain.setValueAtTime(0, t);
+  env3.gain.linearRampToValueAtTime(octGain, t + 0.004);
+  env3.gain.setTargetAtTime(0, t + dur * 0.4, 0.02);
+  osc3.connect(env3);
+  env3.connect(filter);
+  osc3.start(t);
+  osc3.stop(t + dur + 0.15);
+}
+
+function scheduleHorns(time, barIndex) {
+  if (!enabled.horns) return;
+  const beat = 60 / bpm;
+  const barInCycle = barIndex % 8;
+
+  for (const [bar, beatOffset, note, vel] of HORN_PATTERN) {
+    if (barInCycle === bar) {
+      playHornStab(time + beat * beatOffset, note, vel);
+    }
+  }
+}
+
+// ═══════════════════════════════════════════════════════════
+// LAYER 4 — Texture, Ear Candy & Glue (AUTHENTIC)
+//
+// 1. Tape wobble: modulated delay (±4ms at 0.18Hz) on ALL audio
+// 2. Organ pad: warm Hammond-style drawbar organ with slow Leslie tremolo
+// 3. Dub delay slapback: filtered echo on horns & snare
+// 4. Reverse noise swell: once per 8-bar cycle
+// 5. Vinyl dust pops: random clicks per bar
+// ═══════════════════════════════════════════════════════════
+
+// Warm organ pad — Hammond drawbar style (8' + 4' + Leslie tremolo)
+// Follows chord changes, sits underneath the Rhodes. Low-key warmth.
+function scheduleOrganPad(time, barIndex) {
+  if (!enabled.texture) return;
+  const chord = CHORDS[barIndex % 2];
+  const beat = 60 / bpm;
+  const bar = beat * 4;
+  const dur = bar + 0.2;
+
+  // Use pad voicing one octave below Rhodes — warm bed
+  const voicing = [chord.bass + 12, ...chord.notes.slice(0, 2)]; // root + 2 color tones
+
+  for (const midi of voicing) {
+    const freq = mtof(midi);
+
+    // 8' drawbar — fundamental (sine)
+    const osc8 = ctx.createOscillator();
+    osc8.type = 'sine';
+    osc8.frequency.value = freq;
+    osc8.detune.value = -4 + Math.random() * 8; // slight analog drift
+
+    // 4' drawbar — octave above (sine, quieter)
+    const osc4 = ctx.createOscillator();
+    osc4.type = 'sine';
+    osc4.frequency.value = freq * 2;
+    osc4.detune.value = -3 + Math.random() * 6;
+
+    // Leslie tremolo — slow amplitude modulation
+    const trem = ctx.createOscillator();
+    const tremGain = ctx.createGain();
+    trem.type = 'sine';
+    trem.frequency.value = 0.9 + Math.random() * 0.2; // ~1Hz Leslie slow
+    tremGain.gain.value = 0.012; // modulates gain ±0.012
+
+    // Envelopes
+    const env8 = ctx.createGain();
+    env8.gain.setValueAtTime(0, time);
+    env8.gain.linearRampToValueAtTime(0.028, time + 0.3);
+    env8.gain.setTargetAtTime(0.022, time + 0.5, 0.4);
+    env8.gain.setTargetAtTime(0, time + dur - 0.25, 0.2);
+
+    const env4 = ctx.createGain();
+    env4.gain.setValueAtTime(0, time);
+    env4.gain.linearRampToValueAtTime(0.010, time + 0.3);
+    env4.gain.setTargetAtTime(0.007, time + 0.5, 0.4);
+    env4.gain.setTargetAtTime(0, time + dur - 0.25, 0.2);
+
+    // Leslie modulates the 8' drawbar gain
+    trem.connect(tremGain);
+    tremGain.connect(env8.gain);
+
+    // LPF — keep it dark, below the Rhodes
+    const lpf = ctx.createBiquadFilter();
+    lpf.type = 'lowpass';
+    lpf.frequency.value = 700;
+    lpf.Q.value = 0.5;
+
+    osc8.connect(env8);
+    osc4.connect(env4);
+    env8.connect(lpf);
+    env4.connect(lpf);
+    lpf.connect(textureGain);
+
+    const stopAt = time + dur + 1;
+    osc8.start(time); osc8.stop(stopAt);
+    osc4.start(time); osc4.stop(stopAt);
+    trem.start(time); trem.stop(stopAt);
+  }
+}
+
+function scheduleReverseSwell(time, barIndex) {
+  if (!enabled.texture) return;
+  const barInCycle = barIndex % 8;
+  if (barInCycle !== 7) return;  // only on last bar of 8-bar cycle
+
+  const beat = 60 / bpm;
+  const startBeat = 1.0;   // begin earlier — full 3 beats of swell
+  const endBeat = 4.0;     // peaks at bar boundary
+  const swellDur = beat * (endBeat - startBeat);
+  const t = time + beat * startBeat;
+
+  const src = ctx.createBufferSource();
+  src.buffer = swellBuf;
+
+  // Wider bandpass for fuller body
+  const bp = ctx.createBiquadFilter();
+  bp.type = 'bandpass';
+  bp.frequency.value = 2000;
+  bp.Q.value = 0.4;
+
+  const env = ctx.createGain();
+  // Reverse envelope: silence → swell → hard cut
+  env.gain.setValueAtTime(0, t);
+  env.gain.setValueAtTime(0.005, t + 0.01);  // tiny seed to allow exponential
+  env.gain.exponentialRampToValueAtTime(0.16, t + swellDur - 0.01);
+  env.gain.setValueAtTime(0, t + swellDur);   // hard cut at bar boundary
+
+  src.connect(bp);
+  bp.connect(env);
+  env.connect(textureGain);
+  // Heavy reverb feed for splash tail after the cut
+  const swellReverb = ctx.createGain();
+  swellReverb.gain.value = 0.5;
+  env.connect(swellReverb);
+  swellReverb.connect(convolver);
+  src.start(t);
+}
+
+// Vinyl dust pops — random loud clicks, 1-3 per bar
+function scheduleVinylPops(time) {
+  if (!enabled.texture) return;
+  const beat = 60 / bpm;
+  const barDur = beat * 4;
+  const numPops = 1 + Math.floor(Math.random() * 3);  // 1–3 pops
+
+  for (let i = 0; i < numPops; i++) {
+    const t = time + Math.random() * barDur;
+    const loud = Math.random() < 0.15;  // 15% chance of a loud pop
+    const vol = loud ? 0.12 + Math.random() * 0.08 : 0.03 + Math.random() * 0.04;
+
+    const osc = ctx.createOscillator();
+    const env = ctx.createGain();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(800 + Math.random() * 1200, t);
+    osc.frequency.exponentialRampToValueAtTime(100, t + 0.008);
+    env.gain.setValueAtTime(vol, t);
+    env.gain.exponentialRampToValueAtTime(0.0001, t + (loud ? 0.015 : 0.006));
+    osc.connect(env);
+    env.connect(textureGain);
+    osc.start(t);
+    osc.stop(t + 0.02);
+  }
+}
+
+// ═══════════════════════════════════════════════════════════
+// Scheduling
+// ═══════════════════════════════════════════════════════════
+function scheduleRhodes(time, barIndex) {
+  const chordIdx = barIndex % 2;
+  const chord = CHORDS[chordIdx];
+  const beat = 60 / bpm;
+
+  if (chordIdx === 0) {
+    playRhodesStab(time, chord, 1.0, beat * 1.0);
+    playRhodesStab(time + beat * 1.6, chord, 0.45, beat * 0.4);
+    playRhodesStab(time + beat * 3.0, chord, 0.65, beat * 0.7);
+  } else {
+    playRhodesStab(time, chord, 1.0, beat * 1.0);
+    playRhodesStab(time + beat * 2.6, chord, 0.45, beat * 0.4);
+  }
+}
+
+function scheduleBar(time, barIndex) {
+  const chordIdx = barIndex % 2;
+  const info = document.getElementById('barInfo');
+  if (info) info.textContent = `Bar ${barIndex + 1} — ${CHORDS[chordIdx].name} [${(barIndex % 8) + 1}/8]`;
+
+  scheduleRhodes(time, barIndex);
+  scheduleDrums(time, barIndex);
+  scheduleBass(time, barIndex);
+  scheduleHorns(time, barIndex);
+  scheduleOrganPad(time, barIndex);
+  scheduleReverseSwell(time, barIndex);
+  scheduleVinylPops(time);
+}
+
+function scheduler() {
+  const bar = 60 / bpm * 4;
+  while (nextBarTime < ctx.currentTime + 0.3) {
+    scheduleBar(nextBarTime, currentBar);
+    nextBarTime += bar;
+    currentBar++;
+  }
+  if (playing) schedTimer = setTimeout(scheduler, 50);
+}
+
+function startPlayback() {
+  initAudio();
+  if (ctx.state === 'suspended') ctx.resume();
+  if (playing) stopPlayback();
+  playing = true;
+  currentBar = 0;
+  nextBarTime = ctx.currentTime + 0.05;
+  startCrackle();
+  startTexture();
+  scheduler();
+  document.getElementById('status').textContent = 'Playing...';
+}
+
+function stopPlayback() {
+  playing = false;
+  if (schedTimer) clearTimeout(schedTimer);
+  schedTimer = null;
+  stopCrackle();
+  stopTexture();
+  document.getElementById('status').textContent = '';
+  document.getElementById('barInfo').textContent = 'Stopped';
+}
+
+// ── UI ──
+document.getElementById('playBtn').addEventListener('click', startPlayback);
+document.getElementById('stopBtn').addEventListener('click', stopPlayback);
+
+document.getElementById('volSlider').addEventListener('input', (e) => {
+  if (master) master.gain.value = e.target.value / 100 * 0.5;
+});
+
+document.getElementById('bpmSlider').addEventListener('input', (e) => {
+  bpm = Number(e.target.value);
+  document.getElementById('bpmLabel').textContent = bpm;
+});
+
+document.querySelectorAll('.part-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const part = btn.dataset.part;
+    enabled[part] = !enabled[part];
+    btn.classList.toggle('active', enabled[part]);
+    const gainMap = { drums: drumGain, bass: bassGain, horns: hornGain, texture: textureGain };
+    if (gainMap[part]) {
+      gainMap[part].gain.setTargetAtTime(enabled[part] ? 1 : 0, ctx.currentTime, 0.06);
+    }
+    // Tape wobble + dub delay: gate when texture is off
+    if (part === 'texture' && wobbleDepth) {
+      wobbleDepth.gain.setTargetAtTime(enabled.texture ? 0.004 : 0, ctx.currentTime, 0.1);
+    }
+    if (part === 'texture' && dubDelaySend) {
+      dubDelaySend.gain.setTargetAtTime(enabled.texture ? 0.22 : 0, ctx.currentTime, 0.1);
+    }
+  });
+});
+</script>
+</body>
+</html>

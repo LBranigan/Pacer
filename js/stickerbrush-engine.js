@@ -187,8 +187,8 @@ export class StickerbrushEngine {
         osc.detune.value = det;
         const env = ctx.createGain();
         env.gain.setValueAtTime(0, time);
-        env.gain.linearRampToValueAtTime(0.045, time + 0.35);
-        env.gain.setTargetAtTime(0.032, time + 0.5, 0.5);
+        env.gain.linearRampToValueAtTime(0.038, time + 0.35);
+        env.gain.setTargetAtTime(0.027, time + 0.5, 0.5);
         env.gain.setTargetAtTime(0, time + dur - 0.3, 0.25);
         const lpf = ctx.createBiquadFilter();
         lpf.type = 'lowpass';
@@ -221,11 +221,11 @@ export class StickerbrushEngine {
       osc2.frequency.value = freq * 3;
       const env = ctx.createGain();
       env.gain.setValueAtTime(0, t);
-      env.gain.linearRampToValueAtTime(0.072, t + 0.004);
+      env.gain.linearRampToValueAtTime(0.083, t + 0.004);
       env.gain.exponentialRampToValueAtTime(0.001, t + 0.35);
       const env2 = ctx.createGain();
       env2.gain.setValueAtTime(0, t);
-      env2.gain.linearRampToValueAtTime(0.013, t + 0.004);
+      env2.gain.linearRampToValueAtTime(0.015, t + 0.004);
       env2.gain.exponentialRampToValueAtTime(0.001, t + 0.15);
       osc1.connect(env);
       osc2.connect(env2);
@@ -253,13 +253,13 @@ export class StickerbrushEngine {
     sub.frequency.value = freq / 2;
     const env = ctx.createGain();
     env.gain.setValueAtTime(0, time);
-    env.gain.linearRampToValueAtTime(0.18, time + 0.06);
-    env.gain.setTargetAtTime(0.14, time + 0.1, 0.3);
+    env.gain.linearRampToValueAtTime(0.153, time + 0.06);
+    env.gain.setTargetAtTime(0.119, time + 0.1, 0.3);
     env.gain.setTargetAtTime(0, time + dur - 0.2, 0.15);
     const subEnv = ctx.createGain();
     subEnv.gain.setValueAtTime(0, time);
-    subEnv.gain.linearRampToValueAtTime(0.07, time + 0.06);
-    subEnv.gain.setTargetAtTime(0.05, time + 0.1, 0.3);
+    subEnv.gain.linearRampToValueAtTime(0.060, time + 0.06);
+    subEnv.gain.setTargetAtTime(0.043, time + 0.1, 0.3);
     subEnv.gain.setTargetAtTime(0, time + dur - 0.2, 0.15);
     const lpf = ctx.createBiquadFilter();
     lpf.type = 'lowpass';
@@ -314,13 +314,13 @@ export class StickerbrushEngine {
     lfoG.connect(osc2.detune);
     const env1 = ctx.createGain();
     env1.gain.setValueAtTime(0, time);
-    env1.gain.linearRampToValueAtTime(0.07, time + 0.04);
-    env1.gain.setTargetAtTime(0.055, time + 0.08, 0.25);
+    env1.gain.linearRampToValueAtTime(0.060, time + 0.04);
+    env1.gain.setTargetAtTime(0.047, time + 0.08, 0.25);
     env1.gain.setTargetAtTime(0, time + Math.max(dur - 0.02, 0.03), 0.1);
     const env2 = ctx.createGain();
     env2.gain.setValueAtTime(0, time);
-    env2.gain.linearRampToValueAtTime(0.035, time + 0.04);
-    env2.gain.setTargetAtTime(0.025, time + 0.08, 0.25);
+    env2.gain.linearRampToValueAtTime(0.030, time + 0.04);
+    env2.gain.setTargetAtTime(0.021, time + 0.08, 0.25);
     env2.gain.setTargetAtTime(0, time + Math.max(dur - 0.02, 0.03), 0.1);
     osc1.connect(env1);
     osc2.connect(env2);
@@ -340,7 +340,7 @@ export class StickerbrushEngine {
     this._playSnare(time + beat);
     this._playSnare(time + beat * 3);
     for (let i = 0; i < 8; i++) {
-      this._playHat(time + i * beat / 2, i % 2 === 0 ? 0.032 : 0.016);
+      this._playHat(time + i * beat / 2, i % 2 === 0 ? 0.027 : 0.014);
     }
   }
 
@@ -351,7 +351,7 @@ export class StickerbrushEngine {
     osc.frequency.setValueAtTime(110, time);
     osc.frequency.exponentialRampToValueAtTime(38, time + 0.12);
     const env = ctx.createGain();
-    env.gain.setValueAtTime(0.23, time);
+    env.gain.setValueAtTime(0.195, time);
     env.gain.exponentialRampToValueAtTime(0.001, time + 0.25);
     osc.connect(env); env.connect(this._gains.drums);
     osc.start(time); osc.stop(time + 0.3);
@@ -363,7 +363,7 @@ export class StickerbrushEngine {
     const bpf = ctx.createBiquadFilter();
     bpf.type = 'bandpass'; bpf.frequency.value = 1100; bpf.Q.value = 0.7;
     const env = ctx.createGain();
-    env.gain.setValueAtTime(0.045, time);
+    env.gain.setValueAtTime(0.038, time);
     env.gain.exponentialRampToValueAtTime(0.001, time + 0.08);
     src.connect(bpf); bpf.connect(env); env.connect(this._gains.drums);
     src.start(time); src.stop(time + 0.1);
