@@ -4,15 +4,15 @@
  * Key: G minor | Default tempo: 96 BPM
  * Progression: Gm7 -> Cm7 (2-bar loop, i -> iv)
  *
- * Synthesis: Rhodes EP stabs, boom-bap drums, deep bass, muted horn stabs,
- * harmonic bed (Perfect Day sample feel), dub delay, vinyl pops, reverse swell, tape wobble.
+ * Synthesis: Rhodes EP stabs, boom-bap drums, deep bass, congas/bongos,
+ * guitar bed (Perfect Day sample feel), dub delay, vinyl pops, reverse swell, tape wobble.
  *
  * Layer order:
  *   Layer 1 (Base):  Rhodes EP + vinyl crackle
  *   Layer 2 (+3):    Drums (kick, snare, swung hats)
  *   Layer 3 (+6):    Bass (root + sub + passing tones)
- *   Layer 4 (+9):    Horn stabs (muted jazz trumpet)
- *   Layer 5 (+12):   Texture (harmonic bed, dub delay, vinyl pops, reverse swell)
+ *   Layer 4 (+9):    Congas / bongos (syncopated hand percussion)
+ *   Layer 5 (+12):   Texture (guitar bed, dub delay, vinyl pops, reverse swell)
  */
 
 function mtof(m) { return 440 * Math.pow(2, (m - 69) / 12); }
@@ -22,18 +22,18 @@ const CHORDS = [
   { name: 'Cm7', notes: [60, 63, 67, 70], bass: 48, passing: null },
 ];
 
-const HORN_PATTERN = [
-  // [barInCycle, beatOffset, midiNote, velocity]
-  [0, 2.5,  74, 1.0],   // D5 — main stab
-  [0, 3.0,  70, 0.7],   // Bb4 — quick answer
-  [1, 1.0,  67, 0.9],   // G4 — downbeat anchor
-  [2, 2.5,  74, 0.85],  // D5 — repeat motif
-  [3, 3.5,  72, 0.75],  // C5 — leading to Cm bars
-  [4, 1.0,  72, 1.0],   // C5 — Cm territory
-  [4, 2.5,  70, 0.8],   // Bb4
-  [5, 3.0,  67, 0.7],   // G4
-  [6, 2.5,  63, 0.9],   // Eb4 — color note
-  [7, 3.75, 70, 0.6],   // Bb4 — pickup into next cycle
+// Conga/bongo pattern — [barInCycle, beatOffset, freq, velocity, decay]
+const PERC_PATTERN = [
+  [0, 1.5,  340, 0.9, 0.22],   // low conga, off-beat
+  [0, 3.0,  520, 0.6, 0.12],   // high slap
+  [1, 0.5,  290, 1.0, 0.28],   // deep tone
+  [1, 2.5,  520, 0.7, 0.12],   // high slap
+  [1, 3.5,  430, 0.5, 0.16],   // mid pickup
+  [2, 1.5,  340, 0.85, 0.22],  // low, repeat motif
+  [2, 3.0,  520, 0.6, 0.12],   // high slap
+  [3, 0.5,  290, 1.0, 0.28],   // deep
+  [3, 2.5,  620, 0.6, 0.10],   // bongo pop
+  [3, 3.75, 430, 0.5, 0.16],   // pickup
 ];
 
 const SWING = 0.6;
@@ -478,74 +478,60 @@ export class KickItEngine {
     tri.start(t); tri.stop(t + duration + 0.4);
   }
 
-  // ── HORNS ────────────────────────────────────────────────────────────────────
+  // ── CONGAS / BONGOS ──────────────────────────────────────────────────────────
 
   _scheduleHorns(time, barIndex) {
     const beat = 60 / this._bpm;
     const barInCycle = barIndex % 8;
 
-    for (const [bar, beatOffset, note, vel] of HORN_PATTERN) {
+    for (const [bar, beatOffset, freq, vel, decay] of PERC_PATTERN) {
       if (barInCycle === bar) {
-        this._playHornStab(time + beat * beatOffset, note, vel);
+        this._playPercHit(time + beat * beatOffset, freq, vel, decay);
       }
     }
   }
 
-  _playHornStab(time, midiNote, vel) {
+  _playPercHit(time, freq, vel, decay) {
     const ctx = this._ctx;
-    const freq = mtof(midiNote);
-    const t = time + (Math.random() - 0.5) * 0.008;
-    const v = vel || 1.0;
-    const dur = 0.30 + Math.random() * 0.08;
-    const G = 0.16 * v;
+    const t = time + (Math.random() - 0.5) * 0.004;
+    const G = 0.14 * vel;
 
-    // "Wah" bandpass sweep — muted trumpet opening up
-    const bp = ctx.createBiquadFilter();
-    bp.type = 'bandpass';
-    bp.Q.value = 2.5;
-    bp.frequency.setValueAtTime(700, t);
-    bp.frequency.linearRampToValueAtTime(2200, t + 0.06);
-    bp.frequency.setTargetAtTime(1200, t + 0.08, 0.08);
-    bp.connect(this._gains.horns);
+    // Pitched body — sine with downward pitch sweep (conga resonance)
+    const osc = ctx.createOscillator();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(freq * 1.8, t);
+    osc.frequency.exponentialRampToValueAtTime(freq, t + 0.012);
 
-    // Sawtooth — rich brass harmonics
-    const osc1 = ctx.createOscillator();
-    const env1 = ctx.createGain();
-    osc1.type = 'sawtooth';
-    osc1.frequency.value = freq;
-    osc1.detune.setValueAtTime(30, t);
-    osc1.detune.exponentialRampToValueAtTime(0.01, t + 0.02);
-    env1.gain.setValueAtTime(0, t);
-    env1.gain.linearRampToValueAtTime(G, t + 0.005);
-    env1.gain.setTargetAtTime(G * 0.5, t + 0.04, 0.04);
-    env1.gain.setTargetAtTime(0, t + dur, 0.04);
-    osc1.connect(env1); env1.connect(bp);
-    osc1.start(t); osc1.stop(t + dur + 0.3);
+    const env = ctx.createGain();
+    env.gain.setValueAtTime(G, t);
+    env.gain.setTargetAtTime(0, t + 0.015, decay * 0.4);
 
-    // Square buzz layer — adds grit
-    const osc2 = ctx.createOscillator();
-    const env2 = ctx.createGain();
-    osc2.type = 'square';
-    osc2.frequency.value = freq;
-    osc2.detune.setValueAtTime(30, t);
-    osc2.detune.exponentialRampToValueAtTime(0.01, t + 0.02);
-    env2.gain.setValueAtTime(0, t);
-    env2.gain.linearRampToValueAtTime(G * 0.25, t + 0.005);
-    env2.gain.setTargetAtTime(G * 0.12, t + 0.03, 0.03);
-    env2.gain.setTargetAtTime(0, t + dur, 0.03);
-    osc2.connect(env2); env2.connect(bp);
-    osc2.start(t); osc2.stop(t + dur + 0.25);
+    osc.connect(env);
+    env.connect(this._gains.horns);
+    osc.start(t);
+    osc.stop(t + decay + 0.3);
 
-    // Octave shimmer — bright edge
-    const osc3 = ctx.createOscillator();
-    const env3 = ctx.createGain();
-    osc3.type = 'sawtooth';
-    osc3.frequency.value = freq * 2;
-    env3.gain.setValueAtTime(0, t);
-    env3.gain.linearRampToValueAtTime(G * 0.08, t + 0.005);
-    env3.gain.setTargetAtTime(0, t + dur * 0.3, 0.025);
-    osc3.connect(env3); env3.connect(bp);
-    osc3.start(t); osc3.stop(t + dur + 0.2);
+    // Attack transient — short noise burst for the "slap"
+    const noiseLen = Math.ceil(ctx.sampleRate * 0.006);
+    const nBuf = ctx.createBuffer(1, noiseLen, ctx.sampleRate);
+    const nd = nBuf.getChannelData(0);
+    for (let i = 0; i < noiseLen; i++) nd[i] = Math.random() * 2 - 1;
+
+    const noise = ctx.createBufferSource();
+    noise.buffer = nBuf;
+    const nBP = ctx.createBiquadFilter();
+    nBP.type = 'bandpass';
+    nBP.frequency.value = freq * 2.5;
+    nBP.Q.value = 1.2;
+    const nEnv = ctx.createGain();
+    nEnv.gain.setValueAtTime(G * 0.6, t);
+    nEnv.gain.setTargetAtTime(0, t + 0.003, 0.003);
+
+    noise.connect(nBP);
+    nBP.connect(nEnv);
+    nEnv.connect(this._gains.horns);
+    noise.start(t);
+    noise.stop(t + 0.015);
   }
 
   // ── TEXTURE — Harmonic bed (Perfect Day feel), reverse swell, vinyl pops ────
