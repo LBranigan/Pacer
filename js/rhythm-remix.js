@@ -7,8 +7,8 @@
  * @module rhythm-remix
  */
 
-import { LofiEngine } from './lofi-engine.js?v=20260218a1';
-import { MountainRange } from './mountain-range.js?v=20260218a1';
+import { LofiEngine } from './lofi-engine.js?v=20260219a1';
+import { MountainRange } from './mountain-range.js?v=20260219a1';
 import { getAudioBlob } from './audio-store.js';
 import { getAssessment, getStudents } from './storage.js';
 import { getPunctuationPositions } from './diagnostics.js';
@@ -67,8 +67,6 @@ let audioUrl = null;     // ObjectURL — revoked on cleanup
 let sourceNode = null;
 let voiceGain = null;
 let beatGain = null;
-let analyser = null;
-let vizData = null;       // reusable Uint8Array for visualizer (avoid GC)
 let waveformFrameSkip = 0; // throttle waveform to every 3rd frame
 
 let animFrameId = null;
@@ -77,8 +75,6 @@ let lastFrameTime = 0;
 
 let ballCanvas = null;
 let ballCtx = null;
-let vizCanvas = null;
-let vizCtx = null;
 
 /** Mountain range / waveform visualization. */
 let mountainRange = null;
@@ -409,9 +405,6 @@ function playDJIntroThenReading() {
     djSourceNode.connect(djGainNode);
     djGainNode.connect(audioCtx.destination);
 
-    // Also feed DJ voice into analyser for visualizer
-    djGainNode.connect(analyser);
-
     // Duck the beat volume during DJ intro
     if (beatGain) {
       beatGain.gain.setValueAtTime(0.25, audioCtx.currentTime);
@@ -424,10 +417,9 @@ function playDJIntroThenReading() {
 
     djSourceNode.start(audioCtx.currentTime);
 
-    // Run visualizer during DJ intro
+    // Run chord badge during DJ intro
     let djVizId = null;
     function djVizLoop() {
-      drawVisualizer();
       updateChordBadge();
       djVizId = requestAnimationFrame(djVizLoop);
     }
@@ -601,12 +593,6 @@ function sizeCanvas() {
   const rect = wrapper.getBoundingClientRect();
   ballCanvas.width = rect.width;
   ballCanvas.height = rect.height;
-
-  if (vizCanvas) {
-    const vizRect = vizCanvas.parentElement.getBoundingClientRect();
-    vizCanvas.width = vizRect.width;
-    // height set in HTML attribute
-  }
 }
 
 // ── Audio setup (lazy, first interaction) ────────────────────────────────────
@@ -626,12 +612,6 @@ function setupAudio() {
   beatGain = audioCtx.createGain();
   beatGain.gain.value = 0.60;
   beatGain.connect(audioCtx.destination);
-
-  // Analyser for visualizer (fed by both voice and beat)
-  analyser = audioCtx.createAnalyser();
-  analyser.fftSize = 128;
-  voiceGain.connect(analyser);
-  beatGain.connect(analyser);
 
   // Lo-fi engine
   lofi = new LofiEngine(audioCtx);
@@ -1058,29 +1038,6 @@ function drawFrame(dt) {
   drawParticles(ballCtx);
 }
 
-// ── Audio visualizer ─────────────────────────────────────────────────────────
-
-const VIZ_COLORS = ['#e8a87c', '#d4a5c7', '#a8d8a8', '#c4b5d4'];
-
-function drawVisualizer() {
-  if (!analyser || !vizCtx || !vizCanvas) return;
-
-  if (!vizData) vizData = new Uint8Array(analyser.frequencyBinCount);
-  analyser.getByteFrequencyData(vizData);
-
-  vizCtx.clearRect(0, 0, vizCanvas.width, vizCanvas.height);
-
-  const barW = vizCanvas.width / vizData.length;
-  vizCtx.globalAlpha = 0.7;
-
-  for (let i = 0; i < vizData.length; i++) {
-    const h = (vizData[i] / 255) * vizCanvas.height * 0.9;
-    vizCtx.fillStyle = VIZ_COLORS[i % VIZ_COLORS.length];
-    vizCtx.fillRect(i * barW + 1, vizCanvas.height - h, Math.max(barW - 2, 1), h);
-  }
-  vizCtx.globalAlpha = 1;
-}
-
 // ── Chord badge ──────────────────────────────────────────────────────────────
 
 let lastChordName = '';
@@ -1151,10 +1108,7 @@ function animationLoop(timestamp) {
   // 4. Update word CSS
   updateWordClasses(currentWordIdx);
 
-  // 5. Draw visualizer
-  drawVisualizer();
-
-  // 8. Update waveform visualization (throttled to every 3rd frame)
+  // 5. Update waveform visualization (throttled to every 3rd frame)
   if (mountainRange) {
     mountainRange.setPlayhead(ct);
     waveformFrameSkip++;
@@ -1561,7 +1515,6 @@ function initRhythmRemix() {
 
   const wordArea = document.getElementById('word-area');
   ballCanvas = document.getElementById('ball-canvas');
-  vizCanvas = document.getElementById('visualizer-canvas');
 
   if (!studentId || !assessmentId) {
     if (wordArea) wordArea.innerHTML = '<p class="remix-message">Missing student or assessment data.</p>';
@@ -1633,9 +1586,8 @@ function initRhythmRemix() {
     mountainRange = new MountainRange(mtCanvas, wordSequence.length);
   }
 
-  // Setup canvases
+  // Setup canvas
   if (ballCanvas) ballCtx = ballCanvas.getContext('2d');
-  if (vizCanvas) vizCtx = vizCanvas.getContext('2d');
   // Teleprompter: detect lines and set 2-line height before caching rects
   detectLines();
   setupTeleprompterHeight();
