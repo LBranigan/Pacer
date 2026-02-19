@@ -248,6 +248,8 @@ const STYLE_BPM_RANGE = {
 };
 
 function wcpmToBpm(wcpm, style) {
+  // Hero's Adventure: BPM = WPM directly
+  if (style === 'zelda') return Math.round(Math.max(50, Math.min(200, wcpm)));
   const range = STYLE_BPM_RANGE[style] || STYLE_BPM_RANGE.lofi;
   // sqrt compression: normalize WCPM 20–200 to 0–1, then sqrt to compress top end
   const t = Math.min(1, Math.max(0, Math.sqrt((wcpm - 20) / 180)));
