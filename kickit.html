@@ -695,11 +695,7 @@ function scheduleHarmonicBed(time, barIndex) {
     const src = ctx.createBufferSource();
     src.buffer = buf;
 
-    // Bend up into pitch — start flat, slide to true pitch
-    src.detune.setValueAtTime(-70, t);
-    src.detune.linearRampToValueAtTime(0, t + 0.22);
-
-    // Soft attack + subtle volume
+    // Soft attack + long release — crossfades naturally between chords
     const env = ctx.createGain();
     env.gain.setValueAtTime(0, t);
     env.gain.linearRampToValueAtTime(0.065, t + 0.08);
