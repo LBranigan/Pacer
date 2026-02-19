@@ -2427,7 +2427,7 @@ function renderWordSpeedInto(parent, wordSpeedData, wordAudioEl, transcriptWords
 
   const label = document.createElement('h5');
   label.className = 'word-speed-label';
-  label.textContent = 'Word Speed Map';
+  label.textContent = 'Word Speed Map (relative to student pace)';
   headerRow.appendChild(label);
 
   const toggleLabel = document.createElement('label');
@@ -2453,8 +2453,8 @@ function renderWordSpeedInto(parent, wordSpeedData, wordAudioEl, transcriptWords
     { cls: 'ws-quick', label: 'Quick' },
     { cls: 'ws-steady', label: 'Steady' },
     { cls: 'ws-slow', label: 'Slow' },
-    { cls: 'ws-struggling', label: 'Struggling' },
-    { cls: 'ws-stalled', label: 'Stalled' },
+    { cls: 'ws-very-slow', label: 'Very Slow' },
+    { cls: 'ws-slowest', label: 'Slowest' },
     { cls: 'ws-omitted', label: 'Omitted' },
     { cls: 'ws-no-data', label: 'No data' }
   ];
@@ -2587,8 +2587,8 @@ function buildWordSpeedTooltip(w) {
     quick: '< 0.75x',
     steady: '0.75x – 1.25x',
     slow: '1.25x – 1.75x',
-    struggling: '1.75x – 2.50x',
-    stalled: '>= 2.50x'
+    'very-slow': '1.75x – 2.50x',
+    slowest: '>= 2.50x'
   };
   if (w.ratio != null && w._medianMs) {
     lines.push(`Ratio: ${w.ratio}x student median (${w._medianMs} ms/ph)`);
@@ -2624,13 +2624,13 @@ function renderWordSpeedSummary(container, data) {
   const parts = [];
   parts.push(`${data.atPacePercent}% at pace`);
   if (d.slow > 0) parts.push(`${d.slow} slow`);
-  if (d.struggling > 0) parts.push(`${d.struggling} struggling`);
-  if (d.stalled > 0) parts.push(`${d.stalled} stalled`);
+  if (d['very-slow'] > 0) parts.push(`${d['very-slow']} very slow`);
+  if (d.slowest > 0) parts.push(`${d.slowest} slowest`);
   textLine.textContent = parts.join(' | ');
   container.appendChild(textLine);
 
   // Stacked distribution bar (only classifiable tiers)
-  const classifiable = d.quick + d.steady + d.slow + d.struggling + d.stalled;
+  const classifiable = d.quick + d.steady + d.slow + d['very-slow'] + d.slowest;
   if (classifiable > 0) {
     const bar = document.createElement('div');
     bar.className = 'ws-dist-bar';
@@ -2638,8 +2638,8 @@ function renderWordSpeedSummary(container, data) {
       { cls: 'seg-quick', count: d.quick },
       { cls: 'seg-steady', count: d.steady },
       { cls: 'seg-slow', count: d.slow },
-      { cls: 'seg-struggling', count: d.struggling },
-      { cls: 'seg-stalled', count: d.stalled }
+      { cls: 'seg-very-slow', count: d['very-slow'] },
+      { cls: 'seg-slowest', count: d.slowest }
     ];
     for (const s of segs) {
       if (s.count <= 0) continue;

@@ -1784,9 +1784,9 @@ export function computeWordSpeedTiers(wordOutliers, alignment, xvalRawWords, tra
     } else if (ratio < 1.75) {
       w.tier = 'slow';
     } else if (ratio < 2.50) {
-      w.tier = 'struggling';
+      w.tier = 'very-slow';
     } else {
-      w.tier = 'stalled';
+      w.tier = 'slowest';
     }
     // Outliers (above IQR fence from Metric 4) must show at least "slow" —
     // the two systems use different baselines and can disagree.
@@ -1796,13 +1796,13 @@ export function computeWordSpeedTiers(wordOutliers, alignment, xvalRawWords, tra
   }
 
   // Count distribution per tier
-  const distribution = { quick: 0, steady: 0, slow: 0, struggling: 0, stalled: 0, omitted: 0, 'no-data': 0 };
+  const distribution = { quick: 0, steady: 0, slow: 0, 'very-slow': 0, slowest: 0, omitted: 0, 'no-data': 0 };
   for (const w of words) {
     if (distribution[w.tier] !== undefined) distribution[w.tier]++;
   }
 
   // atPacePercent: only words we could meaningfully classify
-  const classifiable = distribution.quick + distribution.steady + distribution.slow + distribution.struggling + distribution.stalled;
+  const classifiable = distribution.quick + distribution.steady + distribution.slow + distribution['very-slow'] + distribution.slowest;
   const atPace = distribution.quick + distribution.steady;
   const atPacePercent = classifiable > 0 ? Math.round((atPace / classifiable) * 1000) / 10 : 0;
 
@@ -1893,7 +1893,7 @@ export function recomputeWordSpeedWithPauses(wordSpeedData, transcriptWords, ref
   if (!medianMs || medianMs <= 0) return wordSpeedData;
 
   // Re-classify tiers
-  const distribution = { quick: 0, steady: 0, slow: 0, struggling: 0, stalled: 0, omitted: 0, 'no-data': 0 };
+  const distribution = { quick: 0, steady: 0, slow: 0, 'very-slow': 0, slowest: 0, omitted: 0, 'no-data': 0 };
   for (const w of words) {
     if (w.tier === 'omitted' || w.tier === 'no-data') {
       distribution[w.tier]++;
@@ -1916,9 +1916,9 @@ export function recomputeWordSpeedWithPauses(wordSpeedData, transcriptWords, ref
     } else if (ratio < 1.75) {
       w.tier = 'slow';
     } else if (ratio < 2.50) {
-      w.tier = 'struggling';
+      w.tier = 'very-slow';
     } else {
-      w.tier = 'stalled';
+      w.tier = 'slowest';
     }
     if (w.isOutlier && (w.tier === 'quick' || w.tier === 'steady')) {
       w.tier = 'slow';
@@ -1926,7 +1926,7 @@ export function recomputeWordSpeedWithPauses(wordSpeedData, transcriptWords, ref
     distribution[w.tier]++;
   }
 
-  const classifiable = distribution.quick + distribution.steady + distribution.slow + distribution.struggling + distribution.stalled;
+  const classifiable = distribution.quick + distribution.steady + distribution.slow + distribution['very-slow'] + distribution.slowest;
   const atPace = distribution.quick + distribution.steady;
   const atPacePercent = classifiable > 0 ? Math.round((atPace / classifiable) * 1000) / 10 : 0;
 

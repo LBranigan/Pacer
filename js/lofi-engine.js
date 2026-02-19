@@ -890,7 +890,7 @@ export class LofiEngine {
 
   /**
    * Play a melodic ping for a word based on its speed tier.
-   * @param {'quick'|'steady'|'slow'|'struggling'|'stalled'} tier - word speed tier
+   * @param {'quick'|'steady'|'slow'|'very-slow'|'slowest'} tier - word speed tier
    * @param {boolean} isError - whether the word is an error
    */
   playMelodicPing(tier, isError) {
@@ -907,8 +907,8 @@ export class LofiEngine {
     if (tier === 'quick') noteIdx = scale.length - 1;       // highest
     else if (tier === 'steady') noteIdx = Math.floor(scale.length * 0.6);
     else if (tier === 'slow') noteIdx = Math.floor(scale.length * 0.3);
-    else if (tier === 'struggling') noteIdx = 1;
-    else noteIdx = 0;                                         // stalled = lowest
+    else if (tier === 'very-slow') noteIdx = 1;
+    else noteIdx = 0;                                         // slowest = lowest
 
     let freq = scale[Math.min(noteIdx, scale.length - 1)];
 

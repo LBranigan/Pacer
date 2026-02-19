@@ -40,7 +40,7 @@ export function buildInsightPayload(alignment, wcpm, accuracy, diagnostics, refe
       (entry.type === 'substitution' && !entry.forgiven) ||
       (entry.type === 'omission' && !entry.forgiven) ||
       entry._isSelfCorrection || entry._selfCorrected ||
-      (speed && (speed.tier === 'stalled' || speed.tier === 'struggling')) ||
+      (speed && (speed.tier === 'slowest' || speed.tier === 'very-slow')) ||
       (speed && speed.ratio > 2.5) ||
       entry._notAttempted ||
       entry.forgiven;
@@ -96,39 +96,6 @@ export function buildInsightPayload(alignment, wcpm, accuracy, diagnostics, refe
   const readingPattern = prosody?.phrasing?.readingPattern?.classification || null;
   const atPacePercent = wordSpeed?.atPacePercent ?? null;
 
-  // Absolute pace threshold from grade-level norms.
-  // WCPM includes inter-word pauses; word-level ms/ph is articulation-only.
-  // Using 1.5× the WCPM-derived ms/ph as the "truly slow" bar is generous —
-  // only flags words that are genuinely slow in absolute terms.
-  const AVG_PHONEMES_PER_WORD = 4.0;
-  const absoluteThresholdMsPerPh = (benchmark?.norms?.p50)
-    ? (60000 / (benchmark.norms.p50 * AVG_PHONEMES_PER_WORD)) * 1.5
-    : null;
-
-  // Stalled words — dual-gated when benchmark is available:
-  // must be both relatively slow (tier=stalled) AND absolutely slow
-  const stalledWords = [];
-  if (wordSpeed && !wordSpeed.insufficient) {
-    for (const w of wordSpeed.words) {
-      if (w.tier === 'stalled') {
-        if (!absoluteThresholdMsPerPh || w.normalizedMs >= absoluteThresholdMsPerPh) {
-          stalledWords.push(w.refWord);
-        }
-      }
-    }
-  }
-
-  // Downgrade tier labels on interesting words that are only relatively slow
-  // (not absolutely slow) — prevents AI from calling them "stalled"
-  if (absoluteThresholdMsPerPh) {
-    for (const w of interestingWords) {
-      if ((w.tier === 'stalled' || w.tier === 'struggling') &&
-          w.normalizedMs != null && w.normalizedMs < absoluteThresholdMsPerPh) {
-        w.tier = 'relatively slower';
-      }
-    }
-  }
-
   return {
     totalWords: accuracy.totalRefWords,
     wordsCorrect: accuracy.correctCount,
@@ -146,7 +113,6 @@ export function buildInsightPayload(alignment, wcpm, accuracy, diagnostics, refe
 
     readingPattern,
     atPacePercent,
-    stalledWords,
 
     multisyllabicDifficulty: multiRef.length > 0 ? {
       struggled: multiStruggled.length,
@@ -182,7 +148,7 @@ Data notes:
 - "Forgiven" words are NOT errors. A secondary ASR engine confirmed the student read them correctly, even though the primary engine misheard. Do NOT mention forgiven words as mistakes.
 - "Self-corrected" words are a STRENGTH — the student caught and fixed their own error.
 - Only words in the "Errors" table are actual mistakes. Words in "Forgiven" table were read correctly.
-- Pace tiers labeled "stalled" or "struggling" mean the word was slow in BOTH relative AND absolute terms — it's safe to describe these as genuine stalls. Tiers labeled "relatively slower" only mean the word was slower than the student's own median but still within normal absolute pace — do NOT call these "stalled" or imply difficulty; at most note the student "took a bit more time."
+- ALL pace tiers ("very-slow", "slowest", etc.) are RELATIVE to this student's own median pace — they show which words the student spent more time on compared to their own typical speed. They do NOT indicate absolute slowness. A fast reader's "slowest" words may still be objectively quick. Never say the student "stalled" or "halted" based on pace tiers alone. Instead, describe what the tier actually means: "spent noticeably more time on" or "slowed down relative to their own pace on." Only use words like "stalled" or "struggled" when the data explicitly shows a struggle pattern (type=substitution with struggle=true, or near-miss evidence).
 
 Rules:
 - ONLY describe patterns that appear in the data below. Do NOT invent or infer anything not explicitly listed.
@@ -247,10 +213,6 @@ function buildUserPrompt(payload, studentName, passageSnippet, readabilityInfo) 
   if (payload.atPacePercent != null) {
     lines.push(`- ${payload.atPacePercent}% of words read at steady pace`);
   }
-  if (payload.stalledWords.length > 0) {
-    lines.push(`- Stalled on: ${payload.stalledWords.join(', ')}`);
-  }
-
   // Split interesting words into errors vs forgiven
   const activeWords = payload.interestingWords.filter(w => !w.notAttempted);
   const errorWords = activeWords.filter(w => !w.forgiven);

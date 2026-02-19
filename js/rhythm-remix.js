@@ -8,7 +8,6 @@
  */
 
 import { LofiEngine } from './lofi-engine.js?v=20260219a5';
-import { MegaManEngine } from './megaman-engine.js?v=20260219a5';
 import { LofiV2Engine } from './lofi-v2-engine.js?v=20260219a5';
 import { StickerbrushEngine } from './stickerbrush-engine.js?v=20260219a5';
 import { StickerbrushV2Engine } from './stickerbrush-v2-engine.js?v=20260219a5';
@@ -785,8 +784,8 @@ function onWordChange(fromIdx, toIdx) {
       if (dur < 0.2) tier = 'quick';
       else if (dur < 0.4) tier = 'steady';
       else if (dur < 0.8) tier = 'slow';
-      else if (dur < 1.5) tier = 'struggling';
-      else tier = 'stalled';
+      else if (dur < 1.5) tier = 'very-slow';
+      else tier = 'slowest';
     }
     if (!w.isOmission) {
       lofi.playMelodicPing(tier, isError);
