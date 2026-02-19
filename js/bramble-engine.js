@@ -8,8 +8,8 @@
  *
  * Layer 1 (Base):  Warm sawtooth pads
  * Layer 2 (+3):    Drums (kick + hat)
- * Layer 3 (+6):    Sub-bass
- * Layer 4 (+9):    Main melody — dotted-8th + 16th rhythm
+ * Layer 3 (+6):    Main melody — dotted-8th + 16th rhythm
+ * Layer 4 (+9):    Sub-bass
  * Layer 5 (+12):   Arpeggiated plucks
  */
 
@@ -144,8 +144,7 @@ export class BrambleEngine {
   constructor(ctx) {
     this._ctx = ctx;
     this._style = 'superstar';
-    this._bpm = 95;          // base tempo (pads/drums/bass/lead) — ~half of arp
-    this._arpBpm = 95;       // arp tempo (= WCPM directly)
+    this._bpm = 95;
     this._playing = false;
     this._overlayLevel = 0;
     this._chordIdx = 0;
@@ -369,11 +368,11 @@ export class BrambleEngine {
   _tick() {
     if (!this._playing) return;
     const now = this._ctx.currentTime;
-    const beatDur = 60 / this._bpm;           // base tempo (half speed)
+    const beatDur = 60 / this._bpm;
     const barDur = beatDur * 4;
     const chordDur = barDur * BARS_PER_CHORD;
     const sixteenthDur = beatDur / 4;
-    const arpSixteenth = 60 / this._arpBpm / 4; // arp runs at full WCPM tempo
+    const arpSixteenth = sixteenthDur;
     const LA = 0.15; // look-ahead
 
     // ── Layer 1 (base): Pad chord changes ───────────────────────────────
@@ -387,12 +386,12 @@ export class BrambleEngine {
       this._drumPos = 0; this._nextDrumTime = t;
       this._arpPos = 0;  this._nextArpTime = t;
       // Start bass with chord if layer active
-      if (this._overlayLevel >= 0.65) {
+      if (this._overlayLevel >= 1.0) {
         this._playBass(CHORDS[this._chordIdx].root, t);
       }
     }
 
-    // ── Layer 2 (+3 streak): Drums on base-tempo 16th grid ──────────────
+    // ── Layer 2 (+3 streak): Drums ───────────────────────────────────────
     if (this._overlayLevel >= 0.35) {
       while (this._nextDrumTime < now + LA && this._drumPos < 32) {
         const t = this._nextDrumTime;
@@ -403,10 +402,8 @@ export class BrambleEngine {
       }
     }
 
-    // ── Layer 3 (+6 streak): Bass (started at chord changes above) ──────
-
-    // ── Layer 4 (+9 streak): Lead melody on base-tempo 16th grid ────────
-    if (this._overlayLevel >= 1.0) {
+    // ── Layer 3 (+6 streak): Lead melody ─────────────────────────────────
+    if (this._overlayLevel >= 0.65) {
       const phrase = (this._melodyCycle % 2 === 0) ? MELODY_A : MELODY_B;
       while (this._melodyIdx < phrase.length) {
         const [pos, freq, hold] = phrase[this._melodyIdx];
@@ -425,7 +422,9 @@ export class BrambleEngine {
       }
     }
 
-    // ── Layer 5 (+12 streak): Arpeggio on FULL WCPM-tempo 16th grid ─────
+    // ── Layer 4 (+9 streak): Bass (started at chord changes above) ──────
+
+    // ── Layer 5 (+12 streak): Arpeggio ──────────────────────────────────
     if (this._overlayLevel >= 1.5) {
       const arp = ARPEGGIO[this._chordIdx % ARPEGGIO.length];
       while (this._nextArpTime < now + LA && this._arpPos < 32) {
@@ -449,8 +448,8 @@ export class BrambleEngine {
     const now = this._ctx.currentTime;
     this._chordIdx = 0; this._lastChordTime = now;
     this._currentPad = this._playPadChord(0, now);
-    // Bass only starts when overlay >= 0.65
-    if (this._overlayLevel >= 0.65) this._playBass(CHORDS[0].root, now);
+    // Bass only starts when overlay >= 1.0
+    if (this._overlayLevel >= 1.0) this._playBass(CHORDS[0].root, now);
     this._drumPos = 0; this._nextDrumTime = now;
     this._arpPos = 0; this._nextArpTime = now;
     this._melodyCycle = 0; this._melodyIdx = 0; this._melodyCycleStart = now;
@@ -468,10 +467,7 @@ export class BrambleEngine {
   }
 
   setTempo(bpm) {
-    // bpm arrives as WCPM directly (via 'superstar' mapping in wcpmToBpm).
-    // Arp runs at full WCPM tempo; pads/drums/bass/lead at ~half.
-    this._arpBpm = Math.max(40, Math.min(200, bpm));
-    this._bpm = Math.max(30, Math.min(120, bpm / 2));
+    this._bpm = Math.max(40, Math.min(200, bpm));
     if (this._melodyDelay) this._melodyDelay.delayTime.value = 60 / this._bpm;
   }
   setStyle() {}
