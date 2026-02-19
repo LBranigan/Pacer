@@ -1,0 +1,856 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>PACER — One Flow (Mockup D)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+  :root {
+    --bg: #111111;
+    --surface: #1a1a1a;
+    --surface-2: #222222;
+    --border: #2a2a2a;
+    --text: #f0f0f0;
+    --text-2: #888888;
+    --text-3: #555555;
+    --accent: #5b7fff;
+    --green: #34d399;
+    --red: #f87171;
+    --amber: #fbbf24;
+  }
+
+  body {
+    font-family: 'Inter', -apple-system, system-ui, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    min-height: 100dvh;
+    overflow-x: hidden;
+  }
+
+  /* ── The entire app is ONE screen that morphs ── */
+  .app {
+    min-height: 100vh;
+    min-height: 100dvh;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* ── Persistent top bar ── */
+  .bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 20px;
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+  .bar-left {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .bar-logo {
+    font-size: 16px;
+    font-weight: 800;
+    letter-spacing: -0.5px;
+  }
+  .mic-indicator {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-3);
+    transition: color 0.3s;
+  }
+  .mic-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--text-3);
+    transition: background 0.3s;
+  }
+  .mic-dot.checking { background: var(--amber); animation: blink 1s infinite; }
+  .mic-dot.good { background: var(--green); }
+  .mic-dot.bad { background: var(--red); }
+  .mic-indicator.good { color: var(--green); }
+  .mic-indicator.bad { color: var(--red); }
+  @keyframes blink { 50% { opacity: 0.4; } }
+
+  .bar-right {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .bar-name {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-2);
+  }
+  .bar-avatar {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--text-2);
+  }
+
+  /* ── Main content area ── */
+  .main {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  .phase {
+    display: none;
+    flex-direction: column;
+    flex: 1;
+    animation: morph 0.3s ease;
+  }
+  .phase.active { display: flex; }
+  @keyframes morph {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+
+  /* ── Phase 0: Home ── */
+  .home-center {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+  }
+  .home-prompt {
+    font-size: 32px;
+    font-weight: 800;
+    letter-spacing: -1px;
+    margin-bottom: 6px;
+    text-align: center;
+  }
+  .home-sub {
+    font-size: 14px;
+    color: var(--text-2);
+    margin-bottom: 40px;
+    text-align: center;
+  }
+  .start-btn {
+    width: 100%;
+    max-width: 320px;
+    padding: 16px;
+    border: none;
+    border-radius: 12px;
+    background: var(--accent);
+    color: white;
+    font-family: inherit;
+    font-size: 16px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .start-btn:active { transform: scale(0.98); opacity: 0.9; }
+
+  .history-section {
+    border-top: 1px solid var(--border);
+    padding: 16px 20px;
+  }
+  .history-label {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-3);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 10px;
+  }
+  .history-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 0;
+  }
+  .history-row + .history-row { border-top: 1px solid var(--border); }
+  .history-wcpm {
+    font-size: 20px;
+    font-weight: 800;
+    width: 56px;
+  }
+  .history-meta { flex: 1; }
+  .history-title { font-size: 13px; font-weight: 600; }
+  .history-date { font-size: 12px; color: var(--text-3); }
+  .history-acc {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--green);
+  }
+
+  /* ── Phase 1: Capture ── */
+  .capture-area {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    position: relative;
+  }
+  .viewfinder {
+    width: 100%;
+    max-width: 380px;
+    aspect-ratio: 3/4;
+    border-radius: 16px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    overflow: hidden;
+    margin-bottom: 16px;
+  }
+  .viewfinder .vf-text {
+    font-size: 14px;
+    color: var(--text-3);
+    font-weight: 500;
+  }
+  .viewfinder .corners {
+    position: absolute;
+    inset: 12px;
+    border: 2px solid rgba(255,255,255,0.15);
+    border-radius: 8px;
+    pointer-events: none;
+  }
+  .viewfinder .guide-text {
+    position: absolute;
+    bottom: 16px;
+    font-size: 12px;
+    color: var(--text-3);
+    font-weight: 500;
+  }
+  .snap-btn {
+    width: 64px;
+    height: 64px;
+    border-radius: 50%;
+    border: 3px solid var(--text);
+    background: transparent;
+    cursor: pointer;
+    position: relative;
+    transition: all 0.15s;
+  }
+  .snap-btn::after {
+    content: '';
+    position: absolute;
+    inset: 4px;
+    border-radius: 50%;
+    background: var(--text);
+    transition: all 0.15s;
+  }
+  .snap-btn:active { transform: scale(0.9); }
+  .snap-btn:active::after { background: var(--accent); }
+
+  /* ── Phase 1b: Confirm ── */
+  .confirm-area {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    padding: 20px;
+  }
+  .detected-banner {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 14px;
+    background: rgba(52, 211, 153, 0.1);
+    border: 1px solid rgba(52, 211, 153, 0.2);
+    border-radius: 10px;
+    margin-bottom: 12px;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--green);
+  }
+  .passage-box {
+    flex: 1;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 16px;
+    font-size: 15px;
+    line-height: 1.7;
+    color: var(--text);
+    overflow-y: auto;
+    margin-bottom: 16px;
+  }
+  .confirm-btns {
+    display: flex;
+    gap: 10px;
+  }
+  .confirm-btns button {
+    flex: 1;
+    padding: 14px;
+    border: none;
+    border-radius: 10px;
+    font-family: inherit;
+    font-size: 15px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .confirm-btns button:active { transform: scale(0.98); }
+  .btn-retake { background: var(--surface-2); color: var(--text-2); }
+  .btn-go { background: var(--accent); color: white; }
+
+  /* ── Phase 2: Recording ── */
+  .rec-area {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    position: relative;
+  }
+  .rec-status {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 8px;
+  }
+  .rec-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: var(--red);
+    animation: rec-blink 1s ease infinite;
+  }
+  @keyframes rec-blink { 50% { opacity: 0.3; } }
+  .rec-label-text {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--red);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+  }
+  .rec-time {
+    font-size: 64px;
+    font-weight: 800;
+    letter-spacing: -2px;
+    font-variant-numeric: tabular-nums;
+    margin-bottom: 4px;
+  }
+  .rec-sub {
+    font-size: 14px;
+    color: var(--text-3);
+    margin-bottom: 40px;
+  }
+  .stop-btn {
+    width: 100%;
+    max-width: 280px;
+    padding: 16px;
+    border: none;
+    border-radius: 12px;
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    font-family: inherit;
+    font-size: 16px;
+    font-weight: 700;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    transition: all 0.15s;
+  }
+  .stop-btn:active { transform: scale(0.98); }
+  .stop-square {
+    width: 14px;
+    height: 14px;
+    border-radius: 3px;
+    background: var(--red);
+  }
+  .waveform {
+    display: flex;
+    gap: 2px;
+    align-items: center;
+    height: 40px;
+    margin-bottom: 24px;
+  }
+  .wave-bar {
+    width: 3px;
+    background: var(--accent);
+    border-radius: 2px;
+    opacity: 0.5;
+    transition: height 0.1s;
+  }
+
+  /* ── Phase 3: Processing ── */
+  .proc-area {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+  }
+  .spinner-ring {
+    width: 48px;
+    height: 48px;
+    border: 3px solid var(--border);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+    margin-bottom: 20px;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .proc-text {
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--text-2);
+  }
+
+  /* ── Phase 4: Results ── */
+  .results-area {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    padding: 20px;
+    overflow-y: auto;
+  }
+  .result-top {
+    text-align: center;
+    padding: 24px 0 20px;
+  }
+  .result-wcpm {
+    font-size: 72px;
+    font-weight: 800;
+    letter-spacing: -3px;
+    line-height: 1;
+    margin-bottom: 2px;
+  }
+  .result-unit {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-3);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+  }
+
+  .stats-strip {
+    display: flex;
+    gap: 1px;
+    background: var(--border);
+    border-radius: 12px;
+    overflow: hidden;
+    margin-bottom: 16px;
+  }
+  .stat-cell {
+    flex: 1;
+    background: var(--surface);
+    padding: 14px 8px;
+    text-align: center;
+  }
+  .stat-cell .sv {
+    font-size: 22px;
+    font-weight: 800;
+    margin-bottom: 2px;
+  }
+  .stat-cell .sl {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-3);
+  }
+  .stat-cell.c-green .sv { color: var(--green); }
+  .stat-cell.c-amber .sv { color: var(--amber); }
+  .stat-cell.c-blue .sv { color: var(--accent); }
+
+  .teacher-note {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 14px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    font-size: 13px;
+    color: var(--text-2);
+    margin-bottom: 20px;
+  }
+
+  .divider {
+    height: 1px;
+    background: var(--border);
+    margin: 4px 0 16px;
+  }
+
+  .activity-row {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 16px;
+  }
+  .activity-btn {
+    flex: 1;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 16px 12px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.15s;
+    font-family: inherit;
+  }
+  .activity-btn:active { transform: scale(0.98); background: var(--surface-2); }
+  .activity-btn .ab-icon { font-size: 24px; margin-bottom: 6px; display: block; }
+  .activity-btn .ab-name { font-size: 14px; font-weight: 700; color: var(--text); }
+  .activity-btn .ab-sub { font-size: 12px; color: var(--text-3); }
+
+  .done-btn {
+    width: 100%;
+    padding: 14px;
+    border: none;
+    border-radius: 10px;
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    color: var(--text-2);
+    font-family: inherit;
+    font-size: 15px;
+    font-weight: 600;
+    cursor: pointer;
+    margin-bottom: 16px;
+    transition: all 0.15s;
+  }
+  .done-btn:active { transform: scale(0.98); }
+
+  /* ── Mic Error Inline ── */
+  .mic-error {
+    display: none;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 14px;
+    background: rgba(248, 113, 113, 0.1);
+    border: 1px solid rgba(248, 113, 113, 0.2);
+    border-radius: 10px;
+    margin: 0 20px 0;
+    font-size: 13px;
+    color: var(--red);
+    font-weight: 600;
+  }
+  .mic-error.show { display: flex; }
+
+  /* ── Name entry (first time only) ── */
+  .name-overlay {
+    position: fixed;
+    inset: 0;
+    background: var(--bg);
+    z-index: 50;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+  }
+  .name-overlay.hidden { display: none; }
+  .name-title {
+    font-size: 24px;
+    font-weight: 800;
+    letter-spacing: -0.5px;
+    margin-bottom: 4px;
+  }
+  .name-sub {
+    font-size: 14px;
+    color: var(--text-2);
+    margin-bottom: 24px;
+  }
+  .name-input {
+    width: 100%;
+    max-width: 300px;
+    padding: 14px 16px;
+    border-radius: 10px;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--text);
+    font-family: inherit;
+    font-size: 17px;
+    font-weight: 600;
+    text-align: center;
+    margin-bottom: 12px;
+  }
+  .name-input:focus {
+    outline: none;
+    border-color: var(--accent);
+  }
+  .name-input::placeholder { color: var(--text-3); }
+  .name-go {
+    width: 100%;
+    max-width: 300px;
+    padding: 14px;
+    border: none;
+    border-radius: 10px;
+    background: var(--accent);
+    color: white;
+    font-family: inherit;
+    font-size: 16px;
+    font-weight: 700;
+    cursor: pointer;
+  }
+
+  /* ── Mockup Banner ── */
+  .mockup-banner {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background: var(--accent);
+    color: white;
+    text-align: center;
+    padding: 5px;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    z-index: 100;
+  }
+</style>
+</head>
+<body>
+
+<div class="mockup-banner">Mockup D — "One Flow" — Single screen that morphs, passive mic check</div>
+
+<!-- First-time name entry (shown once, then remembered) -->
+<div class="name-overlay" id="name-overlay">
+  <div class="name-title">What's your name?</div>
+  <div class="name-sub">We'll remember you next time.</div>
+  <input class="name-input" id="nameField" type="text" placeholder="First name" autocomplete="off">
+  <button class="name-go" onclick="saveName()">Continue</button>
+</div>
+
+<div class="app">
+  <!-- Persistent top bar — always visible -->
+  <div class="bar">
+    <div class="bar-left">
+      <div class="bar-logo">PACER</div>
+      <div class="mic-indicator" id="mic-ind">
+        <div class="mic-dot checking" id="mic-dot"></div>
+        <span id="mic-label">checking mic...</span>
+      </div>
+    </div>
+    <div class="bar-right">
+      <div class="bar-name" id="bar-name">—</div>
+      <div class="bar-avatar" id="bar-avatar">?</div>
+    </div>
+  </div>
+
+  <!-- Inline mic error (hidden by default) -->
+  <div class="mic-error" id="mic-error">
+    No microphone detected — plug one in and reload
+  </div>
+
+  <div class="main">
+
+    <!-- PHASE 0: HOME -->
+    <div class="phase active" id="ph-home">
+      <div class="home-center">
+        <div class="home-prompt">Ready to read?</div>
+        <div class="home-sub">Snap the page, read it aloud, done.</div>
+        <button class="start-btn" onclick="goPhase('ph-capture')">Start</button>
+      </div>
+      <div class="history-section">
+        <div class="history-label">Recent</div>
+        <div class="history-row">
+          <div class="history-wcpm">134</div>
+          <div class="history-meta">
+            <div class="history-title">The Brown Dog</div>
+            <div class="history-date">Yesterday</div>
+          </div>
+          <div class="history-acc">96%</div>
+        </div>
+        <div class="history-row">
+          <div class="history-wcpm">118</div>
+          <div class="history-meta">
+            <div class="history-title">Mountain Trail</div>
+            <div class="history-date">Feb 14</div>
+          </div>
+          <div class="history-acc">91%</div>
+        </div>
+        <div class="history-row">
+          <div class="history-wcpm">122</div>
+          <div class="history-meta">
+            <div class="history-title">City Lights</div>
+            <div class="history-date">Feb 12</div>
+          </div>
+          <div class="history-acc">93%</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- PHASE 1: CAPTURE -->
+    <div class="phase" id="ph-capture">
+      <div class="capture-area">
+        <div class="viewfinder">
+          <div class="corners"></div>
+          <div class="vf-text">Point at the page</div>
+          <div class="guide-text">All text should be inside the frame</div>
+        </div>
+        <button class="snap-btn" onclick="goPhase('ph-confirm')"></button>
+      </div>
+    </div>
+
+    <!-- PHASE 1b: CONFIRM -->
+    <div class="phase" id="ph-confirm">
+      <div class="confirm-area">
+        <div class="detected-banner">
+          47 words detected
+        </div>
+        <div class="passage-box">
+          The little brown dog sat on the porch. He watched the cars go by. Sometimes a squirrel would run across the yard and he would bark. But mostly he just sat and watched. It was a warm summer day and the breeze felt nice on his fur. He could hear children playing down the street.
+        </div>
+        <div class="confirm-btns">
+          <button class="btn-retake" onclick="goPhase('ph-capture')">Retake</button>
+          <button class="btn-go" onclick="startRecording()">Read</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- PHASE 2: RECORDING -->
+    <div class="phase" id="ph-record">
+      <div class="rec-area">
+        <div class="rec-status">
+          <div class="rec-dot"></div>
+          <div class="rec-label-text">Recording</div>
+        </div>
+        <div class="rec-time" id="rec-time">0:00</div>
+        <div class="waveform" id="waveform"></div>
+        <div class="rec-sub">Read the passage aloud</div>
+        <button class="stop-btn" onclick="stopRecording()">
+          <div class="stop-square"></div>
+          Done reading
+        </button>
+      </div>
+    </div>
+
+    <!-- PHASE 3: PROCESSING -->
+    <div class="phase" id="ph-processing">
+      <div class="proc-area">
+        <div class="spinner-ring"></div>
+        <div class="proc-text">Analyzing your reading...</div>
+      </div>
+    </div>
+
+    <!-- PHASE 4: RESULTS -->
+    <div class="phase" id="ph-results">
+      <div class="results-area">
+        <div class="result-top">
+          <div class="result-wcpm">127</div>
+          <div class="result-unit">words per minute</div>
+        </div>
+
+        <div class="stats-strip">
+          <div class="stat-cell c-green">
+            <div class="sv">94%</div>
+            <div class="sl">Accuracy</div>
+          </div>
+          <div class="stat-cell c-amber">
+            <div class="sv">3</div>
+            <div class="sl">Tough words</div>
+          </div>
+          <div class="stat-cell c-blue">
+            <div class="sv">2</div>
+            <div class="sl">Self-fixes</div>
+          </div>
+        </div>
+
+        <div class="teacher-note">
+          Report sent to your teacher
+        </div>
+
+        <div class="divider"></div>
+
+        <div class="activity-row">
+          <button class="activity-btn" onclick="alert('Rhythm Remix')">
+            <span class="ab-icon">&#x1F3B5;</span>
+            <div class="ab-name">Rhythm Remix</div>
+            <div class="ab-sub">Lo-fi playback</div>
+          </button>
+          <button class="activity-btn" onclick="alert('Word Maze')">
+            <span class="ab-icon">&#x1F9E9;</span>
+            <div class="ab-name">Word Maze</div>
+            <div class="ab-sub">Comprehension</div>
+          </button>
+        </div>
+
+        <button class="done-btn" onclick="goPhase('ph-home')">Done</button>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+// Phase navigation
+function goPhase(id) {
+  document.querySelectorAll('.phase').forEach(p => p.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+}
+
+// Name
+function saveName() {
+  const name = document.getElementById('nameField').value.trim() || 'Student';
+  document.getElementById('bar-name').textContent = name;
+  document.getElementById('bar-avatar').textContent = name[0].toUpperCase();
+  document.getElementById('name-overlay').classList.add('hidden');
+}
+
+// Simulate passive mic check on load
+setTimeout(() => {
+  document.getElementById('mic-dot').className = 'mic-dot good';
+  document.getElementById('mic-label').textContent = 'mic ready';
+  document.getElementById('mic-ind').classList.add('good');
+}, 1800);
+
+// Recording
+let recIv, secs = 0;
+function startRecording() {
+  goPhase('ph-record');
+  secs = 0;
+  // Build waveform bars
+  const wf = document.getElementById('waveform');
+  wf.innerHTML = '';
+  for (let i = 0; i < 40; i++) {
+    const b = document.createElement('div');
+    b.className = 'wave-bar';
+    b.style.height = '4px';
+    wf.appendChild(b);
+  }
+  recIv = setInterval(() => {
+    secs++;
+    const m = Math.floor(secs / 60);
+    const s = secs % 60;
+    document.getElementById('rec-time').textContent = m + ':' + String(s).padStart(2, '0');
+    // Animate waveform
+    wf.querySelectorAll('.wave-bar').forEach(b => {
+      b.style.height = (Math.random() * 30 + 4) + 'px';
+    });
+  }, 1000);
+}
+function stopRecording() {
+  clearInterval(recIv);
+  goPhase('ph-processing');
+  setTimeout(() => goPhase('ph-results'), 2000);
+}
+</script>
+</body>
+</html>

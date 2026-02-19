@@ -4,7 +4,7 @@ Reverb ASR HTTP API Server
 Endpoints:
   POST /ensemble - Dual-pass transcription (v=1.0 verbatim + v=0.0 clean)
   POST /deepgram - Deepgram Nova-3 transcription proxy (cross-validation)
-  POST /parakeet - Parakeet TDT 0.6B v3 local transcription (cross-validation)
+  POST /parakeet - Parakeet TDT 0.6B v2 local transcription (cross-validation)
   GET  /health   - Health check with GPU status and model info
 
 Requirements:
@@ -151,12 +151,21 @@ def check_parakeet_available():
 
 
 def get_parakeet_model():
-    """Get or load the Parakeet TDT 0.6B v3 model singleton. ~600MB VRAM."""
+    """Get or load the Parakeet TDT 0.6B v2 model singleton. ~600MB VRAM.
+
+    v2 (English-only) is used instead of v3 (multilingual) because:
+      - v2 wins on 6/8 English benchmarks (LibriSpeech clean: 1.69% vs 1.93% WER)
+      - v2's 1,024-token English-optimized BPE produces fewer fragmentation artifacts
+        than v3's 8,192-token multilingual tokenizer
+      - v3 has no way to force English-only mode and occasionally outputs non-English
+        characters (NVIDIA GitHub #14799), which would corrupt the alignment pipeline
+      - This tool only needs English — v3's 25-language support is unnecessary overhead
+    """
     global _parakeet_model
     if _parakeet_model is None:
         import nemo.collections.asr as nemo_asr
-        print("[parakeet] Loading model nvidia/parakeet-tdt-0.6b-v3...")
-        _parakeet_model = nemo_asr.models.ASRModel.from_pretrained("nvidia/parakeet-tdt-0.6b-v3")
+        print("[parakeet] Loading model nvidia/parakeet-tdt-0.6b-v2...")
+        _parakeet_model = nemo_asr.models.ASRModel.from_pretrained("nvidia/parakeet-tdt-0.6b-v2")
         print("[parakeet] Model loaded successfully")
     return _parakeet_model
 
@@ -314,27 +323,31 @@ async def ensemble(req: EnsembleRequest, request: Request):
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Invalid base64: {e}")
 
-    async with gpu_lock:
-        # Write to temp file (wenet requires file path)
-        with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as f:
-            f.write(audio)
-            temp_path = f.name
+    # Write to temp file outside the lock (no GPU needed)
+    with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as f:
+        f.write(audio)
+        temp_path = f.name
 
+    async with gpu_lock:
         try:
+            # Run blocking GPU work in executor so the event loop stays responsive.
+            # Without this, concurrent requests (e.g. Parakeet) can't even be accepted
+            # while Reverb is transcribing, causing tunnel/client timeouts.
+            loop = asyncio.get_event_loop()
+
             model = get_model()
 
             # Pass 1: Verbatim (v=1.0) - preserves disfluencies
-            # attention_rescoring mode: CTC beam search + attention decoder rescoring
-            # Returns real per-word confidence scores (attention log-softmax probs)
-            # ~20-50% slower but more accurate transcription + real confidence
-            verbatim_ctm = model.transcribe(temp_path, verbatimicity=1.0, format="ctm",
-                                            mode="attention_rescoring")
+            verbatim_ctm = await loop.run_in_executor(
+                None, lambda: model.transcribe(temp_path, verbatimicity=1.0, format="ctm",
+                                               mode="attention_rescoring"))
             print(f"[reverb] Raw CTM v=1.0 (verbatim):\n{verbatim_ctm}")
             verbatim_words = parse_ctm(verbatim_ctm)
 
             # Pass 2: Clean (v=0.0) - removes disfluencies
-            clean_ctm = model.transcribe(temp_path, verbatimicity=0.0, format="ctm",
-                                         mode="attention_rescoring")
+            clean_ctm = await loop.run_in_executor(
+                None, lambda: model.transcribe(temp_path, verbatimicity=0.0, format="ctm",
+                                               mode="attention_rescoring"))
             print(f"[reverb] Raw CTM v=0.0 (clean):\n{clean_ctm}")
             clean_words = parse_ctm(clean_ctm)
 
@@ -420,7 +433,7 @@ async def deepgram_transcribe(req: DeepgramRequest, request: Request):
 @limiter.limit("10/minute")
 async def parakeet_transcribe(req: ParakeetRequest, request: Request):
     """
-    Transcribe audio using Parakeet TDT 0.6B v3 (local GPU).
+    Transcribe audio using Parakeet TDT 0.6B v2 (local GPU, English-only).
 
     Returns normalized word-level timestamps matching project format.
     Model lazy-loads on first request (~600MB VRAM).
@@ -440,27 +453,30 @@ async def parakeet_transcribe(req: ParakeetRequest, request: Request):
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Invalid base64: {e}")
 
+    # Prep temp file and ffmpeg conversion outside the lock (no GPU needed)
+    with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as f:
+        f.write(audio_bytes)
+        temp_path = f.name
+
+    # Parakeet requires mono audio — convert with ffmpeg if needed
+    import subprocess
+    mono_path = temp_path.replace(".wav", "_mono.wav")
+    subprocess.run(
+        ["ffmpeg", "-y", "-i", temp_path, "-ac", "1", "-ar", "16000", mono_path],
+        capture_output=True
+    )
+    if os.path.exists(mono_path):
+        os.unlink(temp_path)
+        temp_path = mono_path
+
     async with gpu_lock:
-        with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as f:
-            f.write(audio_bytes)
-            temp_path = f.name
-
-        # Parakeet requires mono audio — convert with ffmpeg if needed
-        import subprocess
-        mono_path = temp_path.replace(".wav", "_mono.wav")
-        subprocess.run(
-            ["ffmpeg", "-y", "-i", temp_path, "-ac", "1", "-ar", "16000", mono_path],
-            capture_output=True
-        )
-        if os.path.exists(mono_path):
-            os.unlink(temp_path)
-            temp_path = mono_path
-
         try:
             model = get_parakeet_model()
 
-            # Transcribe with timestamps enabled (TDT native duration prediction)
-            output = model.transcribe([temp_path], timestamps=True, batch_size=1)
+            # Run blocking GPU work in executor so the event loop stays responsive.
+            loop = asyncio.get_event_loop()
+            output = await loop.run_in_executor(
+                None, lambda: model.transcribe([temp_path], timestamps=True, batch_size=1))
 
             words = []
             transcript = ""
@@ -507,7 +523,7 @@ async def parakeet_transcribe(req: ParakeetRequest, request: Request):
             return {
                 "words": words,
                 "transcript": transcript,
-                "model": "parakeet-tdt-0.6b-v3"
+                "model": "parakeet-tdt-0.6b-v2"
             }
 
         except Exception as e:

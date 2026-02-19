@@ -50,7 +50,7 @@
 
 **Critical (Python backend):**
 - `rev-reverb==0.1.0` - Reverb ASR model (dual-pass verbatim/clean transcription)
-- `nemo_toolkit[asr]>=2.2` - NVIDIA NeMo for Parakeet TDT 0.6B v3 local ASR
+- `nemo_toolkit[asr]>=2.2` - NVIDIA NeMo for Parakeet TDT 0.6B v2 local ASR (English-only; v2 preferred over v3 for better English WER)
 - `deepgram-sdk>=5.0.0,<6.0.0` - Deepgram Nova-3 API client (proxied from backend)
 - `torch==2.4.0` + `torchaudio==2.4.0` (CUDA 11.8) - GPU tensor computation
 - `wenet` - CTC alignment (imported directly in `server.py`)

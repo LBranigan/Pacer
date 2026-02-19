@@ -1,0 +1,811 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>PACER — Reading Buddy (Mockup B)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+  :root {
+    --bg: #fef7ed;
+    --bg-card: #ffffff;
+    --bg-warm: #fff8f0;
+    --primary: #f97316;
+    --primary-soft: #fed7aa;
+    --primary-glow: rgba(249, 115, 22, 0.15);
+    --green: #22c55e;
+    --green-soft: #bbf7d0;
+    --blue: #3b82f6;
+    --blue-soft: #bfdbfe;
+    --purple: #8b5cf6;
+    --purple-soft: #ddd6fe;
+    --pink: #ec4899;
+    --text: #1c1917;
+    --text-soft: #78716c;
+    --border: #e7e5e4;
+    --radius: 24px;
+    --radius-sm: 16px;
+    --shadow: 0 2px 12px rgba(0,0,0,0.06);
+    --shadow-lg: 0 8px 32px rgba(0,0,0,0.08);
+  }
+
+  body {
+    font-family: 'Quicksand', system-ui, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    min-height: 100dvh;
+    overflow-x: hidden;
+  }
+
+  .screen {
+    display: none;
+    flex-direction: column;
+    align-items: center;
+    min-height: 100vh;
+    min-height: 100dvh;
+    padding: 20px;
+    animation: fadeUp 0.35s ease;
+  }
+  .screen.active { display: flex; }
+
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(16px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  /* ── Buddy character ── */
+  .buddy {
+    width: 100px;
+    height: 100px;
+    background: linear-gradient(135deg, #fde68a, #fbbf24);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 56px;
+    box-shadow: 0 4px 20px rgba(251, 191, 36, 0.25);
+    margin-bottom: 16px;
+    position: relative;
+    animation: buddy-bob 3s ease-in-out infinite;
+  }
+  .buddy.small {
+    width: 60px;
+    height: 60px;
+    font-size: 34px;
+    margin-bottom: 8px;
+  }
+  @keyframes buddy-bob {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-6px); }
+  }
+
+  /* ── Speech bubble ── */
+  .speech-bubble {
+    background: var(--bg-card);
+    border-radius: var(--radius);
+    padding: 20px 24px;
+    max-width: 320px;
+    text-align: center;
+    box-shadow: var(--shadow);
+    position: relative;
+    margin-bottom: 28px;
+    font-size: 17px;
+    font-weight: 600;
+    line-height: 1.5;
+  }
+  .speech-bubble::before {
+    content: '';
+    position: absolute;
+    top: -10px;
+    left: 50%;
+    transform: translateX(-50%);
+    border-left: 10px solid transparent;
+    border-right: 10px solid transparent;
+    border-bottom: 10px solid var(--bg-card);
+  }
+  .speech-bubble .highlight { color: var(--primary); }
+
+  /* ── Step dots ── */
+  .step-dots {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 24px;
+  }
+  .step-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: var(--border);
+    transition: all 0.3s;
+  }
+  .step-dot.active {
+    background: var(--primary);
+    width: 28px;
+    border-radius: 5px;
+  }
+  .step-dot.done { background: var(--green); }
+
+  /* ── Big Buttons ── */
+  .btn {
+    border: none;
+    border-radius: var(--radius);
+    font-family: inherit;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.15s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+  }
+  .btn:active { transform: scale(0.97); }
+  .btn-huge {
+    width: 100%;
+    max-width: 340px;
+    padding: 20px 28px;
+    font-size: 20px;
+    border-radius: 28px;
+  }
+  .btn-orange {
+    background: linear-gradient(135deg, #f97316, #ea580c);
+    color: white;
+    box-shadow: 0 4px 16px rgba(249, 115, 22, 0.3);
+  }
+  .btn-green {
+    background: linear-gradient(135deg, #22c55e, #16a34a);
+    color: white;
+    box-shadow: 0 4px 16px rgba(34, 197, 94, 0.3);
+  }
+  .btn-ghost {
+    background: transparent;
+    color: var(--text-soft);
+    padding: 12px 20px;
+    font-size: 15px;
+  }
+  .btn .icon { font-size: 26px; }
+
+  /* ── Name input ── */
+  .name-field {
+    width: 100%;
+    max-width: 300px;
+    padding: 16px 20px;
+    border-radius: 16px;
+    border: 2px solid var(--border);
+    background: var(--bg-card);
+    font-family: inherit;
+    font-size: 20px;
+    font-weight: 600;
+    text-align: center;
+    color: var(--text);
+    margin-bottom: 16px;
+  }
+  .name-field:focus {
+    outline: none;
+    border-color: var(--primary);
+    box-shadow: 0 0 0 4px var(--primary-glow);
+  }
+  .name-field::placeholder { color: #d6d3d1; }
+
+  /* ── Mic Check ── */
+  .mic-circle {
+    width: 160px;
+    height: 160px;
+    border-radius: 50%;
+    background: var(--bg-card);
+    border: 3px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 64px;
+    margin-bottom: 20px;
+    box-shadow: var(--shadow);
+    transition: all 0.3s;
+    cursor: pointer;
+  }
+  .mic-circle.listening {
+    border-color: var(--primary);
+    box-shadow: 0 0 0 6px var(--primary-glow), var(--shadow-lg);
+    animation: mic-breathe 1.5s ease infinite;
+  }
+  @keyframes mic-breathe {
+    0%, 100% { box-shadow: 0 0 0 4px var(--primary-glow), var(--shadow); }
+    50% { box-shadow: 0 0 0 12px var(--primary-glow), var(--shadow-lg); }
+  }
+  .mic-circle.ok {
+    border-color: var(--green);
+    box-shadow: 0 0 0 6px rgba(34, 197, 94, 0.15);
+    background: #f0fdf4;
+  }
+  .mic-bars {
+    display: flex;
+    gap: 3px;
+    align-items: flex-end;
+    height: 32px;
+    margin-bottom: 12px;
+  }
+  .mic-bar {
+    width: 5px;
+    background: var(--border);
+    border-radius: 3px;
+    transition: all 0.12s;
+  }
+  .mic-bar.hit { background: var(--primary); }
+  .mic-hint {
+    font-size: 15px;
+    color: var(--text-soft);
+    font-weight: 600;
+    margin-bottom: 20px;
+    text-align: center;
+  }
+  .mic-hint.ok { color: var(--green); }
+  .mic-hint.bad { color: #ef4444; }
+
+  /* ── Camera ── */
+  .cam-area {
+    width: 100%;
+    max-width: 340px;
+    aspect-ratio: 3/4;
+    border-radius: var(--radius);
+    border: 3px dashed var(--border);
+    background: var(--bg-card);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 16px;
+    position: relative;
+    overflow: hidden;
+    cursor: pointer;
+    transition: all 0.3s;
+  }
+  .cam-area.filled {
+    border-style: solid;
+    border-color: var(--green);
+    background: #f0fdf4;
+  }
+  .cam-area .cam-placeholder { font-size: 60px; opacity: 0.3; margin-bottom: 8px; }
+  .cam-area .cam-text { font-size: 14px; color: var(--text-soft); font-weight: 600; }
+  .cam-hint-row {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 20px;
+  }
+  .cam-hint-chip {
+    background: var(--bg-card);
+    border-radius: 50px;
+    padding: 6px 14px;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-soft);
+    box-shadow: var(--shadow);
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+  .check-overlay {
+    position: absolute;
+    bottom: 12px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(255,255,255,0.9);
+    backdrop-filter: blur(8px);
+    padding: 8px 16px;
+    border-radius: 50px;
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--green);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    box-shadow: var(--shadow);
+  }
+  .passage-text-preview {
+    padding: 20px;
+    font-size: 14px;
+    line-height: 1.7;
+    color: var(--text-soft);
+    text-align: left;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+  }
+
+  /* ── Recording ── */
+  .rec-button {
+    width: 140px;
+    height: 140px;
+    border-radius: 50%;
+    border: none;
+    background: linear-gradient(135deg, #ef4444, #dc2626);
+    color: white;
+    font-size: 48px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    box-shadow: 0 4px 24px rgba(239, 68, 68, 0.3);
+    transition: all 0.2s;
+    margin-bottom: 16px;
+  }
+  .rec-button:active { transform: scale(0.95); }
+  .rec-button.recording {
+    box-shadow: 0 0 0 8px rgba(239, 68, 68, 0.15), 0 4px 24px rgba(239, 68, 68, 0.3);
+    animation: rec-glow 1.5s ease infinite;
+  }
+  @keyframes rec-glow {
+    0%, 100% { box-shadow: 0 0 0 4px rgba(239, 68, 68, 0.15), 0 4px 24px rgba(239, 68, 68, 0.3); }
+    50% { box-shadow: 0 0 0 14px rgba(239, 68, 68, 0.1), 0 4px 32px rgba(239, 68, 68, 0.4); }
+  }
+  .rec-timer {
+    font-size: 40px;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    margin-bottom: 4px;
+  }
+  .rec-hint {
+    font-size: 14px;
+    color: var(--text-soft);
+    font-weight: 600;
+    margin-bottom: 24px;
+  }
+  .passage-card {
+    background: var(--bg-card);
+    border-radius: var(--radius-sm);
+    padding: 16px 18px;
+    width: 100%;
+    max-width: 340px;
+    font-size: 14px;
+    line-height: 1.7;
+    color: var(--text-soft);
+    box-shadow: var(--shadow);
+    max-height: 100px;
+    overflow: hidden;
+    position: relative;
+  }
+  .passage-card::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 32px;
+    background: linear-gradient(transparent, var(--bg-card));
+  }
+
+  /* ── Processing ── */
+  .loading-buddy {
+    width: 120px;
+    height: 120px;
+    background: linear-gradient(135deg, #fde68a, #fbbf24);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 64px;
+    box-shadow: 0 4px 20px rgba(251, 191, 36, 0.25);
+    margin-bottom: 24px;
+    animation: think 1.5s ease-in-out infinite;
+  }
+  @keyframes think {
+    0%, 100% { transform: rotate(-5deg); }
+    50% { transform: rotate(5deg); }
+  }
+
+  /* ── Results ── */
+  .celebration { font-size: 48px; margin-bottom: 8px; }
+  .result-score {
+    font-size: 64px;
+    font-weight: 700;
+    color: var(--primary);
+    line-height: 1;
+    margin-bottom: 4px;
+  }
+  .result-unit {
+    font-size: 14px;
+    color: var(--text-soft);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-bottom: 24px;
+  }
+
+  .sticker-row {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 24px;
+    flex-wrap: wrap;
+    justify-content: center;
+    max-width: 340px;
+  }
+  .sticker {
+    background: var(--bg-card);
+    border-radius: 16px;
+    padding: 12px 16px;
+    box-shadow: var(--shadow);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    min-width: 80px;
+  }
+  .sticker .sticker-icon { font-size: 28px; }
+  .sticker .sticker-val { font-size: 20px; font-weight: 700; }
+  .sticker .sticker-label { font-size: 11px; color: var(--text-soft); font-weight: 600; }
+  .sticker.green .sticker-val { color: var(--green); }
+  .sticker.orange .sticker-val { color: var(--primary); }
+  .sticker.purple .sticker-val { color: var(--purple); }
+  .sticker.blue .sticker-val { color: var(--blue); }
+
+  .streak-bar {
+    background: linear-gradient(135deg, #fef3c7, #fde68a);
+    border-radius: 50px;
+    padding: 10px 20px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 15px;
+    font-weight: 700;
+    color: #92400e;
+    margin-bottom: 24px;
+  }
+
+  .fun-section-title {
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--text-soft);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-bottom: 12px;
+    align-self: flex-start;
+    max-width: 380px;
+    width: 100%;
+    padding-left: 4px;
+  }
+  .fun-cards {
+    display: flex;
+    gap: 12px;
+    width: 100%;
+    max-width: 380px;
+    margin-bottom: 24px;
+  }
+  .fun-card {
+    flex: 1;
+    background: var(--bg-card);
+    border-radius: var(--radius);
+    padding: 20px 16px;
+    text-align: center;
+    box-shadow: var(--shadow);
+    cursor: pointer;
+    transition: all 0.15s;
+    border: 2px solid transparent;
+  }
+  .fun-card:active { transform: scale(0.97); }
+  .fun-card:hover { border-color: var(--primary-soft); }
+  .fun-card .fun-icon { font-size: 40px; margin-bottom: 8px; display: block; }
+  .fun-card .fun-name { font-size: 15px; font-weight: 700; margin-bottom: 2px; }
+  .fun-card .fun-desc { font-size: 12px; color: var(--text-soft); }
+
+  .btn-done-area {
+    width: 100%;
+    max-width: 380px;
+    padding-bottom: 20px;
+  }
+
+  /* ── Mockup Banner ── */
+  .mockup-banner {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    background: linear-gradient(90deg, #f97316, #ea580c);
+    color: white;
+    text-align: center;
+    padding: 6px;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    z-index: 100;
+  }
+  .screen { padding-top: 44px; }
+
+  @media (max-width: 380px) {
+    .result-score { font-size: 52px; }
+    .sticker { min-width: 70px; padding: 10px 12px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="mockup-banner">Mockup B — "Reading Buddy" (Warm & Character-Driven)</div>
+
+<!-- ═══════════════ SCREEN 0: WELCOME ═══════════════ -->
+<div class="screen active" id="screen-welcome">
+  <div style="flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center;">
+    <div class="buddy">&#x1F43B;</div>
+    <div class="speech-bubble">
+      Hi there! I'm <span class="highlight">Pacer</span>.<br>
+      Ready to read together?
+    </div>
+
+    <input class="name-field" id="name-input" type="text" placeholder="Your name" autocomplete="off" spellcheck="false">
+
+    <button class="btn btn-huge btn-orange" onclick="goTo('screen-mic')">
+      <span class="icon">&#x1F44B;</span>
+      Let's Go!
+    </button>
+  </div>
+</div>
+
+<!-- ═══════════════ SCREEN 1: MIC CHECK ═══════════════ -->
+<div class="screen" id="screen-mic">
+  <div class="step-dots">
+    <div class="step-dot active"></div>
+    <div class="step-dot"></div>
+    <div class="step-dot"></div>
+  </div>
+
+  <div class="buddy small">&#x1F43B;</div>
+  <div class="speech-bubble">
+    Say <span class="highlight">"hello"</span> so I can<br>hear you!
+  </div>
+
+  <div class="mic-circle" id="mic-circle" onclick="startMicTest()">&#x1F3A4;</div>
+
+  <div class="mic-bars" id="mic-bars">
+    <div class="mic-bar" style="height: 6px;"></div>
+    <div class="mic-bar" style="height: 10px;"></div>
+    <div class="mic-bar" style="height: 8px;"></div>
+    <div class="mic-bar" style="height: 14px;"></div>
+    <div class="mic-bar" style="height: 6px;"></div>
+    <div class="mic-bar" style="height: 18px;"></div>
+    <div class="mic-bar" style="height: 8px;"></div>
+    <div class="mic-bar" style="height: 12px;"></div>
+    <div class="mic-bar" style="height: 6px;"></div>
+    <div class="mic-bar" style="height: 16px;"></div>
+  </div>
+
+  <div class="mic-hint" id="mic-hint">Tap the microphone to start</div>
+
+  <button class="btn btn-huge btn-orange" id="mic-next-btn" style="display: none;" onclick="goTo('screen-photo')">
+    <span class="icon">&#x2705;</span>
+    Sounds Great!
+  </button>
+</div>
+
+<!-- ═══════════════ SCREEN 2: PHOTO ═══════════════ -->
+<div class="screen" id="screen-photo">
+  <div class="step-dots">
+    <div class="step-dot done"></div>
+    <div class="step-dot active"></div>
+    <div class="step-dot"></div>
+  </div>
+
+  <div class="buddy small">&#x1F43B;</div>
+  <div class="speech-bubble">
+    Show me your<br><span class="highlight">reading page!</span>
+  </div>
+
+  <div class="cam-area" id="cam-area" onclick="simulatePhoto()">
+    <div class="cam-placeholder">&#x1F4F7;</div>
+    <div class="cam-text">Tap to take a photo</div>
+  </div>
+
+  <div class="cam-hint-row">
+    <div class="cam-hint-chip">&#x2600;&#xFE0F; Good light</div>
+    <div class="cam-hint-chip">&#x1F4D6; Flat page</div>
+    <div class="cam-hint-chip">&#x1F441;&#xFE0F; All words</div>
+  </div>
+
+  <button class="btn btn-huge btn-orange" id="photo-btn" onclick="simulatePhoto()">
+    <span class="icon">&#x1F4F8;</span>
+    Snap Photo
+  </button>
+</div>
+
+<!-- ═══════════════ SCREEN 2b: PHOTO CONFIRM ═══════════════ -->
+<div class="screen" id="screen-photo-ok">
+  <div class="step-dots">
+    <div class="step-dot done"></div>
+    <div class="step-dot active"></div>
+    <div class="step-dot"></div>
+  </div>
+
+  <div class="buddy small">&#x1F43B;</div>
+  <div class="speech-bubble">
+    I can see <span class="highlight">47 words</span>!<br>Does this look right?
+  </div>
+
+  <div class="cam-area filled" style="aspect-ratio: 4/3;">
+    <div class="passage-text-preview">
+      The little brown dog sat on the porch. He watched the cars go by. Sometimes a squirrel would run across the yard and he would bark. But mostly he just sat and watched. It was a warm summer day and the breeze felt nice...
+    </div>
+    <div class="check-overlay">&#x2705; 47 words detected</div>
+  </div>
+
+  <div style="height: 16px;"></div>
+
+  <div style="display: flex; gap: 12px; width: 100%; max-width: 340px;">
+    <button class="btn btn-ghost" style="flex: 1;" onclick="goTo('screen-photo')">Retake</button>
+    <button class="btn btn-huge btn-green" style="flex: 2;" onclick="goTo('screen-record')">
+      <span class="icon">&#x1F44D;</span>
+      Looks Good!
+    </button>
+  </div>
+</div>
+
+<!-- ═══════════════ SCREEN 3: RECORDING ═══════════════ -->
+<div class="screen" id="screen-record">
+  <div class="step-dots">
+    <div class="step-dot done"></div>
+    <div class="step-dot done"></div>
+    <div class="step-dot active"></div>
+  </div>
+
+  <div class="buddy small">&#x1F43B;</div>
+  <div class="speech-bubble" id="rec-bubble">
+    Read out loud!<br>I'm listening.
+  </div>
+
+  <button class="rec-button" id="rec-btn" onclick="toggleRec()">
+    <span id="rec-icon">&#x23FA;</span>
+  </button>
+  <div class="rec-timer" id="rec-timer">0:00</div>
+  <div class="rec-hint" id="rec-hint">Tap the red button to start</div>
+
+  <div class="passage-card">
+    The little brown dog sat on the porch. He watched the cars go by. Sometimes a squirrel would run across the yard and he would bark. But mostly he just sat and watched...
+  </div>
+</div>
+
+<!-- ═══════════════ SCREEN 4: PROCESSING ═══════════════ -->
+<div class="screen" id="screen-processing">
+  <div style="flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center;">
+    <div class="loading-buddy">&#x1F914;</div>
+    <div class="speech-bubble">
+      Hmm, let me<br>think about this...
+    </div>
+    <div style="font-size: 14px; color: var(--text-soft); font-weight: 600;">
+      Checking your reading...
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════ SCREEN 5: RESULTS ═══════════════ -->
+<div class="screen" id="screen-results">
+  <div class="buddy small" style="animation: none;">&#x1F929;</div>
+
+  <div class="celebration">&#x1F389;</div>
+  <div class="result-score">127</div>
+  <div class="result-unit">Words Per Minute</div>
+
+  <div class="sticker-row">
+    <div class="sticker green">
+      <div class="sticker-icon">&#x1F3AF;</div>
+      <div class="sticker-val">94%</div>
+      <div class="sticker-label">Accuracy</div>
+    </div>
+    <div class="sticker orange">
+      <div class="sticker-icon">&#x23F1;&#xFE0F;</div>
+      <div class="sticker-val">1:42</div>
+      <div class="sticker-label">Time</div>
+    </div>
+    <div class="sticker purple">
+      <div class="sticker-icon">&#x1F4AA;</div>
+      <div class="sticker-val">3</div>
+      <div class="sticker-label">Tough Words</div>
+    </div>
+    <div class="sticker blue">
+      <div class="sticker-icon">&#x1F504;</div>
+      <div class="sticker-val">2</div>
+      <div class="sticker-label">Self-Fixes</div>
+    </div>
+  </div>
+
+  <div class="streak-bar">
+    &#x1F525; 5 days in a row — keep it up!
+  </div>
+
+  <div class="fun-section-title">Bonus Activities</div>
+  <div class="fun-cards">
+    <div class="fun-card" onclick="alert('Opens Rhythm Remix')">
+      <span class="fun-icon">&#x1F3B5;</span>
+      <div class="fun-name">Rhythm Remix</div>
+      <div class="fun-desc">Hear your reading with beats!</div>
+    </div>
+    <div class="fun-card" onclick="alert('Opens Word Maze')">
+      <span class="fun-icon">&#x1F9E9;</span>
+      <div class="fun-name">Word Maze</div>
+      <div class="fun-desc">Comprehension game</div>
+    </div>
+  </div>
+
+  <div class="btn-done-area">
+    <button class="btn btn-huge btn-orange" onclick="goTo('screen-welcome')" style="width: 100%;">
+      <span class="icon">&#x1F4DA;</span>
+      Read Again
+    </button>
+  </div>
+</div>
+
+<script>
+function goTo(id) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+  window.scrollTo(0, 0);
+}
+
+// Mic test
+function startMicTest() {
+  const circle = document.getElementById('mic-circle');
+  const hint = document.getElementById('mic-hint');
+  const bars = document.querySelectorAll('.mic-bar');
+  const nextBtn = document.getElementById('mic-next-btn');
+
+  circle.classList.add('listening');
+  hint.textContent = 'Listening...';
+
+  let count = 0;
+  const iv = setInterval(() => {
+    bars.forEach(bar => {
+      const h = Math.random() * 28 + 4;
+      bar.style.height = h + 'px';
+      bar.classList.toggle('hit', h > 12);
+    });
+    count++;
+    if (count > 14) {
+      clearInterval(iv);
+      circle.classList.remove('listening');
+      circle.classList.add('ok');
+      circle.innerHTML = '&#x2705;';
+      hint.textContent = 'I can hear you!';
+      hint.className = 'mic-hint ok';
+      nextBtn.style.display = 'flex';
+    }
+  }, 130);
+}
+
+// Photo
+function simulatePhoto() {
+  goTo('screen-photo-ok');
+}
+
+// Recording
+let recording = false;
+let recIv = null;
+let secs = 0;
+function toggleRec() {
+  const btn = document.getElementById('rec-btn');
+  const icon = document.getElementById('rec-icon');
+  const timer = document.getElementById('rec-timer');
+  const hint = document.getElementById('rec-hint');
+  const bubble = document.getElementById('rec-bubble');
+
+  if (!recording) {
+    recording = true;
+    btn.classList.add('recording');
+    icon.innerHTML = '&#x23F9;';
+    hint.textContent = 'Tap when you\'re done';
+    bubble.innerHTML = 'I\'m listening...<br><span class="highlight">Take your time!</span>';
+    secs = 0;
+    recIv = setInterval(() => {
+      secs++;
+      timer.textContent = Math.floor(secs/60) + ':' + String(secs%60).padStart(2,'0');
+    }, 1000);
+  } else {
+    recording = false;
+    clearInterval(recIv);
+    btn.classList.remove('recording');
+    goTo('screen-processing');
+    setTimeout(() => goTo('screen-results'), 2200);
+  }
+}
+</script>
+</body>
+</html>

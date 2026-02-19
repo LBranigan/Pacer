@@ -1,8 +1,12 @@
 /**
- * Parakeet TDT 0.6B v3 API Client
+ * Parakeet TDT 0.6B v2 API Client (English-only)
  *
  * Calls backend at localhost:8765/parakeet for local GPU-based transcription.
  * Pure transport layer — cross-validation logic is in cross-validator.js.
+ *
+ * Uses v2 (English-only) instead of v3 (multilingual) for better English WER
+ * and a tighter 1,024-token BPE vocabulary that produces fewer fragmentation artifacts.
+ * See server.py get_parakeet_model() docstring for full rationale.
  *
  * Parakeet TDT (Token-and-Duration Transducer) provides:
  * - Native word-level timestamps from duration prediction head

@@ -1,0 +1,706 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>PACER — Fullscreen (Mockup F)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+  :root {
+    --bg: #fafafa;
+    --text: #111;
+    --text-2: #666;
+    --text-3: #aaa;
+    --border: #eaeaea;
+    --blue: #0070f3;
+    --green: #0cad56;
+    --red: #e5484d;
+    --amber: #f5a623;
+    --surface: #fff;
+  }
+
+  body {
+    font-family: 'Space Grotesk', -apple-system, system-ui, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    min-height: 100dvh;
+    overflow-x: hidden;
+  }
+
+  /* ── Every phase is fullscreen, edge-to-edge ── */
+  .phase {
+    display: none;
+    flex-direction: column;
+    min-height: 100vh;
+    min-height: 100dvh;
+    position: relative;
+  }
+  .phase.active { display: flex; }
+
+  /* ── Subtle phase transition ── */
+  .phase.active { animation: fade 0.2s ease; }
+  @keyframes fade {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+
+  /* ── Top status strip — thin, informational ── */
+  .status-strip {
+    display: flex;
+    align-items: center;
+    padding: 10px 16px;
+    gap: 8px;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-3);
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+    background: var(--surface);
+  }
+  .ss-logo {
+    font-weight: 700;
+    color: var(--text);
+    letter-spacing: -0.3px;
+    margin-right: auto;
+  }
+  .ss-mic {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+  .ss-mic-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--text-3);
+    transition: background 0.3s;
+  }
+  .ss-mic-dot.ok { background: var(--green); }
+  .ss-mic-dot.checking { background: var(--amber); animation: blink 1s infinite; }
+  .ss-mic-dot.bad { background: var(--red); }
+  @keyframes blink { 50% { opacity: 0.3; } }
+
+  /* ── PHASE 0: HOME ── */
+  /* Minimal home. Just a prompt and one button. History below. */
+  .home-body {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+  }
+  .home-title {
+    font-size: 20px;
+    font-weight: 700;
+    margin-bottom: 20px;
+    letter-spacing: -0.3px;
+  }
+  .cta-btn {
+    padding: 14px 48px;
+    border: none;
+    border-radius: 8px;
+    background: var(--text);
+    color: var(--bg);
+    font-family: inherit;
+    font-size: 15px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.12s;
+  }
+  .cta-btn:active { transform: scale(0.97); opacity: 0.85; }
+
+  .home-history {
+    border-top: 1px solid var(--border);
+    padding: 14px 16px;
+    width: 100%;
+  }
+  .hh-label {
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--text-3);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 8px;
+  }
+  .hh-item {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    padding: 8px 0;
+    border-bottom: 1px solid var(--border);
+    font-size: 13px;
+  }
+  .hh-item:last-child { border-bottom: none; }
+  .hh-wcpm { font-weight: 700; font-size: 16px; width: 40px; }
+  .hh-title { flex: 1; color: var(--text-2); }
+  .hh-date { color: var(--text-3); font-size: 12px; }
+
+  /* ── PHASE 1: CAMERA — fullscreen viewfinder ── */
+  .camera-full {
+    flex: 1;
+    background: #000;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-end;
+    padding: 0 0 32px;
+    position: relative;
+  }
+  .cf-overlay {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+  }
+  .cf-top {
+    padding: 12px 16px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .cf-cancel {
+    font-size: 14px;
+    font-weight: 600;
+    color: rgba(255,255,255,0.7);
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 8px;
+    font-family: inherit;
+  }
+  .cf-hint {
+    font-size: 13px;
+    color: rgba(255,255,255,0.5);
+    font-weight: 500;
+  }
+  .cf-spacer { flex: 1; }
+  .cf-guide {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 85%;
+    aspect-ratio: 4/3;
+    border: 1.5px solid rgba(255,255,255,0.2);
+    border-radius: 8px;
+  }
+  .cf-guide-label {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    color: rgba(255,255,255,0.3);
+    font-size: 14px;
+    font-weight: 600;
+    text-align: center;
+  }
+  .shutter-btn {
+    width: 68px;
+    height: 68px;
+    border-radius: 50%;
+    border: 3px solid rgba(255,255,255,0.9);
+    background: transparent;
+    cursor: pointer;
+    position: relative;
+    z-index: 5;
+    transition: all 0.12s;
+  }
+  .shutter-btn::after {
+    content: '';
+    position: absolute;
+    inset: 4px;
+    border-radius: 50%;
+    background: rgba(255,255,255,0.9);
+  }
+  .shutter-btn:active { transform: scale(0.92); }
+
+  /* ── PHASE 1b: CONFIRM — passage on white ── */
+  .confirm-body {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    padding: 0;
+  }
+  .cb-header {
+    padding: 12px 16px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface);
+  }
+  .cb-header button {
+    font-family: inherit;
+    font-size: 14px;
+    font-weight: 600;
+    border: none;
+    background: none;
+    cursor: pointer;
+    padding: 6px;
+  }
+  .cb-retake { color: var(--text-2); }
+  .cb-go { color: var(--blue); }
+  .cb-info {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--green);
+  }
+  .cb-passage {
+    flex: 1;
+    padding: 20px 16px;
+    font-size: 16px;
+    line-height: 1.8;
+    color: var(--text);
+    overflow-y: auto;
+  }
+
+  /* ── PHASE 2: RECORDING — clean center stage ── */
+  .rec-body {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+  }
+  .rec-indicator {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 4px;
+  }
+  .rec-red-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--red);
+    animation: blink 1s infinite;
+  }
+  .rec-tag {
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--red);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+  }
+  .rec-timer {
+    font-size: 72px;
+    font-weight: 700;
+    letter-spacing: -3px;
+    font-variant-numeric: tabular-nums;
+    line-height: 1;
+    margin-bottom: 4px;
+  }
+  .rec-sub {
+    font-size: 13px;
+    color: var(--text-3);
+    margin-bottom: 32px;
+  }
+  .rec-wave {
+    display: flex;
+    gap: 2px;
+    align-items: center;
+    height: 40px;
+    margin-bottom: 32px;
+  }
+  .rw-bar {
+    width: 2.5px;
+    background: var(--text);
+    border-radius: 2px;
+    opacity: 0.15;
+  }
+  .rec-stop {
+    padding: 14px 40px;
+    border: 1.5px solid var(--border);
+    border-radius: 8px;
+    background: var(--surface);
+    font-family: inherit;
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--text);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    transition: all 0.12s;
+  }
+  .rec-stop:active { background: var(--bg); }
+  .rec-stop-sq {
+    width: 12px;
+    height: 12px;
+    border-radius: 2px;
+    background: var(--red);
+  }
+
+  /* ── PHASE 3: PROCESSING ── */
+  .proc-body {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+  }
+  .proc-spinner {
+    width: 40px;
+    height: 40px;
+    border: 2.5px solid var(--border);
+    border-top-color: var(--text);
+    border-radius: 50%;
+    animation: spin 0.6s linear infinite;
+    margin-bottom: 16px;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .proc-label {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-2);
+  }
+
+  /* ── PHASE 4: RESULTS ── */
+  .res-body {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow-y: auto;
+  }
+  .res-hero {
+    text-align: center;
+    padding: 32px 20px 24px;
+    border-bottom: 1px solid var(--border);
+  }
+  .res-score {
+    font-size: 80px;
+    font-weight: 700;
+    letter-spacing: -4px;
+    line-height: 1;
+    margin-bottom: 2px;
+  }
+  .res-unit {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-3);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+  }
+
+  .res-stats {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    border-bottom: 1px solid var(--border);
+  }
+  .res-stat {
+    padding: 16px 8px;
+    text-align: center;
+    border-right: 1px solid var(--border);
+  }
+  .res-stat:last-child { border-right: none; }
+  .res-stat .v {
+    font-size: 22px;
+    font-weight: 700;
+    margin-bottom: 2px;
+  }
+  .res-stat .l {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-3);
+  }
+
+  .res-section {
+    padding: 16px;
+    border-bottom: 1px solid var(--border);
+  }
+  .res-sent {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--green);
+  }
+  .res-sent-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--green);
+  }
+
+  .res-links {
+    display: flex;
+    flex-direction: column;
+  }
+  .res-link {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 14px 16px;
+    border-bottom: 1px solid var(--border);
+    cursor: pointer;
+    transition: background 0.1s;
+    font-family: inherit;
+    background: none;
+    border-left: none;
+    border-right: none;
+    border-top: none;
+    text-align: left;
+    color: var(--text);
+    font-size: 14px;
+  }
+  .res-link:last-child { border-bottom: none; }
+  .res-link:active { background: var(--bg); }
+  .rl-icon {
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+    background: var(--bg);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 16px;
+    flex-shrink: 0;
+  }
+  .rl-text { flex: 1; }
+  .rl-title { font-weight: 700; font-size: 14px; }
+  .rl-sub { font-size: 12px; color: var(--text-2); }
+  .rl-arrow { color: var(--text-3); }
+
+  .res-done {
+    padding: 16px;
+  }
+  .res-done-btn {
+    width: 100%;
+    padding: 14px;
+    border: 1.5px solid var(--border);
+    border-radius: 8px;
+    background: var(--surface);
+    font-family: inherit;
+    font-size: 15px;
+    font-weight: 700;
+    cursor: pointer;
+    color: var(--text);
+    transition: all 0.12s;
+  }
+  .res-done-btn:active { background: var(--bg); }
+
+  /* ── Mockup Banner ── */
+  .mockup-banner {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background: var(--text);
+    color: var(--bg);
+    text-align: center;
+    padding: 5px;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    z-index: 100;
+  }
+</style>
+</head>
+<body>
+
+<div class="mockup-banner">Mockup F — "Fullscreen" — Each phase owns the entire screen. Vercel/Linear-inspired.</div>
+
+<!-- ═══════════════ HOME ═══════════════ -->
+<div class="phase active" id="ph-home">
+  <div class="status-strip">
+    <div class="ss-logo">PACER</div>
+    <div class="ss-mic">
+      <div class="ss-mic-dot checking" id="mic-f"></div>
+      <span id="mic-label-f">mic</span>
+    </div>
+  </div>
+  <div class="home-body">
+    <div class="home-title">New reading</div>
+    <button class="cta-btn" onclick="go('ph-camera')">Start</button>
+  </div>
+  <div class="home-history">
+    <div class="hh-label">Recent</div>
+    <div class="hh-item">
+      <div class="hh-wcpm">134</div>
+      <div class="hh-title">The Brown Dog</div>
+      <div class="hh-date">Yesterday</div>
+    </div>
+    <div class="hh-item">
+      <div class="hh-wcpm">118</div>
+      <div class="hh-title">Mountain Trail</div>
+      <div class="hh-date">Feb 14</div>
+    </div>
+    <div class="hh-item">
+      <div class="hh-wcpm">122</div>
+      <div class="hh-title">City Lights</div>
+      <div class="hh-date">Feb 12</div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════ CAMERA ═══════════════ -->
+<div class="phase" id="ph-camera">
+  <div class="camera-full">
+    <div class="cf-overlay">
+      <div class="cf-top">
+        <button class="cf-cancel" onclick="go('ph-home')">Cancel</button>
+        <div class="cf-hint">Lay page flat</div>
+      </div>
+      <div class="cf-spacer">
+        <div class="cf-guide">
+          <div class="cf-guide-label">Align page here</div>
+        </div>
+      </div>
+    </div>
+    <button class="shutter-btn" onclick="go('ph-confirm')"></button>
+  </div>
+</div>
+
+<!-- ═══════════════ CONFIRM ═══════════════ -->
+<div class="phase" id="ph-confirm">
+  <div class="confirm-body">
+    <div class="cb-header">
+      <button class="cb-retake" onclick="go('ph-camera')">Retake</button>
+      <div class="cb-info">47 words</div>
+      <button class="cb-go" onclick="go('ph-record')">Read</button>
+    </div>
+    <div class="cb-passage">
+      The little brown dog sat on the porch. He watched the cars go by. Sometimes a squirrel would run across the yard and he would bark. But mostly he just sat and watched. It was a warm summer day and the breeze felt nice on his fur. He could hear children playing down the street. They were laughing and shouting as they ran through the sprinkler. The dog's ears perked up. He wanted to join them, but he was too lazy to move.
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════ RECORDING ═══════════════ -->
+<div class="phase" id="ph-record">
+  <div class="status-strip">
+    <div class="ss-logo">PACER</div>
+  </div>
+  <div class="rec-body">
+    <div class="rec-indicator">
+      <div class="rec-red-dot"></div>
+      <div class="rec-tag">Recording</div>
+    </div>
+    <div class="rec-timer" id="timer-f">0:00</div>
+    <div class="rec-sub">Read at your normal pace</div>
+    <div class="rec-wave" id="wave-f"></div>
+    <button class="rec-stop" onclick="stopRec()">
+      <div class="rec-stop-sq"></div>
+      Done
+    </button>
+  </div>
+</div>
+
+<!-- ═══════════════ PROCESSING ═══════════════ -->
+<div class="phase" id="ph-proc">
+  <div class="proc-body">
+    <div class="proc-spinner"></div>
+    <div class="proc-label">Analyzing...</div>
+  </div>
+</div>
+
+<!-- ═══════════════ RESULTS ═══════════════ -->
+<div class="phase" id="ph-results">
+  <div class="status-strip">
+    <div class="ss-logo">PACER</div>
+  </div>
+  <div class="res-body">
+    <div class="res-hero">
+      <div class="res-score">127</div>
+      <div class="res-unit">words per minute</div>
+    </div>
+
+    <div class="res-stats">
+      <div class="res-stat">
+        <div class="v" style="color:var(--green)">94%</div>
+        <div class="l">Accuracy</div>
+      </div>
+      <div class="res-stat">
+        <div class="v" style="color:var(--amber)">3</div>
+        <div class="l">Tough words</div>
+      </div>
+      <div class="res-stat">
+        <div class="v" style="color:var(--blue)">2</div>
+        <div class="l">Self-fixes</div>
+      </div>
+    </div>
+
+    <div class="res-section">
+      <div class="res-sent">
+        <div class="res-sent-dot"></div>
+        Report sent to teacher
+      </div>
+    </div>
+
+    <div class="res-links">
+      <button class="res-link" onclick="alert('Rhythm Remix')">
+        <div class="rl-icon">&#x1F3B5;</div>
+        <div class="rl-text">
+          <div class="rl-title">Rhythm Remix</div>
+          <div class="rl-sub">Replay with lo-fi beats</div>
+        </div>
+        <div class="rl-arrow">&#x203A;</div>
+      </button>
+      <button class="res-link" onclick="alert('Word Maze')">
+        <div class="rl-icon">&#x1F9E9;</div>
+        <div class="rl-text">
+          <div class="rl-title">Word Maze</div>
+          <div class="rl-sub">Comprehension game</div>
+        </div>
+        <div class="rl-arrow">&#x203A;</div>
+      </button>
+    </div>
+
+    <div class="res-done">
+      <button class="res-done-btn" onclick="go('ph-home')">Done</button>
+    </div>
+  </div>
+</div>
+
+<script>
+function go(id) {
+  document.querySelectorAll('.phase').forEach(p => p.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+  if (id === 'ph-record') startRec();
+}
+
+// Passive mic check
+setTimeout(() => {
+  document.getElementById('mic-f').className = 'ss-mic-dot ok';
+}, 1200);
+
+// Recording
+let rv, rs = 0;
+function startRec() {
+  const w = document.getElementById('wave-f');
+  w.innerHTML = '';
+  for (let i = 0; i < 36; i++) {
+    const b = document.createElement('div');
+    b.className = 'rw-bar';
+    b.style.height = '4px';
+    w.appendChild(b);
+  }
+  rs = 0;
+  rv = setInterval(() => {
+    rs++;
+    document.getElementById('timer-f').textContent =
+      Math.floor(rs/60) + ':' + String(rs%60).padStart(2,'0');
+    w.querySelectorAll('.rw-bar').forEach(b => {
+      const h = Math.random() * 32 + 4;
+      b.style.height = h + 'px';
+      b.style.opacity = h > 16 ? '0.3' : '0.12';
+    });
+  }, 1000);
+}
+function stopRec() {
+  clearInterval(rv);
+  go('ph-proc');
+  setTimeout(() => go('ph-results'), 1800);
+}
+</script>
+</body>
+</html>

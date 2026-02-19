@@ -1201,15 +1201,17 @@ code {
     <div class="collapsible-header" onclick="this.parentElement.classList.toggle('open')">
       <span class="collapsible-arrow">&#9654;</span>
       <span class="collapsible-tag tag-engine">Engine</span>
-      <span class="collapsible-title">NVIDIA Parakeet TDT 0.6B v3</span>
+      <span class="collapsible-title">NVIDIA Parakeet TDT 0.6B v2 (English-only)</span>
     </div>
     <div class="collapsible-body"><div class="collapsible-content">
       <p>Parakeet is NVIDIA's Token-and-Duration Transducer model, running locally on the same GPU as Reverb.
       It serves as the <strong>cross-validator</strong>: an independent second opinion on what the student said.</p>
+      <p><em>v2 (English-only) is used instead of v3 (multilingual) for better English WER (1.69% vs 1.93% on LibriSpeech clean),
+      a tighter 1,024-token BPE vocabulary that produces fewer fragmentation artifacts, and no risk of non-English output.</em></p>
 
       <table class="data-table">
         <tr><th>Property</th><th>Value</th></tr>
-        <tr><td>Model</td><td><code>nvidia/parakeet-tdt-0.6b-v3</code></td></tr>
+        <tr><td>Model</td><td><code>nvidia/parakeet-tdt-0.6b-v2</code></td></tr>
         <tr><td>Architecture</td><td>Token-and-Duration Transducer (TDT)</td></tr>
         <tr><td>VRAM</td><td>~600MB (lightweight)</td></tr>
         <tr><td>Audio Format</td><td>Mono, 16kHz (ffmpeg conversion required)</td></tr>

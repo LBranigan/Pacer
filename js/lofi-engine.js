@@ -136,6 +136,19 @@ const CHORD_SETS = {
       { name: 'C9',     notes: [NOTE.C3, NOTE.E3, NOTE.G3, NOTE.Bb3, NOTE.D4], root: NOTE.C2,
         scale: [NOTE.C4, NOTE.D4, NOTE.E4, NOTE.G4, NOTE.A4, NOTE.Bb4] },
     ]
+  },
+  lofi4: {
+    // Save Room: I-vi-IV-V in F major — warm, bright, nostalgic
+    chords: [
+      { name: 'Fmaj7',  notes: [NOTE.F3, NOTE.A3, NOTE.C4, NOTE.E4], root: NOTE.F2,
+        scale: [NOTE.F4, NOTE.G4, NOTE.A4, NOTE.Bb4, NOTE.C5, NOTE.D5] },
+      { name: 'Dm7',    notes: [NOTE.D3, NOTE.F3, NOTE.A3, NOTE.C4], root: NOTE.D2,
+        scale: [NOTE.D4, NOTE.E4, NOTE.F4, NOTE.G4, NOTE.A4, NOTE.C5] },
+      { name: 'Bbmaj7', notes: [NOTE.Bb3, NOTE.D4, NOTE.F4, NOTE.A4], root: NOTE.Bb2,
+        scale: [NOTE.Bb4, NOTE.C5, NOTE.D5, NOTE.F4, NOTE.G4, NOTE.A4] },
+      { name: 'C7',     notes: [NOTE.C3, NOTE.E3, NOTE.G3, NOTE.Bb3], root: NOTE.C2,
+        scale: [NOTE.C4, NOTE.D4, NOTE.E4, NOTE.F4, NOTE.G4, NOTE.A4] },
+    ]
   }
 };
 
@@ -253,6 +266,13 @@ const DRUM_PATTERNS = {
     snare:   [0,0,0,0, 1,0,0,0, 0,0,0,0, 1,0,0,0, 0,0,0,0, 1,0,0,0, 0,0,0,0, 1,0,0,0],
     hatC:    [1,1,1,1, 1,1,1,1, 1,1,1,1, 1,1,1,1, 1,1,1,1, 1,1,1,1, 1,1,1,1, 1,1,1,1],
     hatO:    [0,0,1,0, 0,0,1,1, 0,0,1,0, 0,1,0,0, 0,0,1,0, 0,0,1,1, 0,0,1,0, 0,1,0,0],
+  },
+  lofi4: {
+    // Save room: gentle but steady — soft kick on 1, brush on 2/4, soft hats
+    kick:    [1,0,0,0, 0,0,0,0, 1,0,0,0, 0,0,0,0, 1,0,0,0, 0,0,0,0, 1,0,0,0, 0,0,0,0],
+    snare:   [0,0,0,0, 1,0,0,0, 0,0,0,0, 1,0,0,0, 0,0,0,0, 1,0,0,0, 0,0,0,0, 1,0,0,0],
+    hatC:    [1,0,1,0, 1,0,1,0, 1,0,1,0, 1,0,1,0, 1,0,1,0, 1,0,1,0, 1,0,1,0, 1,0,1,0],
+    hatO:    new Array(32).fill(0),
   }
 };
 
@@ -283,6 +303,7 @@ const BASS_PATTERNS = {
   classical: [1,0,0,0, 1,0,0,0, 1,0,0,0, 1,0,0,0, 1,0,0,0, 1,0,0,0, 1,0,0,0, 1,0,0,0],
   trap:      [1,0,0,0, 0,0,0,1, 1,0,0,0, 0,0,0,1, 1,0,0,0, 0,0,0,1, 1,0,0,0, 0,0,0,1],
   lounge:    [1,0,0,0, 0,0,1,0, 0,0,0,0, 0,0,1,0, 1,0,0,0, 0,0,1,0, 0,0,0,0, 0,0,1,0],
+  lofi4:     [1,0,0,0, 0,0,0,0, 1,0,0,0, 0,0,0,0, 1,0,0,0, 0,0,0,0, 1,0,0,0, 0,0,0,0],
 };
 
 
@@ -377,6 +398,20 @@ const OVERLAY_DRUM_PATTERNS = {
     kick:  [0,0,1,0, 0,0,0,0, 0,1,0,0, 0,0,0,0, 0,0,1,0, 0,0,0,0, 0,1,0,0, 0,0,0,0],
     snare: [0,0,0,0, 0,0,0,1, 0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,1, 0,0,0,0, 0,0,0,0],
   },
+  lofi4: {
+    // Save room: ultra-gentle ghost hits to fill gaps
+    kick:  [0,0,0,0, 0,0,0,0, 0,0,0,0, 0,1,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0, 0,1,0,0],
+    snare: [0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0, 1,0,0,0, 0,0,0,0, 0,0,0,0],
+    // L2: add brush hits on beat 2 of each bar
+    kickL2:  [0,0,0,0, 0,1,0,0, 0,0,0,0, 0,1,0,0, 0,0,0,0, 0,1,0,0, 0,0,0,0, 0,1,0,0],
+    snareL2: [0,0,0,0, 1,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0, 1,0,0,0, 0,0,0,0, 0,0,0,0],
+    // L3: gentle brushed rhythm
+    kickL3:  [0,0,0,0, 0,1,0,0, 0,0,0,0, 0,1,0,0, 0,0,0,0, 0,1,0,0, 0,0,0,0, 0,1,0,0],
+    snareL3: [0,0,0,0, 1,0,0,0, 0,0,0,0, 1,0,0,0, 0,0,0,0, 1,0,0,0, 0,0,0,0, 1,0,0,0],
+    // L4: soft backbeat
+    kickL4:  [0,0,0,1, 0,1,0,0, 0,0,0,1, 0,1,0,0, 0,0,0,1, 0,1,0,0, 0,0,0,1, 0,1,0,0],
+    snareL4: [0,0,0,0, 1,0,0,0, 0,0,1,0, 1,0,0,0, 0,0,0,0, 1,0,0,0, 0,0,1,0, 1,0,0,0],
+  },
 };
 
 // ─── Per-style synthesis config ─────────────────────────────────────────────
@@ -444,6 +479,13 @@ const STYLE_CONFIG = {
     reverbWet: 0.08,        warmthCutoff: 3500,
     tapeWobbleDepth: 0.0,   crusherBits: 10,
     kickStyle: '808',       snareStyle: 'clap',      hatStyle: 'trap',
+  },
+  lofi4: {
+    padType: 'triangle',    padFilterCutoff: 2200,   padAttack: 0.35, padRelease: 0.8,
+    bassType: 'triangle',   bassFilterCutoff: 400,
+    reverbWet: 0.35,        warmthCutoff: 6000,
+    tapeWobbleDepth: 0.002, crusherBits: 16,
+    kickStyle: 'soft',      snareStyle: 'brush',     hatStyle: 'soft',
   },
 };
 
@@ -1199,6 +1241,13 @@ export class LofiEngine {
 
   _scheduleTick() {
     const now = this._ctx.currentTime;
+    // Catch-up guard: skip ahead if we fell far behind (tab lost focus, GC pause)
+    if (this._nextBeatTime < now - 0.3) {
+      const beatDur = 60 / this._bpm;
+      const skipped = Math.floor((now - this._nextBeatTime) / beatDur);
+      this._nextBeatTime += skipped * beatDur;
+      this._currentBeat = (this._currentBeat + skipped) % 32;
+    }
     while (this._nextBeatTime < now + this._scheduleAheadTime) {
       this._scheduleBeatsAt(this._nextBeatTime, this._currentBeat);
       this._advanceBeat();
@@ -1266,8 +1315,8 @@ export class LofiEngine {
     }
     const chord = chordSet.chords[chordIndex];
 
-    // Swing offset for jazzhop/bossa/lounge hi-hats: delay every odd beat by 30%
-    const swingOffset = ((style === 'jazzhop' || style === 'bossa' || style === 'lounge') && beat % 2 === 1)
+    // Swing offset for jazzhop/bossa/lounge/lofi4 hi-hats: delay every odd beat by 30%
+    const swingOffset = ((style === 'jazzhop' || style === 'bossa' || style === 'lounge' || style === 'lofi4') && beat % 2 === 1)
       ? secondsPerBeat * 0.3 : 0;
 
     // ── Drums (whisper = no drums at all) ──
@@ -1387,11 +1436,11 @@ export class LofiEngine {
     // ── Bass (skip in whisper) ──
     if (density !== 'whisper' && bassPat[beat]) {
       const bassVol = style === 'classical' ? 0.55
-        : style === 'ambient' ? 0.3
+        : (style === 'ambient' || style === 'lofi4') ? 0.3
         : style === 'trap' ? 1.0
         : (style === 'bossa' || style === 'lounge') ? 0.55
         : (density === 'full' ? 0.9 : 0.65);
-      const bassDur = (style === 'ambient' || style === 'classical') ? secondsPerBeat * 3.5
+      const bassDur = (style === 'ambient' || style === 'classical' || style === 'lofi4') ? secondsPerBeat * 3.5
         : style === 'trap' ? secondsPerBeat * 2.5
         : (style === 'bossa' || style === 'lounge') ? secondsPerBeat * 1.2
         : secondsPerBeat * 0.8;
@@ -1429,6 +1478,7 @@ export class LofiEngine {
       classical: [0.45, 8, 150],   // Moderate
       chiptune:  [0.20, 3, 80],    // Tight, retro
       zelda:     [0.25, 5, 100],   // SNES dungeon pump
+      lofi4:     [0.45, 12, 250],  // Gentle, slow release — save room breathing
     };
     const [depth, atkMs, relMs] = params[style] || params.lofi;
     const atk = atkMs / 1000;
@@ -1775,6 +1825,8 @@ export class LofiEngine {
       this._scheduleChiptuneOverlay(time, beat, chord, secondsPerBeat, level);
     } else if (style === 'zelda') {
       this._scheduleZeldaOverlay(time, beat, chord, secondsPerBeat, level);
+    } else if (style === 'lofi4') {
+      this._scheduleLofi4Overlay(time, beat, chord, secondsPerBeat, level);
     } else {
       // Generic styles: basic shaker at higher levels
       if (level > 0.4 && beat % 2 === 1) {
@@ -1950,6 +2002,84 @@ export class LofiEngine {
       const kalDeg = kalP[beat];
       if (kalDeg >= 0) {
         this._playKalimba(time, scale[kalDeg % S] * 2, secondsPerBeat * 0.6, 0.25);
+      }
+    }
+  }
+
+  /**
+   * LOFI 4 "Save Room" overlay — warm, melodic, nostalgic SNES-inspired.
+   * Vibraphone carries a singable melody, Rhodes comps gently, tape strings swell,
+   * kalimba adds sparkle. Bright F major — uplifting but unobtrusive for reading.
+   */
+  _scheduleLofi4Overlay(time, beat, chord, secondsPerBeat, level) {
+    const mainBass = BASS_PATTERNS.lofi4;
+    const root = chord.root;
+    const notes = chord.notes;
+    const scale = chord.scale || [];
+    const spb = secondsPerBeat;
+
+    // ── Walking bass fills ──
+    const bassWalk1 = [0,0,0,0, 0,0,0,1, 0,0,0,0, 0,0,0,1, 0,0,0,0, 0,0,0,1, 0,0,0,0, 0,0,0,1];
+    const bassWalk2 = [0,0,0,1, 0,0,0,1, 0,0,0,1, 0,0,0,1, 0,0,0,1, 0,0,0,1, 0,0,0,1, 0,0,0,1];
+    const bassWalk3 = [0,0,0,1, 0,0,1,1, 0,0,0,1, 0,0,1,1, 0,0,0,1, 0,0,1,1, 0,0,0,1, 0,0,1,1];
+    const bassWalk4 = [0,0,1,1, 0,0,1,1, 0,1,0,1, 0,0,1,1, 0,0,1,1, 0,0,1,1, 0,1,0,1, 0,0,1,1];
+
+    const bassPat = level >= 1.5 ? bassWalk4 : level >= 1.0 ? bassWalk3 : level >= 0.65 ? bassWalk2 : bassWalk1;
+    if (bassPat[beat] && !mainBass[beat]) {
+      const passingTones = [root * 2, notes[1] ? notes[1] / 2 : root * 1.5, root * 1.5];
+      this._playBass(time, passingTones[beat % passingTones.length], spb * 2.0, 0.30);
+    }
+
+    if (scale.length < 3) return;
+    const S = scale.length;
+
+    // ── L1+ Vibraphone melody — singable phrases with stepwise motion ──
+    // A real melody: rises, falls, breathes. ~1 note per bar at L1, denser at higher levels.
+    const vibA = [-1,-1,-1,-1,  0,-1,-1,-1, -1,-1,-1,-1,  2,-1,-1,-1,
+                  -1,-1,-1,-1,  4,-1,-1,-1, -1,-1, 2,-1, -1,-1,-1,-1];
+    const vibB = [-1,-1, 0,-1, -1,-1, 2,-1, -1,-1,-1,-1, -1,-1, 4,-1,
+                  -1,-1, 3,-1, -1,-1, 1,-1, -1,-1, 0,-1, -1,-1,-1,-1];
+    const vibC = [ 0,-1,-1, 2, -1,-1, 4,-1, -1, 3,-1,-1, -1, 2,-1, 0,
+                  -1,-1, 1,-1, -1, 3,-1,-1, -1, 4,-1, 2, -1,-1, 0,-1];
+    const vibD = [ 0,-1, 2,-1,  4,-1, 3,-1, -1, 2,-1, 0, -1, 1,-1, 2,
+                   4,-1, 3,-1,  1,-1, 0,-1,  2,-1, 4,-1,  3,-1, 1,-1];
+
+    const vibP = level >= 1.5 ? vibD : level >= 1.0 ? vibC : level >= 0.65 ? vibB : vibA;
+    const vibDeg = vibP[beat];
+    if (vibDeg >= 0) {
+      this._playVibraphone(time, scale[vibDeg % S], spb * 2.0, 0.22);
+    }
+
+    // ── L2+ Rhodes electric piano — warm syncopated chord comps ──
+    if (level >= 0.65) {
+      const rh1 = [0,0,0,0, 0,0,0,1, 0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,1, 0,0,0,0, 0,0,0,0];
+      const rh2 = [0,0,0,0, 0,0,0,1, 0,0,0,0, 0,0,0,1, 0,0,0,0, 0,0,0,1, 0,0,0,0, 0,0,0,1];
+      const rh3 = [0,0,0,1, 0,0,0,1, 0,0,0,0, 0,1,0,1, 0,0,0,1, 0,0,0,1, 0,0,0,0, 0,1,0,1];
+
+      const rhPat = level >= 1.5 ? rh3 : level >= 1.0 ? rh2 : rh1;
+      if (rhPat[beat]) {
+        const rhodesChord = notes.map(f => f * 2);
+        this._playRhodes(time, rhodesChord, spb * 2.0, 0.20);
+      }
+    }
+
+    // ── L3+ Tape strings — warm swelling pad ──
+    if (level >= 1.0) {
+      if (beat % 8 === 0) {
+        this._playTapeStrings(time, notes, spb * 7, 0.14);
+      }
+    }
+
+    // ── L4+ Kalimba with delay echo — bright sparkly plucks ──
+    if (level >= 1.5 && scale.length >= 3) {
+      const kalP = [-1,-1,-1,-1, -1,-1, 0,-1, -1,-1,-1,-1, -1,-1, 2,-1,
+                    -1,-1,-1,-1, -1, 4,-1,-1, -1,-1,-1,-1,  3,-1,-1,-1];
+      const kalDeg = kalP[beat];
+      if (kalDeg >= 0) {
+        const kFreq = scale[kalDeg % S] * 2;
+        this._playKalimba(time, kFreq, spb * 0.8, 0.22);
+        this._playKalimba(time + spb * 0.75, kFreq, spb * 0.6, 0.13);
+        this._playKalimba(time + spb * 1.5, kFreq, spb * 0.4, 0.07);
       }
     }
   }

@@ -9,7 +9,7 @@
   - Access: Local Docker container via `http://localhost:8765/ensemble`
   - Client: `js/reverb-api.js`
   - Auth: None (local), or Bearer token via `ORF_AUTH_TOKEN` env var
-- Parakeet TDT 0.6B v3 (NVIDIA NeMo) - Primary correctness engine, sub-second word timestamps
+- Parakeet TDT 0.6B v2 (NVIDIA NeMo, English-only) - Primary correctness engine, sub-second word timestamps
   - Access: Same backend at `http://localhost:8765/parakeet`
   - Client: `js/parakeet-api.js`
   - Auth: Same Bearer token as above

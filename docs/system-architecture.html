@@ -907,7 +907,7 @@ code {
     <a href="#reverb" class="nav-link"><span class="nav-dot" style="background:#3b82f6"></span> Reverb Engine</a>
     <a href="#parakeet" class="nav-link"><span class="nav-dot" style="background:#8b5cf6"></span> Parakeet TDT</a>
     <a href="#deepgram" class="nav-link"><span class="nav-dot" style="background:#f59e0b"></span> Deepgram Nova-3</a>
-    <a href="#crossval" class="nav-link"><span class="nav-dot" style="background:#14b8a6"></span> 3-Way Verdict</a>
+    <a href="#crossval" class="nav-link"><span class="nav-dot" style="background:#14b8a6"></span> V1+Pk Verdict</a>
 
     <div class="nav-section-label">Processing</div>
     <a href="#normalize" class="nav-link"><span class="nav-num">07</span> Text Normalization</a>
@@ -974,7 +974,8 @@ code {
 
   <div class="callout callout-blue">
     <strong>Independent Reference Alignment:</strong> The current architecture aligns each ASR engine
-    independently to the reference text, then compares per-reference-word in a 3-way verdict.
+    independently to the reference text, then compares V1 and Parakeet per-reference-word in a scoring verdict
+    (V0 aligned for display only).
   </div>
 
   <p>The problem is that <strong>ASR models were never designed to be reading assessment tools</strong>. They produce artifacts
@@ -1004,10 +1005,11 @@ code {
     <h2 class="section-title">System Overview</h2>
   </div>
 
-  <p>The "Kitchen Sink" pipeline combines three independent ASR engines to produce a high-confidence
+  <p>The "Kitchen Sink" pipeline combines two scoring ASR engines to produce a high-confidence
   oral reading fluency assessment. Audio is processed in parallel by Reverb (dual-pass) and Parakeet
-  (optionally Deepgram as fallback). Each engine is independently aligned to the reference text via
-  Needleman-Wunsch, then compared per-reference-word in a 3-way verdict.</p>
+  (optionally Deepgram as fallback). V1 (Reverb verbatim) and Parakeet are independently aligned to the reference text via
+  Needleman-Wunsch, then compared per-reference-word in a 2-engine verdict. V0 (Reverb clean) is still aligned
+  for display and diagnostic purposes but is <strong>excluded from all scoring and classification decisions</strong>.</p>
 
   <div class="flow-diagram">
     <div class="flow-label">Audio Input</div>
@@ -1026,20 +1028,20 @@ code {
       <div class="flow-box box-purple">Parakeet TDT<small>Primary engine</small></div>
     </div>
     <span class="flow-arrow-down">&darr;</span>
-    <div class="flow-label">3 Independent Reference Alignments</div>
+    <div class="flow-label">Independent Reference Alignments</div>
     <div class="flow-row">
-      <div class="flow-box box-blue">V1 &rarr; Ref<small>NW graded</small></div>
-      <div class="flow-box box-green">V0 &rarr; Ref<small>NW graded</small></div>
-      <div class="flow-box box-purple">Pk &rarr; Ref<small>NW graded</small></div>
+      <div class="flow-box box-blue">V1 &rarr; Ref<small>NW graded (scoring)</small></div>
+      <div class="flow-box box-green" style="opacity:0.5">V0 &rarr; Ref<small>Display only</small></div>
+      <div class="flow-box box-purple">Pk &rarr; Ref<small>NW graded (scoring)</small></div>
     </div>
     <span class="flow-arrow-down">&darr;</span>
-    <div class="flow-label">Spillover &amp; 3-Way Verdict</div>
+    <div class="flow-label">Spillover &amp; V1+Pk Verdict</div>
     <div class="flow-row">
       <div class="flow-box box-teal">Spillover<small>Per-engine</small></div>
       <span class="flow-arrow">&rarr;</span>
-      <div class="flow-box box-orange">3-Way Verdict<small>Per-ref-word</small></div>
+      <div class="flow-box box-orange">V1+Pk Verdict<small>Per-ref-word</small></div>
       <span class="flow-arrow">&rarr;</span>
-      <div class="flow-box box-pink">Diagnostics<small>27 phases</small></div>
+      <div class="flow-box box-pink">Diagnostics<small>~24 phases</small></div>
     </div>
     <span class="flow-arrow-down">&darr;</span>
     <div class="flow-label">Output</div>
@@ -1138,10 +1140,16 @@ code {
       hallucinate disfluencies, miss ones that occurred, or collapse multiple tokens. By running the <em>same</em> model
       in two modes on the <em>same</em> audio:</p>
       <ul>
-        <li><strong>Verbatim</strong> shows what the student actually said (including disfluencies)</li>
-        <li><strong>Clean</strong> shows what the student intended to say (without disfluencies)</li>
-        <li><strong>V0 serves as a voter</strong> in the 3-way verdict (its alignment is compared per-ref-word alongside V1 and Parakeet)</li>
+        <li><strong>Verbatim (V1)</strong> shows what the student actually said (including disfluencies) &mdash; this is the primary transcript used for scoring</li>
+        <li><strong>Clean (V0)</strong> shows what the student intended to say (without disfluencies) &mdash; used for <strong>display and diagnostics only</strong></li>
       </ul>
+      <div class="callout callout-orange">
+        <strong>V0 Demoted:</strong> V0 was previously a voter in the 3-way verdict but has been demoted to display-only.
+        Analysis showed V0 echoed V1 91.3% of the time, uniquely rescued only 0.1% of words, and introduced 4.8% noise.
+        All scoring and classification decisions now use <strong>V1 + Parakeet only</strong>. V0 alignment data is still
+        computed and shown in the 6-column diagnostic table but excluded from all verdicts, forgiveness phases, and metrics.
+        See <code>docs/v0-demotion-proposal.md</code> for full rationale.
+      </div>
       <p>Disfluency classification happens in <code>js/app.js</code> (filler tagging at line 965): known fillers
       (<code>um</code>, <code>uh</code>, <code>uh-huh</code>, <code>mm</code>, <code>hmm</code>, <code>er</code>, <code>ah</code>)
       are tagged via the <code>FILLER_WORDS</code> set. The earlier V0 insertion diff approach (flagging false starts
@@ -1202,7 +1210,7 @@ code {
 <span class="kw">POST</span> <span class="str">/ensemble</span>   <span class="cmt">— Dual-pass transcription (v=1.0 + v=0.0)</span>
 <span class="kw">POST</span> <span class="str">/deepgram</span>   <span class="cmt">— Deepgram Nova-3 proxy (CORS bypass)</span>
 <span class="kw">POST</span> <span class="str">/parakeet</span>   <span class="cmt">— Parakeet TDT local inference</span>
-<span class="kw">POST</span> <span class="str">/deepgram-maze</span> <span class="cmt">— Keyterm-boosted short-audio recognition (maze game, 20 req/min)</span>
+<span class="kw">POST</span> <span class="str">/deepgram-maze</span> <span class="cmt">— Keyterm-boosted short-audio recognition (maze game, 20 req/min, Nova-3)</span>
       </div>
 
       <p><code>services/reverb/server.py</code> &middot; <code>services/reverb/Dockerfile</code> &middot; <code>services/reverb/docker-compose.yml</code></p>
@@ -1221,17 +1229,19 @@ code {
     <div class="collapsible-header" onclick="this.parentElement.classList.toggle('open')">
       <span class="collapsible-arrow">&#9654;</span>
       <span class="collapsible-tag tag-engine">Engine</span>
-      <span class="collapsible-title">NVIDIA Parakeet TDT 0.6B v3</span>
+      <span class="collapsible-title">NVIDIA Parakeet TDT 0.6B v2 (English-only)</span>
     </div>
     <div class="collapsible-body"><div class="collapsible-content">
       <p>Parakeet is NVIDIA's Token-and-Duration Transducer model, running locally on the same GPU as Reverb.
       With "Trust Pk" ON (the default), Parakeet serves as the <strong>primary correctness engine</strong> &mdash;
       it overrides Reverb on every disagreed word. The code still uses "cross-validator" in filenames and
       variable names for historical reasons, but Parakeet's actual role is final arbiter of word correctness.</p>
+      <p><em>v2 (English-only) is used instead of v3 (multilingual) for better English WER (1.69% vs 1.93% on LibriSpeech clean),
+      a tighter 1,024-token BPE vocabulary that produces fewer fragmentation artifacts, and no risk of non-English output.</em></p>
 
       <table class="data-table">
         <tr><th>Property</th><th>Value</th></tr>
-        <tr><td>Model</td><td><code>nvidia/parakeet-tdt-0.6b-v3</code></td></tr>
+        <tr><td>Model</td><td><code>nvidia/parakeet-tdt-0.6b-v2</code></td></tr>
         <tr><td>Architecture</td><td>Token-and-Duration Transducer (TDT)</td></tr>
         <tr><td>VRAM</td><td>~600MB (lightweight)</td></tr>
         <tr><td>Audio Format</td><td>Mono, 16kHz (ffmpeg conversion required)</td></tr>
@@ -1274,7 +1284,7 @@ ffmpeg -y -i input.wav -ac <span class="num">1</span> -ar <span class="num">1600
     </div>
     <div class="collapsible-body"><div class="collapsible-content">
       <p>Deepgram Nova-3 is a cloud-based ASR used as a <strong>fallback engine</strong> when Parakeet is unavailable.
-      Deepgram fills Parakeet's slot in the 3-way alignment when needed.
+      Deepgram fills Parakeet's slot in the V1+Pk alignment when needed.
       The browser cannot call Deepgram directly (CORS restrictions), so requests are proxied through the backend server.</p>
 
       <table class="data-table">
@@ -1295,35 +1305,38 @@ ffmpeg -y -i input.wav -ac <span class="num">1</span> -ar <span class="num">1600
 <div class="section" id="crossval">
   <div class="section-header">
     <span class="section-num">06</span>
-    <h2 class="section-title">3-Way Verdict System</h2>
+    <h2 class="section-title">V1+Pk Verdict System</h2>
   </div>
 
   <p>Each engine is independently
   aligned to the reference text via <code>alignWords()</code>, producing three parallel ref-entry arrays.
   After spillover consolidation, insertions are filtered out and the remaining ref-aligned entries
-  are compared per-reference-word in a 3-way decision matrix.</p>
+  are compared per-reference-word. <strong>Only V1 and Parakeet participate in the verdict</strong> &mdash;
+  V0 data is stored as metadata (<code>_v0Word</code>, <code>_v0Type</code>) for display but does not
+  influence any scoring or classification decision.</p>
 
   <div class="collapsible open">
     <div class="collapsible-header" onclick="this.parentElement.classList.toggle('open')">
       <span class="collapsible-arrow">&#9654;</span>
       <span class="collapsible-tag tag-algorithm">Algorithm</span>
-      <span class="collapsible-title">3-Way Per-Ref-Word Decision Matrix</span>
+      <span class="collapsible-title">V1+Pk Per-Ref-Word Decision Matrix</span>
     </div>
     <div class="collapsible-body"><div class="collapsible-content">
 
-      <p>For each reference word, the V1, V0, and Parakeet alignment entries are compared.
-      The V1 entry is primary; V0 and Parakeet serve as validators.</p>
+      <p>For each reference word, V1 and Parakeet alignment entries are compared.
+      V1 is the primary transcript; Parakeet is the correctness engine that can override V1.
+      V0 data (<code>_v0Word</code>, <code>_v0Type</code>) is stored as display metadata only.</p>
 
       <div class="status-grid">
         <div class="status-card status-confirmed">
           <h4>Confirmed</h4>
-          <p>2+ engines agree on correct; or V1 compound match confirmed by another engine;
-          or all engines agree on the same substitution; or 2+ engines report omission.</p>
+          <p>V1 and Parakeet both correct; or V1 compound match confirmed by Parakeet;
+          or both engines agree on the same substitution; or both report omission.</p>
         </div>
         <div class="status-card status-disagreed">
           <h4>Disagreed</h4>
-          <p>V1 substitution but Parakeet heard it correctly (V1 overridden);
-          or V1 &amp; Parakeet wrong but V0 correct (V0 tiebreak).</p>
+          <p>V1 substitution but Parakeet heard it correctly (V1 overridden by Trust Pk).
+          This is how Parakeet functions as the primary correctness engine.</p>
         </div>
         <div class="status-card" style="background:#fff0f0;border-color:#fca5a5">
           <h4 style="color:#991b1b">Recovered</h4>
@@ -1332,7 +1345,7 @@ ffmpeg -y -i input.wav -ac <span class="num">1</span> -ar <span class="num">1600
         </div>
         <div class="status-card" style="background:#fefce8;border-color:#fde68a">
           <h4 style="color:#92400e">Confirmed Omission</h4>
-          <p>All three engines omitted the word. High confidence the student
+          <p>Both V1 and Parakeet omitted the word. High confidence the student
           did not attempt it.</p>
         </div>
         <div class="status-card status-unconfirmed">
@@ -1346,9 +1359,9 @@ ffmpeg -y -i input.wav -ac <span class="num">1</span> -ar <span class="num">1600
       </div>
 
       <div class="callout callout-blue">
-        <strong>Three timestamp sources per word:</strong> Cross-validator / Parakeet (primary for timing),
-        Reverb v=1.0 (secondary), and Reverb v=0.0 (for disfluency delta). When engines disagree,
-        V1 entry is the anchor; disagreed words are overridden to correct with Parakeet timestamps.
+        <strong>Two scoring timestamp sources per word:</strong> Parakeet (primary for timing and duration analysis)
+        and Reverb V1 (secondary fallback). V0 timestamps are stored for display but not used in scoring.
+        When engines disagree, V1 entry is the anchor; disagreed words are overridden to correct with Parakeet timestamps.
       </div>
     </div></div>
   </div>
@@ -1360,9 +1373,10 @@ ffmpeg -y -i input.wav -ac <span class="num">1</span> -ar <span class="num">1600
       <span class="collapsible-title">Confirmed Insertions &amp; Timestamp Propagation</span>
     </div>
     <div class="collapsible-body"><div class="collapsible-content">
-      <p>After the 3-way ref-word comparison, insertions are cross-validated at their ref-word boundary position.
-      When <strong>all available engines</strong> independently hear the same extra word at the same boundary,
-      it becomes a <strong>confirmed insertion</strong> (<code>_confirmedInsertion: true</code>) and counts as an error.</p>
+      <p>After the V1+Pk ref-word comparison, insertions are cross-validated at their ref-word boundary position.
+      When <strong>both V1 and Parakeet</strong> independently hear the same extra word at the same boundary,
+      it becomes a <strong>confirmed insertion</strong> (<code>_confirmedInsertion: true</code>, <code>_insertionEngines: 2</code>) and counts as an error.
+      V0 is excluded from confirmed insertion engine count.</p>
       <ul>
         <li>Exclusions: fillers, self-corrections, struggle fragments, CTC artifacts are cleared in post-validation</li>
         <li>Regular (single/dual-engine) insertions remain non-errors</li>
@@ -1370,7 +1384,7 @@ ffmpeg -y -i input.wav -ac <span class="num">1</span> -ar <span class="num">1600
       </ul>
       <p>Timestamps flow through the entire pipeline: <code>_xvalStartTime</code> / <code>_xvalEndTime</code> (primary),
       <code>_reverbStartTime</code> / <code>_reverbEndTime</code> (fallback), used by prosody metrics, word speed tiers, and click-to-play.</p>
-      <p><code>js/cross-validator.js</code> (engine routing) &middot; <code>js/app.js</code> (3-way logic)</p>
+      <p><code>js/cross-validator.js</code> (engine routing) &middot; <code>js/app.js</code> (V1+Pk verdict logic)</p>
     </div></div>
   </div>
 </div>
@@ -1520,8 +1534,8 @@ ffmpeg -y -i input.wav -ac <span class="num">1</span> -ar <span class="num">1600
 
   <p>The full pipeline runs sequentially after the Kitchen Sink returns raw ASR results. Order matters &mdash;
   several stages depend on outputs from earlier ones (e.g., omission recovery must precede near-miss resolution).
-  The 3 independent reference alignments and 3-way verdict significantly expand the pipeline. The main orchestrator
-  (<code>js/app.js</code>, 4,109 lines) executes ~30 phases in strict order.</p>
+  The independent reference alignments and V1+Pk verdict significantly expand the pipeline. The main orchestrator
+  (<code>js/app.js</code>, 4,105 lines) executes ~24 phases in strict order.</p>
 
   <div class="pipeline">
     <div class="pipeline-step">
@@ -1544,7 +1558,7 @@ ffmpeg -y -i input.wav -ac <span class="num">1</span> -ar <span class="num">1600
       <div class="pipeline-line"><div class="pipeline-dot"></div><div class="pipeline-stem"></div></div>
       <div class="pipeline-card">
         <div class="pipeline-card-title">3. Three Independent NW Alignments</div>
-        <div class="pipeline-card-desc">V1, V0, and Parakeet each independently aligned to reference text via <code>alignWords()</code> with graded substitution scoring.</div>
+        <div class="pipeline-card-desc">V1, V0, and Parakeet each independently aligned to reference text via <code>alignWords()</code> with graded substitution scoring. V0 alignment is computed for display/diagnostics only &mdash; excluded from all scoring decisions.</div>
         <div class="pipeline-card-file">js/alignment.js &middot; js/app.js:715&ndash;800</div>
       </div>
     </div>
@@ -1575,8 +1589,8 @@ ffmpeg -y -i input.wav -ac <span class="num">1</span> -ar <span class="num">1600
     <div class="pipeline-step">
       <div class="pipeline-line"><div class="pipeline-dot dot-red"></div><div class="pipeline-stem"></div></div>
       <div class="pipeline-card">
-        <div class="pipeline-card-title">10. 3-Way Per-Ref-Word Verdict</div>
-        <div class="pipeline-card-desc">Compares V1, V0, Parakeet per reference word. Statuses: confirmed, disagreed, recovered, confirmed_omission, unconfirmed, unavailable.</div>
+        <div class="pipeline-card-title">10. V1+Pk Per-Ref-Word Verdict</div>
+        <div class="pipeline-card-desc">Compares V1 and Parakeet per reference word (V0 demoted to display-only metadata). Statuses: confirmed, disagreed, recovered, confirmed_omission, unconfirmed, unavailable.</div>
         <div class="pipeline-card-file">js/app.js:857&ndash;1396</div>
       </div>
     </div>
@@ -1584,8 +1598,8 @@ ffmpeg -y -i input.wav -ac <span class="num">1</span> -ar <span class="num">1600
       <div class="pipeline-line"><div class="pipeline-dot dot-purple"></div><div class="pipeline-stem"></div></div>
       <div class="pipeline-card">
         <div class="pipeline-card-title">11. Filler &amp; Insertion Cross-Validation</div>
-        <div class="pipeline-card-desc">Filler classification (um, uh, etc.) &rarr; 3-way insertion cross-validation (<code>_confirmedInsertion</code>). Positional match only sets timestamps; flat match only sets metadata.</div>
-        <div class="pipeline-card-file">js/app.js (within 3-way verdict block)</div>
+        <div class="pipeline-card-desc">Filler classification (um, uh, etc.) &rarr; V1+Pk insertion cross-validation (<code>_confirmedInsertion</code>). Positional match only sets timestamps; flat match only sets metadata. V0 excluded from engine count.</div>
+        <div class="pipeline-card-file">js/app.js (within V1+Pk verdict block)</div>
       </div>
     </div>
     <div class="pipeline-step">
@@ -1593,7 +1607,7 @@ ffmpeg -y -i input.wav -ac <span class="num">1</span> -ar <span class="num">1600
       <div class="pipeline-card">
         <div class="pipeline-card-title">12. CTC Artifact Filtering</div>
         <div class="pipeline-card-desc">Flags overlapping <code>&lt;unknown&gt;</code> tokens (&le;120ms) as <code>_ctcArtifact</code>. Also filters pre-word and post-word artifacts outside the confirmed word window.</div>
-        <div class="pipeline-card-file">js/app.js (within 3-way block)</div>
+        <div class="pipeline-card-file">js/app.js (within verdict block)</div>
       </div>
     </div>
     <div class="pipeline-step">
@@ -1601,7 +1615,7 @@ ffmpeg -y -i input.wav -ac <span class="num">1</span> -ar <span class="num">1600
       <div class="pipeline-card">
         <div class="pipeline-card-title">13. Omission Recovery</div>
         <div class="pipeline-card-desc">Recovers omitted words from unconsumed Parakeet words with timestamps. Adjusts all subsequent <code>hypIndex</code> references. Must run before near-miss resolution.</div>
-        <div class="pipeline-card-file">js/app.js (within 3-way block)</div>
+        <div class="pipeline-card-file">js/app.js (within verdict block)</div>
       </div>
     </div>
     <div class="pipeline-step">
@@ -1609,7 +1623,7 @@ ffmpeg -y -i input.wav -ac <span class="num">1</span> -ar <span class="num">1600
       <div class="pipeline-card">
         <div class="pipeline-card-title">14. Xval Abbreviation Confirmation</div>
         <div class="pipeline-card-desc">If Parakeet raw words confirm a short abbreviation form (e.g., "ie"), reclassify substitution as correct.</div>
-        <div class="pipeline-card-file">js/app.js (within 3-way block)</div>
+        <div class="pipeline-card-file">js/app.js (within verdict block)</div>
       </div>
     </div>
     <div class="pipeline-step">
@@ -1697,7 +1711,7 @@ ffmpeg -y -i input.wav -ac <span class="num">1</span> -ar <span class="num">1600
       <div class="pipeline-card">
         <div class="pipeline-card-title">22. Function Word Forgiveness &amp; Trust Pk</div>
         <div class="pipeline-card-desc">
-          Phase 7: single-letter function word forgiveness ("a"/"I" omissions where V0/Pk correct) &middot;
+          Phase 7: single-letter function word forgiveness ("a"/"I" omissions where both V1 and Pk omitted) &middot;
           <strong>Phase 7b: Trust Pk Override</strong> &mdash; all disagreed subs where Parakeet heard correct &rarr;
           <code>forgiven = true, _pkTrustOverride = true</code>. Fragment guard: checks <code>pkInsGroups[refIdx]</code>
           and <code>[refIdx+1]</code> for near-miss insertions that indicate RNNT reconstruction, not genuine correct hearing.
@@ -1717,7 +1731,7 @@ ffmpeg -y -i input.wav -ac <span class="num">1</span> -ar <span class="num">1600
       <div class="pipeline-line"><div class="pipeline-dot dot-red"></div><div class="pipeline-stem"></div></div>
       <div class="pipeline-card">
         <div class="pipeline-card-title">24. End-of-Reading Detection</div>
-        <div class="pipeline-card-desc">Walks backward from alignment end: trailing subs where NO engine produced a near-miss &rarr; <code>_notAttempted = true</code>. Omissions only marked if a not-attempted sub exists after them (positive evidence). Excluded from accuracy, WCPM, word speed map.</div>
+        <div class="pipeline-card-desc">Walks backward from alignment end: trailing subs where neither V1 nor Parakeet produced a near-miss &rarr; <code>_notAttempted = true</code> (V0 excluded from scoring). Omissions only marked if a not-attempted sub exists after them (positive evidence). Excluded from accuracy, WCPM, word speed map.</div>
         <div class="pipeline-card-file">js/app.js:2500&ndash;2556</div>
       </div>
     </div>
@@ -1827,7 +1841,7 @@ ffmpeg -y -i input.wav -ac <span class="num">1</span> -ar <span class="num">1600
     <h2 class="section-title">Forgiveness Pipeline</h2>
   </div>
 
-  <p>After the 3-way verdict determines raw correctness, a multi-phase forgiveness pipeline prevents false errors.
+  <p>After the V1+Pk verdict determines raw correctness, a multi-phase forgiveness pipeline prevents false errors.
   Each phase has strict ordering requirements and guards against over-forgiveness.</p>
 
   <div class="collapsible open">
@@ -1862,7 +1876,7 @@ ffmpeg -y -i input.wav -ac <span class="num">1</span> -ar <span class="num">1600
           <td>7</td>
           <td><strong>Function Word Forgiveness</strong></td>
           <td>Single-letter function words ("a", "I") omitted in the blast radius of a struggle</td>
-          <td>V0 or Pk must have heard the word correctly</td>
+          <td>Both V1 and Pk must have omitted the word (V0 excluded from scoring)</td>
         </tr>
         <tr>
           <td>7b</td>
@@ -1874,7 +1888,7 @@ ffmpeg -y -i input.wav -ac <span class="num">1</span> -ar <span class="num">1600
           <td>8</td>
           <td><strong>Post-Struggle Leniency</strong></td>
           <td>One word of grace after a confirmed error (prevRefWasError + Pk confirms)</td>
-          <td>Dual cross-validator override (V0 + Pk both correct) bypasses prevRefWasError requirement</td>
+          <td>Parakeet confirms current word correct; prevRefWasError requirement</td>
         </tr>
         <tr>
           <td>8b</td>
@@ -2130,7 +2144,7 @@ ffmpeg -y -i input.wav -ac <span class="num">1</span> -ar <span class="num">1600
         <tr><td><strong>Future You</strong></td><td class="file-path">js/future-you.js</td><td>Audio stitching of correctly-read segments into seamless karaoke-style playback with word-by-word highlighting</td></tr>
         <tr><td><strong>Celeration Chart</strong></td><td class="file-path">js/celeration-chart.js</td><td>Reading rate trend visualization over multiple sessions</td></tr>
         <tr><td><strong>Maze Game</strong></td><td class="file-path">js/maze-game.js + maze-generator.js</td><td>Procedurally generated maze with speech-recognition gates (uses <code>/deepgram-maze</code> endpoint for keyterm boosting)</td></tr>
-        <tr><td><strong>Rhythm Remix</strong></td><td class="file-path">js/rhythm-remix.js</td><td>Bouncing-ball reading playback with lo-fi beats. Study Beats FM DJ intro via Gemini TTS. Mountain Range canvas visualization.</td></tr>
+        <tr><td><strong>Rhythm Remix</strong></td><td class="file-path">js/rhythm-remix.js</td><td>Bouncing-ball reading playback with lo-fi beats. Study Beats FM DJ intro via Gemini TTS. Color-coded audio waveform visualization (replaced mountain range).</td></tr>
         <tr><td><strong>Movie Trailer</strong></td><td class="file-path">js/movie-trailer.js</td><td>Auto-generated narrative clips from passage content</td></tr>
         <tr><td><strong>Illustrator</strong></td><td class="file-path">js/illustrator.js</td><td>Visual companion generation for passages</td></tr>
         <tr><td><strong>Student Playback</strong></td><td class="file-path">js/student-playback.js</td><td>Student-mode audio replay with controls</td></tr>
@@ -2141,7 +2155,7 @@ ffmpeg -y -i input.wav -ac <span class="num">1</span> -ar <span class="num">1600
       <code>js/sprite-animator.js</code> (character animation) &middot;
       <code>js/noun-emoji-map.js</code> (visual noun annotation) &middot;
       <code>js/lofi-engine.js</code> (Web Audio lo-fi synth with 7 styles, drum variants, tape wobble, bitcrusher) &middot;
-      <code>js/mountain-range.js</code> (canvas word-peak visualization, 180px fixed height)</p>
+      <code>js/mountain-range.js</code> (color-coded audio waveform visualization, bars colored by word correctness)</p>
     </div></div>
   </div>
 </div>
@@ -2166,17 +2180,17 @@ ffmpeg -y -i input.wav -ac <span class="num">1</span> -ar <span class="num">1600
       <div class="subsection-title">Core Pipeline</div>
       <table class="data-table">
         <tr><th>File</th><th>Lines</th><th>Role</th></tr>
-        <tr><td class="file-path">js/app.js</td><td class="line-count">4,109</td><td>Pipeline orchestrator &mdash; entry point for <code>runAnalysis()</code>, 3-way verdict, 8 forgiveness phases, end-of-reading, self-correction</td></tr>
+        <tr><td class="file-path">js/app.js</td><td class="line-count">4,105</td><td>Pipeline orchestrator &mdash; entry point for <code>runAnalysis()</code>, V1+Pk verdict, 8 forgiveness phases, end-of-reading, self-correction</td></tr>
         <tr><td class="file-path">js/alignment.js</td><td class="line-count">748</td><td>NW alignment + compound / abbreviation / number / contraction merge + spillover consolidation</td></tr>
-        <tr><td class="file-path">js/diagnostics.js</td><td class="line-count">2,091</td><td>All detectors, near-miss resolution, fragment absorption, prosody, word speed tiers</td></tr>
-        <tr><td class="file-path">js/ui.js</td><td class="line-count">2,777</td><td>Bucket-based rendering (11 buckets), tooltips, click-to-play, word speed map, STT transcript view</td></tr>
+        <tr><td class="file-path">js/diagnostics.js</td><td class="line-count">2,115</td><td>All detectors, near-miss resolution, fragment absorption, prosody, word speed tiers</td></tr>
+        <tr><td class="file-path">js/ui.js</td><td class="line-count">2,759</td><td>Bucket-based rendering (11 buckets), tooltips, click-to-play, word speed map, STT transcript view</td></tr>
         <tr><td class="file-path">js/kitchen-sink-merger.js</td><td class="line-count">206</td><td>Reverb dual-pass + Parakeet orchestrator with fallback chain</td></tr>
         <tr><td class="file-path">js/cross-validator.js</td><td class="line-count">106</td><td>Engine-agnostic routing: selects Parakeet or Deepgram</td></tr>
         <tr><td class="file-path">js/text-normalize.js</td><td class="line-count">140</td><td><code>normalizeText()</code> + <code>splitHyphenParts()</code> + <code>splitReferenceForDisplay()</code> + <code>DISFLUENCIES</code> set</td></tr>
         <tr><td class="file-path">js/word-equivalences.js</td><td class="line-count">503</td><td>Canonical form mapping &mdash; 20+ equivalence groups (titles, contractions, homophones, numbers, abbreviations, etc.)</td></tr>
         <tr><td class="file-path">js/number-words.js</td><td class="line-count">407</td><td><code>numberToWordForms()</code> &mdash; generates spoken forms for 0&ndash;999,999 + decimals + ordinals</td></tr>
         <tr><td class="file-path">js/nl-api.js</td><td class="line-count">171</td><td>Google NL API + <code>levenshteinRatio()</code> + word tier classification (proper/sight/academic/function)</td></tr>
-        <tr><td class="file-path">js/metrics.js</td><td class="line-count">129</td><td>WCPM + accuracy (with confirmed insertion errors, forgiven words, not-attempted exclusion) + WCPM range</td></tr>
+        <tr><td class="file-path">js/metrics.js</td><td class="line-count">126</td><td>WCPM + accuracy (with confirmed insertion errors, forgiven words, not-attempted exclusion) + WCPM range</td></tr>
         <tr><td class="file-path">js/miscue-registry.js</td><td class="line-count">823</td><td>Single source of truth for all miscue/error types, forgiveness rules, detector locations</td></tr>
       </table>
 
@@ -2218,15 +2232,15 @@ ffmpeg -y -i input.wav -ac <span class="num">1</span> -ar <span class="num">1600
         <tr><td class="file-path">js/celeration-chart.js</td><td class="line-count">819</td><td>Reading rate trend visualization over time</td></tr>
         <tr><td class="file-path">js/maze-game.js</td><td class="line-count">713</td><td>Interactive maze with speech-recognition gates</td></tr>
         <tr><td class="file-path">js/maze-generator.js</td><td class="line-count">675</td><td>Procedural maze generation</td></tr>
-        <tr><td class="file-path">js/rhythm-remix.js</td><td class="line-count">1,483</td><td>Bouncing-ball reading orchestrator with Study Beats FM DJ (Gemini TTS)</td></tr>
+        <tr><td class="file-path">js/rhythm-remix.js</td><td class="line-count">1,494</td><td>Bouncing-ball reading orchestrator with Study Beats FM DJ (Gemini TTS)</td></tr>
         <tr><td class="file-path">js/movie-trailer.js</td><td class="line-count">410</td><td>Auto-generated narrative clips</td></tr>
         <tr><td class="file-path">js/illustrator.js</td><td class="line-count">503</td><td>Visual companion generation for passages</td></tr>
         <tr><td class="file-path">js/gamification.js</td><td class="line-count">49</td><td>Engagement hooks and scoring</td></tr>
         <tr><td class="file-path">js/effect-engine.js</td><td class="line-count">259</td><td>Visual/audio effect rendering</td></tr>
         <tr><td class="file-path">js/sprite-animator.js</td><td class="line-count">168</td><td>Character sprite animation</td></tr>
         <tr><td class="file-path">js/noun-emoji-map.js</td><td class="line-count">113</td><td>Visual noun &rarr; emoji annotation mapping</td></tr>
-        <tr><td class="file-path">js/lofi-engine.js</td><td class="line-count">1,828</td><td>Web Audio lo-fi synth with 7 styles (STYLE_CONFIG), drum variants, tape wobble, bitcrusher, reverb</td></tr>
-        <tr><td class="file-path">js/mountain-range.js</td><td class="line-count">606</td><td>Canvas word-peak visualization for Rhythm Remix (180px fixed height)</td></tr>
+        <tr><td class="file-path">js/lofi-engine.js</td><td class="line-count">1,862</td><td>Web Audio lo-fi synth with 7 styles (STYLE_CONFIG), drum variants, tape wobble, bitcrusher, reverb</td></tr>
+        <tr><td class="file-path">js/mountain-range.js</td><td class="line-count">454</td><td>Color-coded audio waveform visualization for Rhythm Remix (bars colored by word correctness)</td></tr>
       </table>
 
       <div class="subsection-title">Infrastructure</div>

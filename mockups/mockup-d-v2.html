@@ -1,0 +1,1349 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>PACER</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+  :root {
+    --bg: #111111;
+    --surface: #1a1a1a;
+    --surface-2: #222222;
+    --surface-3: #2a2a2a;
+    --border: #2a2a2a;
+    --border-2: #333;
+    --text: #f0f0f0;
+    --text-2: #999;
+    --text-3: #555;
+    --accent: #5b7fff;
+    --accent-dim: rgba(91, 127, 255, 0.12);
+    --green: #34d399;
+    --green-dim: rgba(52, 211, 153, 0.12);
+    --red: #f87171;
+    --red-dim: rgba(248, 113, 113, 0.1);
+    --amber: #fbbf24;
+    --amber-dim: rgba(251, 191, 36, 0.1);
+  }
+
+  html, body {
+    font-family: 'Inter', -apple-system, system-ui, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    min-height: 100dvh;
+    overflow-x: hidden;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* ── Phase container ── */
+  .phase {
+    display: none;
+    flex-direction: column;
+    min-height: 100vh;
+    min-height: 100dvh;
+  }
+  .phase.active { display: flex; animation: phaseIn 0.25s ease; }
+  @keyframes phaseIn { from { opacity: 0; } to { opacity: 1; } }
+
+  /* ── Reusable top bar ── */
+  .topbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 20px;
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+  .topbar-logo {
+    font-size: 15px;
+    font-weight: 800;
+    letter-spacing: -0.5px;
+  }
+  .topbar-right {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-2);
+  }
+  .topbar-avatar {
+    width: 26px;
+    height: 26px;
+    border-radius: 50%;
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    overflow: hidden;
+  }
+  .topbar-avatar img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+
+  /* ── Shared layout ── */
+  .center-body {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 24px 20px;
+  }
+  .bottom-body {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    padding: 24px 20px;
+  }
+  .padded { padding: 24px 20px; }
+
+  /* ── Common elements ── */
+  .btn {
+    border: none;
+    border-radius: 10px;
+    font-family: inherit;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.12s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+  }
+  .btn:active { transform: scale(0.98); opacity: 0.9; }
+  .btn-full {
+    width: 100%;
+    max-width: 400px;
+    padding: 15px 20px;
+    font-size: 15px;
+  }
+  .btn-primary { background: var(--accent); color: white; }
+  .btn-dark { background: var(--surface-2); border: 1px solid var(--border); color: var(--text-2); }
+  .btn-danger { background: var(--red-dim); color: var(--red); border: 1px solid rgba(248,113,113,0.2); }
+  .btn-google {
+    background: #fff;
+    color: #333;
+    padding: 14px 20px;
+    font-size: 15px;
+    font-weight: 600;
+    border-radius: 10px;
+    width: 100%;
+    max-width: 340px;
+    gap: 10px;
+  }
+  .btn-google svg { width: 20px; height: 20px; flex-shrink: 0; }
+
+  .heading {
+    font-size: 22px;
+    font-weight: 800;
+    letter-spacing: -0.5px;
+    text-align: center;
+    margin-bottom: 4px;
+  }
+  .subtext {
+    font-size: 14px;
+    color: var(--text-2);
+    text-align: center;
+    line-height: 1.5;
+  }
+
+  /* ═══════════════════════════════════
+     PHASE 1: GOOGLE SIGN-IN
+     ═══════════════════════════════════ */
+  .signin-logo {
+    font-size: 28px;
+    font-weight: 800;
+    letter-spacing: -1px;
+    margin-bottom: 4px;
+  }
+  .signin-sub {
+    font-size: 14px;
+    color: var(--text-3);
+    margin-bottom: 40px;
+  }
+
+  /* ═══════════════════════════════════
+     PHASE 2: SELECT STUDENT
+     ═══════════════════════════════════ */
+  .class-label {
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--text-3);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 8px;
+    align-self: flex-start;
+  }
+  .student-list {
+    width: 100%;
+    max-width: 400px;
+    flex: 1;
+    overflow-y: auto;
+    margin-bottom: 16px;
+  }
+  .student-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 14px;
+    border-radius: 10px;
+    cursor: pointer;
+    transition: background 0.12s;
+    border: 1.5px solid transparent;
+  }
+  .student-item:hover { background: var(--surface); }
+  .student-item.selected {
+    background: var(--accent-dim);
+    border-color: rgba(91, 127, 255, 0.3);
+  }
+  .si-avatar {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    background: var(--surface-2);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--text-2);
+    flex-shrink: 0;
+  }
+  .student-item.selected .si-avatar {
+    background: var(--accent);
+    color: white;
+  }
+  .si-name { font-size: 15px; font-weight: 600; flex: 1; }
+  .student-item-wrap {
+    position: relative;
+  }
+  .si-continue {
+    overflow: hidden;
+    max-height: 0;
+    transition: max-height 0.25s ease, opacity 0.2s ease;
+    opacity: 0;
+  }
+  .si-continue.visible {
+    max-height: 52px;
+    opacity: 1;
+  }
+  .si-continue-btn {
+    width: 100%;
+    margin-top: 4px;
+    padding: 11px 16px;
+    border: none;
+    border-radius: 8px;
+    background: var(--accent);
+    color: white;
+    font-family: inherit;
+    font-size: 14px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.12s;
+  }
+  .si-continue-btn:active { transform: scale(0.98); opacity: 0.9; }
+
+  .add-student-row {
+    display: flex;
+    gap: 8px;
+    width: 100%;
+    max-width: 400px;
+    margin-top: 12px;
+    padding-top: 12px;
+    border-top: 1px solid var(--border);
+  }
+  .add-student-input {
+    flex: 1;
+    padding: 10px 14px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--text);
+    font-family: inherit;
+    font-size: 14px;
+  }
+  .add-student-input:focus { outline: none; border-color: var(--accent); }
+  .add-student-input::placeholder { color: var(--text-3); }
+  .add-student-btn {
+    padding: 10px 16px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: var(--surface-2);
+    color: var(--text-2);
+    font-family: inherit;
+    font-size: 14px;
+    font-weight: 700;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: all 0.12s;
+  }
+  .add-student-btn:active { transform: scale(0.97); }
+
+  /* ═══════════════════════════════════
+     PHASE 3: MIC CHECK (inline)
+     ═══════════════════════════════════ */
+  .mic-card {
+    width: 100%;
+    max-width: 400px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 24px 20px;
+    margin-bottom: 20px;
+  }
+  .mic-status-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 6px;
+  }
+  .mic-icon {
+    width: 36px;
+    height: 36px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 18px;
+    flex-shrink: 0;
+  }
+  .mic-icon.good { background: var(--green-dim); }
+  .mic-icon.warn { background: var(--amber-dim); }
+  .mic-title {
+    font-size: 15px;
+    font-weight: 700;
+  }
+  .mic-title.good { color: var(--green); }
+  .mic-title.warn { color: var(--amber); }
+  .mic-detail {
+    font-size: 13px;
+    color: var(--text-2);
+    line-height: 1.5;
+    margin-top: 4px;
+    padding-left: 46px;
+  }
+  .mic-device {
+    font-size: 12px;
+    color: var(--text-3);
+    padding-left: 46px;
+    margin-top: 2px;
+  }
+  .mic-warn-box {
+    background: var(--amber-dim);
+    border: 1px solid rgba(251, 191, 36, 0.2);
+    border-radius: 10px;
+    padding: 14px 16px;
+    margin-top: 14px;
+    font-size: 13px;
+    line-height: 1.5;
+    color: var(--amber);
+  }
+  .mic-warn-box strong { font-weight: 700; }
+
+  /* ═══════════════════════════════════
+     PHASE 4: PRE-RECORD
+     ═══════════════════════════════════ */
+  .prerecord-visual {
+    width: 64px;
+    height: 64px;
+    margin-bottom: 32px;
+    opacity: 0.18;
+  }
+  .prerecord-visual svg {
+    width: 100%;
+    height: 100%;
+  }
+  .encourage-text {
+    font-size: 17px;
+    font-weight: 500;
+    text-align: center;
+    line-height: 1.7;
+    max-width: 260px;
+    margin-bottom: 48px;
+    color: var(--text-2);
+  }
+  .record-btn {
+    padding: 14px 40px;
+    border-radius: 10px;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    transition: all 0.15s;
+    font-family: inherit;
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--text);
+  }
+  .record-btn:active { transform: scale(0.98); background: var(--surface-2); }
+  .record-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: var(--red);
+    flex-shrink: 0;
+  }
+
+  /* ═══════════════════════════════════
+     PHASE 5: COUNTDOWN
+     ═══════════════════════════════════ */
+  .countdown-number {
+    font-size: 120px;
+    font-weight: 800;
+    line-height: 1;
+    opacity: 0;
+    animation: countPop 0.8s ease forwards;
+  }
+  @keyframes countPop {
+    0% { opacity: 0; transform: scale(1.3); }
+    20% { opacity: 1; transform: scale(1); }
+    80% { opacity: 1; transform: scale(1); }
+    100% { opacity: 0; transform: scale(0.8); }
+  }
+  .countdown-msg {
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--text-2);
+    margin-top: 16px;
+  }
+
+  /* ═══════════════════════════════════
+     PHASE 6: RECORDING (minimal)
+     ═══════════════════════════════════ */
+  .rec-live-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: var(--red);
+    animation: liveBlink 1.2s ease infinite;
+    margin-bottom: 8px;
+  }
+  @keyframes liveBlink {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.25; }
+  }
+  .rec-timer {
+    font-size: 72px;
+    font-weight: 800;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -3px;
+    line-height: 1;
+    margin-bottom: 4px;
+  }
+  .rec-of {
+    font-size: 13px;
+    color: var(--text-3);
+    font-weight: 600;
+    margin-bottom: 40px;
+  }
+  .rec-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    width: 100%;
+    max-width: 280px;
+  }
+  .btn-stop {
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 14px;
+    font-size: 15px;
+    border-radius: 10px;
+  }
+  .btn-reset {
+    background: transparent;
+    border: 1px solid rgba(248,113,113,0.2);
+    color: var(--red);
+    padding: 12px;
+    font-size: 14px;
+    border-radius: 10px;
+    opacity: 0;
+    transition: opacity 0.3s;
+  }
+  .btn-reset.visible { opacity: 1; }
+
+  /* ═══════════════════════════════════
+     PHASE 7: RECORDING DONE
+     ═══════════════════════════════════ */
+  .done-check {
+    width: 72px;
+    height: 72px;
+    border-radius: 50%;
+    background: var(--green-dim);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 20px;
+    animation: checkPop 0.4s ease;
+  }
+  @keyframes checkPop {
+    0% { transform: scale(0.5); opacity: 0; }
+    60% { transform: scale(1.1); }
+    100% { transform: scale(1); opacity: 1; }
+  }
+  .done-check svg {
+    width: 32px;
+    height: 32px;
+    stroke: var(--green);
+    fill: none;
+    stroke-width: 2.5;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+  .done-time {
+    font-size: 14px;
+    color: var(--text-2);
+    font-weight: 600;
+    margin-bottom: 32px;
+  }
+
+  /* ═══════════════════════════════════
+     PHASE 8: PHOTO — fullscreen camera
+     ═══════════════════════════════════ */
+  .camera-full {
+    flex: 1;
+    background: #000;
+    position: relative;
+    display: flex;
+    flex-direction: column;
+  }
+  /* Simulated live feed (dark gradient in mockup) */
+  .camera-feed {
+    flex: 1;
+    background: linear-gradient(160deg, #1a1a1a 0%, #0d0d0d 100%);
+    position: relative;
+  }
+  /* Corner brackets */
+  .cam-corners {
+    position: absolute;
+    inset: 24px 20px;
+    pointer-events: none;
+  }
+  .cam-corner {
+    position: absolute;
+    width: 28px;
+    height: 28px;
+    border-color: rgba(255,255,255,0.5);
+    border-style: solid;
+    border-width: 0;
+  }
+  .cam-corner.tl { top:0;left:0; border-top-width:2px;border-left-width:2px;border-top-left-radius:4px; }
+  .cam-corner.tr { top:0;right:0; border-top-width:2px;border-right-width:2px;border-top-right-radius:4px; }
+  .cam-corner.bl { bottom:0;left:0; border-bottom-width:2px;border-left-width:2px;border-bottom-left-radius:4px; }
+  .cam-corner.br { bottom:0;right:0; border-bottom-width:2px;border-right-width:2px;border-bottom-right-radius:4px; }
+  /* Superimposed hints */
+  .cam-hints {
+    position: absolute;
+    top: 32px;
+    left: 0;
+    right: 0;
+    display: flex;
+    justify-content: center;
+    gap: 16px;
+    pointer-events: none;
+  }
+  .cam-hint {
+    font-size: 12px;
+    font-weight: 600;
+    color: rgba(255,255,255,0.7);
+    background: rgba(0,0,0,0.5);
+    backdrop-filter: blur(8px);
+    padding: 5px 10px;
+    border-radius: 6px;
+  }
+  .cam-center-msg {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    font-size: 15px;
+    font-weight: 600;
+    color: rgba(255,255,255,0.35);
+    text-align: center;
+    pointer-events: none;
+  }
+  /* Bottom bar with shutter */
+  .cam-bottom {
+    background: rgba(0,0,0,0.6);
+    backdrop-filter: blur(12px);
+    padding: 20px 0 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .shutter {
+    width: 68px;
+    height: 68px;
+    border-radius: 50%;
+    border: 3px solid rgba(255,255,255,0.85);
+    background: transparent;
+    cursor: pointer;
+    position: relative;
+  }
+  .shutter::after {
+    content: '';
+    position: absolute;
+    inset: 4px;
+    border-radius: 50%;
+    background: rgba(255,255,255,0.85);
+  }
+  .shutter:active { transform: scale(0.92); }
+
+
+  /* ═══════════════════════════════════
+     PHASE 9: ANALYZING
+     ═══════════════════════════════════ */
+  .analyze-body {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 24px 20px;
+  }
+  .jogger-container {
+    width: 200px;
+    height: 120px;
+    position: relative;
+    margin-bottom: 24px;
+    overflow: hidden;
+  }
+  /* Road line */
+  .jogger-road {
+    position: absolute;
+    bottom: 12px;
+    left: 0;
+    right: 0;
+    height: 2px;
+    background: var(--border-2);
+  }
+  .jogger-road::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 200%;
+    height: 100%;
+    background: repeating-linear-gradient(90deg, var(--text-3) 0, var(--text-3) 8px, transparent 8px, transparent 20px);
+    animation: roadScroll 1s linear infinite;
+  }
+  @keyframes roadScroll { to { transform: translateX(-50%); } }
+
+  /* Stick figure jogger */
+  .jogger {
+    position: absolute;
+    bottom: 14px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 40px;
+    height: 70px;
+  }
+  .jogger-head {
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    border: 2px solid var(--text-2);
+    position: absolute;
+    top: 0;
+    left: 50%;
+    transform: translateX(-50%);
+    animation: headBob 0.5s ease infinite;
+  }
+  @keyframes headBob {
+    0%, 100% { transform: translateX(-50%) translateY(0); }
+    50% { transform: translateX(-50%) translateY(-3px); }
+  }
+  .jogger-body {
+    position: absolute;
+    top: 14px;
+    left: 50%;
+    width: 2px;
+    height: 24px;
+    background: var(--text-2);
+    transform: translateX(-50%);
+  }
+  .jogger-arm-l, .jogger-arm-r {
+    position: absolute;
+    top: 16px;
+    left: 50%;
+    width: 2px;
+    height: 18px;
+    background: var(--text-2);
+    transform-origin: top center;
+    border-radius: 1px;
+  }
+  .jogger-arm-l { animation: armSwing 0.5s ease infinite; }
+  .jogger-arm-r { animation: armSwing 0.5s ease infinite reverse; }
+  @keyframes armSwing {
+    0%, 100% { transform: translateX(-50%) rotate(-30deg); }
+    50% { transform: translateX(-50%) rotate(30deg); }
+  }
+  .jogger-leg-l, .jogger-leg-r {
+    position: absolute;
+    top: 38px;
+    left: 50%;
+    width: 2px;
+    height: 22px;
+    background: var(--text-2);
+    transform-origin: top center;
+    border-radius: 1px;
+  }
+  .jogger-leg-l { animation: legSwing 0.5s ease infinite; }
+  .jogger-leg-r { animation: legSwing 0.5s ease infinite reverse; }
+  @keyframes legSwing {
+    0%, 100% { transform: translateX(-50%) rotate(-35deg); }
+    50% { transform: translateX(-50%) rotate(35deg); }
+  }
+
+  .analyze-text {
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--text-2);
+    margin-bottom: 4px;
+  }
+  .analyze-sub {
+    font-size: 13px;
+    color: var(--text-3);
+  }
+
+  /* ═══════════════════════════════════
+     PHASE 10: RESULTS
+     ═══════════════════════════════════ */
+  .results-body {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow-y: auto;
+  }
+  .results-hero {
+    text-align: center;
+    padding: 40px 20px 28px;
+  }
+  .rh-wcpm {
+    font-size: 80px;
+    font-weight: 800;
+    letter-spacing: -4px;
+    line-height: 1;
+    margin-bottom: 2px;
+  }
+  .rh-label {
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--text-3);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+  }
+
+  .results-stats {
+    display: flex;
+    border-top: 1px solid var(--border);
+    border-bottom: 1px solid var(--border);
+  }
+  .rs-cell {
+    flex: 1;
+    padding: 18px 8px;
+    text-align: center;
+    border-right: 1px solid var(--border);
+  }
+  .rs-cell:last-child { border-right: none; }
+  .rs-val {
+    font-size: 24px;
+    font-weight: 800;
+    margin-bottom: 2px;
+  }
+  .rs-label {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-3);
+  }
+  .rs-cell.green .rs-val { color: var(--green); }
+  .rs-cell.accent .rs-val { color: var(--accent); }
+
+  .results-activities {
+    padding: 16px 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .ra-section-label {
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--text-3);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 4px;
+  }
+  .ra-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 14px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    cursor: pointer;
+    transition: background 0.12s;
+  }
+  .ra-item:active { background: var(--surface-2); }
+  .ra-icon {
+    width: 36px;
+    height: 36px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 17px;
+    flex-shrink: 0;
+    background: var(--surface-2);
+  }
+  .ra-text { flex: 1; }
+  .ra-title { font-size: 14px; font-weight: 700; }
+  .ra-sub { font-size: 12px; color: var(--text-2); }
+  .ra-arrow { color: var(--text-3); font-size: 16px; }
+
+  .results-bottom {
+    padding: 8px 20px 24px;
+  }
+
+  /* ═══════════════════════════════════
+     UTILITY
+     ═══════════════════════════════════ */
+  .gap-8 { height: 8px; }
+  .gap-16 { height: 16px; }
+  .gap-24 { height: 24px; }
+  .gap-32 { height: 32px; }
+  .w-full { width: 100%; max-width: 400px; }
+
+  /* ── Mockup Banner ── */
+  .mockup-banner {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background: var(--accent);
+    color: white;
+    text-align: center;
+    padding: 5px;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+    z-index: 100;
+  }
+</style>
+</head>
+<body>
+
+<div class="mockup-banner">Mockup D v2 — Full flow mockup</div>
+
+<!-- ═══════════════════════════════════════════════
+     PHASE 1: GOOGLE SIGN-IN
+     ═══════════════════════════════════════════════ -->
+<div class="phase active" id="ph-signin">
+  <div class="center-body">
+    <div class="signin-logo">PACER</div>
+    <div class="signin-sub">Oral Reading Fluency</div>
+    <div class="gap-32"></div>
+    <button class="btn btn-google" onclick="signIn()">
+      <svg viewBox="0 0 24 24"><path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" fill="#4285F4"/><path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/><path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/><path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/></svg>
+      Sign in with Google
+    </button>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════
+     PHASE 2: SELECT STUDENT
+     ═══════════════════════════════════════════════ -->
+<div class="phase" id="ph-student">
+  <div class="topbar">
+    <div class="topbar-logo">PACER</div>
+    <div class="topbar-right">
+      <span>Ms. Johnson</span>
+      <div class="topbar-avatar">
+        <div style="width:100%;height:100%;background:var(--accent);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:white;">MJ</div>
+      </div>
+    </div>
+  </div>
+  <div class="bottom-body">
+    <div class="heading" style="text-align:left;margin-bottom:12px;">Who's reading?</div>
+    <div class="student-list" id="student-list">
+      <!-- Populated by JS -->
+    </div>
+    <div class="add-student-row">
+      <input class="add-student-input" type="text" placeholder="Add new student..." id="new-student-input" autocomplete="off">
+      <button class="add-student-btn" onclick="addStudent()">Add</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════
+     PHASE 3: MIC CHECK
+     ═══════════════════════════════════════════════ -->
+<div class="phase" id="ph-mic">
+  <div class="topbar">
+    <div class="topbar-logo">PACER</div>
+    <div class="topbar-right">
+      <span id="mic-student-name">—</span>
+    </div>
+  </div>
+  <div class="center-body">
+    <div class="heading">Audio Check</div>
+    <div class="subtext" style="margin-bottom:24px;">Checking your microphone setup</div>
+
+    <!-- External mic detected -->
+    <div class="mic-card" id="mic-good" style="display:none;">
+      <div class="mic-status-row">
+        <div class="mic-icon good">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#34d399" stroke-width="2.5" stroke-linecap="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="22"/></svg>
+        </div>
+        <div class="mic-title good">External microphone detected</div>
+      </div>
+      <div class="mic-device" id="mic-device-name">USB Audio Device</div>
+    </div>
+
+    <!-- No external mic -->
+    <div class="mic-card" id="mic-warn" style="display:none;">
+      <div class="mic-status-row">
+        <div class="mic-icon warn">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fbbf24" stroke-width="2.5" stroke-linecap="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="22"/></svg>
+        </div>
+        <div class="mic-title warn">No external microphone found</div>
+      </div>
+      <div class="mic-detail">Using your device's built-in microphone.</div>
+      <div class="mic-warn-box">
+        <strong>Audio quality may be lower.</strong> For best results, connect a USB or Bluetooth microphone. You can still continue with the built-in mic.
+      </div>
+    </div>
+
+    <!-- Checking state -->
+    <div class="mic-card" id="mic-checking">
+      <div class="mic-status-row">
+        <div class="mic-icon" style="background:var(--surface-2);">
+          <div style="width:16px;height:16px;border:2px solid var(--border);border-top-color:var(--text-2);border-radius:50%;animation:spin 0.6s linear infinite;"></div>
+        </div>
+        <div class="mic-title" style="color:var(--text-2);">Detecting microphone...</div>
+      </div>
+    </div>
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    <div class="gap-16"></div>
+    <button class="btn btn-full btn-primary" id="mic-continue-btn" style="display:none;" onclick="go('ph-prerecord')">Continue</button>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════
+     PHASE 4: PRE-RECORD (encouragement)
+     ═══════════════════════════════════════════════ -->
+<div class="phase" id="ph-prerecord">
+  <div class="topbar">
+    <div class="topbar-logo">PACER</div>
+    <div class="topbar-right">
+      <span id="pre-student-name">—</span>
+    </div>
+  </div>
+  <div class="center-body">
+    <div class="prerecord-visual">
+      <svg viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" color="#888">
+        <path d="M12 52 C12 52 16 40 20 36 C24 32 28 34 32 30 C36 26 34 20 38 16 C42 12 48 14 52 12"/>
+        <path d="M8 56 L56 56" stroke-dasharray="2 4"/>
+      </svg>
+    </div>
+    <div class="encourage-text">
+      Pick up your favorite book,<br>take a breath, tap record<br>when you're ready.
+    </div>
+    <button class="record-btn" id="record-btn" onclick="startCountdown()">
+      <div class="record-dot"></div>
+      Record
+    </button>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════
+     PHASE 5: COUNTDOWN
+     ═══════════════════════════════════════════════ -->
+<div class="phase" id="ph-countdown">
+  <div class="center-body">
+    <div id="countdown-display"></div>
+    <div class="countdown-msg" id="countdown-msg"></div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════
+     PHASE 6: RECORDING
+     ═══════════════════════════════════════════════ -->
+<div class="phase" id="ph-recording">
+  <div class="topbar" style="border-bottom-color:transparent;">
+    <div class="topbar-logo" style="opacity:0.3;">PACER</div>
+    <div></div>
+  </div>
+  <div class="center-body">
+    <div class="rec-live-dot"></div>
+    <div class="rec-timer" id="rec-timer-display">0:00</div>
+    <div class="rec-of">of 1:00</div>
+    <div class="rec-actions">
+      <button class="btn btn-stop btn-full" onclick="stopRecording()">
+        <svg width="14" height="14" viewBox="0 0 14 14"><rect width="14" height="14" rx="2" fill="#f87171"/></svg>
+        Done reading
+      </button>
+      <button class="btn btn-reset btn-full" id="reset-btn" onclick="resetRecording()">
+        Start over
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════
+     PHASE 7: RECORDING DONE
+     ═══════════════════════════════════════════════ -->
+<div class="phase" id="ph-recdone">
+  <div class="center-body">
+    <div class="done-check">
+      <svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>
+    </div>
+    <div class="heading">Nice work!</div>
+    <div class="subtext" id="done-time-text">Recorded 1:02</div>
+    <div class="gap-32"></div>
+    <button class="btn btn-full btn-primary" onclick="go('ph-photo')">
+      Next: Snap the page
+    </button>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════
+     PHASE 8: PHOTO — fullscreen camera, already open
+     ═══════════════════════════════════════════════ -->
+<div class="phase" id="ph-photo">
+  <div class="camera-full">
+    <div class="camera-feed">
+      <div class="cam-corners">
+        <div class="cam-corner tl"></div>
+        <div class="cam-corner tr"></div>
+        <div class="cam-corner bl"></div>
+        <div class="cam-corner br"></div>
+      </div>
+      <div class="cam-hints">
+        <div class="cam-hint">Flatten pages</div>
+        <div class="cam-hint">Good light</div>
+        <div class="cam-hint">All text visible</div>
+      </div>
+      <div class="cam-center-msg">Frame the page you read</div>
+    </div>
+    <div class="cam-bottom">
+      <button class="shutter" onclick="go('ph-analyze')"></button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════
+     PHASE 9: ANALYZING
+     ═══════════════════════════════════════════════ -->
+<div class="phase" id="ph-analyze">
+  <div class="analyze-body">
+    <div class="jogger-container">
+      <div class="jogger">
+        <div class="jogger-head"></div>
+        <div class="jogger-body"></div>
+        <div class="jogger-arm-l"></div>
+        <div class="jogger-arm-r"></div>
+        <div class="jogger-leg-l"></div>
+        <div class="jogger-leg-r"></div>
+      </div>
+      <div class="jogger-road"></div>
+    </div>
+    <div class="analyze-text">Analyzing your reading...</div>
+    <div class="analyze-sub">This takes a few seconds</div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════
+     PHASE 10: RESULTS
+     ═══════════════════════════════════════════════ -->
+<div class="phase" id="ph-results">
+  <div class="topbar">
+    <div class="topbar-logo">PACER</div>
+    <div class="topbar-right">
+      <span id="results-student-name">—</span>
+    </div>
+  </div>
+  <div class="results-body">
+    <div class="results-hero">
+      <div class="rh-wcpm">127</div>
+      <div class="rh-label">Words Correct Per Minute</div>
+    </div>
+
+    <div class="results-stats">
+      <div class="rs-cell green">
+        <div class="rs-val">94%</div>
+        <div class="rs-label">Accuracy</div>
+      </div>
+      <div class="rs-cell accent">
+        <div class="rs-val">44 / 47</div>
+        <div class="rs-label">Words Correct</div>
+      </div>
+    </div>
+
+    <div class="results-activities">
+      <div class="gap-8"></div>
+      <div class="ra-section-label">Activities</div>
+      <div class="ra-item" onclick="alert('Rhythm Remix')">
+        <div class="ra-icon">&#x1F3B5;</div>
+        <div class="ra-text">
+          <div class="ra-title">Rhythm Remix</div>
+          <div class="ra-sub">Replay your reading with lo-fi beats</div>
+        </div>
+        <div class="ra-arrow">&#x203A;</div>
+      </div>
+      <div class="ra-item" onclick="alert('Word Maze')">
+        <div class="ra-icon">&#x1F9E9;</div>
+        <div class="ra-text">
+          <div class="ra-title">Word Maze</div>
+          <div class="ra-sub">Comprehension challenge</div>
+        </div>
+        <div class="ra-arrow">&#x203A;</div>
+      </div>
+    </div>
+
+    <div class="results-bottom">
+      <button class="btn btn-full btn-dark" style="align-self:center;width:100%;" onclick="go('ph-student')">Done</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════ -->
+<script>
+// ── State ──
+let selectedStudent = null;
+let recInterval = null;
+let recSeconds = 0;
+
+// ── Navigation ──
+function go(id) {
+  document.querySelectorAll('.phase').forEach(p => p.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+  window.scrollTo(0, 0);
+}
+
+// ── Phase 1: Sign in ──
+function signIn() {
+  go('ph-student');
+  populateStudents();
+}
+
+// ── Phase 2: Student list ──
+const students = [
+  'Alex Martinez', 'Brianna Chen', 'Carlos Williams', 'Diana Patel',
+  'Ethan Robinson', 'Fatima Ali', 'Gabriel Torres', 'Hannah Kim',
+  'Isaac Nguyen', 'Jasmine Brown', 'Kevin Okafor', 'Luna Garcia',
+  'Marcus Lee', 'Noor Adebayo', 'Olivia Davis', 'Pedro Ramirez'
+];
+
+function populateStudents() {
+  const list = document.getElementById('student-list');
+  list.innerHTML = '';
+  students.forEach(name => renderStudentRow(list, name));
+}
+
+function renderStudentRow(list, name) {
+  const initials = name.split(' ').map(w => w[0]).join('');
+  const wrap = document.createElement('div');
+  wrap.className = 'student-item-wrap';
+  wrap.innerHTML = `
+    <div class="student-item" data-name="${name}">
+      <div class="si-avatar">${initials}</div>
+      <div class="si-name">${name}</div>
+    </div>
+    <div class="si-continue">
+      <button class="si-continue-btn">Continue</button>
+    </div>
+  `;
+  wrap.querySelector('.student-item').addEventListener('click', () => selectRow(wrap, name));
+  wrap.querySelector('.si-continue-btn').addEventListener('click', () => goWithStudent(name));
+  list.appendChild(wrap);
+}
+
+function selectRow(wrap, name) {
+  // Collapse all others
+  document.querySelectorAll('.student-item-wrap').forEach(w => {
+    w.querySelector('.student-item').classList.remove('selected');
+    w.querySelector('.si-continue').classList.remove('visible');
+  });
+  // Expand this one
+  wrap.querySelector('.student-item').classList.add('selected');
+  wrap.querySelector('.si-continue').classList.add('visible');
+  selectedStudent = name;
+}
+
+function goWithStudent(name) {
+  selectedStudent = name;
+  const first = name.split(' ')[0];
+  document.getElementById('mic-student-name').textContent = first;
+  document.getElementById('pre-student-name').textContent = first;
+  document.getElementById('results-student-name').textContent = first;
+  go('ph-mic');
+  simulateMicCheck();
+}
+
+function addStudent() {
+  const input = document.getElementById('new-student-input');
+  const name = input.value.trim();
+  if (!name) return;
+  students.push(name);
+  const list = document.getElementById('student-list');
+  renderStudentRow(list, name);
+  input.value = '';
+  // Auto-select the new student
+  const wraps = list.querySelectorAll('.student-item-wrap');
+  const last = wraps[wraps.length - 1];
+  selectRow(last, name);
+  last.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+// ── Phase 3: Mic check ──
+function simulateMicCheck() {
+  document.getElementById('mic-checking').style.display = 'block';
+  document.getElementById('mic-good').style.display = 'none';
+  document.getElementById('mic-warn').style.display = 'none';
+  document.getElementById('mic-continue-btn').style.display = 'none';
+
+  setTimeout(() => {
+    document.getElementById('mic-checking').style.display = 'none';
+    // Simulate: 50/50 chance of external mic for demo
+    const hasExternal = Math.random() > 0.5;
+    if (hasExternal) {
+      document.getElementById('mic-good').style.display = 'block';
+    } else {
+      document.getElementById('mic-warn').style.display = 'block';
+    }
+    document.getElementById('mic-continue-btn').style.display = 'flex';
+  }, 1500);
+}
+
+/*
+  REAL IMPLEMENTATION NOTE:
+  navigator.mediaDevices.enumerateDevices() returns all media devices.
+  Filter for kind === 'audioinput'. Check labels for keywords:
+  "USB", "Bluetooth", "Wireless", "Headset", "External", "AirPods", etc.
+  If only default/built-in found → show warning.
+  If any external keyword found → show green confirmation.
+*/
+
+// ── Phase 5: Countdown ──
+function startCountdown() {
+  go('ph-countdown');
+  const display = document.getElementById('countdown-display');
+  const msg = document.getElementById('countdown-msg');
+
+  const sequence = [
+    { text: '3', delay: 0 },
+    { text: '2', delay: 900 },
+    { text: '1', delay: 1800 },
+  ];
+
+  msg.textContent = 'Get ready...';
+
+  sequence.forEach(({ text, delay }) => {
+    setTimeout(() => {
+      display.innerHTML = `<div class="countdown-number">${text}</div>`;
+    }, delay);
+  });
+
+  // "Begin reading" message
+  setTimeout(() => {
+    display.innerHTML = '';
+    msg.textContent = 'Begin reading after the beep';
+  }, 2700);
+
+  // Beep (Web Audio)
+  setTimeout(() => {
+    playBeep();
+    setTimeout(() => {
+      beginRecording();
+    }, 400);
+  }, 3400);
+}
+
+function playBeep() {
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.frequency.value = 880;
+    osc.type = 'sine';
+    gain.gain.setValueAtTime(0.3, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.3);
+    osc.start(ctx.currentTime);
+    osc.stop(ctx.currentTime + 0.3);
+  } catch (e) { /* silent fallback */ }
+}
+
+// ── Phase 6: Recording ──
+function beginRecording() {
+  go('ph-recording');
+  recSeconds = 0;
+  updateRecTimer();
+  document.getElementById('reset-btn').classList.remove('visible');
+
+  recInterval = setInterval(() => {
+    recSeconds++;
+    updateRecTimer();
+
+    // Show reset button after 3 seconds (student has started talking)
+    if (recSeconds >= 3) {
+      document.getElementById('reset-btn').classList.add('visible');
+    }
+
+    // Auto-stop at 60 seconds
+    if (recSeconds >= 60) {
+      stopRecording();
+    }
+  }, 1000);
+}
+
+function updateRecTimer() {
+  const m = Math.floor(recSeconds / 60);
+  const s = recSeconds % 60;
+  document.getElementById('rec-timer-display').textContent = m + ':' + String(s).padStart(2, '0');
+}
+
+function stopRecording() {
+  clearInterval(recInterval);
+  const m = Math.floor(recSeconds / 60);
+  const s = recSeconds % 60;
+  document.getElementById('done-time-text').textContent =
+    'Recorded ' + m + ':' + String(s).padStart(2, '0');
+  go('ph-recdone');
+}
+
+function resetRecording() {
+  clearInterval(recInterval);
+  // Go back to pre-record encouragement
+  go('ph-prerecord');
+}
+
+// ── Phase 8: Photo ──
+
+// ── Phase 9: Analyze ──
+// Auto-advance after showing the jogging animation
+const phAnalyzeObserver = new MutationObserver(() => {
+  const el = document.getElementById('ph-analyze');
+  if (el.classList.contains('active')) {
+    setTimeout(() => go('ph-results'), 3000);
+  }
+});
+phAnalyzeObserver.observe(document.getElementById('ph-analyze'), { attributes: true, attributeFilter: ['class'] });
+
+</script>
+</body>
+</html>

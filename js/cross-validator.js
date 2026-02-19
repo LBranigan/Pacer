@@ -13,7 +13,7 @@
  *   - Primary timestamps (TDT duration head, sub-second accuracy)
  *   - CTC-constrained output (cannot hallucinate words)
  *
- * Currently supported engines: Deepgram Nova-3, Parakeet TDT 0.6B v3
+ * Currently supported engines: Deepgram Nova-3, Parakeet TDT 0.6B v2
  * Engine selection via localStorage key 'orf_cross_validator' (default: 'parakeet').
  *
  * Per-word statuses:

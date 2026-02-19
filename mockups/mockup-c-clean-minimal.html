@@ -1,0 +1,1006 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>PACER — Clean Minimal (Mockup C)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+  :root {
+    --bg: #f8fafc;
+    --bg-card: #ffffff;
+    --text: #0f172a;
+    --text-2: #475569;
+    --text-3: #94a3b8;
+    --border: #e2e8f0;
+    --blue: #3b82f6;
+    --blue-soft: #eff6ff;
+    --blue-glow: rgba(59, 130, 246, 0.15);
+    --green: #10b981;
+    --green-soft: #ecfdf5;
+    --red: #ef4444;
+    --red-soft: #fef2f2;
+    --amber: #f59e0b;
+    --amber-soft: #fffbeb;
+    --violet: #8b5cf6;
+    --violet-soft: #f5f3ff;
+    --radius: 16px;
+    --radius-lg: 24px;
+    --shadow-sm: 0 1px 2px rgba(0,0,0,0.05);
+    --shadow: 0 1px 3px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.04);
+    --shadow-lg: 0 4px 12px rgba(0,0,0,0.08);
+  }
+
+  body {
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    min-height: 100dvh;
+  }
+
+  .screen {
+    display: none;
+    flex-direction: column;
+    min-height: 100vh;
+    min-height: 100dvh;
+    animation: enter 0.3s ease;
+  }
+  .screen.active { display: flex; }
+
+  @keyframes enter {
+    from { opacity: 0; transform: translateY(8px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  /* ── Top Bar ── */
+  .top-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 16px 20px 12px;
+    position: sticky;
+    top: 0;
+    background: var(--bg);
+    z-index: 10;
+  }
+  .top-bar .back-btn {
+    width: 36px;
+    height: 36px;
+    border-radius: 10px;
+    border: 1px solid var(--border);
+    background: var(--bg-card);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 16px;
+    cursor: pointer;
+    color: var(--text-2);
+  }
+  .top-bar .step-label {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-3);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  .top-bar .spacer { width: 36px; }
+
+  /* ── Step Progress ── */
+  .step-progress {
+    display: flex;
+    gap: 6px;
+    padding: 0 20px 16px;
+  }
+  .step-seg {
+    flex: 1;
+    height: 4px;
+    border-radius: 2px;
+    background: var(--border);
+    transition: background 0.3s;
+  }
+  .step-seg.done { background: var(--blue); }
+  .step-seg.current { background: linear-gradient(90deg, var(--blue), var(--blue) 50%, var(--border) 50%); background-size: 200%; animation: progress-fill 2s ease forwards; }
+  @keyframes progress-fill {
+    to { background-position: -100% 0; }
+  }
+
+  /* ── Content area ── */
+  .content {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 0 20px 24px;
+  }
+
+  .page-title {
+    font-size: 28px;
+    font-weight: 800;
+    text-align: center;
+    margin-bottom: 6px;
+    letter-spacing: -0.5px;
+  }
+  .page-desc {
+    font-size: 15px;
+    color: var(--text-2);
+    text-align: center;
+    margin-bottom: 28px;
+    line-height: 1.5;
+  }
+
+  /* ── Buttons ── */
+  .btn-main {
+    width: 100%;
+    max-width: 360px;
+    padding: 16px 24px;
+    border: none;
+    border-radius: 14px;
+    font-family: inherit;
+    font-size: 17px;
+    font-weight: 700;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    transition: all 0.15s;
+  }
+  .btn-main:active { transform: scale(0.98); }
+  .btn-blue {
+    background: var(--blue);
+    color: white;
+    box-shadow: 0 2px 8px rgba(59, 130, 246, 0.3);
+  }
+  .btn-green {
+    background: var(--green);
+    color: white;
+    box-shadow: 0 2px 8px rgba(16, 185, 129, 0.3);
+  }
+  .btn-outline {
+    background: var(--bg-card);
+    color: var(--text-2);
+    border: 1.5px solid var(--border);
+  }
+  .btn-text {
+    background: none;
+    border: none;
+    color: var(--text-3);
+    font-family: inherit;
+    font-size: 15px;
+    font-weight: 600;
+    cursor: pointer;
+    padding: 10px;
+  }
+  .btn-icon { font-size: 20px; }
+
+  /* ── Welcome ── */
+  .welcome-icon {
+    font-size: 64px;
+    margin-bottom: 16px;
+    margin-top: 32px;
+  }
+  .name-input {
+    width: 100%;
+    max-width: 360px;
+    padding: 14px 18px;
+    border-radius: 12px;
+    border: 1.5px solid var(--border);
+    background: var(--bg-card);
+    font-family: inherit;
+    font-size: 17px;
+    font-weight: 600;
+    color: var(--text);
+    margin-bottom: 16px;
+    text-align: center;
+    transition: all 0.2s;
+  }
+  .name-input:focus {
+    outline: none;
+    border-color: var(--blue);
+    box-shadow: 0 0 0 3px var(--blue-glow);
+  }
+  .name-input::placeholder { color: var(--text-3); font-weight: 500; }
+  .grade-row {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    justify-content: center;
+    margin-bottom: 24px;
+  }
+  .grade-chip {
+    padding: 8px 16px;
+    border-radius: 8px;
+    border: 1.5px solid var(--border);
+    background: var(--bg-card);
+    font-family: inherit;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-2);
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .grade-chip.selected {
+    border-color: var(--blue);
+    background: var(--blue-soft);
+    color: var(--blue);
+  }
+
+  /* ── Mic Check ── */
+  .mic-ring {
+    width: 144px;
+    height: 144px;
+    border-radius: 50%;
+    background: var(--bg-card);
+    border: 2px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 56px;
+    margin-bottom: 20px;
+    box-shadow: var(--shadow);
+    transition: all 0.3s;
+    cursor: pointer;
+  }
+  .mic-ring.listening {
+    border-color: var(--blue);
+    box-shadow: 0 0 0 6px var(--blue-glow);
+    animation: listen-pulse 1.5s ease infinite;
+  }
+  @keyframes listen-pulse {
+    0%, 100% { box-shadow: 0 0 0 4px var(--blue-glow); }
+    50% { box-shadow: 0 0 0 12px var(--blue-glow); }
+  }
+  .mic-ring.pass {
+    border-color: var(--green);
+    box-shadow: 0 0 0 6px rgba(16, 185, 129, 0.15);
+    background: var(--green-soft);
+  }
+  .mic-ring.fail {
+    border-color: var(--red);
+    box-shadow: 0 0 0 6px rgba(239, 68, 68, 0.15);
+    background: var(--red-soft);
+  }
+  .level-meter {
+    display: flex;
+    gap: 3px;
+    align-items: flex-end;
+    height: 28px;
+    margin-bottom: 10px;
+  }
+  .level-bar {
+    width: 4px;
+    background: var(--border);
+    border-radius: 2px;
+    transition: all 0.1s;
+  }
+  .level-bar.on { background: var(--blue); }
+  .mic-msg {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-3);
+    margin-bottom: 24px;
+  }
+  .mic-msg.pass { color: var(--green); }
+  .mic-msg.fail { color: var(--red); }
+  .troubleshoot-card {
+    background: var(--red-soft);
+    border: 1px solid #fecaca;
+    border-radius: 12px;
+    padding: 14px 16px;
+    max-width: 340px;
+    width: 100%;
+    margin-bottom: 20px;
+    display: none;
+  }
+  .troubleshoot-card.show { display: block; }
+  .troubleshoot-card .ts-title {
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--red);
+    margin-bottom: 6px;
+  }
+  .troubleshoot-card .ts-item {
+    font-size: 13px;
+    color: #991b1b;
+    margin-bottom: 4px;
+    padding-left: 16px;
+    position: relative;
+  }
+  .troubleshoot-card .ts-item::before { content: '•'; position: absolute; left: 4px; }
+
+  /* ── Camera ── */
+  .cam-box {
+    width: 100%;
+    max-width: 360px;
+    aspect-ratio: 3/4;
+    border-radius: var(--radius);
+    border: 2px dashed var(--border);
+    background: var(--bg-card);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 14px;
+    overflow: hidden;
+    position: relative;
+    transition: all 0.3s;
+  }
+  .cam-box.captured {
+    border-style: solid;
+    border-color: var(--green);
+    background: var(--green-soft);
+  }
+  .cam-box .cam-icon { font-size: 48px; opacity: 0.3; margin-bottom: 8px; }
+  .cam-box .cam-label { font-size: 14px; color: var(--text-3); font-weight: 500; }
+  .cam-box .preview-text {
+    padding: 20px;
+    font-size: 14px;
+    line-height: 1.7;
+    color: var(--text-2);
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    text-align: left;
+  }
+  .cam-badge {
+    position: absolute;
+    bottom: 10px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: white;
+    padding: 6px 14px;
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--green);
+    box-shadow: var(--shadow);
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+  .helper-row {
+    display: flex;
+    gap: 6px;
+    margin-bottom: 18px;
+  }
+  .helper-tag {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-3);
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 4px 10px;
+  }
+
+  /* ── Recording ── */
+  .rec-ring {
+    width: 160px;
+    height: 160px;
+    border-radius: 50%;
+    background: var(--bg-card);
+    border: 3px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 16px;
+    cursor: pointer;
+    box-shadow: var(--shadow);
+    transition: all 0.3s;
+    position: relative;
+  }
+  .rec-ring .inner-dot {
+    width: 64px;
+    height: 64px;
+    border-radius: 50%;
+    background: var(--red);
+    transition: all 0.3s;
+  }
+  .rec-ring.active {
+    border-color: var(--red);
+    box-shadow: 0 0 0 6px rgba(239, 68, 68, 0.12);
+    animation: rec-beat 1.5s ease infinite;
+  }
+  .rec-ring.active .inner-dot {
+    width: 40px;
+    height: 40px;
+    border-radius: 8px;
+  }
+  @keyframes rec-beat {
+    0%, 100% { box-shadow: 0 0 0 4px rgba(239, 68, 68, 0.1); }
+    50% { box-shadow: 0 0 0 12px rgba(239, 68, 68, 0.08); }
+  }
+  .timer-display {
+    font-size: 40px;
+    font-weight: 800;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 1px;
+    margin-bottom: 4px;
+  }
+  .timer-display.active { color: var(--red); }
+  .rec-label {
+    font-size: 14px;
+    color: var(--text-3);
+    font-weight: 600;
+    margin-bottom: 28px;
+  }
+  .ref-preview {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 14px 16px;
+    width: 100%;
+    max-width: 360px;
+    font-size: 14px;
+    line-height: 1.6;
+    color: var(--text-2);
+    max-height: 90px;
+    overflow: hidden;
+    position: relative;
+  }
+  .ref-preview::after {
+    content: '';
+    position: absolute;
+    bottom: 0; left: 0; right: 0;
+    height: 28px;
+    background: linear-gradient(transparent, var(--bg-card));
+  }
+  .ref-tag {
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--blue);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 4px;
+  }
+
+  /* ── Processing ── */
+  .proc-icon {
+    width: 80px;
+    height: 80px;
+    border-radius: 50%;
+    border: 3px solid var(--border);
+    border-top-color: var(--blue);
+    animation: spin 0.8s linear infinite;
+    margin-bottom: 24px;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .proc-steps {
+    width: 100%;
+    max-width: 300px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .proc-step {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-3);
+  }
+  .proc-step.done { color: var(--green); }
+  .proc-step.active { color: var(--text); }
+  .proc-step .ps-dot {
+    width: 22px; height: 22px;
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 12px;
+    border: 2px solid var(--border);
+    flex-shrink: 0;
+  }
+  .proc-step.done .ps-dot { background: var(--green); border-color: var(--green); color: white; }
+  .proc-step.active .ps-dot { border-color: var(--blue); animation: listen-pulse 1.5s ease infinite; }
+
+  /* ── Results ── */
+  .result-hero {
+    text-align: center;
+    margin-bottom: 24px;
+  }
+  .result-hero .emoji { font-size: 36px; margin-bottom: 4px; }
+  .result-hero .score {
+    font-size: 60px;
+    font-weight: 900;
+    letter-spacing: -2px;
+    line-height: 1;
+    margin-bottom: 4px;
+    color: var(--blue);
+  }
+  .result-hero .unit {
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--text-3);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+  }
+
+  .stats-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    width: 100%;
+    max-width: 380px;
+    margin-bottom: 20px;
+  }
+  .stat-tile {
+    background: var(--bg-card);
+    border-radius: 12px;
+    padding: 14px;
+    text-align: center;
+    border: 1px solid var(--border);
+  }
+  .stat-tile .sv { font-size: 24px; font-weight: 800; margin-bottom: 2px; }
+  .stat-tile .sl { font-size: 11px; font-weight: 600; color: var(--text-3); text-transform: uppercase; letter-spacing: 0.5px; }
+  .stat-tile.t-green .sv { color: var(--green); }
+  .stat-tile.t-amber .sv { color: var(--amber); }
+  .stat-tile.t-violet .sv { color: var(--violet); }
+  .stat-tile.t-blue .sv { color: var(--blue); }
+
+  .streak-pill {
+    background: var(--amber-soft);
+    border: 1px solid #fde68a;
+    border-radius: 10px;
+    padding: 10px 18px;
+    font-size: 14px;
+    font-weight: 700;
+    color: #92400e;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 24px;
+  }
+
+  .section-label {
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--text-3);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    align-self: flex-start;
+    margin-bottom: 10px;
+    max-width: 380px;
+    width: 100%;
+  }
+  .action-list {
+    width: 100%;
+    max-width: 380px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-bottom: 24px;
+  }
+  .action-item {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 14px 16px;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .action-item:active { transform: scale(0.99); background: var(--bg); }
+  .action-item .ai-icon {
+    width: 42px;
+    height: 42px;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 20px;
+    flex-shrink: 0;
+  }
+  .action-item .ai-icon.purple { background: var(--violet-soft); }
+  .action-item .ai-icon.amber { background: var(--amber-soft); }
+  .action-item .ai-text { flex: 1; }
+  .action-item .ai-title { font-size: 15px; font-weight: 700; }
+  .action-item .ai-desc { font-size: 12px; color: var(--text-3); font-weight: 500; }
+  .action-item .ai-arrow { color: var(--text-3); font-size: 18px; }
+
+  .bottom-action {
+    width: 100%;
+    max-width: 380px;
+    padding-bottom: 24px;
+  }
+
+  /* ── Sent to Teacher Badge ── */
+  .teacher-badge {
+    background: var(--blue-soft);
+    border: 1px solid #bfdbfe;
+    border-radius: 10px;
+    padding: 10px 16px;
+    font-size: 13px;
+    font-weight: 600;
+    color: #1e40af;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 20px;
+    max-width: 380px;
+    width: 100%;
+  }
+
+  /* ── Mockup Banner ── */
+  .mockup-banner {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    background: var(--blue);
+    color: white;
+    text-align: center;
+    padding: 6px;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    z-index: 100;
+  }
+  .top-bar { margin-top: 28px; }
+
+  @media (max-width: 380px) {
+    .page-title { font-size: 24px; }
+    .result-hero .score { font-size: 48px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="mockup-banner">Mockup C — "Clean Minimal" (Apple-like, Professional)</div>
+
+<!-- ═══════════════ SCREEN 0: WELCOME ═══════════════ -->
+<div class="screen active" id="screen-welcome">
+  <div class="content" style="justify-content: center;">
+    <div class="welcome-icon">&#x1F4D6;</div>
+    <div class="page-title">PACER</div>
+    <div class="page-desc">Fluency check in under 2 minutes.</div>
+
+    <input class="name-input" type="text" placeholder="Your name" autocomplete="off" spellcheck="false">
+
+    <div class="grade-row">
+      <button class="grade-chip" onclick="pickGrade(this)">3rd</button>
+      <button class="grade-chip" onclick="pickGrade(this)">4th</button>
+      <button class="grade-chip selected" onclick="pickGrade(this)">5th</button>
+      <button class="grade-chip" onclick="pickGrade(this)">6th</button>
+      <button class="grade-chip" onclick="pickGrade(this)">7th</button>
+      <button class="grade-chip" onclick="pickGrade(this)">8th</button>
+    </div>
+
+    <button class="btn-main btn-blue" onclick="goTo('screen-mic')">
+      <span class="btn-icon">&#x2192;</span>
+      Start
+    </button>
+  </div>
+</div>
+
+<!-- ═══════════════ SCREEN 1: MIC CHECK ═══════════════ -->
+<div class="screen" id="screen-mic">
+  <div class="top-bar">
+    <button class="back-btn" onclick="goTo('screen-welcome')">&#x2190;</button>
+    <span class="step-label">Step 1 of 3</span>
+    <div class="spacer"></div>
+  </div>
+  <div class="step-progress">
+    <div class="step-seg current"></div>
+    <div class="step-seg"></div>
+    <div class="step-seg"></div>
+  </div>
+
+  <div class="content">
+    <div class="page-title">Check Your Mic</div>
+    <div class="page-desc">Say something — we'll check<br>that we can hear you clearly.</div>
+
+    <div class="mic-ring" id="mic-ring" onclick="runMicTest()">&#x1F3A4;</div>
+    <div class="level-meter" id="level-meter">
+      <div class="level-bar" style="height:5px"></div>
+      <div class="level-bar" style="height:9px"></div>
+      <div class="level-bar" style="height:7px"></div>
+      <div class="level-bar" style="height:12px"></div>
+      <div class="level-bar" style="height:6px"></div>
+      <div class="level-bar" style="height:15px"></div>
+      <div class="level-bar" style="height:8px"></div>
+      <div class="level-bar" style="height:11px"></div>
+      <div class="level-bar" style="height:6px"></div>
+      <div class="level-bar" style="height:13px"></div>
+      <div class="level-bar" style="height:7px"></div>
+      <div class="level-bar" style="height:10px"></div>
+    </div>
+    <div class="mic-msg" id="mic-msg">Tap to test</div>
+
+    <div class="troubleshoot-card" id="troubleshoot">
+      <div class="ts-title">Can't hear you</div>
+      <div class="ts-item">Make sure your microphone is connected</div>
+      <div class="ts-item">Check that this app has microphone permission</div>
+      <div class="ts-item">Try unplugging and re-plugging your mic</div>
+    </div>
+
+    <button class="btn-main btn-blue" id="mic-next" style="display:none;" onclick="goTo('screen-photo')">
+      Continue
+    </button>
+    <button class="btn-main btn-outline" id="mic-test-btn" onclick="runMicTest()">
+      Test Microphone
+    </button>
+  </div>
+</div>
+
+<!-- ═══════════════ SCREEN 2: PHOTO ═══════════════ -->
+<div class="screen" id="screen-photo">
+  <div class="top-bar">
+    <button class="back-btn" onclick="goTo('screen-mic')">&#x2190;</button>
+    <span class="step-label">Step 2 of 3</span>
+    <div class="spacer"></div>
+  </div>
+  <div class="step-progress">
+    <div class="step-seg done"></div>
+    <div class="step-seg current"></div>
+    <div class="step-seg"></div>
+  </div>
+
+  <div class="content">
+    <div class="page-title">Photograph the Page</div>
+    <div class="page-desc">Lay the page flat and take a clear photo.</div>
+
+    <div class="cam-box" id="cam-box">
+      <div class="cam-icon">&#x1F4F7;</div>
+      <div class="cam-label">Tap to take a photo</div>
+    </div>
+
+    <div class="helper-row">
+      <span class="helper-tag">&#x2600;&#xFE0F; Good lighting</span>
+      <span class="helper-tag">&#x1F4D6; Flat surface</span>
+      <span class="helper-tag">&#x1F50D; Whole page</span>
+    </div>
+
+    <button class="btn-main btn-blue" onclick="takeSnap()">
+      Take Photo
+    </button>
+  </div>
+</div>
+
+<!-- ═══════════════ SCREEN 2b: PHOTO CONFIRM ═══════════════ -->
+<div class="screen" id="screen-photo-ok">
+  <div class="top-bar">
+    <button class="back-btn" onclick="goTo('screen-photo')">&#x2190;</button>
+    <span class="step-label">Step 2 of 3</span>
+    <div class="spacer"></div>
+  </div>
+  <div class="step-progress">
+    <div class="step-seg done"></div>
+    <div class="step-seg current"></div>
+    <div class="step-seg"></div>
+  </div>
+
+  <div class="content">
+    <div class="page-title">Confirm</div>
+    <div class="page-desc">Can you read all the words?</div>
+
+    <div class="cam-box captured" style="aspect-ratio: 4/3;">
+      <div class="preview-text">
+        The little brown dog sat on the porch. He watched the cars go by. Sometimes a squirrel would run across the yard and he would bark. But mostly he just sat and watched. It was a warm summer day and the breeze felt nice on his fur.
+      </div>
+      <div class="cam-badge">&#x2713; 47 words found</div>
+    </div>
+
+    <div style="height: 14px;"></div>
+
+    <div style="display: flex; gap: 10px; width: 100%; max-width: 360px;">
+      <button class="btn-main btn-outline" style="flex:1;" onclick="goTo('screen-photo')">Retake</button>
+      <button class="btn-main btn-green" style="flex:1.5;" onclick="goTo('screen-record')">Looks Good</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════ SCREEN 3: RECORD ═══════════════ -->
+<div class="screen" id="screen-record">
+  <div class="top-bar">
+    <button class="back-btn" onclick="goTo('screen-photo-ok')">&#x2190;</button>
+    <span class="step-label">Step 3 of 3</span>
+    <div class="spacer"></div>
+  </div>
+  <div class="step-progress">
+    <div class="step-seg done"></div>
+    <div class="step-seg done"></div>
+    <div class="step-seg current"></div>
+  </div>
+
+  <div class="content">
+    <div class="page-title">Read Aloud</div>
+    <div class="page-desc">Read at your normal pace.</div>
+
+    <div class="rec-ring" id="rec-ring" onclick="toggleRec()">
+      <div class="inner-dot" id="inner-dot"></div>
+    </div>
+    <div class="timer-display" id="timer-display">0:00</div>
+    <div class="rec-label" id="rec-label">Tap to start</div>
+
+    <div class="ref-preview">
+      <div class="ref-tag">Your passage</div>
+      The little brown dog sat on the porch. He watched the cars go by. Sometimes a squirrel would run across the yard and he would bark. But mostly he just sat and watched...
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════ SCREEN 4: PROCESSING ═══════════════ -->
+<div class="screen" id="screen-processing">
+  <div class="content" style="justify-content: center;">
+    <div class="proc-icon"></div>
+    <div class="page-title">Analyzing</div>
+    <div class="page-desc" style="margin-bottom: 32px;">This takes a few seconds.</div>
+
+    <div class="proc-steps">
+      <div class="proc-step done">
+        <div class="ps-dot">&#x2713;</div>
+        Transcribing audio
+      </div>
+      <div class="proc-step done">
+        <div class="ps-dot">&#x2713;</div>
+        Comparing to passage
+      </div>
+      <div class="proc-step active">
+        <div class="ps-dot"></div>
+        Checking accuracy
+      </div>
+      <div class="proc-step">
+        <div class="ps-dot"></div>
+        Building report
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════ SCREEN 5: RESULTS ═══════════════ -->
+<div class="screen" id="screen-results">
+  <div class="top-bar">
+    <div class="spacer"></div>
+    <span class="step-label">Results</span>
+    <div class="spacer"></div>
+  </div>
+
+  <div class="content">
+    <div class="result-hero">
+      <div class="emoji">&#x1F31F;</div>
+      <div class="score">127</div>
+      <div class="unit">Words Per Minute</div>
+    </div>
+
+    <div class="stats-row">
+      <div class="stat-tile t-green">
+        <div class="sv">94%</div>
+        <div class="sl">Accuracy</div>
+      </div>
+      <div class="stat-tile t-blue">
+        <div class="sv">1:42</div>
+        <div class="sl">Read Time</div>
+      </div>
+      <div class="stat-tile t-amber">
+        <div class="sv">3</div>
+        <div class="sl">Tough Words</div>
+      </div>
+      <div class="stat-tile t-violet">
+        <div class="sv">2</div>
+        <div class="sl">Self-Fixes</div>
+      </div>
+    </div>
+
+    <div class="streak-pill">
+      &#x1F525; 5-day streak
+    </div>
+
+    <div class="teacher-badge">
+      &#x1F4E8; Full report sent to your teacher
+    </div>
+
+    <div class="section-label">Activities</div>
+    <div class="action-list">
+      <div class="action-item" onclick="alert('Opens Rhythm Remix')">
+        <div class="ai-icon purple">&#x1F3B5;</div>
+        <div class="ai-text">
+          <div class="ai-title">Rhythm Remix</div>
+          <div class="ai-desc">Replay your reading with lo-fi beats</div>
+        </div>
+        <div class="ai-arrow">&#x203A;</div>
+      </div>
+      <div class="action-item" onclick="alert('Opens Word Maze')">
+        <div class="ai-icon amber">&#x1F9E9;</div>
+        <div class="ai-text">
+          <div class="ai-title">Word Maze</div>
+          <div class="ai-desc">Comprehension challenge game</div>
+        </div>
+        <div class="ai-arrow">&#x203A;</div>
+      </div>
+    </div>
+
+    <div class="bottom-action">
+      <button class="btn-main btn-blue" onclick="goTo('screen-welcome')" style="width:100%;">
+        Read Another Passage
+      </button>
+    </div>
+  </div>
+</div>
+
+<script>
+function goTo(id) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+  window.scrollTo(0, 0);
+}
+
+function pickGrade(el) {
+  document.querySelectorAll('.grade-chip').forEach(c => c.classList.remove('selected'));
+  el.classList.add('selected');
+}
+
+// Mic test
+function runMicTest() {
+  const ring = document.getElementById('mic-ring');
+  const msg = document.getElementById('mic-msg');
+  const bars = document.querySelectorAll('.level-bar');
+  const nextBtn = document.getElementById('mic-next');
+  const testBtn = document.getElementById('mic-test-btn');
+
+  ring.classList.add('listening');
+  ring.className = 'mic-ring listening';
+  msg.textContent = 'Listening...';
+  msg.className = 'mic-msg';
+  testBtn.style.display = 'none';
+
+  let n = 0;
+  const iv = setInterval(() => {
+    bars.forEach(b => {
+      const h = Math.random() * 24 + 3;
+      b.style.height = h + 'px';
+      b.classList.toggle('on', h > 10);
+    });
+    n++;
+    if (n > 15) {
+      clearInterval(iv);
+      ring.className = 'mic-ring pass';
+      ring.innerHTML = '&#x2705;';
+      msg.textContent = 'Microphone working';
+      msg.className = 'mic-msg pass';
+      nextBtn.style.display = 'flex';
+    }
+  }, 120);
+}
+
+function takeSnap() { goTo('screen-photo-ok'); }
+
+// Recording
+let isRec = false;
+let recTmr = null;
+let sec = 0;
+function toggleRec() {
+  const ring = document.getElementById('rec-ring');
+  const timer = document.getElementById('timer-display');
+  const label = document.getElementById('rec-label');
+
+  if (!isRec) {
+    isRec = true;
+    ring.classList.add('active');
+    timer.classList.add('active');
+    label.textContent = 'Tap when done';
+    sec = 0;
+    recTmr = setInterval(() => {
+      sec++;
+      timer.textContent = Math.floor(sec/60) + ':' + String(sec%60).padStart(2,'0');
+    }, 1000);
+  } else {
+    isRec = false;
+    clearInterval(recTmr);
+    ring.classList.remove('active');
+    timer.classList.remove('active');
+    goTo('screen-processing');
+    setTimeout(() => goTo('screen-results'), 2400);
+  }
+}
+</script>
+</body>
+</html>

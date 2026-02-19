@@ -1,0 +1,447 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mega Man 2 Beat</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: #0c0040; color: #e0e0ff; font-family: 'Courier New', monospace;
+         display: flex; flex-direction: column; align-items: center; padding: 1.5rem; gap: 1rem; min-height: 100vh; }
+  h1 { color: #5ce1e6; font-size: 1.8rem; letter-spacing: 4px; text-shadow: 0 0 12px #5ce1e680; }
+  .info { color: #ffcc00; font-size: 0.95rem; min-height: 1.2em; }
+  .grid { display: flex; gap: 3px; margin: 0.3rem 0; }
+  .step { width: 22px; height: 22px; background: #1a1a5e; border-radius: 3px; transition: background 0.05s; }
+  .step.on { background: #ffcc00; box-shadow: 0 0 8px #ffcc0080; }
+  .step:nth-child(4n+1) { border-left: 2px solid #5ce1e640; }
+  .controls { display: flex; gap: 1rem; align-items: center; flex-wrap: wrap; justify-content: center; }
+  button { font-family: inherit; font-size: 1rem; padding: 0.5rem 1.4rem; border: 2px solid #5ce1e6;
+           border-radius: 6px; background: #1a1a5e; color: #5ce1e6; cursor: pointer; font-weight: 700; }
+  button:hover { background: #2a2a7e; }
+  button.active { background: #5ce1e6; color: #0c0040; }
+  .ch-row { display: flex; gap: 0.5rem; flex-wrap: wrap; justify-content: center; }
+  .ch { font-size: 0.8rem; padding: 0.35rem 0.7rem; }
+  .ch.muted { opacity: 0.3; text-decoration: line-through; }
+  label { color: #8888cc; font-size: 0.85rem; display: flex; align-items: center; gap: 0.4rem; }
+  input[type=range] { width: 120px; accent-color: #5ce1e6; }
+  .status { color: #666699; font-size: 0.8rem; }
+</style>
+</head>
+<body>
+<h1>MEGA MAN 2 BEAT</h1>
+<div class="info" id="info">Ready</div>
+<div class="grid" id="grid"></div>
+<div class="controls">
+  <button id="playBtn">PLAY</button>
+  <button id="stopBtn">STOP</button>
+</div>
+<div class="controls">
+  <label>VOL <input type="range" id="vol" min="0" max="100" value="70"></label>
+  <label>BPM <span id="bpmVal">150</span> <input type="range" id="bpm" min="100" max="200" value="150"></label>
+</div>
+<div class="ch-row">
+  <button class="ch active" data-ch="p1">P1 Lead</button>
+  <button class="ch active" data-ch="p2">P2 Echo</button>
+  <button class="ch active" data-ch="tri">TRI Bass</button>
+  <button class="ch active" data-ch="noise">NOISE Drums</button>
+</div>
+<div class="status">NES 2A03: 2 Pulse + 1 Triangle + 1 Noise</div>
+
+<script>
+'use strict';
+
+// ═══════════════════════════════════════════════════════════════
+// 1. HELPERS
+// ═══════════════════════════════════════════════════════════════
+
+const midiHz = n => 440 * Math.pow(2, (n - 69) / 12);
+
+function createPulseWave(ctx, duty) {
+  const N = 64, real = new Float32Array(N), imag = new Float32Array(N);
+  for (let i = 1; i < N; i++) imag[i] = (2 / (i * Math.PI)) * Math.sin(i * Math.PI * duty);
+  return ctx.createPeriodicWave(real, imag);
+}
+
+// ═══════════════════════════════════════════════════════════════
+// 2. COMPOSITION DATA — 16 bars, A minor, 150 BPM
+// ═══════════════════════════════════════════════════════════════
+
+const STEPS_PER_BAR = 16;
+const TOTAL_BARS = 16;
+const TOTAL_STEPS = STEPS_PER_BAR * TOTAL_BARS; // 256
+const ECHO_DELAY = 2;   // 16th notes
+const ECHO_DETUNE = -7; // cents
+
+// Chord per bar
+const CHORDS = ['Am','Am','F','G', 'Am','Am','Dm','E', 'Am','Am','Dm','Dm', 'F','G','Am','Am'];
+
+// Arpeggio notes per chord (MIDI)
+const CHORD_ARP = {
+  Am: [69, 72, 76], // A4 C5 E5
+  F:  [65, 69, 72], // F4 A4 C5
+  G:  [67, 71, 74], // G4 B4 D5
+  Dm: [62, 65, 69], // D4 F4 A4
+  E:  [64, 68, 71], // E4 G#4 B4
+};
+
+// Melody (Pulse 1) — 0=rest, -1=sustain, >0=MIDI note
+// Section A: bars 1-8 (Am Am F G Am Am Dm E)
+// Section B: bars 9-16 (Am Am Dm Dm F G Am Am)
+const MELODY = [
+  // Bar 1 (Am) — syncopated opening
+  0, 0, 76, 76,  0, 76, 74, 72,  74,-1, 0, 0,  0, 0, 74, 76,
+  // Bar 2 (Am) — ascending run + fast descent
+  72,-1, 69,-1,  71, 72, 74,-1,  76,-1,-1, 76,  74, 72, 71, 69,
+  // Bar 3 (F) — outlining bVI
+  72,-1,-1,-1,  77,-1, 76,-1,  74,-1, 72,-1,  69,-1, 72,-1,
+  // Bar 4 (G) — tension building
+  74,-1, 71,-1,  74,-1, 76, 74,  71,-1, 67,-1,  69,-1,-1,-1,
+  // Bar 5 (Am) — restatement, higher register
+  0, 0, 76,-1,  81,-1, 79,-1,  76,-1, 74,-1,  72, 74, 76,-1,
+  // Bar 6 (Am) — wide leaps
+  81,-1,-1, 79,  76,-1,-1,-1,  72,-1, 74, 76,  79,-1, 81,-1,
+  // Bar 7 (Dm) — bridge color
+  74,-1, 77,-1,  76, 74, 72,-1,  74,-1,-1, 69,  -1,-1, 72, 74,
+  // Bar 8 (E) — scalar turnaround
+  76, 74, 72, 71,  69, 71, 72, 74,  76,-1,-1,-1,  -1,-1,-1,-1,
+
+  // Bar 9 (Am) — Section B, new theme
+  69, 71, 72, 74,  76,-1,-1,-1,  74, 72, 71, 69,  71,-1,-1,-1,
+  // Bar 10 (Am) — arpeggio leaps
+  69,-1, 72,-1,  76,-1, 81,-1,  79,-1, 76,-1,  74,-1, 72,-1,
+  // Bar 11 (Dm) — dm color
+  74,-1,-1, 74,  77,-1, 76, 74,  72,-1, 69,-1,  74,-1,-1,-1,
+  // Bar 12 (Dm) — descending run
+  77, 76, 74, 72,  69,-1, 72, 74,  77,-1,-1,-1,  76, 74, 72,-1,
+  // Bar 13 (F) — pre-climax leap
+  72,-1, 77,-1,  81,-1,-1,-1,  79, 77, 76,-1,  72,-1,-1,-1,
+  // Bar 14 (G) — building energy
+  71,-1, 74,-1,  79,-1,-1,-1,  76, 74, 71,-1,  74,-1,-1,-1,
+  // Bar 15 (Am) — climactic 16th-note run
+  76,-1, 74, 72,  71, 72, 74, 76,  77, 76, 74, 72,  71, 69, 71, 72,
+  // Bar 16 (Am) — resolution + breath
+  74,-1, 76,-1,  81,-1,-1,-1,  -1,-1,-1,-1,  0, 0, 0, 0,
+];
+
+// Bass (Triangle) — driving 8th notes, root-fifth patterns
+const bAm  = [45,0,52,0, 45,0,52,0, 45,0,52,0, 57,0,52,0];
+const bAm2 = [45,0,52,0, 57,0,52,0, 45,0,52,0, 45,0,43,0];
+const bAm3 = [45,0,52,0, 45,0,52,0, 57,0,52,0, 45,0,52,0];
+const bAm4 = [45,0,57,0, 52,0,45,0, 52,0,57,0, 52,0,45,0];
+const bAmE = [45,0,52,0, 57,0,52,0, 45,0,0,0,  45,0,0,0];
+const bF   = [41,0,48,0, 41,0,48,0, 41,0,48,0, 53,0,48,0];
+const bF2  = [41,0,48,0, 53,0,48,0, 41,0,48,0, 41,0,48,0];
+const bG   = [43,0,50,0, 43,0,50,0, 43,0,50,0, 55,0,50,0];
+const bG2  = [43,0,50,0, 55,0,50,0, 43,0,50,0, 43,0,50,0];
+const bDm  = [38,0,45,0, 38,0,45,0, 50,0,45,0, 38,0,45,0];
+const bDm2 = [38,0,45,0, 38,0,50,0, 45,0,38,0, 43,0,45,0];
+const bE   = [40,0,47,0, 40,0,47,0, 45,0,52,0, 45,0,0,0];
+const BASS = [].concat(bAm,bAm2,bF,bG, bAm3,bAm,bDm,bE, bAm4,bAm2,bDm,bDm2, bF2,bG2,bAm3,bAmE);
+
+// Drum patterns (templates)
+const K0 = [1,0,0,0, 0,0,0,0, 1,0,0,0, 0,0,0,0]; // standard
+const K1 = [1,0,0,0, 0,0,1,0, 1,0,0,0, 0,0,0,0]; // driving
+const K2 = [1,0,0,0, 0,0,1,0, 1,0,0,0, 1,0,1,0]; // fill
+const S0 = [0,0,0,0, 1,0,0,0, 0,0,0,0, 1,0,0,0]; // standard
+const S1 = [0,0,0,0, 1,0,0,0, 0,0,1,0, 1,0,1,1]; // fill
+const S2 = [0,0,0,0, 1,0,0,0, 1,0,1,0, 1,0,1,0]; // roll
+const H0 = [1,0,1,0, 1,0,1,0, 1,0,1,0, 1,0,1,0]; // standard
+const H1 = [1,0,1,1, 1,0,1,0, 1,0,1,1, 1,0,1,0]; // dense
+const KICK  = [].concat(K0,K0,K0,K1, K0,K0,K1,K2, K0,K0,K0,K1, K0,K1,K1,K2);
+const SNARE = [].concat(S0,S0,S0,S0, S0,S0,S0,S1, S0,S0,S0,S0, S0,S0,S2,S1);
+const HIHAT = [].concat(H0,H0,H0,H0, H0,H0,H0,H1, H0,H0,H0,H0, H0,H0,H1,H1);
+
+// ═══════════════════════════════════════════════════════════════
+// 3. AUDIO ENGINE
+// ═══════════════════════════════════════════════════════════════
+
+let ctx, pulse25Wave, pulse125Wave;
+let masterGain, compressor, pulse1Bus, pulse2Bus, triBus, noiseBus;
+let noiseBuf;
+const chMuted = { p1: false, p2: false, tri: false, noise: false };
+
+function initAudio() {
+  ctx = new (window.AudioContext || window.webkitAudioContext)();
+  pulse25Wave = createPulseWave(ctx, 0.25);
+  pulse125Wave = createPulseWave(ctx, 0.125);
+
+  // Pre-render noise buffer
+  noiseBuf = ctx.createBuffer(1, ctx.sampleRate * 0.1, ctx.sampleRate);
+  const nd = noiseBuf.getChannelData(0);
+  for (let i = 0; i < nd.length; i++) nd[i] = Math.random() * 2 - 1;
+
+  // Signal chain: buses → compressor → master → destination
+  compressor = ctx.createDynamicsCompressor();
+  compressor.threshold.value = -10;
+  compressor.ratio.value = 4;
+  compressor.attack.value = 0.003;
+  compressor.release.value = 0.1;
+
+  masterGain = ctx.createGain();
+  masterGain.gain.value = 0.7;
+  compressor.connect(masterGain).connect(ctx.destination);
+
+  pulse1Bus = ctx.createGain(); pulse1Bus.gain.value = 1.0; pulse1Bus.connect(compressor);
+  pulse2Bus = ctx.createGain(); pulse2Bus.gain.value = 1.0; pulse2Bus.connect(compressor);
+  triBus    = ctx.createGain(); triBus.gain.value = 1.0;    triBus.connect(compressor);
+  noiseBus  = ctx.createGain(); noiseBus.gain.value = 1.0;  noiseBus.connect(compressor);
+}
+
+// ═══════════════════════════════════════════════════════════════
+// 4. SYNTHESIS — NES 2A03 faithful
+// ═══════════════════════════════════════════════════════════════
+
+function playPulse(bus, wave, freq, time, dur, vol) {
+  const osc = ctx.createOscillator();
+  const g = ctx.createGain();
+  osc.setPeriodicWave(wave);
+  osc.frequency.value = freq;
+  // Quick attack to avoid click, hold, quick release
+  g.gain.setValueAtTime(0, time);
+  g.gain.linearRampToValueAtTime(vol, time + 0.003);
+  g.gain.setValueAtTime(vol, time + dur - 0.008);
+  g.gain.linearRampToValueAtTime(0, time + dur);
+  osc.connect(g).connect(bus);
+  osc.start(time);
+  osc.stop(time + dur + 0.01);
+}
+
+function playPulseVibrato(bus, wave, freq, time, dur, vol) {
+  const osc = ctx.createOscillator();
+  const g = ctx.createGain();
+  osc.setPeriodicWave(wave);
+  osc.frequency.value = freq;
+  g.gain.setValueAtTime(0, time);
+  g.gain.linearRampToValueAtTime(vol, time + 0.003);
+  g.gain.setValueAtTime(vol, time + dur - 0.008);
+  g.gain.linearRampToValueAtTime(0, time + dur);
+  // Vibrato: 6Hz, ~0.5% pitch
+  const vib = ctx.createOscillator();
+  const vg = ctx.createGain();
+  vib.frequency.value = 6;
+  vg.gain.value = freq * 0.005;
+  vib.connect(vg).connect(osc.frequency);
+  osc.connect(g).connect(bus);
+  osc.start(time); vib.start(time);
+  osc.stop(time + dur + 0.01); vib.stop(time + dur + 0.01);
+}
+
+function playTriBass(freq, time, dur) {
+  const osc = ctx.createOscillator();
+  const g = ctx.createGain();
+  osc.type = 'triangle';
+  osc.frequency.value = freq;
+  // NES triangle: no volume control, just on/off
+  g.gain.setValueAtTime(0, time);
+  g.gain.linearRampToValueAtTime(0.45, time + 0.002);
+  g.gain.setValueAtTime(0.45, time + dur * 0.85);
+  g.gain.linearRampToValueAtTime(0, time + dur * 0.9);
+  osc.connect(g).connect(triBus);
+  osc.start(time);
+  osc.stop(time + dur + 0.01);
+}
+
+function playKick(time) {
+  // NES kick: square osc pitch sweep down
+  const osc = ctx.createOscillator();
+  const g = ctx.createGain();
+  osc.type = 'square';
+  osc.frequency.setValueAtTime(200, time);
+  osc.frequency.exponentialRampToValueAtTime(40, time + 0.06);
+  g.gain.setValueAtTime(0.45, time);
+  g.gain.exponentialRampToValueAtTime(0.001, time + 0.12);
+  osc.connect(g).connect(noiseBus);
+  osc.start(time);
+  osc.stop(time + 0.13);
+}
+
+function playSnare(time) {
+  // NES snare: short noise burst through bandpass
+  const src = ctx.createBufferSource();
+  src.buffer = noiseBuf;
+  const bp = ctx.createBiquadFilter();
+  bp.type = 'bandpass'; bp.frequency.value = 3500; bp.Q.value = 1.5;
+  const g = ctx.createGain();
+  g.gain.setValueAtTime(0.4, time);
+  g.gain.exponentialRampToValueAtTime(0.001, time + 0.07);
+  src.connect(bp).connect(g).connect(noiseBus);
+  src.start(time); src.stop(time + 0.07);
+}
+
+function playHihat(time) {
+  // NES hi-hat: high-freq square through highpass
+  const osc = ctx.createOscillator();
+  osc.type = 'square'; osc.frequency.value = 12000;
+  const hp = ctx.createBiquadFilter();
+  hp.type = 'highpass'; hp.frequency.value = 8000;
+  const g = ctx.createGain();
+  g.gain.setValueAtTime(0.12, time);
+  g.gain.exponentialRampToValueAtTime(0.001, time + 0.03);
+  osc.connect(hp).connect(g).connect(noiseBus);
+  osc.start(time); osc.stop(time + 0.04);
+}
+
+function playArpeggio(time, notes, dur) {
+  // NES faux chord: rapid 30Hz cycling through 3 notes
+  const osc = ctx.createOscillator();
+  const g = ctx.createGain();
+  osc.setPeriodicWave(pulse125Wave);
+  const nd = dur / 3;
+  for (let i = 0; i < 3; i++) {
+    osc.frequency.setValueAtTime(midiHz(notes[i % notes.length]), time + i * nd);
+  }
+  g.gain.setValueAtTime(0.12, time);
+  g.gain.setValueAtTime(0, time + dur - 0.002);
+  osc.connect(g).connect(pulse2Bus);
+  osc.start(time); osc.stop(time + dur + 0.01);
+}
+
+// ═══════════════════════════════════════════════════════════════
+// 5. SCHEDULER — lookahead pattern (25ms poll, 120ms window)
+// ═══════════════════════════════════════════════════════════════
+
+let playing = false, nextBeatTime = 0, curStep = 0, schedId;
+let bpm = 150;
+
+function start() {
+  if (playing) return;
+  if (!ctx) initAudio();
+  if (ctx.state === 'suspended') ctx.resume();
+  playing = true;
+  curStep = 0;
+  nextBeatTime = ctx.currentTime + 0.05;
+  schedId = setInterval(tick, 25);
+  document.getElementById('playBtn').classList.add('active');
+}
+
+function stop() {
+  playing = false;
+  clearInterval(schedId);
+  document.getElementById('playBtn').classList.remove('active');
+  document.getElementById('info').textContent = 'Stopped';
+  // Clear grid
+  const steps = document.getElementById('grid').children;
+  for (let i = 0; i < steps.length; i++) steps[i].classList.remove('on');
+}
+
+function tick() {
+  const stepDur = 60 / bpm / 4; // duration of one 16th note
+  while (nextBeatTime < ctx.currentTime + 0.12) {
+    scheduleStep(nextBeatTime, curStep, stepDur);
+    // Schedule visual update
+    const delay = Math.max(0, (nextBeatTime - ctx.currentTime) * 1000);
+    const s = curStep;
+    setTimeout(() => updateVisuals(s), delay);
+    nextBeatTime += stepDur;
+    curStep = (curStep + 1) % TOTAL_STEPS;
+  }
+}
+
+function scheduleStep(time, step, stepDur) {
+  const bar = Math.floor(step / STEPS_PER_BAR);
+  const chord = CHORDS[bar];
+
+  // ── Pulse 1: Melody ──
+  if (!chMuted.p1) {
+    const note = MELODY[step];
+    if (note > 0) {
+      let dur = 1;
+      for (let i = step + 1; i < TOTAL_STEPS && MELODY[i] === -1; i++) dur++;
+      const freq = midiHz(note);
+      const totalDur = dur * stepDur;
+      // Vibrato on sustained notes (3+ steps)
+      if (dur >= 3) {
+        playPulseVibrato(pulse1Bus, pulse25Wave, freq, time, totalDur * 0.95, 0.28);
+      } else {
+        playPulse(pulse1Bus, pulse25Wave, freq, time, totalDur * 0.95, 0.28);
+      }
+    }
+  }
+
+  // ── Pulse 2: Echo + Arpeggio ──
+  if (!chMuted.p2) {
+    const echoIdx = (step - ECHO_DELAY + TOTAL_STEPS) % TOTAL_STEPS;
+    const echoVal = MELODY[echoIdx];
+    if (echoVal > 0) {
+      // Echo: same note, delayed, quieter, slightly detuned
+      let dur = 1;
+      for (let i = echoIdx + 1; i < TOTAL_STEPS && MELODY[i] === -1; i++) dur++;
+      const freq = midiHz(echoVal) * Math.pow(2, ECHO_DETUNE / 1200);
+      playPulse(pulse2Bus, pulse125Wave, freq, time, dur * stepDur * 0.95, 0.15);
+    } else if (echoVal === 0 && MELODY[step] === 0) {
+      // Both melody and echo silent — fill with arpeggio
+      const arpNotes = CHORD_ARP[chord];
+      if (arpNotes) playArpeggio(time, arpNotes, stepDur);
+    }
+  }
+
+  // ── Triangle: Bass ──
+  if (!chMuted.tri) {
+    const bassNote = BASS[step];
+    if (bassNote > 0) {
+      playTriBass(midiHz(bassNote), time, stepDur * 0.85);
+    }
+  }
+
+  // ── Noise: Drums ──
+  if (!chMuted.noise) {
+    if (KICK[step])  playKick(time);
+    if (SNARE[step]) playSnare(time);
+    if (HIHAT[step]) playHihat(time);
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// 6. UI
+// ═══════════════════════════════════════════════════════════════
+
+// Build beat grid
+const gridEl = document.getElementById('grid');
+for (let i = 0; i < 16; i++) {
+  const d = document.createElement('div');
+  d.className = 'step';
+  gridEl.appendChild(d);
+}
+const gridSteps = gridEl.children;
+
+function updateVisuals(step) {
+  if (!playing) return;
+  const stepInBar = step % STEPS_PER_BAR;
+  for (let i = 0; i < 16; i++) gridSteps[i].classList.toggle('on', i === stepInBar);
+  const bar = Math.floor(step / STEPS_PER_BAR);
+  const section = bar < 8 ? 'A' : 'B';
+  const chord = CHORDS[bar];
+  document.getElementById('info').textContent =
+    `Section ${section} | Bar ${bar + 1}/16 | ${chord}`;
+}
+
+// Controls
+document.getElementById('playBtn').addEventListener('click', start);
+document.getElementById('stopBtn').addEventListener('click', stop);
+
+document.getElementById('vol').addEventListener('input', e => {
+  if (masterGain) masterGain.gain.value = e.target.value / 100;
+});
+
+document.getElementById('bpm').addEventListener('input', e => {
+  bpm = Number(e.target.value);
+  document.getElementById('bpmVal').textContent = bpm;
+});
+
+// Channel mute toggles
+document.querySelectorAll('.ch').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const ch = btn.dataset.ch;
+    chMuted[ch] = !chMuted[ch];
+    btn.classList.toggle('muted', chMuted[ch]);
+    btn.classList.toggle('active', !chMuted[ch]);
+    // Also mute the bus gain for in-progress notes
+    if (ctx) {
+      const bus = { p1: pulse1Bus, p2: pulse2Bus, tri: triBus, noise: noiseBus }[ch];
+      if (bus) bus.gain.value = chMuted[ch] ? 0 : 1;
+    }
+  });
+});
+</script>
+</body>
+</html>

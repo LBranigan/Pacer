@@ -1,0 +1,581 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>PACER — Status Feed (Mockup E)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+  :root {
+    --bg: #0c0c0c;
+    --surface: #161616;
+    --surface-2: #1e1e1e;
+    --border: #262626;
+    --text: #e5e5e5;
+    --text-2: #737373;
+    --text-3: #404040;
+    --green: #22c55e;
+    --red: #ef4444;
+    --blue: #6366f1;
+    --amber: #f59e0b;
+    --cyan: #06b6d4;
+  }
+
+  body {
+    font-family: 'DM Sans', -apple-system, system-ui, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    min-height: 100dvh;
+  }
+
+  /*
+    The entire app is a single scrolling feed.
+    Items appear one at a time as the user progresses.
+    Think: terminal log meets Instagram story.
+  */
+
+  .feed {
+    max-width: 420px;
+    margin: 0 auto;
+    padding: 16px 16px 100px;
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    min-height: 100vh;
+    min-height: 100dvh;
+  }
+
+  /* ── Feed items ── */
+  .fi {
+    display: none;
+    animation: slideIn 0.25s ease;
+  }
+  .fi.show { display: block; }
+  @keyframes slideIn {
+    from { opacity: 0; transform: translateY(8px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  /* ── Header ── */
+  .feed-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 0 20px;
+  }
+  .fh-logo {
+    font-size: 18px;
+    font-weight: 800;
+    letter-spacing: -0.5px;
+  }
+  .fh-user {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-2);
+  }
+
+  /* ── Status line ── */
+  .status-line {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 0;
+  }
+  .sl-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+  .sl-dot.green { background: var(--green); }
+  .sl-dot.red { background: var(--red); }
+  .sl-dot.blue { background: var(--blue); }
+  .sl-dot.amber { background: var(--amber); }
+  .sl-dot.spin {
+    width: 14px;
+    height: 14px;
+    border: 2px solid var(--border);
+    border-top-color: var(--blue);
+    animation: spin 0.6s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .sl-text {
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--text-2);
+  }
+  .sl-text strong { color: var(--text); font-weight: 700; }
+
+  /* ── Separator ── */
+  .sep {
+    height: 1px;
+    background: var(--border);
+    margin: 4px 0;
+  }
+
+  /* ── Prompt card: the main action at each step ── */
+  .prompt-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 20px;
+    margin: 12px 0;
+  }
+  .pc-label {
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--text-3);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 10px;
+  }
+  .pc-action {
+    font-size: 18px;
+    font-weight: 800;
+    margin-bottom: 4px;
+    letter-spacing: -0.3px;
+  }
+  .pc-sub {
+    font-size: 13px;
+    color: var(--text-2);
+    margin-bottom: 16px;
+    line-height: 1.4;
+  }
+  .pc-btn {
+    width: 100%;
+    padding: 14px;
+    border: none;
+    border-radius: 10px;
+    font-family: inherit;
+    font-size: 15px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.15s;
+    color: white;
+  }
+  .pc-btn:active { transform: scale(0.98); opacity: 0.9; }
+  .pc-btn.blue { background: var(--blue); }
+  .pc-btn.green { background: var(--green); color: #000; }
+  .pc-btn.red { background: var(--red); }
+  .pc-btn.dark { background: var(--surface-2); border: 1px solid var(--border); color: var(--text-2); }
+  .pc-btn-row {
+    display: flex;
+    gap: 8px;
+  }
+  .pc-btn-row .pc-btn { flex: 1; }
+
+  /* ── Camera inline ── */
+  .cam-inline {
+    width: 100%;
+    aspect-ratio: 4/3;
+    border-radius: 10px;
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 14px;
+    position: relative;
+    overflow: hidden;
+  }
+  .cam-inline .ci-corners {
+    position: absolute;
+    inset: 8px;
+    border: 1.5px solid rgba(255,255,255,0.1);
+    border-radius: 6px;
+  }
+  .cam-inline .ci-label {
+    font-size: 13px;
+    color: var(--text-3);
+  }
+
+  /* ── Passage preview in confirm ── */
+  .passage-inline {
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px;
+    font-size: 14px;
+    line-height: 1.7;
+    color: var(--text);
+    margin-bottom: 14px;
+    max-height: 140px;
+    overflow-y: auto;
+  }
+
+  /* ── Recording: big timer ── */
+  .rec-block {
+    text-align: center;
+    padding: 24px 0;
+  }
+  .rb-indicator {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 4px;
+  }
+  .rb-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--red);
+    animation: blink 1s infinite;
+  }
+  @keyframes blink { 50% { opacity: 0.3; } }
+  .rb-tag {
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--red);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+  }
+  .rb-time {
+    font-size: 56px;
+    font-weight: 800;
+    letter-spacing: -2px;
+    font-variant-numeric: tabular-nums;
+    margin-bottom: 0;
+  }
+  .rb-wave {
+    display: flex;
+    gap: 2px;
+    align-items: center;
+    justify-content: center;
+    height: 32px;
+    margin: 8px 0;
+  }
+  .rb-wave-bar {
+    width: 2.5px;
+    background: var(--blue);
+    border-radius: 2px;
+    opacity: 0.6;
+  }
+
+  /* ── Results block ── */
+  .result-block {
+    text-align: center;
+    padding: 20px 0 8px;
+  }
+  .rb-score {
+    font-size: 64px;
+    font-weight: 800;
+    letter-spacing: -2px;
+    line-height: 1;
+  }
+  .rb-unit {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-3);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-bottom: 16px;
+  }
+  .rb-stats {
+    display: flex;
+    gap: 1px;
+    background: var(--border);
+    border-radius: 10px;
+    overflow: hidden;
+    margin: 0 0 4px;
+  }
+  .rb-stat {
+    flex: 1;
+    background: var(--surface);
+    padding: 12px 4px;
+    text-align: center;
+  }
+  .rb-stat .v { font-size: 20px; font-weight: 800; }
+  .rb-stat .l { font-size: 10px; font-weight: 600; color: var(--text-3); text-transform: uppercase; letter-spacing: 0.3px; }
+  .rb-stat.green .v { color: var(--green); }
+  .rb-stat.amber .v { color: var(--amber); }
+  .rb-stat.cyan .v { color: var(--cyan); }
+
+  /* ── Activity links ── */
+  .activity-link {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 14px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    margin: 6px 0;
+    cursor: pointer;
+    transition: background 0.15s;
+  }
+  .activity-link:active { background: var(--surface-2); }
+  .al-icon {
+    width: 36px;
+    height: 36px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 18px;
+    flex-shrink: 0;
+  }
+  .al-icon.purple { background: rgba(99, 102, 241, 0.15); }
+  .al-icon.amber { background: rgba(245, 158, 11, 0.15); }
+  .al-text { flex: 1; }
+  .al-title { font-size: 14px; font-weight: 700; }
+  .al-sub { font-size: 12px; color: var(--text-2); }
+  .al-arrow { color: var(--text-3); font-size: 16px; }
+
+  /* ── Mockup Banner ── */
+  .mockup-banner {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background: var(--blue);
+    color: white;
+    text-align: center;
+    padding: 5px;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    z-index: 100;
+  }
+</style>
+</head>
+<body>
+
+<div class="mockup-banner">Mockup E — "Status Feed" — Everything in one scrolling feed, no page transitions</div>
+
+<div class="feed" id="feed">
+
+  <!-- HEADER (always visible) -->
+  <div class="feed-header fi show">
+    <div class="fh-logo">PACER</div>
+    <div class="fh-user" id="user-display">—</div>
+  </div>
+
+  <!-- MIC STATUS (auto-detected) -->
+  <div class="fi show" id="fi-mic-check">
+    <div class="status-line">
+      <div class="sl-dot spin" id="mic-dot-e"></div>
+      <div class="sl-text" id="mic-text-e">Checking microphone...</div>
+    </div>
+  </div>
+
+  <!-- STEP 1: CAPTURE prompt -->
+  <div class="fi" id="fi-capture">
+    <div class="sep"></div>
+    <div class="prompt-card">
+      <div class="pc-label">Step 1</div>
+      <div class="pc-action">Photograph the page</div>
+      <div class="pc-sub">Lay it flat, good lighting, all text visible.</div>
+      <div class="cam-inline">
+        <div class="ci-corners"></div>
+        <div class="ci-label">Camera preview</div>
+      </div>
+      <button class="pc-btn blue" onclick="capturePhoto()">Take Photo</button>
+    </div>
+  </div>
+
+  <!-- STEP 1b: CONFIRM -->
+  <div class="fi" id="fi-confirm">
+    <div class="status-line">
+      <div class="sl-dot green"></div>
+      <div class="sl-text"><strong>47 words</strong> detected</div>
+    </div>
+    <div class="prompt-card">
+      <div class="passage-inline">
+        The little brown dog sat on the porch. He watched the cars go by. Sometimes a squirrel would run across the yard and he would bark. But mostly he just sat and watched. It was a warm summer day and the breeze felt nice on his fur. He could hear children playing down the street.
+      </div>
+      <div class="pc-btn-row">
+        <button class="pc-btn dark" onclick="retakePhoto()">Retake</button>
+        <button class="pc-btn green" onclick="startReading()">Start Reading</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- STEP 2: RECORDING -->
+  <div class="fi" id="fi-record">
+    <div class="sep"></div>
+    <div class="prompt-card" style="padding: 24px 20px;">
+      <div class="rec-block">
+        <div class="rb-indicator">
+          <div class="rb-dot"></div>
+          <div class="rb-tag">Recording</div>
+        </div>
+        <div class="rb-time" id="rec-timer-e">0:00</div>
+        <div class="rb-wave" id="wave-e"></div>
+      </div>
+      <button class="pc-btn red" onclick="stopReading()">Done Reading</button>
+    </div>
+  </div>
+
+  <!-- STEP 3: PROCESSING -->
+  <div class="fi" id="fi-processing">
+    <div class="sep"></div>
+    <div class="status-line">
+      <div class="sl-dot spin"></div>
+      <div class="sl-text">Analyzing your reading...</div>
+    </div>
+  </div>
+
+  <!-- STEP 4: RESULTS -->
+  <div class="fi" id="fi-results">
+    <div class="sep"></div>
+    <div class="result-block">
+      <div class="rb-score">127</div>
+      <div class="rb-unit">words per minute</div>
+      <div class="rb-stats">
+        <div class="rb-stat green"><div class="v">94%</div><div class="l">Accuracy</div></div>
+        <div class="rb-stat amber"><div class="v">3</div><div class="l">Tough</div></div>
+        <div class="rb-stat cyan"><div class="v">2</div><div class="l">Self-fix</div></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="fi" id="fi-teacher">
+    <div class="status-line">
+      <div class="sl-dot green"></div>
+      <div class="sl-text">Report sent to your teacher</div>
+    </div>
+  </div>
+
+  <div class="fi" id="fi-activities">
+    <div class="sep"></div>
+    <div class="activity-link" onclick="alert('Rhythm Remix')">
+      <div class="al-icon purple">&#x1F3B5;</div>
+      <div class="al-text">
+        <div class="al-title">Rhythm Remix</div>
+        <div class="al-sub">Replay with lo-fi beats</div>
+      </div>
+      <div class="al-arrow">&#x203A;</div>
+    </div>
+    <div class="activity-link" onclick="alert('Word Maze')">
+      <div class="al-icon amber">&#x1F9E9;</div>
+      <div class="al-text">
+        <div class="al-title">Word Maze</div>
+        <div class="al-sub">Comprehension challenge</div>
+      </div>
+      <div class="al-arrow">&#x203A;</div>
+    </div>
+  </div>
+
+  <div class="fi" id="fi-done">
+    <div style="padding: 16px 0;">
+      <button class="pc-btn dark" style="width: 100%;" onclick="resetFeed()">New Reading</button>
+    </div>
+  </div>
+
+</div>
+
+<script>
+// Feed show helper
+function showItem(id, delay) {
+  return new Promise(resolve => {
+    setTimeout(() => {
+      document.getElementById(id).classList.add('show');
+      document.getElementById(id).scrollIntoView({ behavior: 'smooth', block: 'end' });
+      resolve();
+    }, delay);
+  });
+}
+
+// Simulated name (would use localStorage in real app)
+document.getElementById('user-display').textContent = 'Alex M.';
+
+// Passive mic check on load
+setTimeout(() => {
+  const dot = document.getElementById('mic-dot-e');
+  const txt = document.getElementById('mic-text-e');
+  dot.className = 'sl-dot green';
+  txt.innerHTML = 'Mic <strong>ready</strong>';
+  // Show capture prompt after mic confirmed
+  showItem('fi-capture', 400);
+}, 1500);
+
+// Photo capture
+function capturePhoto() {
+  document.getElementById('fi-capture').querySelector('.prompt-card').style.opacity = '0.4';
+  document.getElementById('fi-capture').querySelector('.pc-btn').disabled = true;
+  showItem('fi-confirm', 300);
+}
+
+function retakePhoto() {
+  document.getElementById('fi-confirm').classList.remove('show');
+  document.getElementById('fi-capture').querySelector('.prompt-card').style.opacity = '1';
+  document.getElementById('fi-capture').querySelector('.pc-btn').disabled = false;
+}
+
+// Recording
+let recIv, sec = 0;
+function startReading() {
+  // Dim confirm card
+  document.getElementById('fi-confirm').querySelector('.prompt-card').style.opacity = '0.4';
+  showItem('fi-record', 200);
+
+  // Build wave bars
+  const w = document.getElementById('wave-e');
+  w.innerHTML = '';
+  for (let i = 0; i < 30; i++) {
+    const b = document.createElement('div');
+    b.className = 'rb-wave-bar';
+    b.style.height = '3px';
+    w.appendChild(b);
+  }
+
+  sec = 0;
+  recIv = setInterval(() => {
+    sec++;
+    document.getElementById('rec-timer-e').textContent =
+      Math.floor(sec/60) + ':' + String(sec%60).padStart(2,'0');
+    w.querySelectorAll('.rb-wave-bar').forEach(b => {
+      b.style.height = (Math.random() * 24 + 3) + 'px';
+    });
+  }, 1000);
+}
+
+function stopReading() {
+  clearInterval(recIv);
+  document.getElementById('fi-record').querySelector('.prompt-card').style.opacity = '0.4';
+  document.getElementById('fi-record').querySelector('.pc-btn').disabled = true;
+
+  showItem('fi-processing', 300).then(() => {
+    setTimeout(() => {
+      // Replace spinner with done
+      const procLine = document.getElementById('fi-processing').querySelector('.status-line');
+      procLine.querySelector('.sl-dot').className = 'sl-dot green';
+      procLine.querySelector('.sl-text').innerHTML = 'Analysis <strong>complete</strong>';
+
+      showItem('fi-results', 300);
+      showItem('fi-teacher', 600);
+      showItem('fi-activities', 900);
+      showItem('fi-done', 1200);
+    }, 1800);
+  });
+}
+
+// Reset
+function resetFeed() {
+  ['fi-capture','fi-confirm','fi-record','fi-processing','fi-results','fi-teacher','fi-activities','fi-done'].forEach(id => {
+    const el = document.getElementById(id);
+    el.classList.remove('show');
+    const card = el.querySelector('.prompt-card');
+    if (card) { card.style.opacity = '1'; }
+    const btn = el.querySelector('.pc-btn');
+    if (btn) btn.disabled = false;
+  });
+  // Re-trigger mic check
+  document.getElementById('mic-dot-e').className = 'sl-dot spin';
+  document.getElementById('mic-text-e').innerHTML = 'Checking microphone...';
+  setTimeout(() => {
+    document.getElementById('mic-dot-e').className = 'sl-dot green';
+    document.getElementById('mic-text-e').innerHTML = 'Mic <strong>ready</strong>';
+    showItem('fi-capture', 400);
+  }, 1000);
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+</script>
+</body>
+</html>
