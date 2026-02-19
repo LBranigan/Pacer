@@ -87,9 +87,17 @@ const CHORDS = [
 ];
 
 const HORN_PATTERN = [
-  [0,  2.5,  74,  1.0 ],
-  [1,  3.5,  70,  0.8 ],
-  [4,  3.75, 77,  0.7 ],
+  // [barInCycle, beatOffset, midiNote, velocity]
+  [0, 2.5,  74, 1.0],   // D5 — main stab
+  [0, 3.0,  70, 0.7],   // Bb4 — quick answer
+  [1, 1.0,  67, 0.9],   // G4 — downbeat anchor
+  [2, 2.5,  74, 0.85],  // D5 — repeat motif
+  [3, 3.5,  72, 0.75],  // C5 — leading to Cm bars
+  [4, 1.0,  72, 1.0],   // C5 — Cm territory
+  [4, 2.5,  70, 0.8],   // Bb4
+  [5, 3.0,  67, 0.7],   // G4
+  [6, 2.5,  63, 0.9],   // Eb4 — color note
+  [7, 3.75, 70, 0.6],   // Bb4 — pickup into next cycle
 ];
 
 const SWING = 0.6;
@@ -583,67 +591,64 @@ function scheduleBass(time, barIndex) {
 
 function playHornStab(time, midiNote, vel) {
   const freq = mtof(midiNote);
-  const t = time + (Math.random() - 0.5) * 0.015;
+  const t = time + (Math.random() - 0.5) * 0.008;
   const v = vel || 1.0;
-  const dur = 0.18 + Math.random() * 0.06;
+  const dur = 0.30 + Math.random() * 0.08;
+  const G = 0.16 * v;
 
-  const filter = ctx.createBiquadFilter();
-  filter.type = 'lowpass';
-  filter.frequency.value = 2400;
-  filter.Q.value = 0.5;
-  filter.connect(hornGain);
+  // "Wah" bandpass sweep — muted trumpet opening up
+  const bp = ctx.createBiquadFilter();
+  bp.type = 'bandpass';
+  bp.Q.value = 2.5;
+  bp.frequency.setValueAtTime(700, t);
+  bp.frequency.linearRampToValueAtTime(2200, t + 0.06);
+  bp.frequency.setTargetAtTime(1200, t + 0.08, 0.08);
+  bp.connect(hornGain);
 
+  // Sawtooth — rich brass harmonics
   const osc1 = ctx.createOscillator();
   const env1 = ctx.createGain();
-  osc1.type = 'sine';
+  osc1.type = 'sawtooth';
   osc1.frequency.value = freq;
-  osc1.detune.setValueAtTime(40, t);
-  osc1.detune.exponentialRampToValueAtTime(0.01, t + 0.025);
-  const gain = 0.055 * v;
+  osc1.detune.setValueAtTime(30, t);
+  osc1.detune.exponentialRampToValueAtTime(0.01, t + 0.02);
   env1.gain.setValueAtTime(0, t);
-  env1.gain.linearRampToValueAtTime(gain, t + 0.004);
-  env1.gain.setTargetAtTime(gain * 0.55, t + 0.012, 0.025);
-  env1.gain.setTargetAtTime(0, t + dur, 0.035);
+  env1.gain.linearRampToValueAtTime(G, t + 0.005);
+  env1.gain.setTargetAtTime(G * 0.5, t + 0.04, 0.04);
+  env1.gain.setTargetAtTime(0, t + dur, 0.04);
   osc1.connect(env1);
-  env1.connect(filter);
+  env1.connect(bp);
   osc1.start(t);
-  osc1.stop(t + dur + 0.25);
+  osc1.stop(t + dur + 0.3);
 
+  // Square buzz layer — adds grit
   const osc2 = ctx.createOscillator();
   const env2 = ctx.createGain();
-  const bp = ctx.createBiquadFilter();
   osc2.type = 'square';
   osc2.frequency.value = freq;
-  osc2.detune.setValueAtTime(40, t);
-  osc2.detune.exponentialRampToValueAtTime(0.01, t + 0.025);
-  bp.type = 'bandpass';
-  bp.frequency.value = 900;
-  bp.Q.value = 1.8;
-  const buzzGain = gain * 0.18;
+  osc2.detune.setValueAtTime(30, t);
+  osc2.detune.exponentialRampToValueAtTime(0.01, t + 0.02);
   env2.gain.setValueAtTime(0, t);
-  env2.gain.linearRampToValueAtTime(buzzGain, t + 0.005);
-  env2.gain.setTargetAtTime(buzzGain * 0.4, t + 0.01, 0.02);
-  env2.gain.setTargetAtTime(0, t + dur, 0.025);
-  osc2.connect(bp);
-  bp.connect(env2);
-  env2.connect(filter);
+  env2.gain.linearRampToValueAtTime(G * 0.25, t + 0.005);
+  env2.gain.setTargetAtTime(G * 0.12, t + 0.03, 0.03);
+  env2.gain.setTargetAtTime(0, t + dur, 0.03);
+  osc2.connect(env2);
+  env2.connect(bp);
   osc2.start(t);
-  osc2.stop(t + dur + 0.2);
+  osc2.stop(t + dur + 0.25);
 
+  // Octave shimmer — bright edge
   const osc3 = ctx.createOscillator();
   const env3 = ctx.createGain();
-  osc3.type = 'sine';
+  osc3.type = 'sawtooth';
   osc3.frequency.value = freq * 2;
-  osc3.detune.setValueAtTime(40, t);
-  osc3.detune.exponentialRampToValueAtTime(0.01, t + 0.025);
-  const octGain = gain * 0.10;
   env3.gain.setValueAtTime(0, t);
-  env3.gain.linearRampToValueAtTime(octGain, t + 0.004);
-  env3.gain.setTargetAtTime(0, t + dur * 0.4, 0.02);
+  env3.gain.linearRampToValueAtTime(G * 0.08, t + 0.005);
+  env3.gain.setTargetAtTime(0, t + dur * 0.3, 0.025);
   osc3.connect(env3);
-  env3.connect(filter);
+  env3.connect(bp);
   osc3.start(t);
-  osc3.stop(t + dur + 0.15);
+  osc3.stop(t + dur + 0.2);
 }
 
 function scheduleHorns(time, barIndex) {
