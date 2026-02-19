@@ -176,7 +176,7 @@ export function buildInsightPayload(alignment, wcpm, accuracy, diagnostics, refe
 // ─── Pass 1: LLM call ──────────────────────────────────────────────────────
 
 const SYSTEM_PROMPT = `You are summarizing a 60-second oral reading fluency assessment for a teacher.
-Write 3-4 sentences describing how the student read. Be specific — cite actual words.
+Write 2-3 concise sentences describing how the student read. Be specific — cite actual words. Do NOT repeat the student's name after the first mention.
 
 Data notes:
 - "Forgiven" words are NOT errors. A secondary ASR engine confirmed the student read them correctly, even though the primary engine misheard. Do NOT mention forgiven words as mistakes.
