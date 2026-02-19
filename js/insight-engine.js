@@ -144,10 +144,11 @@ const SYSTEM_PROMPT = `You are summarizing a 60-second oral reading fluency asse
 Write 3-4 sentences describing how the student read. Be specific — cite actual words.
 
 Rules:
+- ONLY describe patterns that appear in the data below. Do NOT invent or infer anything not explicitly listed.
+- If the data does not mention the student stopped reading early, do NOT claim they did.
 - Every claim must reference specific words from the data.
 - Quantify: "4 of 6 multisyllabic words" not "many words."
 - Note strengths (self-corrections, steady pace on some words) alongside difficulties.
-- If the student stopped reading before the end, mention it.
 - Do NOT write generic advice like "the student needs more practice."
 - Do NOT restate numbers the teacher can already see (WCPM, accuracy %).
 - Focus on PATTERNS: what types of words caused trouble? What did the student do when stuck?
@@ -225,6 +226,7 @@ function buildUserPrompt(payload, studentName, passageSnippet, readabilityInfo) 
  */
 export async function generateInsight(payload, apiKey, { studentName, passageSnippet, readabilityInfo } = {}) {
   const userPrompt = buildUserPrompt(payload, studentName, passageSnippet, readabilityInfo);
+  console.log('[insight] Prompt sent to Gemini:\n' + userPrompt);
 
   const response = await fetch(`${GEMINI_URL}?key=${apiKey}`, {
     method: 'POST',
