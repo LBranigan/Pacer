@@ -234,8 +234,7 @@ export async function generateInsight(payload, apiKey, { studentName, passageSni
       contents: [{ parts: [{ text: userPrompt }] }],
       generationConfig: {
         temperature: 0.3,
-        maxOutputTokens: 1024,
-        thinkingConfig: { thinkingBudget: 0 }
+        maxOutputTokens: 2048
       }
     })
   });

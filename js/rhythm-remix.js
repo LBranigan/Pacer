@@ -7,8 +7,8 @@
  * @module rhythm-remix
  */
 
-import { LofiEngine } from './lofi-engine.js?v=20260219z9';
-import { MountainRange } from './mountain-range.js?v=20260219z9';
+import { LofiEngine } from './lofi-engine.js?v=20260218a1';
+import { MountainRange } from './mountain-range.js?v=20260218a1';
 import { getAudioBlob } from './audio-store.js';
 import { getAssessment, getStudents } from './storage.js';
 import { getPunctuationPositions } from './diagnostics.js';
@@ -241,11 +241,11 @@ function wcpmToBpm(wcpm) {
 
 /**
  * Update overlay level based on correct-word streak.
- * Level 0: <2 correct  — base beat
- * Level 1: 2+ correct  — overlay 0.35 (extra drums + chord doublings)
- * Level 2: 4+ correct  — overlay 0.65 (thicker chords + shaker)
- * Level 3: 6+ correct  — overlay 1.0  (full: extended chords + dense drums)
- * Level 4: 8+ correct  — overlay 1.5  (double density: maximum musical depth)
+ * Level 0: <3 correct   — base beat
+ * Level 1: 3+ correct   — overlay 0.35 (extra drums + chord doublings)
+ * Level 2: 6+ correct   — overlay 0.65 (thicker chords + shaker)
+ * Level 3: 9+ correct   — overlay 1.0  (full: extended chords + dense drums)
+ * Level 4: 12+ correct  — overlay 1.5  (double density: maximum musical depth)
  */
 function updateOverlayStreak(w) {
   if (!lofi) return;
@@ -256,10 +256,10 @@ function updateOverlayStreak(w) {
     correctStreak = 0;
   }
   let level = 0;
-  if (correctStreak >= 8) level = 1.5;
-  else if (correctStreak >= 6) level = 1.0;
-  else if (correctStreak >= 4) level = 0.65;
-  else if (correctStreak >= 2) level = 0.35;
+  if (correctStreak >= 12) level = 1.5;
+  else if (correctStreak >= 9) level = 1.0;
+  else if (correctStreak >= 6) level = 0.65;
+  else if (correctStreak >= 3) level = 0.35;
   lofi.setOverlayLevel(level);
 }
 
@@ -626,7 +626,7 @@ function setupAudio() {
   lofi.setAdaptiveHarmony(adaptiveHarmonyEnabled);
 
   // Set style from localStorage preference
-  const validStyles = ['lofi', 'jazzhop', 'ambient', 'bossa', 'chiptune', 'classical', 'trap', 'zelda', 'bossa-piano', 'jazzhop-piano', 'chiptune-piano', 'zelda-piano'];
+  const validStyles = ['lofi', 'jazzhop', 'ambient', 'bossa', 'lounge', 'chiptune', 'classical', 'trap', 'zelda', 'bossa-piano', 'lounge-piano', 'jazzhop-piano', 'chiptune-piano'];
   const savedStyle = localStorage.getItem('orf_remix_style');
   if (savedStyle && validStyles.includes(savedStyle)) {
     lofi.setStyle(savedStyle);
@@ -1155,10 +1155,10 @@ function animationLoop(timestamp) {
       const bpm = Math.round(lofi.currentBpm);
       const ol = lofi.overlayLevel;
       let bonus = '';
-      if (ol >= 1.5) bonus = '+8';
-      else if (ol >= 1.0) bonus = '+6';
-      else if (ol >= 0.65) bonus = '+4';
-      else if (ol >= 0.35) bonus = '+2';
+      if (ol >= 1.5) bonus = '+12';
+      else if (ol >= 1.0) bonus = '+9';
+      else if (ol >= 0.65) bonus = '+6';
+      else if (ol >= 0.35) bonus = '+3';
       bpmEl.innerHTML = bpm + ' bpm' + (bonus
         ? ' <span style="color:#a8d8a8;margin-left:0.3em;">' + bonus + '</span>'
         : '');
