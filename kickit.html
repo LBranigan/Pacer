@@ -91,13 +91,13 @@ const CHORDS = [
 const SWING = 0.6;
 const BASS_LEAN = 0.020;
 
-// Perfect Day — transposed from Ab major (F→Bbm→Bbm→Eb) up 2 semitones
-// to fit G minor: G→Cm→Cm→F. Guitar voicings, 4-bar super-cycle.
+// Perfect Day verse: F→Bbm, transposed down 3 semitones to G minor: D→Gm.
+// 4-bar cycle alternating like the original verse piano part.
 const BED_CHORDS = [
-  [43, 47, 55, 59, 62, 67],  // G major  (G2 B2 G3 B3 D4 G4)
-  [48, 55, 60, 63, 67],      // Cm       (C3 G3 C4 Eb4 G4)
-  [48, 55, 60, 63, 67],      // Cm       (C3 G3 C4 Eb4 G4)
-  [41, 48, 53, 57, 60, 65],  // F major  (F2 C3 F3 A3 C4 F4)
+  [38, 45, 50, 54, 57, 62],  // D major  (D2 A2 D3 F#3 A3 D4)
+  [43, 50, 55, 58, 62, 67],  // Gm       (G2 D3 G3 Bb3 D4 G4)
+  [38, 45, 50, 54, 57, 62],  // D major  (D2 A2 D3 F#3 A3 D4)
+  [43, 50, 55, 58, 62, 67],  // Gm       (G2 D3 G3 Bb3 D4 G4)
 ];
 
 // ── Audio state ──
