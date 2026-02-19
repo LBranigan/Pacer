@@ -11,7 +11,7 @@ import { extractTextFromImage, extractTextHybrid } from './ocr-api.js';
 import { trimPassageToAttempted } from './passage-trimmer.js';
 import { splitHyphenParts } from './text-normalize.js';
 import { analyzePassageText, levenshteinRatio } from './nl-api.js';
-import { getStudents, addStudent, deleteStudent, saveAssessment, getAssessments } from './storage.js';
+import { getStudents, addStudent, deleteStudent, saveAssessment, getAssessments, updateStudentGrade } from './storage.js';
 import { saveAudioBlob } from './audio-store.js';
 import { initDashboard } from './dashboard.js';
 import { initDebugLog, addStage, addWarning, addError, finalizeDebugLog, saveDebugLog } from './debug-logger.js';
@@ -240,6 +240,14 @@ function showFutureYouButton(studentId, assessmentId) {
 
 function refreshStudentUI() {
   renderStudentSelector(getStudents(), appState.selectedStudentId);
+  // Sync grade dropdown with selected student's grade
+  const gradeSelect = document.getElementById('newStudentGrade');
+  if (gradeSelect && appState.selectedStudentId) {
+    const student = getStudents().find(s => s.id === appState.selectedStudentId);
+    gradeSelect.value = student?.grade ? String(student.grade) : '';
+  } else if (gradeSelect) {
+    gradeSelect.value = '';
+  }
   if (appState.selectedStudentId) {
     renderHistory(getAssessments(appState.selectedStudentId));
   } else {
@@ -3191,7 +3199,23 @@ document.getElementById('transcript').addEventListener('input', () => {
 document.getElementById('studentSelect').addEventListener('change', (e) => {
   const value = e.target.value;
   appState.selectedStudentId = value ? value : null;
+  // Show selected student's grade in the grade dropdown
+  const gradeSelect = document.getElementById('newStudentGrade');
+  if (appState.selectedStudentId) {
+    const student = getStudents().find(s => s.id === appState.selectedStudentId);
+    gradeSelect.value = student?.grade ? String(student.grade) : '';
+  } else {
+    gradeSelect.value = '';
+  }
   refreshStudentUI();
+});
+
+// Update grade for selected student when dropdown changes
+document.getElementById('newStudentGrade').addEventListener('change', (e) => {
+  if (appState.selectedStudentId) {
+    const gradeVal = e.target.value ? parseInt(e.target.value, 10) : null;
+    updateStudentGrade(appState.selectedStudentId, gradeVal);
+  }
 });
 
 document.getElementById('addStudentBtn').addEventListener('click', () => {
