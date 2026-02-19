@@ -54,6 +54,7 @@ export function buildInsightPayload(alignment, wcpm, accuracy, diagnostics, refe
         selfCorrected: !!(entry._isSelfCorrection || entry._selfCorrected),
         tier: speed?.tier || null,
         paceRatio: speed?.ratio || null,
+        normalizedMs: speed?.normalizedMs || null,
         forgiven: !!entry.forgiven,
         forgivenReason: null,
         notAttempted: !!entry._notAttempted
@@ -95,11 +96,36 @@ export function buildInsightPayload(alignment, wcpm, accuracy, diagnostics, refe
   const readingPattern = prosody?.phrasing?.readingPattern?.classification || null;
   const atPacePercent = wordSpeed?.atPacePercent ?? null;
 
-  // Stalled words
+  // Absolute pace threshold from grade-level norms.
+  // WCPM includes inter-word pauses; word-level ms/ph is articulation-only.
+  // Using 1.5× the WCPM-derived ms/ph as the "truly slow" bar is generous —
+  // only flags words that are genuinely slow in absolute terms.
+  const AVG_PHONEMES_PER_WORD = 4.0;
+  const absoluteThresholdMsPerPh = (benchmark?.norms?.p50)
+    ? (60000 / (benchmark.norms.p50 * AVG_PHONEMES_PER_WORD)) * 1.5
+    : null;
+
+  // Stalled words — dual-gated when benchmark is available:
+  // must be both relatively slow (tier=stalled) AND absolutely slow
   const stalledWords = [];
   if (wordSpeed && !wordSpeed.insufficient) {
     for (const w of wordSpeed.words) {
-      if (w.tier === 'stalled') stalledWords.push(w.refWord);
+      if (w.tier === 'stalled') {
+        if (!absoluteThresholdMsPerPh || w.normalizedMs >= absoluteThresholdMsPerPh) {
+          stalledWords.push(w.refWord);
+        }
+      }
+    }
+  }
+
+  // Downgrade tier labels on interesting words that are only relatively slow
+  // (not absolutely slow) — prevents AI from calling them "stalled"
+  if (absoluteThresholdMsPerPh) {
+    for (const w of interestingWords) {
+      if ((w.tier === 'stalled' || w.tier === 'struggling') &&
+          w.normalizedMs != null && w.normalizedMs < absoluteThresholdMsPerPh) {
+        w.tier = 'relatively slower';
+      }
     }
   }
 
@@ -156,7 +182,7 @@ Data notes:
 - "Forgiven" words are NOT errors. A secondary ASR engine confirmed the student read them correctly, even though the primary engine misheard. Do NOT mention forgiven words as mistakes.
 - "Self-corrected" words are a STRENGTH — the student caught and fixed their own error.
 - Only words in the "Errors" table are actual mistakes. Words in "Forgiven" table were read correctly.
-- "Stalled" and "struggling" pace tiers are RELATIVE to the student's own median pace — they do NOT mean the student read slowly in absolute terms. A student can be "on track" for their grade level while still having relative stalls on specific hard words. Always check the grade-level benchmark line (if provided) before characterizing overall pace.
+- Pace tiers labeled "stalled" or "struggling" mean the word was slow in BOTH relative AND absolute terms — it's safe to describe these as genuine stalls. Tiers labeled "relatively slower" only mean the word was slower than the student's own median but still within normal absolute pace — do NOT call these "stalled" or imply difficulty; at most note the student "took a bit more time."
 
 Rules:
 - ONLY describe patterns that appear in the data below. Do NOT invent or infer anything not explicitly listed.
@@ -165,7 +191,7 @@ Rules:
 - Quantify: "4 of 6 multisyllabic words" not "many words."
 - Note strengths (self-corrections, steady pace) alongside difficulties. Do NOT list examples of words read correctly — only cite words that were problematic.
 - Do NOT restate numbers the teacher can already see (WCPM, accuracy %).
-- If a grade-level benchmark is provided and the student is ON TRACK or above, do NOT describe their reading as "slow" or "choppy" overall. Relative stalls on individual words are fine to mention, but frame the overall pace positively.
+- If a grade-level benchmark is provided and the student is ON TRACK or above, do NOT describe their overall reading as "slow." Frame the overall pace positively.
 - Focus on PATTERNS: what types of words caused trouble? What did the student do when stuck?
 - End with an "Overall" sentence that contextualizes performance. If a grade-level benchmark is provided, reference it (e.g. "Overall, reading on track for grade 4 with strong single-syllable decoding — multisyllabic words are the growth edge." or "Overall, reading below grade-level pace with frequent stalls on longer words — building decoding strategies for multisyllabic words would help."). If no benchmark, use accuracy and error count to frame it (e.g. "Overall, 95% accuracy with only minor stumbles shows solid fluency — unfamiliar proper nouns are the one gap."). Be specific, not generic.
 - Write like a reading specialist's brief note — direct, warm, specific.
