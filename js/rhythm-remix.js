@@ -250,11 +250,10 @@ const STYLE_BPM_RANGE = {
   trap:       { min: 65, max: 90 },    // Half-time trap, heavy
   mega:       { min: 76, max: 118 },   // NES Mega Man, energetic but tamed for reading
   lofi2:      { min: 55, max: 84 },    // Lo-Fi V2, warm and chill
+  stickerbrush: { min: 70, max: 100 }, // DKC2 dreamy, original 94 BPM
 };
 
 function wcpmToBpm(wcpm, style) {
-  // Stickerbrush: BPM = WPM directly
-  if (style === 'stickerbrush') return Math.round(Math.max(40, Math.min(200, wcpm)));
   // Hero's Adventure: BPM = WPM directly
   if (style === 'zelda') return Math.round(Math.max(50, Math.min(200, wcpm)));
   const range = STYLE_BPM_RANGE[style] || STYLE_BPM_RANGE.lofi;
