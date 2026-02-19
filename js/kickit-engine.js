@@ -31,14 +31,13 @@ const HORN_PATTERN = [
 const SWING = 0.6;
 const BASS_LEAN = 0.020;
 
-// Perfect Day harmonic bed — major chords from G minor, moving in 4ths.
-// 4-bar super-cycle over the 2-bar Gm7/Cm7 loop. Close voice-led voicings
-// in low-mid register. No resolution, no drama — frozen confidence.
+// Perfect Day — transposed from Ab major (F→Bbm→Bbm→Eb) up 2 semitones
+// to fit G minor: G→Cm→Cm→F. Guitar voicings, 4-bar super-cycle.
 const BED_CHORDS = [
-  [60, 64, 67],  // C major  (C4 E4 G4)    — IV
-  [60, 65, 69],  // F major  (C4 F4 A4)    — VII
-  [62, 65, 70],  // Bb major (D4 F4 Bb4)   — III
-  [63, 67, 70],  // Eb major (Eb4 G4 Bb4)  — VI
+  [43, 47, 55, 59, 62, 67],  // G major  (G2 B2 G3 B3 D4 G4)
+  [48, 55, 60, 63, 67],      // Cm       (C3 G3 C4 Eb4 G4)
+  [48, 55, 60, 63, 67],      // Cm       (C3 G3 C4 Eb4 G4)
+  [41, 48, 53, 57, 60, 65],  // F major  (F2 C3 F3 A3 C4 F4)
 ];
 
 export class KickItEngine {
@@ -172,10 +171,10 @@ export class KickItEngine {
     this._crackleGain.connect(this._master);
     this._crackleSource = null;
 
-    // ── Harmonic bed filter — warm but present ──
+    // ── Harmonic bed filter — warm guitar, tame the top ──
     this._bedFilter = ctx.createBiquadFilter();
     this._bedFilter.type = 'lowpass';
-    this._bedFilter.frequency.value = 1200;
+    this._bedFilter.frequency.value = 2800;
     this._bedFilter.Q.value = 0.5;
     this._bedFilter.connect(this._gains.texture);
     // Send bed through reverb for space
@@ -530,43 +529,53 @@ export class KickItEngine {
 
   // ── TEXTURE — Harmonic bed (Perfect Day feel), reverse swell, vinyl pops ────
 
+  // Karplus-Strong plucked string buffer (offline computation)
+  _createPluckBuffer(freq, duration) {
+    const ctx = this._ctx;
+    const sr = ctx.sampleRate;
+    const len = Math.ceil(sr * duration);
+    const buf = ctx.createBuffer(1, len, sr);
+    const data = buf.getChannelData(0);
+    const period = Math.round(sr / freq);
+
+    // Seed with noise — the "pluck" excitation
+    for (let i = 0; i < period; i++) {
+      data[i] = Math.random() * 2 - 1;
+    }
+
+    // KS averaging loop
+    const decay = 0.996;
+    for (let i = period; i < len; i++) {
+      data[i] = decay * 0.5 * (data[i - period] + data[i - period + 1]);
+    }
+    return buf;
+  }
+
+  // Perfect Day guitar bed — strummed Karplus-Strong chords (G→Cm→Cm→F)
   _scheduleHarmonicBed(time, barIndex) {
     const ctx = this._ctx;
-    const bedChord = BED_CHORDS[barIndex % 4];
+    const chord = BED_CHORDS[barIndex % 4];
     const beat = 60 / this._bpm;
     const bar = beat * 4;
-    const dur = bar + 0.5; // overlap into next bar — chords ring
+    const strumGap = 0.015; // 15ms between strings — down-strum feel
 
-    const G = 0.09; // per-voice gain
+    for (let i = 0; i < chord.length; i++) {
+      const freq = mtof(chord[i]);
+      const t = time + i * strumGap;
+      const dur = bar + 0.4 - (i * strumGap); // ring until next bar
 
-    for (const midi of bedChord) {
-      const freq = mtof(midi);
+      const buf = this._createPluckBuffer(freq, dur + 1);
+      const src = ctx.createBufferSource();
+      src.buffer = buf;
 
-      // Additive: fundamental (detuned pair) + octave harmonic (detuned pair)
-      const partials = [
-        [-3, 1, 1.0],   // fundamental, slight detune left
-        [+3, 1, 1.0],   // fundamental, slight detune right
-        [-1, 2, 0.35],  // octave harmonic, detune left
-        [+1, 2, 0.35],  // octave harmonic, detune right
-      ];
+      const env = ctx.createGain();
+      env.gain.setValueAtTime(0.11, t);
+      env.gain.setTargetAtTime(0, t + dur - 0.3, 0.25);
 
-      for (const [det, mult, gMult] of partials) {
-        const osc = ctx.createOscillator();
-        osc.type = 'sine';
-        osc.frequency.value = freq * mult;
-        osc.detune.value = det + (Math.random() - 0.5) * 2;
-
-        const env = ctx.createGain();
-        env.gain.setValueAtTime(0, time);
-        env.gain.linearRampToValueAtTime(G * gMult, time + 0.2);
-        env.gain.setTargetAtTime(G * gMult * 0.8, time + 0.5, 0.8);
-        env.gain.setTargetAtTime(0, time + dur - 0.3, 0.3);
-
-        osc.connect(env);
-        env.connect(this._bedFilter);
-        osc.start(time);
-        osc.stop(time + dur + 2);
-      }
+      src.connect(env);
+      env.connect(this._bedFilter);
+      src.start(t);
+      src.stop(t + dur + 1);
     }
   }
 
