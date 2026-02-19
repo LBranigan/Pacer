@@ -312,9 +312,14 @@ body::before {
   opacity: 0.35;
 }
 
-/* Self-corrected: sage green (same as correct) */
+/* Self-corrected: rainbow gradient text that shifts, then settles */
 .word-span.done-self-corrected {
-  color: var(--rm-correct);
+  background: linear-gradient(90deg, #ff4444, #ff8800, #ffcc00, #44cc44, #4488ff, #8844ff, #ff4444);
+  background-size: 200% 200%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: rainbowShift 2s linear infinite;
   opacity: 1;
 }
 

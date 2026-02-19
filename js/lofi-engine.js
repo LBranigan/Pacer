@@ -123,6 +123,19 @@ const CHORD_SETS = {
       { name: 'Am7',   notes: [NOTE.A2, NOTE.C3, NOTE.E3, NOTE.G3], root: NOTE.A1,
         scale: [NOTE.A3, NOTE.B3, NOTE.C4, NOTE.D4, NOTE.E4, NOTE.G4] },
     ]
+  },
+  lounge: {
+    // Coffee Shop Bossa: warm I-vi-IV-V in F major — nylon guitar, upright bass, brushes
+    chords: [
+      { name: 'Fmaj7',  notes: [NOTE.F3, NOTE.A3, NOTE.C4, NOTE.E4], root: NOTE.F2,
+        scale: [NOTE.F4, NOTE.G4, NOTE.A4, NOTE.Bb4, NOTE.C5, NOTE.D5] },
+      { name: 'Dm9',    notes: [NOTE.D3, NOTE.F3, NOTE.A3, NOTE.C4, NOTE.E4], root: NOTE.D2,
+        scale: [NOTE.D4, NOTE.E4, NOTE.F4, NOTE.G4, NOTE.A4, NOTE.C5] },
+      { name: 'Bbmaj7', notes: [NOTE.Bb3, NOTE.D4, NOTE.F4, NOTE.A4], root: NOTE.Bb2,
+        scale: [NOTE.Bb4, NOTE.C5, NOTE.D5, NOTE.F4, NOTE.G4, NOTE.A4] },
+      { name: 'C9',     notes: [NOTE.C3, NOTE.E3, NOTE.G3, NOTE.Bb3, NOTE.D4], root: NOTE.C2,
+        scale: [NOTE.C4, NOTE.D4, NOTE.E4, NOTE.G4, NOTE.A4, NOTE.Bb4] },
+    ]
   }
 };
 
@@ -206,6 +219,13 @@ const DRUM_PATTERNS = {
     hatC:    [1,0,1,0, 1,0,1,0, 1,0,1,0, 1,0,1,0, 1,0,1,0, 1,0,1,0, 1,0,1,0, 1,0,1,0],
     hatO:    new Array(32).fill(0),
   },
+  lounge: {
+    // Coffee shop brushes: soft kick on 1/3, brush snare on 2/4, steady 8th shaker
+    kick:    [1,0,0,0, 0,0,0,0, 1,0,0,0, 0,0,0,0, 1,0,0,0, 0,0,0,0, 1,0,0,0, 0,0,0,0],
+    snare:   [0,0,0,0, 1,0,0,0, 0,0,0,0, 1,0,0,0, 0,0,0,0, 1,0,0,0, 0,0,0,0, 1,0,0,0],
+    hatC:    [1,0,1,0, 1,0,1,0, 1,0,1,0, 1,0,1,0, 1,0,1,0, 1,0,1,0, 1,0,1,0, 1,0,1,0],
+    hatO:    new Array(32).fill(0),
+  },
   chiptune: {
     // 8-bit: punchy, simple, upbeat
     kick:    [1,0,0,0, 1,0,0,0, 1,0,0,0, 1,0,0,0, 1,0,0,0, 1,0,0,0, 1,0,0,0, 1,0,0,0],
@@ -247,6 +267,7 @@ const SAMPLE_MANIFEST = {
   lofi:     { kick: 'kick.wav', snare: 'snare.wav', hatClosed: 'hat-closed.wav', hatOpen: 'hat-open.wav' },
   jazzhop:  { kick: 'kick.wav', snare: 'snare.wav', hatClosed: 'hat-closed.wav', hatOpen: 'hat-open.wav' },
   bossa:    { kick: 'kick.wav', snare: 'rim.wav',   hatClosed: 'hat-closed.wav', hatOpen: 'hat-open.wav' },
+  lounge:   { kick: 'kick.wav', snare: 'rim.wav',   hatClosed: 'hat-closed.wav', hatOpen: 'hat-open.wav' },
   chiptune: { kick: 'kick.wav', snare: 'snare.wav', hatClosed: 'hat-closed.wav', hatOpen: 'hat-open.wav' },
   zelda:    { kick: 'kick.wav', snare: 'snare.wav', hatClosed: 'hat-closed.wav', hatOpen: 'hat-open.wav' },
 };
@@ -261,6 +282,7 @@ const BASS_PATTERNS = {
   zelda:     [1,0,0,0, 0,0,1,0, 1,0,0,0, 0,0,1,0, 1,0,0,0, 0,0,1,0, 1,0,0,0, 0,0,1,0],
   classical: [1,0,0,0, 1,0,0,0, 1,0,0,0, 1,0,0,0, 1,0,0,0, 1,0,0,0, 1,0,0,0, 1,0,0,0],
   trap:      [1,0,0,0, 0,0,0,1, 1,0,0,0, 0,0,0,1, 1,0,0,0, 0,0,0,1, 1,0,0,0, 0,0,0,1],
+  lounge:    [1,0,0,0, 0,0,1,0, 0,0,0,0, 0,0,1,0, 1,0,0,0, 0,0,1,0, 0,0,0,0, 0,0,1,0],
 };
 
 
@@ -304,6 +326,20 @@ const OVERLAY_DRUM_PATTERNS = {
     // L4 (+20): maximum density — every available gap
     kickL4:  [0,0,1,1, 0,0,0,1, 1,0,1,1, 0,0,0,1, 0,0,1,1, 0,0,0,1, 0,0,1,1, 0,0,0,1],
     snareL4: [0,0,0,1, 0,1,0,1, 1,0,1,1, 0,1,0,1, 0,1,0,1, 0,0,1,1, 0,0,0,1, 0,1,0,1],
+  },
+  lounge: {
+    // L1: gentle ghost hits between main beats
+    kick:  [0,0,0,0, 0,0,0,0, 0,0,0,0, 0,1,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0, 0,1,0,0],
+    snare: [0,0,1,0, 0,0,0,0, 0,0,1,0, 0,0,0,0, 0,0,1,0, 0,0,0,0, 0,0,1,0, 0,0,0,0],
+    // L2: more fills
+    kickL2:  [0,0,0,0, 0,1,0,0, 0,0,0,0, 0,1,0,0, 0,0,0,0, 0,1,0,0, 0,0,0,0, 0,1,0,0],
+    snareL2: [0,0,1,0, 0,0,0,1, 0,0,1,0, 0,0,0,1, 0,0,1,0, 0,0,0,1, 0,0,1,0, 0,0,0,1],
+    // L3: syncopated fills
+    kickL3:  [0,0,0,1, 0,1,0,0, 0,0,0,1, 0,1,0,0, 0,0,0,1, 0,1,0,0, 0,0,0,1, 0,1,0,0],
+    snareL3: [0,0,1,0, 0,0,1,1, 0,0,1,0, 0,0,1,1, 0,0,1,0, 0,0,1,1, 0,0,1,0, 0,0,1,1],
+    // L4: dense but still laid-back
+    kickL4:  [0,0,0,1, 0,1,0,1, 0,0,0,1, 0,1,0,1, 0,0,0,1, 0,1,0,1, 0,0,0,1, 0,1,0,1],
+    snareL4: [0,0,1,1, 0,0,1,1, 0,0,1,1, 0,0,1,1, 0,0,1,1, 0,0,1,1, 0,0,1,1, 0,0,1,1],
   },
   chiptune: {
     kick:  [0,0,0,1, 0,1,0,0, 0,0,0,1, 0,1,0,0, 0,0,0,1, 0,1,0,0, 0,0,0,1, 0,1,0,0],
@@ -394,6 +430,13 @@ const STYLE_CONFIG = {
     reverbWet: 0.45,        warmthCutoff: 9000,
     tapeWobbleDepth: 0.0,   crusherBits: 16,
     kickStyle: 'none',      snareStyle: 'none',      hatStyle: 'none',
+  },
+  lounge: {
+    padType: 'triangle',    padFilterCutoff: 2500,   padAttack: 0.15, padRelease: 0.6,
+    bassType: 'sine',       bassFilterCutoff: 400,
+    reverbWet: 0.30,        warmthCutoff: 7000,
+    tapeWobbleDepth: 0.001, crusherBits: 14,
+    kickStyle: 'soft',      snareStyle: 'brush',     hatStyle: 'soft',
   },
   trap: {
     padType: 'sawtooth',    padFilterCutoff: 900,    padAttack: 0.02, padRelease: 0.15,
@@ -1223,8 +1266,8 @@ export class LofiEngine {
     }
     const chord = chordSet.chords[chordIndex];
 
-    // Swing offset for jazzhop/bossa hi-hats: delay every odd beat by 30%
-    const swingOffset = ((style === 'jazzhop' || style === 'bossa') && beat % 2 === 1)
+    // Swing offset for jazzhop/bossa/lounge hi-hats: delay every odd beat by 30%
+    const swingOffset = ((style === 'jazzhop' || style === 'bossa' || style === 'lounge') && beat % 2 === 1)
       ? secondsPerBeat * 0.3 : 0;
 
     // ── Drums (whisper = no drums at all) ──
@@ -1276,8 +1319,8 @@ export class LofiEngine {
         this._playHiHat(time + secondsPerBeat * 0.5, 0.04, 0.08);
       }
 
-      // Bossa shaker: continuous "ch-ch-ch-ch" on every beat
-      if (style === 'bossa' && density !== 'whisper') {
+      // Bossa/lounge shaker: continuous "ch-ch-ch-ch" on every beat
+      if ((style === 'bossa' || style === 'lounge') && density !== 'whisper') {
         this._playShaker(time);
       }
     }
@@ -1346,11 +1389,11 @@ export class LofiEngine {
       const bassVol = style === 'classical' ? 0.55
         : style === 'ambient' ? 0.3
         : style === 'trap' ? 1.0
-        : style === 'bossa' ? 0.55
+        : (style === 'bossa' || style === 'lounge') ? 0.55
         : (density === 'full' ? 0.9 : 0.65);
       const bassDur = (style === 'ambient' || style === 'classical') ? secondsPerBeat * 3.5
         : style === 'trap' ? secondsPerBeat * 2.5
-        : style === 'bossa' ? secondsPerBeat * 1.2
+        : (style === 'bossa' || style === 'lounge') ? secondsPerBeat * 1.2
         : secondsPerBeat * 0.8;
       if (style === 'chiptune' || style === 'zelda') {
         this._playChipBass(time, chord.root, secondsPerBeat * 0.6);
@@ -1724,7 +1767,7 @@ export class LofiEngine {
     // ── Style-specific musical overlays ──
     if (style === 'lofi') {
       this._scheduleLofiOverlay(time, beat, chord, secondsPerBeat, level);
-    } else if (style === 'bossa') {
+    } else if (style === 'bossa' || style === 'lounge') {
       this._scheduleBossaOverlay(time, beat, chord, secondsPerBeat, level);
     } else if (style === 'classical') {
       this._scheduleClassicalOverlay(time, beat, chord, secondsPerBeat, level);
@@ -1750,11 +1793,12 @@ export class LofiEngine {
    * All routed through existing bassBus/padFilter — same sound, more notes.
    */
   _scheduleBossaOverlay(time, beat, chord, secondsPerBeat, level) {
-    const mainBass = BASS_PATTERNS.bossa;
+    const style = this._style;
+    const mainBass = BASS_PATTERNS[style] || BASS_PATTERNS.bossa;
     const root = chord.root;
     const notes = chord.notes;
     const scale = chord.scale || [];
-    const cfg = STYLE_CONFIG.bossa;
+    const cfg = STYLE_CONFIG[style] || STYLE_CONFIG.bossa;
 
     // ── Level 1+: Walking bass fills (through bassBus) ──
     // Main bass: positions 0,14,20,30. Fill gaps with chord passing tones.
@@ -1773,7 +1817,7 @@ export class LofiEngine {
 
     // ── Level 1+: Extra rim clicks (through drumBus — same tap sound) ──
     // Main snare (clave): 0,2,6,20,24. Add more taps in gaps.
-    const mainSnare = DRUM_PATTERNS.bossa.snare;
+    const mainSnare = (DRUM_PATTERNS[style] || DRUM_PATTERNS.bossa).snare;
     const rim1 = [0,0,0,0, 1,0,0,0, 0,0,1,0, 0,0,1,0, 0,0,1,0, 0,0,0,0, 0,0,1,0, 0,0,1,0];
     const rim2 = [0,0,0,1, 1,0,0,1, 0,0,1,0, 0,1,1,0, 0,0,1,0, 0,0,0,1, 0,0,1,0, 0,1,1,0];
     const rim3 = [0,0,0,1, 1,0,0,1, 1,0,1,0, 0,1,1,1, 0,1,1,0, 0,0,0,1, 0,0,1,1, 0,1,1,0];
@@ -2901,7 +2945,7 @@ export class LofiEngine {
         osc.stop(t + 0.2);
         this._trackSource(osc, t + 0.25);
       }
-    } else if (style === 'bossa') {
+    } else if (style === 'bossa' || style === 'lounge') {
       // 3 rapid rim clicks (flam)
       for (let i = 0; i < 3; i++) {
         const t = time + i * 0.07;
