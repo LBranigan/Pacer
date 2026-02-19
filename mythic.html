@@ -1,0 +1,724 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mythic</title>
+<style>
+  body {
+    background: #0a0a14;
+    color: #d4c9a8;
+    font-family: 'Georgia', serif;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 2rem;
+    gap: 1rem;
+    min-height: 100vh;
+  }
+  h1 {
+    margin: 0;
+    font-size: 2rem;
+    letter-spacing: 0.15em;
+    color: #c8a96e;
+    text-transform: uppercase;
+  }
+  .subtitle {
+    color: #665e4a;
+    font-size: 0.85rem;
+    font-style: italic;
+    margin-top: -0.5rem;
+  }
+  .controls {
+    display: flex;
+    gap: 1rem;
+    align-items: center;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+  button {
+    font-size: 1.1rem;
+    padding: 0.5rem 1.4rem;
+    border-radius: 8px;
+    border: 1px solid #3a3528;
+    cursor: pointer;
+    background: #1a1a28;
+    color: #998e70;
+    font-family: inherit;
+    transition: background 0.2s, color 0.2s, border-color 0.2s;
+  }
+  button:hover { background: #252535; }
+  .part-btn.active {
+    background: #2a2518;
+    color: #c8a96e;
+    border-color: #c8a96e;
+  }
+  .play-btn { background: #1e3a1e; color: #6a9e6a; border-color: #3a5e3a; }
+  .play-btn:hover { background: #2a4a2a; }
+  .stop-btn { background: #3a1e1e; color: #9e6a6a; border-color: #5e3a3a; }
+  .stop-btn:hover { background: #4a2a2a; }
+  .status {
+    color: #554e3a;
+    font-size: 0.9rem;
+    min-height: 1.4em;
+  }
+  label { white-space: nowrap; color: #665e4a; }
+  input[type="range"] { accent-color: #c8a96e; }
+  .bar-info {
+    font-size: 0.85rem;
+    color: #554e3a;
+    font-family: monospace;
+    min-height: 1.4em;
+  }
+</style>
+</head>
+<body>
+<h1>Mythic</h1>
+<p class="subtitle">Layered Instrumental &mdash; All Layers</p>
+<p class="subtitle">A minor &bull; ~90 BPM &bull; Am9 &rarr; Fmaj7 &rarr; Dm7 &rarr; Em7 &bull; 2 bars per chord</p>
+
+<div class="controls">
+  <button class="play-btn" id="playBtn">Play</button>
+  <button class="stop-btn" id="stopBtn">Stop</button>
+</div>
+
+<div class="controls">
+  <button class="part-btn active" data-part="pads">Pads</button>
+  <button class="part-btn active" data-part="lead">Lead</button>
+  <button class="part-btn active" data-part="drums">Drums</button>
+  <button class="part-btn active" data-part="bass">Bass</button>
+  <button class="part-btn active" data-part="texture">Texture</button>
+</div>
+
+<div class="controls">
+  <label>Volume: <input type="range" id="volSlider" min="0" max="100" value="70"></label>
+  <label>BPM: <span id="bpmLabel">90</span> <input type="range" id="bpmSlider" min="70" max="110" value="90"></label>
+</div>
+
+<div class="bar-info" id="barInfo">Ready</div>
+<div class="status" id="status"></div>
+
+<script>
+// ── Mythic: Harmonic Atmosphere + Melodic Motif ──
+// Key: A minor (natural) | Tempo: ~90 BPM
+// Inspired by Aruarian Dance — calm, introspective, melancholic
+// Harmonic rhythm: 1 chord every 2 bars (8-bar cycle)
+// Melody: 16-bar super-cycle, sparse shakuhachi-like phrases
+
+function mtof(m) { return 440 * Math.pow(2, (m - 69) / 12); }
+
+// ── Chord Progression (8-bar cycle, 2 bars per chord) ──
+// Am9 → Fmaj7 → Dm7 → Em7
+const CHORDS = [
+  {
+    name: 'Am9',
+    bass: 45,  // A2
+    passing: 43,  // G2 — step down approaching F
+    pad: [57, 60, 67, 71],  // A3, C4, G4, B4
+  },
+  {
+    name: 'Fmaj7',
+    bass: 41,  // F2
+    passing: 40,  // E2 — step down approaching D
+    pad: [53, 57, 60, 64],  // F3, A3, C4, E4
+  },
+  {
+    name: 'Dm7',
+    bass: 38,  // D2
+    passing: null,  // no passing tone — stillness
+    pad: [50, 53, 57, 60],  // D3, F3, A3, C4
+  },
+  {
+    name: 'Em7',
+    bass: 40,  // E2
+    passing: 43,  // G2 — step up approaching A (ascending into root)
+    pad: [52, 55, 59, 62],  // E3, G3, B3, D4
+  },
+];
+
+// ── Melody (16-bar / 64-beat super-cycle) ──
+// Sparse, descending, lots of silence. Shakuhachi-like phrasing.
+// Bars 0-1: Am9, 2-3: Fmaj7, 4-5: Dm7, 6-7: Em7, then repeat 8-15
+const MELODY = [
+  // ── First half (bars 0-7) ──
+  // Phrase A: descending E-D-C over Am9→Fmaj7
+  { note: 76, beat: 2,    dur: 2.5 },   // E5 — gentle entry
+  { note: 74, beat: 5,    dur: 1.5 },   // D5 — step down
+  { note: 72, beat: 8,    dur: 4.0 },   // C5 — held into Fmaj7
+  { note: 69, beat: 13,   dur: 2.5 },   // A4 — settle on Fmaj7
+  // silence through Dm7 (beats 16-23) — breathing room
+  // Phrase B: gentle rise over Em7
+  { note: 71, beat: 25,   dur: 2.0 },   // B4
+  { note: 72, beat: 28,   dur: 2.5 },   // C5 — unresolved
+
+  // ── Second half (bars 8-15) ──
+  // Phrase C: E-F-E neighbor tone (minor 2nd tension)
+  { note: 76, beat: 34,   dur: 1.5 },   // E5 — reprise
+  { note: 77, beat: 36.5, dur: 1.0 },   // F5 — neighbor (m2 above)
+  { note: 76, beat: 38,   dur: 3.0 },   // E5 — settle back
+  // Phrase D: descent over Fmaj7
+  { note: 74, beat: 42,   dur: 2.0 },   // D5
+  { note: 72, beat: 45,   dur: 2.5 },   // C5
+  // silence through Dm7 (beats 48-55)
+  // Phrase E: long final hold over Em7
+  { note: 71, beat: 57,   dur: 5.0 },   // B4 — yearning, unresolved
+];
+
+// ── Audio state ──
+let ctx = null;
+let master = null;
+let convolver = null;
+let reverbSend = null;
+let gains = { pads: null, lead: null, drums: null, bass: null, texture: null };
+let enabled = { pads: true, lead: true, drums: true, bass: true, texture: true };
+let playing = false;
+let schedTimer = null;
+let nextBarTime = 0;
+let currentBar = 0;
+let bpm = 90;
+let breathBuf = null;  // short noise buffer for lead breath attacks
+let snareBuf = null;   // noise buffer for snare
+let hatBuf = null;     // noise buffer for hi-hat
+
+function initAudio() {
+  if (ctx) return;
+  ctx = new (window.AudioContext || window.webkitAudioContext)();
+
+  // Master gain
+  master = ctx.createGain();
+  master.gain.value = 0.5;
+  master.connect(ctx.destination);
+
+  // Reverb (3-second tail for spaciousness)
+  const irLen = ctx.sampleRate * 3;
+  const irBuf = ctx.createBuffer(2, irLen, ctx.sampleRate);
+  for (let ch = 0; ch < 2; ch++) {
+    const d = irBuf.getChannelData(ch);
+    for (let i = 0; i < irLen; i++) {
+      d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / irLen, 2.5);
+    }
+  }
+  convolver = ctx.createConvolver();
+  convolver.buffer = irBuf;
+  reverbSend = ctx.createGain();
+  reverbSend.gain.value = 0.55;
+  convolver.connect(reverbSend);
+  reverbSend.connect(ctx.destination);
+
+  // Breath noise buffer for lead (0.06s of white noise)
+  const breathLen = Math.ceil(ctx.sampleRate * 0.06);
+  breathBuf = ctx.createBuffer(1, breathLen, ctx.sampleRate);
+  const bd = breathBuf.getChannelData(0);
+  for (let i = 0; i < breathLen; i++) bd[i] = Math.random() * 2 - 1;
+
+  // Snare noise buffer (0.12s — longer for muted thud)
+  const snareLen = Math.ceil(ctx.sampleRate * 0.12);
+  snareBuf = ctx.createBuffer(1, snareLen, ctx.sampleRate);
+  const sd = snareBuf.getChannelData(0);
+  for (let i = 0; i < snareLen; i++) sd[i] = Math.random() * 2 - 1;
+
+  // Hi-hat noise buffer (0.035s)
+  const hatLen = Math.ceil(ctx.sampleRate * 0.035);
+  hatBuf = ctx.createBuffer(1, hatLen, ctx.sampleRate);
+  const hd = hatBuf.getChannelData(0);
+  for (let i = 0; i < hatLen; i++) hd[i] = Math.random() * 2 - 1;
+
+  // Layer gains
+  gains.pads = ctx.createGain();
+  gains.pads.gain.value = 1;
+  gains.pads.connect(master);
+  gains.pads.connect(convolver);
+
+  gains.lead = ctx.createGain();
+  gains.lead.gain.value = 1;
+  gains.lead.connect(master);
+  gains.lead.connect(convolver);
+
+  // Drums: connect to master only (dry, grounded — minimal reverb)
+  gains.drums = ctx.createGain();
+  gains.drums.gain.value = 1;
+  gains.drums.connect(master);
+
+  // Bass: mostly dry, just a touch of reverb for warmth
+  gains.bass = ctx.createGain();
+  gains.bass.gain.value = 1;
+  gains.bass.connect(master);
+  const bassReverbSend = ctx.createGain();
+  bassReverbSend.gain.value = 0.15;
+  gains.bass.connect(bassReverbSend);
+  bassReverbSend.connect(convolver);
+
+  // Texture: kalimba with heavy reverb wash
+  gains.texture = ctx.createGain();
+  gains.texture.gain.value = 1;
+  gains.texture.connect(master);
+  const textureReverb = ctx.createGain();
+  textureReverb.gain.value = 0.5;
+  gains.texture.connect(textureReverb);
+  textureReverb.connect(convolver);
+}
+
+// ═══════════════════════════════════════════════════
+// LAYER 0 — Harmonic Atmosphere (Pads)
+// 3 detuned triangle oscillators per chord note
+// LPF at 600 Hz with slow breathing LFO
+// Long attack (0.8s), overlap into next chord
+// ═══════════════════════════════════════════════════
+function schedulePads(time, chord) {
+  if (!enabled.pads) return;
+  const bar = 60 / bpm * 4;
+  const dur = bar * 2 + 0.4;  // 2-bar duration + overlap
+
+  chord.pad.forEach(note => {
+    const freq = mtof(note);
+
+    // LPF per note with breathing LFO
+    const filter = ctx.createBiquadFilter();
+    filter.type = 'lowpass';
+    filter.frequency.value = 600;
+    filter.Q.value = 0.6;
+    filter.connect(gains.pads);
+
+    // Slow breathing LFO on filter cutoff
+    const lfo = ctx.createOscillator();
+    const lfoGain = ctx.createGain();
+    lfo.type = 'sine';
+    lfo.frequency.value = 0.12;  // very slow breathing
+    lfoGain.gain.value = 130;    // ±130 Hz modulation (~470-730 Hz)
+    lfo.connect(lfoGain);
+    lfoGain.connect(filter.frequency);
+    lfo.start(time);
+    lfo.stop(time + dur + 2);
+
+    // 3 detuned triangle oscillators
+    [-10, 0, 10].forEach(detune => {
+      const osc = ctx.createOscillator();
+      const env = ctx.createGain();
+
+      osc.type = 'triangle';
+      osc.frequency.value = freq;
+      osc.detune.value = detune;
+
+      // Long attack, gentle sustain, long release (pulled back ~40%)
+      env.gain.setValueAtTime(0, time);
+      env.gain.linearRampToValueAtTime(0.024, time + 1.0);   // 1.0s fade in
+      env.gain.setTargetAtTime(0.017, time + 1.5, 0.8);      // gentle sustain
+      env.gain.setTargetAtTime(0, time + dur - 0.5, 0.4);    // long fade out
+
+      osc.connect(env);
+      env.connect(filter);
+      osc.start(time);
+      osc.stop(time + dur + 2.5);
+    });
+  });
+}
+
+// ═══════════════════════════════════════════════════
+// LAYER 1 — Primary Melodic Motif (Shakuhachi-like lead)
+// Triangle + sine oscillators with delayed vibrato
+// Breath noise at onset for shakuhachi "chiff"
+// Pitch scoop (start flat, glide up) for human feel
+// ═══════════════════════════════════════════════════
+function playLeadNote(time, freq, dur) {
+  // ── Pitch scoop: start 25-35 cents flat, glide up ──
+  const scoopCents = -(25 + Math.random() * 10);
+
+  // ── Triangle oscillator (warm, hollow — shakuhachi body) ──
+  const tri = ctx.createOscillator();
+  const triEnv = ctx.createGain();
+  const triFilter = ctx.createBiquadFilter();
+  tri.type = 'triangle';
+  tri.frequency.value = freq;
+  tri.detune.setValueAtTime(scoopCents, time);
+  tri.detune.exponentialRampToValueAtTime(0.01, time + 0.15);  // glide to pitch
+
+  triFilter.type = 'lowpass';
+  triFilter.frequency.value = 1100;
+  triFilter.Q.value = 0.5;
+
+  triEnv.gain.setValueAtTime(0, time);
+  triEnv.gain.linearRampToValueAtTime(0.035, time + 0.12);   // attack (pulled back ~35%)
+  triEnv.gain.setTargetAtTime(0.024, time + 0.3, 0.25);      // sustain
+  triEnv.gain.setTargetAtTime(0, time + dur - 0.05, 0.18);   // release
+
+  tri.connect(triFilter);
+  triFilter.connect(triEnv);
+  triEnv.connect(gains.lead);
+  tri.start(time);
+  tri.stop(time + dur + 1.0);
+
+  // ── Sine oscillator (fundamental body) ──
+  const sin = ctx.createOscillator();
+  const sinEnv = ctx.createGain();
+  sin.type = 'sine';
+  sin.frequency.value = freq;
+  sin.detune.setValueAtTime(scoopCents, time);
+  sin.detune.exponentialRampToValueAtTime(0.01, time + 0.15);
+
+  sinEnv.gain.setValueAtTime(0, time);
+  sinEnv.gain.linearRampToValueAtTime(0.019, time + 0.12);   // pulled back ~35%
+  sinEnv.gain.setTargetAtTime(0.013, time + 0.3, 0.25);
+  sinEnv.gain.setTargetAtTime(0, time + dur - 0.05, 0.18);
+
+  sin.connect(sinEnv);
+  sinEnv.connect(gains.lead);
+  sin.start(time);
+  sin.stop(time + dur + 1.0);
+
+  // ── Vibrato LFO (delayed onset, ~4.5 Hz) ──
+  const vib = ctx.createOscillator();
+  const vibGain = ctx.createGain();
+  vib.type = 'sine';
+  vib.frequency.value = 4.5 + Math.random() * 0.6;  // slight randomness
+  vibGain.gain.setValueAtTime(0, time);
+  vibGain.gain.setTargetAtTime(14, time + 0.25, 0.3);  // ramp to ~14 cents
+  vib.connect(vibGain);
+  vibGain.connect(tri.detune);
+  vibGain.connect(sin.detune);
+  vib.start(time);
+  vib.stop(time + dur + 1.0);
+
+  // ── Breath noise at onset (shakuhachi "chiff") ──
+  const noise = ctx.createBufferSource();
+  const noiseBP = ctx.createBiquadFilter();
+  const noiseEnv = ctx.createGain();
+  noise.buffer = breathBuf;
+  noiseBP.type = 'bandpass';
+  noiseBP.frequency.value = 2200;
+  noiseBP.Q.value = 1.0;
+  noiseEnv.gain.setValueAtTime(0.018, time);
+  noiseEnv.gain.exponentialRampToValueAtTime(0.001, time + 0.06);
+  noise.connect(noiseBP);
+  noiseBP.connect(noiseEnv);
+  noiseEnv.connect(gains.lead);
+  noise.start(time);
+}
+
+function scheduleLead(time, barInCycle) {
+  if (!enabled.lead) return;
+  const beatDur = 60 / bpm;
+  const barStartBeat = barInCycle * 4;
+  const barEndBeat = barStartBeat + 4;
+
+  MELODY.forEach(m => {
+    if (m.beat >= barStartBeat && m.beat < barEndBeat) {
+      const offset = (m.beat - barStartBeat) * beatDur;
+      playLeadNote(time + offset, mtof(m.note), m.dur * beatDur);
+    }
+  });
+}
+
+// ═══════════════════════════════════════════════════
+// LAYER 3 — Bass / Low Motion
+// Sine root + sub-octave through LPF. Long sustained notes.
+// Occasional passing tone at end of 2-bar block (stepwise
+// approach to next chord root). "Gravity."
+// ═══════════════════════════════════════════════════
+function playBassNote(time, midiNote, dur, gain) {
+  const freq = mtof(midiNote);
+
+  // LPF for warmth
+  const filter = ctx.createBiquadFilter();
+  filter.type = 'lowpass';
+  filter.frequency.value = 280;
+  filter.Q.value = 0.5;
+  filter.connect(gains.bass);
+
+  // Root sine
+  const root = ctx.createOscillator();
+  const rootEnv = ctx.createGain();
+  root.type = 'sine';
+  root.frequency.value = freq;
+  rootEnv.gain.setValueAtTime(0, time);
+  rootEnv.gain.linearRampToValueAtTime(gain, time + 0.06);
+  rootEnv.gain.setTargetAtTime(gain * 0.78, time + 0.15, 0.3);
+  rootEnv.gain.setTargetAtTime(0, time + dur - 0.08, 0.18);
+  root.connect(rootEnv);
+  rootEnv.connect(filter);
+  root.start(time);
+  root.stop(time + dur + 1.0);
+
+  // Sub-octave sine (one octave below — deep weight)
+  const sub = ctx.createOscillator();
+  const subEnv = ctx.createGain();
+  sub.type = 'sine';
+  sub.frequency.value = freq / 2;
+  const subGain = gain * 0.4;
+  subEnv.gain.setValueAtTime(0, time);
+  subEnv.gain.linearRampToValueAtTime(subGain, time + 0.08);
+  subEnv.gain.setTargetAtTime(subGain * 0.75, time + 0.2, 0.3);
+  subEnv.gain.setTargetAtTime(0, time + dur - 0.08, 0.2);
+  sub.connect(subEnv);
+  subEnv.connect(filter);
+  sub.start(time);
+  sub.stop(time + dur + 1.0);
+}
+
+function scheduleBass(time, chord) {
+  if (!enabled.bass) return;
+  const beat = 60 / bpm;
+  const twoBarDur = beat * 8;
+
+  if (chord.passing) {
+    // Root sustains for ~7 beats, then passing tone for ~1 beat
+    playBassNote(time, chord.bass, beat * 6.8, 0.22);
+    playBassNote(time + beat * 7.0, chord.passing, beat * 0.9, 0.16);
+  } else {
+    // No passing tone — root sustains the full 2 bars
+    playBassNote(time, chord.bass, twoBarDur + 0.1, 0.22);
+  }
+}
+
+// ═══════════════════════════════════════════════════
+// LAYER 2 — Drum & Groove (Hip-hop, subdued, loose)
+// Kick: sine sweep, deep & soft. Beats 1 and 3.
+// Snare: bandpass noise, muted thud. Beats 2 and 4, ~40ms late.
+// Hi-hat: highpass noise, very quiet. Eighth notes, random velocity.
+// All hits have random timing jitter for "loose" human feel.
+// ═══════════════════════════════════════════════════
+function playKick(time) {
+  // Random jitter: ±20ms
+  const t = time + (Math.random() - 0.5) * 0.04;
+
+  // Main body: sine sweep 95→40 Hz
+  const osc = ctx.createOscillator();
+  const env = ctx.createGain();
+  osc.type = 'sine';
+  osc.frequency.setValueAtTime(95, t);
+  osc.frequency.exponentialRampToValueAtTime(40, t + 0.14);
+  env.gain.setValueAtTime(0.38, t);
+  env.gain.exponentialRampToValueAtTime(0.001, t + 0.35);
+  osc.connect(env);
+  env.connect(gains.drums);
+  osc.start(t);
+  osc.stop(t + 0.38);
+
+  // Click transient: short high-freq pop for attack definition
+  const click = ctx.createOscillator();
+  const clickEnv = ctx.createGain();
+  click.type = 'sine';
+  click.frequency.setValueAtTime(300, t);
+  click.frequency.exponentialRampToValueAtTime(60, t + 0.03);
+  clickEnv.gain.setValueAtTime(0.15, t);
+  clickEnv.gain.exponentialRampToValueAtTime(0.001, t + 0.04);
+  click.connect(clickEnv);
+  clickEnv.connect(gains.drums);
+  click.start(t);
+  click.stop(t + 0.06);
+}
+
+function playSnare(time) {
+  // Late feel: +35-45ms behind the beat + ±12ms jitter
+  const late = 0.035 + Math.random() * 0.01;
+  const jitter = (Math.random() - 0.5) * 0.024;
+  const t = time + late + jitter;
+
+  // Noise layer: bandpass filtered white noise (the "crack")
+  const src = ctx.createBufferSource();
+  const bp = ctx.createBiquadFilter();
+  const env = ctx.createGain();
+  src.buffer = snareBuf;
+  bp.type = 'bandpass';
+  bp.frequency.value = 900;
+  bp.Q.value = 0.6;
+  env.gain.setValueAtTime(0.12, t);
+  env.gain.exponentialRampToValueAtTime(0.001, t + 0.14);
+  src.connect(bp);
+  bp.connect(env);
+  env.connect(gains.drums);
+  src.start(t);
+
+  // Body layer: sine thud at ~180 Hz for weight
+  const body = ctx.createOscillator();
+  const bodyEnv = ctx.createGain();
+  body.type = 'sine';
+  body.frequency.setValueAtTime(180, t);
+  body.frequency.exponentialRampToValueAtTime(120, t + 0.06);
+  bodyEnv.gain.setValueAtTime(0.14, t);
+  bodyEnv.gain.exponentialRampToValueAtTime(0.001, t + 0.10);
+  body.connect(bodyEnv);
+  bodyEnv.connect(gains.drums);
+  body.start(t);
+  body.stop(t + 0.12);
+}
+
+function playHat(time, accent) {
+  // Random jitter: ±15ms
+  const t = time + (Math.random() - 0.5) * 0.03;
+  // Random velocity variation (0.6x to 1.0x of base gain)
+  const velScale = 0.6 + Math.random() * 0.4;
+  const baseGain = accent ? 0.038 : 0.020;
+
+  const src = ctx.createBufferSource();
+  const hp = ctx.createBiquadFilter();
+  const env = ctx.createGain();
+  src.buffer = hatBuf;
+  hp.type = 'highpass';
+  hp.frequency.value = 7500;
+  env.gain.setValueAtTime(baseGain * velScale, t);
+  env.gain.exponentialRampToValueAtTime(0.0001, t + 0.028);
+  src.connect(hp);
+  hp.connect(env);
+  env.connect(gains.drums);
+  src.start(t);
+}
+
+function scheduleDrums(time) {
+  if (!enabled.drums) return;
+  const beat = 60 / bpm;
+
+  // Kick: beats 1 and 3
+  playKick(time);
+  playKick(time + beat * 2);
+
+  // Snare: beats 2 and 4 (late offset built into playSnare)
+  playSnare(time + beat);
+  playSnare(time + beat * 3);
+
+  // Hi-hats: quarter notes only (not eighths — keep space for calm)
+  for (let i = 0; i < 4; i++) {
+    playHat(time + beat * i, true);
+  }
+}
+
+// ═══════════════════════════════════════════════════
+// LAYER 4 — Secondary Texture & Ornamentation
+// Sparse kalimba plucks: 1 per bar on select bars only.
+// Darker tone (reduced harmonic), LPF to remove brightness.
+// ═══════════════════════════════════════════════════
+function playKalimba(time, midiNote) {
+  const freq = mtof(midiNote);
+  const t = time + (Math.random() - 0.5) * 0.01;
+
+  // LPF to darken — remove any brightness
+  const filter = ctx.createBiquadFilter();
+  filter.type = 'lowpass';
+  filter.frequency.value = 1800;
+  filter.Q.value = 0.4;
+  filter.connect(gains.texture);
+
+  // Fundamental sine
+  const osc1 = ctx.createOscillator();
+  const env1 = ctx.createGain();
+  osc1.type = 'sine';
+  osc1.frequency.value = freq;
+  env1.gain.setValueAtTime(0.055, t);
+  env1.gain.exponentialRampToValueAtTime(0.001, t + 0.35);
+  osc1.connect(env1);
+  env1.connect(filter);
+  osc1.start(t);
+  osc1.stop(t + 0.4);
+
+  // 3rd harmonic — quiet, just enough for pluck definition
+  const osc2 = ctx.createOscillator();
+  const env2 = ctx.createGain();
+  osc2.type = 'sine';
+  osc2.frequency.value = freq * 3;
+  env2.gain.setValueAtTime(0.008, t);
+  env2.gain.exponentialRampToValueAtTime(0.001, t + 0.1);
+  osc2.connect(env2);
+  env2.connect(filter);
+  osc2.start(t);
+  osc2.stop(t + 0.15);
+}
+
+function scheduleTexture(time, chord, barInHarmony) {
+  if (!enabled.texture) return;
+  const beat = 60 / bpm;
+
+  // Sparse: 1 pluck on B-bars only (bars 1, 3, 5, 7 of 8-bar cycle)
+  // Each on a different beat position to avoid predictability
+  if (barInHarmony === 1) playKalimba(time + beat * 2.5, chord.pad[2]);  // G4
+  if (barInHarmony === 3) playKalimba(time + beat * 1.0, chord.pad[1]);  // A3
+  if (barInHarmony === 5) playKalimba(time + beat * 3.0, chord.pad[0]);  // D3
+  if (barInHarmony === 7) playKalimba(time + beat * 2.0, chord.pad[2]);  // B3
+}
+
+// ═══════════════════════════════════════════════════
+// Scheduling
+// ═══════════════════════════════════════════════════
+function scheduleBar(time, barIndex) {
+  const barInCycle = barIndex % 16;        // 16-bar melody super-cycle
+  const barInHarmony = barIndex % 8;       // 8-bar harmonic cycle
+  const chordIdx = Math.floor(barInHarmony / 2);  // 2 bars per chord
+  const chord = CHORDS[chordIdx];
+
+  const info = document.getElementById('barInfo');
+  if (info) info.textContent = `Bar ${barIndex + 1} — ${chord.name} (${barInHarmony % 2 === 0 ? 'A' : 'B'})`;
+
+  // Pads + Bass: schedule on first bar of each 2-bar chord block
+  if (barInHarmony % 2 === 0) {
+    schedulePads(time, chord);
+    scheduleBass(time, chord);
+  }
+
+  // Lead: check for melody notes in this bar
+  scheduleLead(time, barInCycle);
+
+  // Drums: every bar
+  scheduleDrums(time);
+
+  // Texture: sparse kalimba on select bars
+  scheduleTexture(time, chord, barInHarmony);
+}
+
+function scheduler() {
+  const bar = 60 / bpm * 4;
+  while (nextBarTime < ctx.currentTime + 0.3) {
+    scheduleBar(nextBarTime, currentBar);
+    nextBarTime += bar;
+    currentBar++;
+  }
+  if (playing) {
+    schedTimer = setTimeout(scheduler, 50);
+  }
+}
+
+function startPlayback() {
+  initAudio();
+  if (ctx.state === 'suspended') ctx.resume();
+  if (playing) stopPlayback();
+  playing = true;
+  currentBar = 0;
+  nextBarTime = ctx.currentTime + 0.05;
+  scheduler();
+  document.getElementById('status').textContent = 'Playing...';
+}
+
+function stopPlayback() {
+  playing = false;
+  if (schedTimer) clearTimeout(schedTimer);
+  schedTimer = null;
+  document.getElementById('status').textContent = '';
+  document.getElementById('barInfo').textContent = 'Stopped';
+}
+
+// ═══════════════════════════════════════════════════
+// UI
+// ═══════════════════════════════════════════════════
+document.getElementById('playBtn').addEventListener('click', startPlayback);
+document.getElementById('stopBtn').addEventListener('click', stopPlayback);
+
+document.getElementById('volSlider').addEventListener('input', (e) => {
+  if (master) master.gain.value = e.target.value / 100 * 0.5;
+});
+
+document.getElementById('bpmSlider').addEventListener('input', (e) => {
+  bpm = Number(e.target.value);
+  document.getElementById('bpmLabel').textContent = bpm;
+});
+
+document.querySelectorAll('.part-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const part = btn.dataset.part;
+    enabled[part] = !enabled[part];
+    btn.classList.toggle('active', enabled[part]);
+    if (gains[part]) {
+      gains[part].gain.setTargetAtTime(enabled[part] ? 1 : 0, ctx.currentTime, 0.06);
+    }
+    if (enabled[part] && !playing) startPlayback();
+  });
+});
+</script>
+</body>
+</html>

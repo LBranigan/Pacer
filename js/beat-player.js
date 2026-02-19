@@ -19,6 +19,7 @@ import { Lofi4Engine } from './lofi4-engine.js';
 import { BrambleEngine } from './bramble-engine.js';
 import { Bossa2Engine } from './bossa2-engine.js';
 import { StickerbrushEngine } from './stickerbrush-engine.js';
+import { MythicEngine } from './mythic-engine.js';
 
 const STANDALONE = {
   megaman: MegaManEngine,
@@ -27,6 +28,7 @@ const STANDALONE = {
   bramble: BrambleEngine,
   bossa2: Bossa2Engine,
   stickerbrush: StickerbrushEngine,
+  mythic: MythicEngine,
 };
 
 export class BeatPlayer {
@@ -47,7 +49,7 @@ export class BeatPlayer {
       'lofi', 'lofi4', 'bramble', 'jazzhop', 'ambient', 'bossa', 'lounge',
       'chiptune', 'classical', 'trap', 'zelda',
       'megaman', 'zelda2',
-      'bossa2', 'stickerbrush',
+      'bossa2', 'stickerbrush', 'mythic',
       'bossa-piano', 'jazzhop-piano', 'chiptune-piano', 'lounge-piano',
     ];
   }

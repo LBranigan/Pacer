@@ -11,6 +11,7 @@ import { LofiEngine } from './lofi-engine.js?v=20260219a5';
 import { LofiV2Engine } from './lofi-v2-engine.js?v=20260219a5';
 import { StickerbrushEngine } from './stickerbrush-engine.js?v=20260219a5';
 import { StickerbrushV2Engine } from './stickerbrush-v2-engine.js?v=20260219a5';
+import { MythicEngine } from './mythic-engine.js?v=20260219a6';
 import { MountainRange } from './mountain-range.js?v=20260219a5';
 import { getAudioBlob } from './audio-store.js';
 import { getAssessment, getStudents } from './storage.js';
@@ -69,6 +70,7 @@ let lofiEngine = null;    // cached LofiEngine instance (handles classical)
 let lofi2Engine = null;   // cached LofiV2Engine instance
 let stickerbrushEngine = null; // cached StickerbrushEngine
 let stickerbrush2Engine = null; // cached StickerbrushV2Engine
+let mythicEngine = null; // cached MythicEngine
 let audioEl = null;
 let audioUrl = null;     // ObjectURL — revoked on cleanup
 let sourceNode = null;
@@ -243,6 +245,7 @@ const STYLE_BPM_RANGE = {
   lofi2:         { min: 55, max: 84 },    // Lo-Fi V2, warm and chill
   stickerbrush:  { min: 70, max: 100 },   // DKC2 dreamy, original 94 BPM
   stickerbrush2: { min: 70, max: 100 },   // DKC2 A-minor arr., original 95 BPM
+  mythic:        { min: 70, max: 105 },   // Aruarian-style, original 90 BPM
 };
 
 function wcpmToBpm(wcpm, style) {
@@ -279,6 +282,12 @@ function switchEngine(style) {
       stickerbrush2Engine.output.connect(beatGain);
     }
     lofi = stickerbrush2Engine;
+  } else if (style === 'mythic') {
+    if (!mythicEngine) {
+      mythicEngine = new MythicEngine(audioCtx);
+      mythicEngine.output.connect(beatGain);
+    }
+    lofi = mythicEngine;
   } else {
     lofiEngine.setStyle(style);
     lofi = lofiEngine;
@@ -661,7 +670,7 @@ function setupAudio() {
   lofiEngine.setAdaptiveHarmony(adaptiveHarmonyEnabled);
 
   // Set style from localStorage preference
-  const validStyles = ['stickerbrush', 'stickerbrush2', 'lofi2', 'classical'];
+  const validStyles = ['stickerbrush', 'stickerbrush2', 'lofi2', 'classical', 'mythic'];
   const savedStyle = localStorage.getItem('orf_remix_style');
   const initialStyle = (savedStyle && validStyles.includes(savedStyle)) ? savedStyle : 'stickerbrush';
 
