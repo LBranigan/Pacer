@@ -1567,45 +1567,6 @@ export function computeWordSpeedTiers(wordOutliers, alignment, xvalRawWords, tra
     allWordsMap.set(w.hypIndex, w);
   }
 
-  // Build sorted xval timeline for ordered consumption
-  const xvalTimeline = (xvalRawWords || []).map(w => ({
-    word: (w.word || '').toLowerCase(),
-    startS: parseTime(w.startTime),
-    endS: parseTime(w.endTime)
-  })).filter(w => w.startS < w.endS).sort((a, b) => a.startS - b.startS);
-
-  const hasXval = xvalTimeline.length > 0 && transcriptWords;
-
-  // Pointer into xval timeline — advances forward only (ordered consumption)
-  let xvalPtr = 0;
-
-  /**
-   * Find the next xval word that covers a given Reverb time position.
-   * Advances xvalPtr past consumed/earlier words. Each xval word consumed once.
-   * @param {number} reverbStartS - Reverb word's start time in seconds
-   * @returns {{ startS, endS, word }|null}
-   */
-  function consumeXvalAt(reverbStartS) {
-    if (!hasXval || reverbStartS <= 0) return null;
-
-    // Advance past xval words that end before our target (with tolerance)
-    while (xvalPtr < xvalTimeline.length && xvalTimeline[xvalPtr].endS < reverbStartS - 0.5) {
-      xvalPtr++;
-    }
-
-    if (xvalPtr >= xvalTimeline.length) return null;
-
-    const candidate = xvalTimeline[xvalPtr];
-
-    // Check if Reverb start falls within xval interval (with 500ms tolerance)
-    if (reverbStartS >= candidate.startS - 0.5 && reverbStartS <= candidate.endS + 0.5) {
-      xvalPtr++; // consume
-      return candidate;
-    }
-
-    return null;
-  }
-
   const words = [];
   const xvalDurations = []; // for computing own baseline from xval timestamps
   let hypIndex = 0;
@@ -1613,32 +1574,10 @@ export function computeWordSpeedTiers(wordOutliers, alignment, xvalRawWords, tra
   let lastSpokenHypIdx = -1; // track shared-hypIndex entries
 
   for (const entry of alignment) {
-    // Insertions: not in reference passage — advance hypIndex and xval pointer
+    // Insertions: not in reference passage — advance hypIndex only
     if (entry.type === 'insertion') {
       const partsCount = entry.compound && entry.parts ? entry.parts.length : 1;
       const effectiveHyp = (entry.hypIndex != null && entry.hypIndex >= 0) ? entry.hypIndex : hypIndex;
-      // Advance xval pointer past this insertion so it doesn't misalign.
-      // Skip disfluencies — Parakeet doesn't produce fillers like "uh"/"um",
-      // so consuming an xval word for them steals the next real word's timestamp.
-      if (hasXval) {
-        const isDisfluency = transcriptWords[effectiveHyp] && transcriptWords[effectiveHyp].isDisfluency;
-        if (!isDisfluency) {
-          let prevEnd = -Infinity;
-          for (let p = 0; p < partsCount; p++) {
-            if (transcriptWords[effectiveHyp + p]) {
-              const savedPtr = xvalPtr;
-              const m = consumeXvalAt(parseTime(transcriptWords[effectiveHyp + p].startTime));
-              if (m) {
-                if (p > 0 && m.startS > prevEnd + 0.2) {
-                  xvalPtr = savedPtr;
-                  break;
-                }
-                prevEnd = m.endS;
-              }
-            }
-          }
-        }
-      }
       hypIndex = effectiveHyp + partsCount;
       continue;
     }
@@ -1705,38 +1644,35 @@ export function computeWordSpeedTiers(wordOutliers, alignment, xvalRawWords, tra
     }
     lastSpokenHypIdx = effectiveHyp;
 
-    // Try xval timestamp first
+    // Read timestamps directly from transcriptWords.
+    // Cross-validation already overwrites these with Parakeet timestamps (the correct source).
+    // For non-cross-validated words, Reverb timestamps are used as fallback.
     let durationMs = null;
     let tsSource = null;
-    if (hasXval && transcriptWords[effectiveHyp]) {
-      const reverbS = parseTime(transcriptWords[effectiveHyp].startTime);
-      const xvalMatch = consumeXvalAt(reverbS);
-      if (xvalMatch) {
-        // For compounds, consume additional xval parts and span first-start to last-end.
-        // Guard: only consume extras whose start is within 200ms of the first match's end,
-        // preventing overshoot when Parakeet merged the compound into fewer words.
-        if (partsCount > 1) {
-          let lastEnd = xvalMatch.endS;
-          for (let extra = 1; extra < partsCount; extra++) {
-            if (transcriptWords[effectiveHyp + extra]) {
-              const savedPtr = xvalPtr;
-              const extraMatch = consumeXvalAt(parseTime(transcriptWords[effectiveHyp + extra].startTime));
-              if (extraMatch && extraMatch.startS <= lastEnd + 0.2) {
-                lastEnd = extraMatch.endS;
-              } else if (extraMatch) {
-                xvalPtr = savedPtr;
-              }
-            }
+    const tw = transcriptWords ? transcriptWords[effectiveHyp] : null;
+    if (tw) {
+      const startS = parseTime(tw.startTime);
+      let endS;
+      if (partsCount > 1) {
+        // Compounds: span from first part's start to last part's end
+        endS = parseTime(tw.endTime);
+        for (let p = 1; p < partsCount; p++) {
+          const partTw = transcriptWords[effectiveHyp + p];
+          if (partTw) {
+            const partEnd = parseTime(partTw.endTime);
+            if (partEnd > endS) endS = partEnd;
           }
-          durationMs = Math.round((lastEnd - xvalMatch.startS) * 1000);
-        } else {
-          durationMs = Math.round((xvalMatch.endS - xvalMatch.startS) * 1000);
         }
-        tsSource = 'cross-validator';
+      } else {
+        endS = parseTime(tw.endTime);
+      }
+      if (startS > 0 && endS > startS) {
+        durationMs = Math.round((endS - startS) * 1000);
+        tsSource = tw._xvalStartTime ? 'cross-validator' : 'reverb';
       }
     }
 
-    // Fallback to Metric 4 data (NW-matched cross-validator timestamps)
+    // Fallback to Metric 4 data
     const m4Word = allWordsMap.get(effectiveHyp);
     if (durationMs == null && m4Word && m4Word.durationMs != null) {
       durationMs = m4Word.durationMs;
