@@ -27,13 +27,17 @@ const CHORDS = [
 const SWING = 0.6;
 const BASS_LEAN = 0.020;
 
-// Perfect Day verse: F→Bbm, transposed down 3 semitones to G minor: D→Gm.
-// 4-bar cycle alternating like the original verse piano part.
+// Perfect Day verse: F→Bbm→Eb→Ab→Db→Gb→Ebm→F, transposed down 3 semitones to G minor.
+// Full 8-bar cycle matching the original progression.
 const BED_CHORDS = [
   [38, 45, 50, 54, 57, 62],  // D major  (D2 A2 D3 F#3 A3 D4)
   [43, 50, 55, 58, 62, 67],  // Gm       (G2 D3 G3 Bb3 D4 G4)
+  [48, 52, 55, 60, 64],      // C major  (C3 E3 G3 C4 E4)
+  [41, 48, 53, 57, 60, 65],  // F major  (F2 C3 F3 A3 C4 F4)
+  [46, 53, 58, 62, 65],      // Bb major (Bb2 F3 Bb3 D4 F4)
+  [51, 55, 58, 63, 67],      // Eb major (Eb3 G3 Bb3 Eb4 G4)
+  [48, 55, 60, 63, 67],      // Cm       (C3 G3 C4 Eb4 G4)
   [38, 45, 50, 54, 57, 62],  // D major  (D2 A2 D3 F#3 A3 D4)
-  [43, 50, 55, 58, 62, 67],  // Gm       (G2 D3 G3 Bb3 D4 G4)
 ];
 
 export class KickItEngine {
@@ -529,10 +533,10 @@ export class KickItEngine {
     return buf;
   }
 
-  // Perfect Day guitar bed — strummed Karplus-Strong chords (G→Cm→Cm→F)
+  // Perfect Day guitar bed — strummed Karplus-Strong chords (8-bar cycle)
   _scheduleHarmonicBed(time, barIndex) {
     const ctx = this._ctx;
-    const chord = BED_CHORDS[barIndex % 4];
+    const chord = BED_CHORDS[barIndex % 8];
     const beat = 60 / this._bpm;
     const bar = beat * 4;
     const strumGap = 0.015; // 15ms between strings — down-strum feel
