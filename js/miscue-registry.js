@@ -150,11 +150,11 @@ const DIAGNOSTIC_MISCUES = {
     config: {
       conditions: [
         '(a) Forgiven substitution with _nearMissEvidence (failed attempt + override)',
-        '(b) Forgiven substitution with _fullAttempt.length > 1 (multiple fragments → correct)',
-        '(c) Correct/forgiven entry + adjacent insertion exactly matches ref (repetition)',
-        '(d) Correct/forgiven entry + adjacent insertion is isNearMiss() of ref (false start)'
+        '(b) Forgiven substitution with _fullAttempt.length > 1 + preceding _partOfStruggle insertions',
+        '(c) Correct/forgiven entry + preceding insertion exactly matches ref (repetition)',
+        '(d) Correct/forgiven entry + preceding insertion is isNearMiss() of ref (false start)'
       ],
-      filters: 'Fillers excluded (uh, um, ah, er, hm, mm). Both words must be >= 2 chars.'
+      filters: 'Fillers excluded (uh, um, ah, er, hm, mm). Both words must be >= 2 chars. Before-only rule: only insertions BEFORE the entry count — after-fragments (e.g., absorbed "in" after correctly-read "wall") are not self-corrections.'
     },
     example: {
       reference: 'faced / again',
@@ -490,6 +490,7 @@ const FORGIVENESS_RULES = {
       'NL API must identify word as proper noun (isProperViaNL)',
       'Reference text lowercase override: if word appears lowercase elsewhere, NOT proper',
       'Dictionary guard: if Free Dictionary API returns 200, word is common English → NOT forgiven',
+      'ALL-CAPS bypass: words in ALL CAPS (MASH, NASA, FBI) skip guards 2+3 — always forgiven if NL API says proper',
       'Capitalization is cosmetic only — no isProperViaCaps fallback'
     ],
     uiClass: 'word-forgiven',
@@ -512,6 +513,7 @@ const FORGIVENESS_RULES = {
     },
     guards: [
       'Same guards as properNounForgiveness (NL API, dictionary, lowercase)',
+      'ALL-CAPS bypass: words in ALL CAPS (MASH, NASA, FBI) skip lowercase + dictionary guards',
       'Must have _xvalWord (Parakeet) or preceding insertion fragments as evidence',
       'Evidence must meet 0.4 Levenshtein threshold against ref word',
     ],

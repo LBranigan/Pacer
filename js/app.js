@@ -1804,16 +1804,21 @@ async function runAnalysis() {
         if (isProperViaNL && refIsLowercase) {
           isProperViaNL = false;
         }
+        // ALL-CAPS words (MASH, NASA, FBI) get full proper noun leniency —
+        // bypass refLowercaseSet and dictionary guards
+        const alphaOnly = refWordOriginal.replace(/[^a-zA-Z]/g, '');
+        const isAllCaps = alphaOnly.length >= 2 && alphaOnly === alphaOnly.toUpperCase();
+
         // Override if this word appears lowercase elsewhere in the reference text
         // (e.g., "Sheet" in "Google Sheet" when "sheet" also appears in "spreadsheet")
-        if (isProperViaNL && refLowercaseSet.has(entry.ref.toLowerCase())) {
+        if (isProperViaNL && !isAllCaps && refLowercaseSet.has(entry.ref.toLowerCase())) {
           isProperViaNL = false;
         }
 
         // Dictionary guard: common English words (north, straight) should NOT be forgiven
         // even if NL API tags them as proper nouns (e.g., "Straight North" company name)
         let isDictionaryCommon = false;
-        if (isProperViaNL) {
+        if (isProperViaNL && !isAllCaps) {
           isDictionaryCommon = await isCommonDictionaryWord(entry.ref);
           if (isDictionaryCommon) {
             isProperViaNL = false;
@@ -1825,6 +1830,7 @@ async function runAnalysis() {
           hypWord: entry.hyp,
           refIdx,
           isProperViaNL,
+          isAllCaps,
           isDictionaryCommon,
           refIsLowercase,
           nlData: entry.nl
@@ -1892,10 +1898,12 @@ async function runAnalysis() {
 
         let isProperViaNL = entry.nl && entry.nl.isProperNoun;
         if (isProperViaNL && refIsLowercase) isProperViaNL = false;
-        if (isProperViaNL && refLowercaseSet.has(entry.ref.toLowerCase())) isProperViaNL = false;
+        const alphaOnlyOm = refWordOriginal.replace(/[^a-zA-Z]/g, '');
+        const isAllCapsOm = alphaOnlyOm.length >= 2 && alphaOnlyOm === alphaOnlyOm.toUpperCase();
+        if (isProperViaNL && !isAllCapsOm && refLowercaseSet.has(entry.ref.toLowerCase())) isProperViaNL = false;
 
         let isDictionaryCommon = false;
-        if (isProperViaNL) {
+        if (isProperViaNL && !isAllCapsOm) {
           isDictionaryCommon = await isCommonDictionaryWord(entry.ref);
           if (isDictionaryCommon) isProperViaNL = false;
         }
@@ -1906,6 +1914,7 @@ async function runAnalysis() {
           refIdx,
           isOmission: true,
           isProperViaNL,
+          isAllCaps: isAllCapsOm,
           isDictionaryCommon,
           refIsLowercase,
           nlData: entry.nl
@@ -2505,6 +2514,28 @@ async function runAnalysis() {
     }
   }
 
+  // ── Phase 7b cleanup: release fragments absorbed into Pk-forgiven entries ──
+  // absorbMispronunciationFragments ran before Trust Pk, so insertions may have
+  // been absorbed into substitutions that are now forgiven (e.g., "in" absorbed
+  // into "wall" which Trust Pk overrode). Release them as regular insertions.
+  {
+    for (let i = 0; i < alignment.length; i++) {
+      const entry = alignment[i];
+      if (!entry._pkTrustOverride) continue;
+      // Walk backward and forward to find _partOfStruggle insertions absorbed into this entry
+      for (let j = i - 1; j >= 0 && alignment[j].type === 'insertion'; j--) {
+        if (alignment[j]._partOfStruggle) delete alignment[j]._partOfStruggle;
+      }
+      for (let j = i + 1; j < alignment.length && alignment[j].type === 'insertion'; j++) {
+        if (alignment[j]._partOfStruggle) delete alignment[j]._partOfStruggle;
+      }
+      // Clear full-attempt metadata that was built from those fragments
+      if (entry._fullAttempt) delete entry._fullAttempt;
+      if (entry._fullAttemptJoined) delete entry._fullAttemptJoined;
+      if (entry._fullAttemptRatio) delete entry._fullAttemptRatio;
+    }
+  }
+
   // ── Phase 8: Post-struggle Parakeet leniency ────────────────────────
   // After a confirmed error, Reverb's CTC decoder often can't recover
   // for the next word. If Parakeet independently heard it correctly,
@@ -2612,8 +2643,11 @@ async function runAnalysis() {
   // Four conditions:
   // (a) Forgiven substitution with _nearMissEvidence (failed attempt + Pk/trust override)
   // (b) Forgiven substitution with _fullAttempt.length > 1 (multiple fragments → correct)
-  // (c) Correct/forgiven entry + adjacent insertion exactly matches ref (repetition)
-  // (d) Correct/forgiven entry + adjacent insertion is near-miss of ref (false start)
+  // (c) Correct/forgiven entry + preceding insertion exactly matches ref (repetition)
+  // (d) Correct/forgiven entry + preceding insertion is near-miss of ref (false start)
+  // NOTE: Only BEFORE-fragments count. After-fragments (e.g., "in" absorbed after
+  // correctly-read "wall") are not self-corrections — SC requires the failed attempt
+  // to precede the correct production.
   {
     const scNorm = s => (s || '').toLowerCase().replace(/[^a-z]/g, '');
     const scLog = [];
@@ -2640,10 +2674,19 @@ async function runAnalysis() {
         evidence = entry._nearMissEvidence;
         reason = 'near-miss-evidence';
       }
-      // (b) Forgiven sub with multi-part full attempt
+      // (b) Forgiven sub with multi-part full attempt — only if struggle
+      // fragments exist BEFORE the entry (student attempted, then got it right).
+      // After-only fragments (e.g., absorbed "in" after "wall") are not SC.
       else if (entry._fullAttempt && entry._fullAttempt.length > 1) {
-        evidence = entry._fullAttempt;
-        reason = 'full-attempt';
+        let hasBeforeFragments = false;
+        for (let j = i - 1; j >= 0; j--) {
+          if (alignment[j].type !== 'insertion') break;
+          if (alignment[j]._partOfStruggle) { hasBeforeFragments = true; break; }
+        }
+        if (hasBeforeFragments) {
+          evidence = entry._fullAttempt;
+          reason = 'full-attempt';
+        }
       }
       // (c)+(d) Scan adjacent insertions for exact match or near-miss of ref
       else {
@@ -2652,33 +2695,13 @@ async function runAnalysis() {
           if (alignment[j].type !== 'insertion') break;
           before.unshift(alignment[j]);
         }
-        const after = [];
-        for (let j = i + 1; j < alignment.length; j++) {
-          if (alignment[j].type !== 'insertion') break;
-          after.push(alignment[j]);
-        }
 
-        // Build set of nearby ref words (next 5) to detect phrase false starts.
-        // If an insertion matches an upcoming ref word, it's a read-ahead, not a
-        // self-correction attempt of the current word.
-        const nearbyRefWords = new Set();
-        let refsSeen = 0;
-        for (let j = i + 1; j < alignment.length && refsSeen < 5; j++) {
-          if (alignment[j].ref) {
-            nearbyRefWords.add(scNorm(alignment[j].ref));
-            refsSeen++;
-          }
-        }
-
-        for (const ins of [...before, ...after]) {
+        for (const ins of before) {
           const insN = scNorm(ins.hyp);
           if (!insN || insN.length < 2) continue;
           if (['uh', 'um', 'ah', 'er', 'hm', 'mm'].includes(insN)) continue;
           // Skip insertions already classified by another pipeline stage
           if (ins._confirmedInsertion || ins._partOfStruggle || ins.isDisfluency) continue;
-          // Skip insertions that match an upcoming ref word (phrase false start),
-          // but allow through if the insertion matches the CURRENT ref (repetition)
-          if (insN !== refN && nearbyRefWords.has(insN)) continue;
           // (c) Exact repetition
           if (insN === refN) {
             evidence = [ins.hyp];
