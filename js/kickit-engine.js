@@ -177,11 +177,22 @@ export class KickItEngine {
     this._bedFilter.frequency.value = 2800;
     this._bedFilter.Q.value = 0.5;
     this._bedFilter.connect(this._gains.texture);
-    // Send bed through reverb for space
-    const bedReverb = ctx.createGain();
-    bedReverb.gain.value = 0.30;
-    this._bedFilter.connect(bedReverb);
-    bedReverb.connect(this._convolver);
+    // Dedicated long reverb for guitar (2.5s tail — spacious, satisfying decay)
+    const gVerbLen = Math.ceil(ctx.sampleRate * 2.5);
+    const gVerbIR = ctx.createBuffer(2, gVerbLen, ctx.sampleRate);
+    for (let ch = 0; ch < 2; ch++) {
+      const d = gVerbIR.getChannelData(ch);
+      for (let i = 0; i < gVerbLen; i++) {
+        d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / gVerbLen, 2.0);
+      }
+    }
+    const guitarVerb = ctx.createConvolver();
+    guitarVerb.buffer = gVerbIR;
+    const guitarVerbGain = ctx.createGain();
+    guitarVerbGain.gain.value = 0.50;
+    this._bedFilter.connect(guitarVerb);
+    guitarVerb.connect(guitarVerbGain);
+    guitarVerbGain.connect(this._gains.texture);
 
     // ── Dub delay slapback ──
     this._dubDelay = ctx.createDelay(2);

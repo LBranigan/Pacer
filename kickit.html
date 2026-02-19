@@ -127,7 +127,8 @@ let bassGain = null;
 let hornGain = null;
 let textureGain = null;
 let bedFilter = null;
-let bedReverb = null;
+let guitarVerb = null;
+let guitarVerbGain = null;
 let dubDelay = null;
 let dubDelayFb = null;
 let dubDelaySend = null;
@@ -250,11 +251,22 @@ function initAudio() {
   bedFilter.frequency.value = 2800;
   bedFilter.Q.value = 0.5;
   bedFilter.connect(textureGain);
-  // Send bed through reverb for space
-  bedReverb = ctx.createGain();
-  bedReverb.gain.value = 0.30;
-  bedFilter.connect(bedReverb);
-  bedReverb.connect(convolver);
+  // Dedicated long reverb for guitar (2.5s tail — spacious, satisfying decay)
+  const gVerbLen = Math.ceil(ctx.sampleRate * 2.5);
+  const gVerbIR = ctx.createBuffer(2, gVerbLen, ctx.sampleRate);
+  for (let ch = 0; ch < 2; ch++) {
+    const d = gVerbIR.getChannelData(ch);
+    for (let i = 0; i < gVerbLen; i++) {
+      d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / gVerbLen, 2.0);
+    }
+  }
+  guitarVerb = ctx.createConvolver();
+  guitarVerb.buffer = gVerbIR;
+  guitarVerbGain = ctx.createGain();
+  guitarVerbGain.gain.value = 0.50;
+  bedFilter.connect(guitarVerb);
+  guitarVerb.connect(guitarVerbGain);
+  guitarVerbGain.connect(textureGain);
 
   // ── Dub delay slapback — filtered echo catches horn stabs & snares ──
   dubDelay = ctx.createDelay(2);
