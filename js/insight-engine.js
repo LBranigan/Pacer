@@ -236,7 +236,8 @@ export async function generateInsight(payload, apiKey, { studentName, passageSni
       contents: [{ parts: [{ text: userPrompt }] }],
       generationConfig: {
         temperature: 0.3,
-        maxOutputTokens: 8192
+        maxOutputTokens: 1024,
+        thinkingConfig: { thinkingBudget: 4096 }
       }
     })
   });
@@ -251,7 +252,22 @@ export async function generateInsight(payload, apiKey, { studentName, passageSni
     throw new Error(`Gemini blocked: ${data.promptFeedback.blockReason}`);
   }
 
-  const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+  // With thinking enabled, response has multiple parts: thought parts + actual response.
+  // Find the last non-thought part (the actual summary).
+  const parts = data.candidates?.[0]?.content?.parts || [];
+  let text = null;
+  for (let i = parts.length - 1; i >= 0; i--) {
+    if (!parts[i].thought && parts[i].text) {
+      text = parts[i].text;
+      break;
+    }
+  }
+
+  const finishReason = data.candidates?.[0]?.finishReason;
+  const thinkingTokens = data.usageMetadata?.thoughtsTokenCount || 0;
+  const outputTokens = data.usageMetadata?.candidatesTokenCount || 0;
+  console.log(`[insight] finishReason=${finishReason}, thinking=${thinkingTokens}, output=${outputTokens}, parts=${parts.length}`);
+
   if (!text) throw new Error('Empty response from Gemini');
   return text.trim();
 }
