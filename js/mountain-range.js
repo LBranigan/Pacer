@@ -63,7 +63,7 @@ function generateStars(count, w, h) {
       size: bright ? (1.4 + Math.random() * 1.2) : (0.7 + Math.random() * 1.0),
       baseAlpha: bright ? (0.7 + Math.random() * 0.3) : (0.35 + Math.random() * 0.4),
       phase: Math.random() * Math.PI * 2,
-      freq: bright ? (0.8 + Math.random() * 1.2) : (0.3 + Math.random() * 0.7),
+      freq: bright ? (0.08 + Math.random() * 0.12) : (0.03 + Math.random() * 0.07),
     });
   }
   return stars;
@@ -379,9 +379,9 @@ export class MountainRange {
       ? (this._playheadTime / this._totalDuration) * this._barCount * BAR_STRIDE + this._offsetX
       : -1;
 
-    // Beat breathing (subtle)
+    // Very slow breathing (~0.1 Hz, one full cycle per ~10 seconds)
     const breathe = (REDUCED_MOTION || isExport) ? 0
-      : Math.sin(beatPhase * Math.PI * 2) * 1.0;
+      : Math.sin(this._elapsed * 0.1 * Math.PI * 2) * 3.0;
 
     // ── Bars (single pass) ──────────────────────────────────────────────
     for (let i = 0; i < this._barCount; i++) {
