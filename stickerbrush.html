@@ -1,0 +1,602 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Stickerbrush Symphony</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+    background: #0a0a1a;
+    color: #e0e0e0;
+    font-family: 'Segoe UI', system-ui, sans-serif;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+    gap: 2rem;
+    padding: 2rem;
+}
+h1 {
+    font-size: 1.8rem;
+    color: #7eb8da;
+    text-shadow: 0 0 20px rgba(126,184,218,0.3);
+    letter-spacing: 3px;
+    text-transform: uppercase;
+}
+.subtitle {
+    color: #555;
+    font-size: 0.85rem;
+    margin-top: -1rem;
+    font-style: italic;
+}
+.parts {
+    display: flex;
+    gap: 1rem;
+    flex-wrap: wrap;
+    justify-content: center;
+}
+.part-btn {
+    background: #1a1a2e;
+    border: 2px solid #333;
+    color: #666;
+    padding: 1rem 1.5rem;
+    border-radius: 12px;
+    cursor: pointer;
+    font-size: 1rem;
+    transition: all 0.3s;
+    min-width: 120px;
+    text-align: center;
+    user-select: none;
+}
+.part-btn:hover { border-color: #555; color: #999; }
+.part-btn.active {
+    border-color: var(--c);
+    color: var(--c);
+    background: var(--bg);
+    box-shadow: 0 0 20px var(--glow);
+}
+.part-btn .label { font-weight: 600; }
+.part-btn .sub { font-size: 0.7rem; opacity: 0.6; margin-top: 4px; }
+.controls { display: flex; gap: 1rem; align-items: center; }
+.play-btn {
+    background: #1a2e1a;
+    border: 2px solid #4a8;
+    color: #4a8;
+    padding: 0.8rem 2.5rem;
+    border-radius: 30px;
+    cursor: pointer;
+    font-size: 1.1rem;
+    font-weight: 600;
+    transition: all 0.3s;
+    letter-spacing: 1px;
+}
+.play-btn:hover { background: #2a3e2a; }
+.play-btn.playing { border-color: #c55; color: #c55; background: #2e1a1a; }
+.bar-indicator {
+    color: #444;
+    font-size: 0.8rem;
+    font-family: monospace;
+    min-width: 100px;
+    text-align: center;
+}
+</style>
+</head>
+<body>
+
+<h1>Stickerbrush Symphony</h1>
+<p class="subtitle">Donkey Kong Country 2 &mdash; David Wise &mdash; Web Audio API</p>
+
+<div class="parts">
+    <button class="part-btn" data-part="pads" style="--c:#7eb8da;--bg:rgba(126,184,218,0.08);--glow:rgba(126,184,218,0.15)">
+        <div class="label">Pads</div><div class="sub">Lush chords</div>
+    </button>
+    <button class="part-btn" data-part="drums" style="--c:#b07eda;--bg:rgba(176,126,218,0.08);--glow:rgba(176,126,218,0.15)">
+        <div class="label">Drums</div><div class="sub">Rhythm</div>
+    </button>
+    <button class="part-btn" data-part="bass" style="--c:#da7e9f;--bg:rgba(218,126,159,0.08);--glow:rgba(218,126,159,0.15)">
+        <div class="label">Bass</div><div class="sub">Low end</div>
+    </button>
+    <button class="part-btn" data-part="lead" style="--c:#a8da7e;--bg:rgba(168,218,126,0.08);--glow:rgba(168,218,126,0.15)">
+        <div class="label">Lead</div><div class="sub">Melody</div>
+    </button>
+    <button class="part-btn" data-part="arp" style="--c:#daa87e;--bg:rgba(218,168,126,0.08);--glow:rgba(218,168,126,0.15)">
+        <div class="label">Arpeggio</div><div class="sub">Shimmer</div>
+    </button>
+</div>
+
+<div class="controls">
+    <button class="play-btn" id="playBtn">&#9654; PLAY</button>
+    <div class="bar-indicator" id="barInd"></div>
+</div>
+
+<script>
+// ─── Constants ───────────────────────────────────────────────────
+// Key of Bb major, tempo from sheet music (P.E. Rosén arr.)
+const BPM = 94;
+const BEAT = 60 / BPM;           // ~0.638s
+const SIXTEENTH = BEAT / 4;      // ~0.160s
+const BAR = BEAT * 4;            // ~2.553s
+
+function mtof(m) { return 440 * Math.pow(2, (m - 69) / 12); }
+
+// ─── Chord Progression — Bb major, 8-bar cycle ──────────────────
+// Bb → F/A → Gm7 → Gm/F → Eb → Bb/D → Cm7 → Fsus4
+// Bass descends: Bb2 A2 G2 F2 Eb2 D2 C2 F2
+//
+// MIDI ref: Bb2=46 A2=45 G2=43 F2=41 Eb2=39 D2=38 C2=36
+//   Bb3=58 C4=60 D4=62 Eb4=63 F4=65 G4=67 A4=69 Bb4=70
+//   C5=72 D5=74 Eb5=75 F5=77 G5=79 A5=81 Bb5=82
+
+const CHORDS = [
+    { name:'Bb',    bass:46, pad:[58,62,65],     arp:[70,74,77]     },
+    { name:'F/A',   bass:45, pad:[57,60,65],     arp:[69,72,77]     },
+    { name:'Gm7',   bass:43, pad:[55,58,62,65],  arp:[67,70,74,77]  },
+    { name:'Gm/F',  bass:41, pad:[55,58,62,65],  arp:[67,70,74,77]  },
+    { name:'Eb',    bass:39, pad:[55,58,63],      arp:[67,70,75]     },
+    { name:'Bb/D',  bass:38, pad:[58,62,65],      arp:[70,74,77]     },
+    { name:'Cm7',   bass:36, pad:[55,58,60,63],   arp:[67,70,72,75]  },
+    { name:'Fsus4', bass:41, pad:[58,60,63,65],   arp:[70,72,75,77]  },
+];
+
+// Generate 16-note arpeggio patterns per bar (sixteenth notes)
+// Wave shape: ascend through chord tones, peak with octave leap, descend
+CHORDS.forEach(c => {
+    const n = c.arp;
+    if (n.length >= 4) {
+        c.arpPat = [
+            n[0],n[2],n[1],n[3], n[2],n[0],n[3],n[1],
+            n[0],n[3],n[2],n[1], n[3],n[1],n[0],n[2]
+        ];
+    } else {
+        // 3-note chords: add an octave-up root for sparkle at 2 positions
+        const hi = n[0] + 12;
+        c.arpPat = [
+            n[0],n[1],n[2],n[1], n[2],n[1],n[0],n[1],
+            n[2], hi, n[2],n[1], n[0],n[1],n[2],n[1]
+        ];
+    }
+});
+
+// ─── Melody — Bb major, 16 bars = 64 beats ──────────────────────
+// Phase 1 (bars 0-7): ascending motif F-Bb-C-D then flowing descent
+// Phase 2 (bars 8-15): higher register with dotted-eighth rhythms
+// beat = absolute beat position in 16-bar cycle
+const MELODY = [
+    // ── Phase 1: establishing theme ──
+    // Bar 0 (Bb)
+    { note:65,  beat:1,    dur:0.5  },  // F4 pickup
+    { note:70,  beat:1.5,  dur:0.5  },  // Bb4
+    { note:72,  beat:2,    dur:1    },  // C5
+    { note:74,  beat:3,    dur:1    },  // D5
+    // Bar 1 (F/A)
+    { note:72,  beat:4,    dur:1.5  },  // C5 dotted-quarter
+    { note:70,  beat:5.5,  dur:0.5  },  // Bb4
+    { note:69,  beat:6,    dur:1    },  // A4
+    { note:70,  beat:7,    dur:1    },  // Bb4
+    // Bar 2 (Gm7)
+    { note:74,  beat:8,    dur:2    },  // D5
+    { note:72,  beat:10,   dur:1    },  // C5
+    { note:70,  beat:11,   dur:1    },  // Bb4
+    // Bar 3 (Gm/F)
+    { note:67,  beat:12,   dur:3    },  // G4 held
+    { note:69,  beat:15,   dur:1    },  // A4 pickup
+    // Bar 4 (Eb)
+    { note:70,  beat:16,   dur:1.5  },  // Bb4
+    { note:67,  beat:17.5, dur:0.5  },  // G4
+    { note:70,  beat:18,   dur:2    },  // Bb4
+    // Bar 5 (Bb/D)
+    { note:69,  beat:20,   dur:2    },  // A4
+    { note:65,  beat:22,   dur:1    },  // F4
+    { note:67,  beat:23,   dur:1    },  // G4
+    // Bar 6 (Cm7)
+    { note:63,  beat:24,   dur:1.5  },  // Eb4
+    { note:65,  beat:25.5, dur:0.5  },  // F4
+    { note:67,  beat:26,   dur:2    },  // G4
+    // Bar 7 (Fsus4)
+    { note:65,  beat:28,   dur:3    },  // F4 resolves
+
+    // ── Phase 2: higher, dotted rhythms from sheet ──
+    // Bar 8 (Bb)
+    { note:74,  beat:32,    dur:1    },  // D5
+    { note:75,  beat:33,    dur:0.75 },  // Eb5 dotted-eighth
+    { note:74,  beat:33.75, dur:0.25 },  // D5 sixteenth
+    { note:77,  beat:34,    dur:1    },  // F5
+    { note:74,  beat:35,    dur:1    },  // D5
+    // Bar 9 (F/A)
+    { note:72,  beat:36,    dur:1.5  },  // C5
+    { note:70,  beat:37.5,  dur:0.5  },  // Bb4
+    { note:69,  beat:38,    dur:1    },  // A4
+    { note:72,  beat:39,    dur:1    },  // C5
+    // Bar 10 (Gm7)
+    { note:74,  beat:40,    dur:1    },  // D5
+    { note:75,  beat:41,    dur:0.75 },  // Eb5 dotted-eighth
+    { note:74,  beat:41.75, dur:0.25 },  // D5 sixteenth
+    { note:70,  beat:42,    dur:1    },  // Bb4
+    { note:74,  beat:43,    dur:1    },  // D5
+    // Bar 11 (Gm/F)
+    { note:72,  beat:44,    dur:2    },  // C5
+    { note:70,  beat:46,    dur:2    },  // Bb4
+    // Bar 12 (Eb)
+    { note:67,  beat:48,    dur:1    },  // G4
+    { note:70,  beat:49,    dur:0.75 },  // Bb4 dotted-eighth
+    { note:69,  beat:49.75, dur:0.25 },  // A4 sixteenth
+    { note:70,  beat:50,    dur:1    },  // Bb4
+    { note:72,  beat:51,    dur:1    },  // C5
+    // Bar 13 (Bb/D)
+    { note:74,  beat:52,    dur:3    },  // D5 held
+    { note:72,  beat:55,    dur:1    },  // C5
+    // Bar 14 (Cm7)
+    { note:70,  beat:56,    dur:1    },  // Bb4
+    { note:67,  beat:57,    dur:1.5  },  // G4
+    { note:69,  beat:58.5,  dur:0.5  },  // A4
+    { note:70,  beat:59,    dur:1    },  // Bb4
+    // Bar 15 (Fsus4)
+    { note:69,  beat:60,    dur:2    },  // A4
+    { note:65,  beat:62,    dur:2    },  // F4 resolve
+];
+
+// ─── Audio Engine ────────────────────────────────────────────────
+let ctx, master, reverb, reverbSend, delayNode, delayFB, delaySend;
+let snareNoise, hatNoise;  // pre-allocated noise buffers
+let gains = {};
+let enabled = { pads:false, arp:false, bass:false, lead:false, drums:false };
+let playing = false;
+let nextBarTime = 0;
+let currentBar = 0;  // 0-15 (16-bar super-cycle for melody)
+let schedTimer = null;
+
+async function initAudio() {
+    ctx = new (window.AudioContext || window.webkitAudioContext)();
+    await ctx.resume();
+
+    // Pre-create shared noise buffers for drums (avoid per-hit allocation)
+    snareNoise = ctx.createBuffer(1, ctx.sampleRate * 0.08 | 0, ctx.sampleRate);
+    const sd = snareNoise.getChannelData(0);
+    for (let i = 0; i < sd.length; i++) sd[i] = Math.random() * 2 - 1;
+    hatNoise = ctx.createBuffer(1, ctx.sampleRate * 0.03 | 0, ctx.sampleRate);
+    const hd = hatNoise.getChannelData(0);
+    for (let i = 0; i < hd.length; i++) hd[i] = Math.random() * 2 - 1;
+
+    // Master output
+    master = ctx.createGain();
+    master.gain.value = 0.5;
+    master.connect(ctx.destination);
+
+    // Reverb — procedural impulse response
+    const irLen = ctx.sampleRate * 2;
+    const irBuf = ctx.createBuffer(2, irLen, ctx.sampleRate);
+    for (let ch = 0; ch < 2; ch++) {
+        const d = irBuf.getChannelData(ch);
+        for (let i = 0; i < irLen; i++) {
+            d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / irLen, 2.2);
+        }
+    }
+    reverb = ctx.createConvolver();
+    reverb.buffer = irBuf;
+    reverbSend = ctx.createGain();
+    reverbSend.gain.value = 0.45;
+    reverb.connect(reverbSend);
+    reverbSend.connect(ctx.destination);
+
+    // Stereo delay (dotted-eighth, for arp shimmer tail)
+    delayNode = ctx.createDelay(2);
+    delayNode.delayTime.value = BEAT * 0.75;
+    delayFB = ctx.createGain();
+    delayFB.gain.value = 0.33;
+    delaySend = ctx.createGain();
+    delaySend.gain.value = 0.2;
+    delayNode.connect(delayFB);
+    delayFB.connect(delayNode);
+    delayNode.connect(delaySend);
+    delaySend.connect(master);
+
+    // Per-part gain nodes (all start muted)
+    for (const p of ['pads','arp','bass','lead','drums']) {
+        gains[p] = ctx.createGain();
+        gains[p].gain.value = 0;
+        gains[p].connect(master);
+        gains[p].connect(reverb);
+    }
+    // Arp also feeds the delay line
+    gains.arp.connect(delayNode);
+}
+
+function toggle(part) {
+    enabled[part] = !enabled[part];
+    if (!gains[part]) return;
+    gains[part].gain.cancelScheduledValues(ctx.currentTime);
+    gains[part].gain.setTargetAtTime(enabled[part] ? 1 : 0, ctx.currentTime, 0.06);
+}
+
+// ─── Look-ahead Scheduler ────────────────────────────────────────
+function startPlay() {
+    if (playing) return;
+    playing = true;
+    nextBarTime = ctx.currentTime + 0.1;
+    currentBar = 0;
+    scheduler();
+}
+function stopPlay() {
+    playing = false;
+    if (schedTimer) clearTimeout(schedTimer);
+    document.getElementById('barInd').textContent = '';
+}
+function scheduler() {
+    while (nextBarTime < ctx.currentTime + 0.3) {
+        scheduleBar(nextBarTime, currentBar);
+        nextBarTime += BAR;  // advance time (was missing → caused infinite loop)
+        currentBar = (currentBar + 1) % 16;
+    }
+    if (playing) schedTimer = setTimeout(scheduler, 50);
+}
+
+function scheduleBar(time, bar16) {
+    const ci = bar16 % 8;
+    const chord = CHORDS[ci];
+
+    // UI indicator
+    setTimeout(() => {
+        if (playing) document.getElementById('barInd').textContent =
+            chord.name + '  [' + (bar16 + 1) + '/16]';
+    }, Math.max(0, (time - ctx.currentTime) * 1000));
+
+    schedulePads(time, chord);
+    scheduleArp(time, chord);
+    scheduleBass(time, chord);
+    scheduleLead(time, bar16);
+    scheduleDrums(time);
+}
+
+// ─── PAD: 3 detuned triangles per note through LPF ──────────────
+function schedulePads(time, chord) {
+    const dur = BAR + 0.15;
+    for (const midi of chord.pad) {
+        const freq = mtof(midi);
+        for (const det of [-7, 0, 7]) {
+            const osc = ctx.createOscillator();
+            osc.type = 'triangle';
+            osc.frequency.value = freq;
+            osc.detune.value = det;
+
+            const env = ctx.createGain();
+            env.gain.setValueAtTime(0, time);
+            env.gain.linearRampToValueAtTime(0.05, time + 0.35);
+            env.gain.setTargetAtTime(0.035, time + 0.5, 0.5);
+            env.gain.setTargetAtTime(0, time + dur - 0.3, 0.25);
+
+            const lpf = ctx.createBiquadFilter();
+            lpf.type = 'lowpass';
+            lpf.frequency.value = 900;
+            lpf.Q.value = 0.7;
+
+            osc.connect(lpf);
+            lpf.connect(env);
+            env.connect(gains.pads);
+            osc.start(time);
+            osc.stop(time + dur + 1.5);
+        }
+    }
+}
+
+// ─── ARPEGGIO: bell-like plucks (sine + quiet harmonic) ──────────
+function scheduleArp(time, chord) {
+    for (let i = 0; i < 16; i++) {
+        const t = time + i * SIXTEENTH;
+        const midi = chord.arpPat[i];
+        const freq = mtof(midi);
+
+        // Fundamental
+        const osc1 = ctx.createOscillator();
+        osc1.type = 'sine';
+        osc1.frequency.value = freq;
+
+        // 2nd partial for bell shimmer
+        const osc2 = ctx.createOscillator();
+        osc2.type = 'sine';
+        osc2.frequency.value = freq * 3; // 3rd harmonic
+        const env = ctx.createGain();
+        env.gain.setValueAtTime(0, t);
+        env.gain.linearRampToValueAtTime(0.065, t + 0.004);
+        env.gain.exponentialRampToValueAtTime(0.001, t + 0.35);
+
+        const env2 = ctx.createGain();
+        env2.gain.setValueAtTime(0, t);
+        env2.gain.linearRampToValueAtTime(0.012, t + 0.004);
+        env2.gain.exponentialRampToValueAtTime(0.001, t + 0.15);
+
+        osc1.connect(env);
+        osc2.connect(env2);
+        env.connect(gains.arp);
+        env2.connect(gains.arp);
+        osc1.start(t);
+        osc1.stop(t + 0.4);
+        osc2.start(t);
+        osc2.stop(t + 0.2);
+    }
+}
+
+// ─── BASS: sine + sub-octave through LPF ─────────────────────────
+function scheduleBass(time, chord) {
+    const freq = mtof(chord.bass);
+    const dur = BAR + 0.1;
+
+    const osc = ctx.createOscillator();
+    osc.type = 'sine';
+    osc.frequency.value = freq;
+
+    const sub = ctx.createOscillator();
+    sub.type = 'sine';
+    sub.frequency.value = freq / 2;
+
+    const env = ctx.createGain();
+    env.gain.setValueAtTime(0, time);
+    env.gain.linearRampToValueAtTime(0.18, time + 0.06);
+    env.gain.setTargetAtTime(0.14, time + 0.1, 0.3);
+    env.gain.setTargetAtTime(0, time + dur - 0.2, 0.15);
+
+    const subEnv = ctx.createGain();
+    subEnv.gain.setValueAtTime(0, time);
+    subEnv.gain.linearRampToValueAtTime(0.07, time + 0.06);
+    subEnv.gain.setTargetAtTime(0.05, time + 0.1, 0.3);
+    subEnv.gain.setTargetAtTime(0, time + dur - 0.2, 0.15);
+
+    const lpf = ctx.createBiquadFilter();
+    lpf.type = 'lowpass';
+    lpf.frequency.value = 260;
+    lpf.Q.value = 0.5;
+
+    osc.connect(env);
+    sub.connect(subEnv);
+    env.connect(lpf);
+    subEnv.connect(lpf);
+    lpf.connect(gains.bass);
+
+    osc.start(time);
+    osc.stop(time + dur + 1);
+    sub.start(time);
+    sub.stop(time + dur + 1);
+}
+
+// ─── LEAD: detuned sine+triangle with delayed vibrato ────────────
+function scheduleLead(time, bar16) {
+    const barBeatStart = bar16 * 4;
+    const barBeatEnd = barBeatStart + 4;
+
+    for (const m of MELODY) {
+        if (m.beat >= barBeatStart && m.beat < barBeatEnd) {
+            const noteTime = time + (m.beat - barBeatStart) * BEAT;
+            const dur = m.dur * BEAT;
+            playLeadNote(noteTime, m.note, dur);
+        }
+    }
+}
+
+function playLeadNote(time, midi, dur) {
+    const freq = mtof(midi);
+
+    const osc1 = ctx.createOscillator();
+    osc1.type = 'sine';
+    osc1.frequency.value = freq;
+    osc1.detune.value = -5;
+
+    const osc2 = ctx.createOscillator();
+    osc2.type = 'triangle';
+    osc2.frequency.value = freq;
+    osc2.detune.value = 5;
+
+    // Vibrato (ramps in after onset)
+    const lfo = ctx.createOscillator();
+    lfo.type = 'sine';
+    lfo.frequency.value = 4.8;
+    const lfoG = ctx.createGain();
+    lfoG.gain.setValueAtTime(0, time);
+    lfoG.gain.setTargetAtTime(8, time + 0.15, 0.35);
+    lfo.connect(lfoG);
+    lfoG.connect(osc1.detune);
+    lfoG.connect(osc2.detune);
+
+    const env1 = ctx.createGain();
+    env1.gain.setValueAtTime(0, time);
+    env1.gain.linearRampToValueAtTime(0.07, time + 0.04);
+    env1.gain.setTargetAtTime(0.055, time + 0.08, 0.25);
+    env1.gain.setTargetAtTime(0, time + Math.max(dur - 0.02, 0.03), 0.1);
+
+    const env2 = ctx.createGain();
+    env2.gain.setValueAtTime(0, time);
+    env2.gain.linearRampToValueAtTime(0.035, time + 0.04);
+    env2.gain.setTargetAtTime(0.025, time + 0.08, 0.25);
+    env2.gain.setTargetAtTime(0, time + Math.max(dur - 0.02, 0.03), 0.1);
+
+    osc1.connect(env1);
+    osc2.connect(env2);
+    env1.connect(gains.lead);
+    env2.connect(gains.lead);
+
+    const stopAt = time + dur + 0.4;
+    lfo.start(time);  osc1.start(time);  osc2.start(time);
+    lfo.stop(stopAt);  osc1.stop(stopAt);  osc2.stop(stopAt);
+}
+
+// ─── DRUMS: gentle kick, ghost snare, hi-hat ─────────────────────
+function scheduleDrums(time) {
+    playKick(time);
+    playKick(time + BEAT * 2);
+    playSnare(time + BEAT);
+    playSnare(time + BEAT * 3);
+    for (let i = 0; i < 8; i++) {
+        playHat(time + i * BEAT / 2, i % 2 === 0 ? 0.032 : 0.016);
+    }
+}
+
+function playKick(time) {
+    const osc = ctx.createOscillator();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(110, time);
+    osc.frequency.exponentialRampToValueAtTime(38, time + 0.12);
+    const env = ctx.createGain();
+    env.gain.setValueAtTime(0.23, time);
+    env.gain.exponentialRampToValueAtTime(0.001, time + 0.25);
+    osc.connect(env); env.connect(gains.drums);
+    osc.start(time); osc.stop(time + 0.3);
+}
+
+function playSnare(time) {
+    const src = ctx.createBufferSource(); src.buffer = snareNoise;
+    const bpf = ctx.createBiquadFilter();
+    bpf.type = 'bandpass'; bpf.frequency.value = 1100; bpf.Q.value = 0.7;
+    const env = ctx.createGain();
+    env.gain.setValueAtTime(0.045, time);
+    env.gain.exponentialRampToValueAtTime(0.001, time + 0.08);
+    src.connect(bpf); bpf.connect(env); env.connect(gains.drums);
+    src.start(time); src.stop(time + 0.1);
+}
+
+function playHat(time, vol) {
+    const src = ctx.createBufferSource(); src.buffer = hatNoise;
+    const hpf = ctx.createBiquadFilter();
+    hpf.type = 'highpass'; hpf.frequency.value = 8500;
+    const env = ctx.createGain();
+    env.gain.setValueAtTime(vol, time);
+    env.gain.exponentialRampToValueAtTime(0.0001, time + 0.03);
+    src.connect(hpf); hpf.connect(env); env.connect(gains.drums);
+    src.start(time); src.stop(time + 0.04);
+}
+
+// ─── UI Wiring ───────────────────────────────────────────────────
+let inited = false;
+
+document.querySelectorAll('.part-btn').forEach(btn => {
+    btn.addEventListener('click', async () => {
+        if (!inited) { await initAudio(); inited = true; }
+        const part = btn.dataset.part;
+        toggle(part);
+        btn.classList.toggle('active', enabled[part]);
+        // Auto-start when first part toggled on
+        if (enabled[part] && !playing) {
+            playing = true;
+            nextBarTime = ctx.currentTime + 0.1;
+            currentBar = 0;
+            scheduler();
+            document.getElementById('playBtn').textContent = '\u25A0 STOP';
+            document.getElementById('playBtn').classList.add('playing');
+        }
+    });
+});
+
+document.getElementById('playBtn').addEventListener('click', async () => {
+    if (!inited) { await initAudio(); inited = true; }
+    if (playing) {
+        stopPlay();
+        document.getElementById('playBtn').textContent = '\u25B6 PLAY';
+        document.getElementById('playBtn').classList.remove('playing');
+    } else {
+        startPlay();
+        document.getElementById('playBtn').textContent = '\u25A0 STOP';
+        document.getElementById('playBtn').classList.add('playing');
+    }
+});
+</script>
+</body>
+</html>
