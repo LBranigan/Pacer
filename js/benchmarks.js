@@ -1,5 +1,6 @@
-// benchmarks.js – Hasbrouck-Tindal 2017 ORF norms (Technical Report #1702)
-// Values from training data — flagged for manual verification against published source.
+// benchmarks.js – Hasbrouck-Tindal ORF norms
+// Grades 1-6: 2017 Technical Report #1702
+// Grades 7-8: 2006 compiled norms (2017 report only covers 1-6)
 // Grade 1 has no fall norms (testing begins in winter).
 
 export const HT_NORMS = {
@@ -31,6 +32,17 @@ export const HT_NORMS = {
     fall:   { p10: 82, p25: 107, p50: 136, p75: 164, p90: 190 },
     winter: { p10: 89, p25: 115, p50: 145, p75: 173, p90: 199 },
     spring: { p10: 96, p25: 122, p50: 150, p75: 177, p90: 204 }
+  },
+  // Grades 7-8: Hasbrouck & Tindal 2006 compiled norms
+  7: {
+    fall:   { p10: 102, p25: 109, p50: 128, p75: 153, p90: 177 },
+    winter: { p10: 109, p25: 117, p50: 136, p75: 160, p90: 182 },
+    spring: { p10: 112, p25: 123, p50: 150, p75: 177, p90: 199 }
+  },
+  8: {
+    fall:   { p10: 106, p25: 115, p50: 133, p75: 157, p90: 185 },
+    winter: { p10: 113, p25: 124, p50: 146, p75: 171, p90: 199 },
+    spring: { p10: 115, p25: 126, p50: 151, p75: 177, p90: 199 }
   }
 };
 
