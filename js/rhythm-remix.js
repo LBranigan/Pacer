@@ -64,10 +64,9 @@ let lineGroups = [];     // array of arrays: lineGroups[lineIdx] = [wordIdx, ...
 let currentLinePair = 0; // which pair of lines is visible (0 = lines 0-1, 1 = lines 2-3, ...)
 
 let audioCtx = null;
-let lofi = null;          // active engine (LofiEngine, LofiV2Engine, or MegaManEngine)
-let lofiEngine = null;    // cached LofiEngine instance
+let lofi = null;          // active engine
+let lofiEngine = null;    // cached LofiEngine instance (handles classical)
 let lofi2Engine = null;   // cached LofiV2Engine instance
-let megaEngine = null;    // cached MegaManEngine instance
 let stickerbrushEngine = null; // cached StickerbrushEngine
 let stickerbrush2Engine = null; // cached StickerbrushV2Engine
 let audioEl = null;
@@ -240,31 +239,20 @@ function updateSpring(dt) {
 // WCPM is sqrt-compressed into the style's range so slow readers get the low end
 // and fast readers get the high end, but nobody leaves the genre's comfort zone.
 const STYLE_BPM_RANGE = {
-  classical:  { min: 50, max: 78 },   // Satie-like, contemplative
-  zelda:      { min: 76, max: 114 },   // Heroic march, needs energy
-  chiptune:   { min: 80, max: 118 },   // 8-bit game feel, upbeat
-  bossa:      { min: 62, max: 88 },    // Traditional bossa groove
-  lounge:     { min: 60, max: 86 },    // Coffee shop, laid-back
-  lofi:       { min: 58, max: 86 },    // Lo-fi hip-hop, chill
-  jazzhop:    { min: 60, max: 90 },    // Jazz hop, relaxed swing
-  ambient:    { min: 50, max: 72 },    // Atmospheric, slow drift
-  trap:       { min: 65, max: 90 },    // Half-time trap, heavy
-  mega:       { min: 76, max: 118 },   // NES Mega Man, energetic but tamed for reading
-  lofi2:      { min: 55, max: 84 },    // Lo-Fi V2, warm and chill
-  stickerbrush:  { min: 70, max: 100 }, // DKC2 dreamy, original 94 BPM
-  stickerbrush2: { min: 70, max: 100 }, // DKC2 A-minor arr., original 95 BPM
+  classical:     { min: 50, max: 78 },   // Satie-like, contemplative
+  lofi2:         { min: 55, max: 84 },    // Lo-Fi V2, warm and chill
+  stickerbrush:  { min: 70, max: 100 },   // DKC2 dreamy, original 94 BPM
+  stickerbrush2: { min: 70, max: 100 },   // DKC2 A-minor arr., original 95 BPM
 };
 
 function wcpmToBpm(wcpm, style) {
-  // Hero's Adventure: BPM = WPM directly
-  if (style === 'zelda') return Math.round(Math.max(50, Math.min(200, wcpm)));
-  const range = STYLE_BPM_RANGE[style] || STYLE_BPM_RANGE.lofi;
+  const range = STYLE_BPM_RANGE[style] || STYLE_BPM_RANGE.stickerbrush;
   // sqrt compression: normalize WCPM 20–200 to 0–1, then sqrt to compress top end
   const t = Math.min(1, Math.max(0, Math.sqrt((wcpm - 20) / 180)));
   return Math.round(range.min + t * (range.max - range.min));
 }
 
-// ── Engine switching (LoFi ↔ Mega Man) ───────────────────────────────────────
+// ── Engine switching ─────────────────────────────────────────────────────────
 
 function switchEngine(style) {
   const wasPlaying = lofi && lofi.isPlaying;
@@ -272,14 +260,7 @@ function switchEngine(style) {
   // Stop current engine if switching
   if (lofi && wasPlaying) lofi.stop();
 
-  if (style === 'mega') {
-    if (!megaEngine) {
-      megaEngine = new MegaManEngine(audioCtx);
-      megaEngine.output.connect(beatGain);
-    }
-    megaEngine._style = 'mega';
-    lofi = megaEngine;
-  } else if (style === 'lofi2') {
+  if (style === 'lofi2') {
     if (!lofi2Engine) {
       lofi2Engine = new LofiV2Engine(audioCtx);
       lofi2Engine.output.connect(beatGain);
@@ -670,7 +651,7 @@ function setupAudio() {
   beatGain.gain.value = 0.60;
   beatGain.connect(audioCtx.destination);
 
-  // Lo-fi engine (default)
+  // Lo-fi engine (handles classical style)
   lofiEngine = new LofiEngine(audioCtx);
   lofiEngine.output.connect(beatGain);
 
@@ -679,13 +660,10 @@ function setupAudio() {
   lofiEngine.setMelody(melodyEnabled);
   lofiEngine.setAdaptiveHarmony(adaptiveHarmonyEnabled);
 
-  // Mega Man engine (lazy — created on first use)
-  // megaEngine created in switchEngine() when needed
-
   // Set style from localStorage preference
-  const validStyles = ['lofi', 'jazzhop', 'ambient', 'bossa', 'lounge', 'chiptune', 'classical', 'trap', 'zelda', 'bossa-piano', 'lounge-piano', 'jazzhop-piano', 'chiptune-piano', 'mega', 'lofi2', 'lofi4', 'stickerbrush', 'stickerbrush2'];
+  const validStyles = ['stickerbrush', 'stickerbrush2', 'lofi2', 'classical'];
   const savedStyle = localStorage.getItem('orf_remix_style');
-  const initialStyle = (savedStyle && validStyles.includes(savedStyle)) ? savedStyle : 'lofi';
+  const initialStyle = (savedStyle && validStyles.includes(savedStyle)) ? savedStyle : 'stickerbrush';
 
   // Activate the correct engine
   switchEngine(initialStyle);
@@ -1562,10 +1540,6 @@ function cleanup() {
   if (lofi2Engine) {
     lofi2Engine.dispose();
     lofi2Engine = null;
-  }
-  if (megaEngine) {
-    megaEngine.dispose();
-    megaEngine = null;
   }
   if (stickerbrushEngine) {
     stickerbrushEngine.dispose();

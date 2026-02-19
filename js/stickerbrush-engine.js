@@ -187,8 +187,8 @@ export class StickerbrushEngine {
         osc.detune.value = det;
         const env = ctx.createGain();
         env.gain.setValueAtTime(0, time);
-        env.gain.linearRampToValueAtTime(0.05, time + 0.35);
-        env.gain.setTargetAtTime(0.035, time + 0.5, 0.5);
+        env.gain.linearRampToValueAtTime(0.045, time + 0.35);
+        env.gain.setTargetAtTime(0.032, time + 0.5, 0.5);
         env.gain.setTargetAtTime(0, time + dur - 0.3, 0.25);
         const lpf = ctx.createBiquadFilter();
         lpf.type = 'lowpass';
@@ -221,11 +221,11 @@ export class StickerbrushEngine {
       osc2.frequency.value = freq * 3;
       const env = ctx.createGain();
       env.gain.setValueAtTime(0, t);
-      env.gain.linearRampToValueAtTime(0.065, t + 0.004);
+      env.gain.linearRampToValueAtTime(0.072, t + 0.004);
       env.gain.exponentialRampToValueAtTime(0.001, t + 0.35);
       const env2 = ctx.createGain();
       env2.gain.setValueAtTime(0, t);
-      env2.gain.linearRampToValueAtTime(0.012, t + 0.004);
+      env2.gain.linearRampToValueAtTime(0.013, t + 0.004);
       env2.gain.exponentialRampToValueAtTime(0.001, t + 0.15);
       osc1.connect(env);
       osc2.connect(env2);
