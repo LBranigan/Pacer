@@ -244,7 +244,7 @@ const STYLE_BPM_RANGE = {
   jazzhop:    { min: 60, max: 90 },    // Jazz hop, relaxed swing
   ambient:    { min: 50, max: 72 },    // Atmospheric, slow drift
   trap:       { min: 65, max: 90 },    // Half-time trap, heavy
-  mega:       { min: 100, max: 160 },  // NES Mega Man, energetic
+  mega:       { min: 76, max: 118 },   // NES Mega Man, energetic but tamed for reading
 };
 
 function wcpmToBpm(wcpm, style) {
