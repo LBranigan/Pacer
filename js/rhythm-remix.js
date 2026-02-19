@@ -7,11 +7,12 @@
  * @module rhythm-remix
  */
 
-import { LofiEngine } from './lofi-engine.js?v=20260219a4';
-import { MegaManEngine } from './megaman-engine.js?v=20260219a4';
-import { LofiV2Engine } from './lofi-v2-engine.js?v=20260219a4';
-import { StickerbrushEngine } from './stickerbrush-engine.js?v=20260219a4';
-import { MountainRange } from './mountain-range.js?v=20260219a4';
+import { LofiEngine } from './lofi-engine.js?v=20260219a5';
+import { MegaManEngine } from './megaman-engine.js?v=20260219a5';
+import { LofiV2Engine } from './lofi-v2-engine.js?v=20260219a5';
+import { StickerbrushEngine } from './stickerbrush-engine.js?v=20260219a5';
+import { StickerbrushV2Engine } from './stickerbrush-v2-engine.js?v=20260219a5';
+import { MountainRange } from './mountain-range.js?v=20260219a5';
 import { getAudioBlob } from './audio-store.js';
 import { getAssessment, getStudents } from './storage.js';
 import { getPunctuationPositions } from './diagnostics.js';
@@ -69,6 +70,7 @@ let lofiEngine = null;    // cached LofiEngine instance
 let lofi2Engine = null;   // cached LofiV2Engine instance
 let megaEngine = null;    // cached MegaManEngine instance
 let stickerbrushEngine = null; // cached StickerbrushEngine
+let stickerbrush2Engine = null; // cached StickerbrushV2Engine
 let audioEl = null;
 let audioUrl = null;     // ObjectURL — revoked on cleanup
 let sourceNode = null;
@@ -250,7 +252,8 @@ const STYLE_BPM_RANGE = {
   trap:       { min: 65, max: 90 },    // Half-time trap, heavy
   mega:       { min: 76, max: 118 },   // NES Mega Man, energetic but tamed for reading
   lofi2:      { min: 55, max: 84 },    // Lo-Fi V2, warm and chill
-  stickerbrush: { min: 70, max: 100 }, // DKC2 dreamy, original 94 BPM
+  stickerbrush:  { min: 70, max: 100 }, // DKC2 dreamy, original 94 BPM
+  stickerbrush2: { min: 70, max: 100 }, // DKC2 A-minor arr., original 95 BPM
 };
 
 function wcpmToBpm(wcpm, style) {
@@ -290,6 +293,12 @@ function switchEngine(style) {
       stickerbrushEngine.output.connect(beatGain);
     }
     lofi = stickerbrushEngine;
+  } else if (style === 'stickerbrush2') {
+    if (!stickerbrush2Engine) {
+      stickerbrush2Engine = new StickerbrushV2Engine(audioCtx);
+      stickerbrush2Engine.output.connect(beatGain);
+    }
+    lofi = stickerbrush2Engine;
   } else {
     lofiEngine.setStyle(style);
     lofi = lofiEngine;
@@ -675,7 +684,7 @@ function setupAudio() {
   // megaEngine created in switchEngine() when needed
 
   // Set style from localStorage preference
-  const validStyles = ['lofi', 'jazzhop', 'ambient', 'bossa', 'lounge', 'chiptune', 'classical', 'trap', 'zelda', 'bossa-piano', 'lounge-piano', 'jazzhop-piano', 'chiptune-piano', 'mega', 'lofi2', 'lofi4', 'stickerbrush'];
+  const validStyles = ['lofi', 'jazzhop', 'ambient', 'bossa', 'lounge', 'chiptune', 'classical', 'trap', 'zelda', 'bossa-piano', 'lounge-piano', 'jazzhop-piano', 'chiptune-piano', 'mega', 'lofi2', 'lofi4', 'stickerbrush', 'stickerbrush2'];
   const savedStyle = localStorage.getItem('orf_remix_style');
   const initialStyle = (savedStyle && validStyles.includes(savedStyle)) ? savedStyle : 'lofi';
 
@@ -1558,6 +1567,14 @@ function cleanup() {
   if (megaEngine) {
     megaEngine.dispose();
     megaEngine = null;
+  }
+  if (stickerbrushEngine) {
+    stickerbrushEngine.dispose();
+    stickerbrushEngine = null;
+  }
+  if (stickerbrush2Engine) {
+    stickerbrush2Engine.dispose();
+    stickerbrush2Engine = null;
   }
   lofi = null;
   if (audioUrl) {
