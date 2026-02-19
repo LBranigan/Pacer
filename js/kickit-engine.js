@@ -5,14 +5,14 @@
  * Progression: Gm7 -> Cm7 (2-bar loop, i -> iv)
  *
  * Synthesis: Rhodes EP stabs, boom-bap drums, deep bass, muted horn stabs,
- * organ pad, dub delay, vinyl pops, reverse swell, tape wobble.
+ * harmonic bed (Perfect Day sample feel), dub delay, vinyl pops, reverse swell, tape wobble.
  *
  * Layer order:
  *   Layer 1 (Base):  Rhodes EP + vinyl crackle
  *   Layer 2 (+3):    Drums (kick, snare, swung hats)
  *   Layer 3 (+6):    Bass (root + sub + passing tones)
  *   Layer 4 (+9):    Horn stabs (muted jazz trumpet)
- *   Layer 5 (+12):   Texture (organ pad, dub delay, vinyl pops, reverse swell)
+ *   Layer 5 (+12):   Texture (harmonic bed, dub delay, vinyl pops, reverse swell)
  */
 
 function mtof(m) { return 440 * Math.pow(2, (m - 69) / 12); }
@@ -30,6 +30,16 @@ const HORN_PATTERN = [
 
 const SWING = 0.6;
 const BASS_LEAN = 0.020;
+
+// Perfect Day harmonic bed — major chords from G minor, moving in 4ths.
+// 4-bar super-cycle over the 2-bar Gm7/Cm7 loop. Close voice-led voicings
+// in low-mid register. No resolution, no drama — frozen confidence.
+const BED_CHORDS = [
+  [48, 52, 55],  // C major  (C3 E3 G3)    — IV
+  [48, 53, 57],  // F major  (C3 F3 A3)    — VII
+  [50, 53, 58],  // Bb major (D3 F3 Bb3)   — III
+  [51, 55, 58],  // Eb major (Eb3 G3 Bb3)  — VI
+];
 
 export class KickItEngine {
   constructor(ctx) {
@@ -161,6 +171,13 @@ export class KickItEngine {
     this._crackleBPF.connect(this._crackleGain);
     this._crackleGain.connect(this._master);
     this._crackleSource = null;
+
+    // ── Harmonic bed filter — dark, warm, sample-like ──
+    this._bedFilter = ctx.createBiquadFilter();
+    this._bedFilter.type = 'lowpass';
+    this._bedFilter.frequency.value = 600;
+    this._bedFilter.Q.value = 0.4;
+    this._bedFilter.connect(this._gains.texture);
 
     // ── Dub delay slapback ──
     this._dubDelay = ctx.createDelay(2);
@@ -506,62 +523,39 @@ export class KickItEngine {
     osc3.start(t); osc3.stop(t + dur + 0.15);
   }
 
-  // ── TEXTURE — Organ pad, reverse swell, vinyl pops ──────────────────────────
+  // ── TEXTURE — Harmonic bed (Perfect Day feel), reverse swell, vinyl pops ────
 
-  _scheduleOrganPad(time, barIndex) {
+  _scheduleHarmonicBed(time, barIndex) {
     const ctx = this._ctx;
-    const chord = CHORDS[barIndex % 2];
+    const bedChord = BED_CHORDS[barIndex % 4];
     const beat = 60 / this._bpm;
     const bar = beat * 4;
-    const dur = bar + 0.2;
+    const dur = bar + 0.4; // slight overlap into next bar — chords ring
 
-    const voicing = [chord.bass + 12, ...chord.notes.slice(0, 2)];
-
-    for (const midi of voicing) {
+    for (const midi of bedChord) {
       const freq = mtof(midi);
 
-      const osc8 = ctx.createOscillator();
-      osc8.type = 'sine';
-      osc8.frequency.value = freq;
-      osc8.detune.value = -4 + Math.random() * 8;
+      // Two detuned sines per note — analog warmth, sample-like
+      for (const det of [-3, 3]) {
+        const osc = ctx.createOscillator();
+        osc.type = 'sine';
+        osc.frequency.value = freq;
+        osc.detune.value = det + (Math.random() - 0.5) * 2;
 
-      const osc4 = ctx.createOscillator();
-      osc4.type = 'sine';
-      osc4.frequency.value = freq * 2;
-      osc4.detune.value = -3 + Math.random() * 6;
+        const env = ctx.createGain();
+        // Slow attack (0.5s) — fades in like a sample
+        env.gain.setValueAtTime(0, time);
+        env.gain.linearRampToValueAtTime(0.038, time + 0.5);
+        env.gain.setTargetAtTime(0.032, time + 0.8, 0.6);
+        // Gentle release — overlaps into next chord
+        env.gain.setTargetAtTime(0, time + dur - 0.3, 0.25);
 
-      const trem = ctx.createOscillator();
-      const tremGain = ctx.createGain();
-      trem.type = 'sine';
-      trem.frequency.value = 0.9 + Math.random() * 0.2;
-      tremGain.gain.value = 0.012;
+        osc.connect(env);
+        env.connect(this._bedFilter);
 
-      const env8 = ctx.createGain();
-      env8.gain.setValueAtTime(0, time);
-      env8.gain.linearRampToValueAtTime(0.028, time + 0.3);
-      env8.gain.setTargetAtTime(0.022, time + 0.5, 0.4);
-      env8.gain.setTargetAtTime(0, time + dur - 0.25, 0.2);
-
-      const env4 = ctx.createGain();
-      env4.gain.setValueAtTime(0, time);
-      env4.gain.linearRampToValueAtTime(0.010, time + 0.3);
-      env4.gain.setTargetAtTime(0.007, time + 0.5, 0.4);
-      env4.gain.setTargetAtTime(0, time + dur - 0.25, 0.2);
-
-      trem.connect(tremGain);
-      tremGain.connect(env8.gain);
-
-      const lpf = ctx.createBiquadFilter();
-      lpf.type = 'lowpass'; lpf.frequency.value = 700; lpf.Q.value = 0.5;
-
-      osc8.connect(env8); osc4.connect(env4);
-      env8.connect(lpf); env4.connect(lpf);
-      lpf.connect(this._gains.texture);
-
-      const stopAt = time + dur + 1;
-      osc8.start(time); osc8.stop(stopAt);
-      osc4.start(time); osc4.stop(stopAt);
-      trem.start(time); trem.stop(stopAt);
+        osc.start(time);
+        osc.stop(time + dur + 1.5);
+      }
     }
   }
 
@@ -626,7 +620,7 @@ export class KickItEngine {
     if (this._overlayLevel >= 0.65) this._scheduleBass(time, barIndex);
     if (this._overlayLevel >= 1.0) this._scheduleHorns(time, barIndex);
     if (this._overlayLevel >= 1.5) {
-      this._scheduleOrganPad(time, barIndex);
+      this._scheduleHarmonicBed(time, barIndex);
       this._scheduleReverseSwell(time, barIndex);
       this._scheduleVinylPops(time);
     }

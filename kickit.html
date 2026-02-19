@@ -95,6 +95,15 @@ const HORN_PATTERN = [
 const SWING = 0.6;
 const BASS_LEAN = 0.020;
 
+// Perfect Day harmonic bed — major chords from G minor, moving in 4ths.
+// 4-bar super-cycle. Close voice-led voicings in low-mid register.
+const BED_CHORDS = [
+  [48, 52, 55],  // C major  (C3 E3 G3)
+  [48, 53, 57],  // F major  (C3 F3 A3)
+  [50, 53, 58],  // Bb major (D3 F3 Bb3)
+  [51, 55, 58],  // Eb major (Eb3 G3 Bb3)
+];
+
 // ── Audio state ──
 let ctx = null;
 let master = null;
@@ -117,6 +126,7 @@ let drumGain = null;
 let bassGain = null;
 let hornGain = null;
 let textureGain = null;
+let bedFilter = null;
 let dubDelay = null;
 let dubDelayFb = null;
 let dubDelaySend = null;
@@ -232,6 +242,13 @@ function initAudio() {
   crackleBP.connect(crackleGain);
   crackleGain.connect(master);
   crackleGain._bp = crackleBP;
+
+  // ── Harmonic bed filter — dark, warm, sample-like ──
+  bedFilter = ctx.createBiquadFilter();
+  bedFilter.type = 'lowpass';
+  bedFilter.frequency.value = 600;
+  bedFilter.Q.value = 0.4;
+  bedFilter.connect(textureGain);
 
   // ── Dub delay slapback — filtered echo catches horn stabs & snares ──
   dubDelay = ctx.createDelay(2);
@@ -627,79 +644,45 @@ function scheduleHorns(time, barIndex) {
 // LAYER 4 — Texture, Ear Candy & Glue (AUTHENTIC)
 //
 // 1. Tape wobble: modulated delay (±4ms at 0.18Hz) on ALL audio
-// 2. Organ pad: warm Hammond-style drawbar organ with slow Leslie tremolo
+// 2. Harmonic bed: Perfect Day-inspired major chords from minor key (C→F→Bb→Eb)
 // 3. Dub delay slapback: filtered echo on horns & snare
 // 4. Reverse noise swell: once per 8-bar cycle
 // 5. Vinyl dust pops: random clicks per bar
 // ═══════════════════════════════════════════════════════════
 
-// Warm organ pad — Hammond drawbar style (8' + 4' + Leslie tremolo)
-// Follows chord changes, sits underneath the Rhodes. Low-key warmth.
-function scheduleOrganPad(time, barIndex) {
+// Harmonic bed — Perfect Day sample feel (major chords from G minor, 4ths).
+// Block chords, slow attack, long sustain, dark-filtered. Frozen confidence.
+function scheduleHarmonicBed(time, barIndex) {
   if (!enabled.texture) return;
-  const chord = CHORDS[barIndex % 2];
+  const bedChord = BED_CHORDS[barIndex % 4];
   const beat = 60 / bpm;
   const bar = beat * 4;
-  const dur = bar + 0.2;
+  const dur = bar + 0.4; // slight overlap — chords ring into next bar
 
-  // Use pad voicing one octave below Rhodes — warm bed
-  const voicing = [chord.bass + 12, ...chord.notes.slice(0, 2)]; // root + 2 color tones
-
-  for (const midi of voicing) {
+  for (const midi of bedChord) {
     const freq = mtof(midi);
 
-    // 8' drawbar — fundamental (sine)
-    const osc8 = ctx.createOscillator();
-    osc8.type = 'sine';
-    osc8.frequency.value = freq;
-    osc8.detune.value = -4 + Math.random() * 8; // slight analog drift
+    // Two detuned sines per note — analog warmth, sample-like
+    for (const det of [-3, 3]) {
+      const osc = ctx.createOscillator();
+      osc.type = 'sine';
+      osc.frequency.value = freq;
+      osc.detune.value = det + (Math.random() - 0.5) * 2;
 
-    // 4' drawbar — octave above (sine, quieter)
-    const osc4 = ctx.createOscillator();
-    osc4.type = 'sine';
-    osc4.frequency.value = freq * 2;
-    osc4.detune.value = -3 + Math.random() * 6;
+      const env = ctx.createGain();
+      // Slow attack (0.5s) — fades in like a sample
+      env.gain.setValueAtTime(0, time);
+      env.gain.linearRampToValueAtTime(0.038, time + 0.5);
+      env.gain.setTargetAtTime(0.032, time + 0.8, 0.6);
+      // Gentle release — overlaps into next chord
+      env.gain.setTargetAtTime(0, time + dur - 0.3, 0.25);
 
-    // Leslie tremolo — slow amplitude modulation
-    const trem = ctx.createOscillator();
-    const tremGain = ctx.createGain();
-    trem.type = 'sine';
-    trem.frequency.value = 0.9 + Math.random() * 0.2; // ~1Hz Leslie slow
-    tremGain.gain.value = 0.012; // modulates gain ±0.012
+      osc.connect(env);
+      env.connect(bedFilter);
 
-    // Envelopes
-    const env8 = ctx.createGain();
-    env8.gain.setValueAtTime(0, time);
-    env8.gain.linearRampToValueAtTime(0.028, time + 0.3);
-    env8.gain.setTargetAtTime(0.022, time + 0.5, 0.4);
-    env8.gain.setTargetAtTime(0, time + dur - 0.25, 0.2);
-
-    const env4 = ctx.createGain();
-    env4.gain.setValueAtTime(0, time);
-    env4.gain.linearRampToValueAtTime(0.010, time + 0.3);
-    env4.gain.setTargetAtTime(0.007, time + 0.5, 0.4);
-    env4.gain.setTargetAtTime(0, time + dur - 0.25, 0.2);
-
-    // Leslie modulates the 8' drawbar gain
-    trem.connect(tremGain);
-    tremGain.connect(env8.gain);
-
-    // LPF — keep it dark, below the Rhodes
-    const lpf = ctx.createBiquadFilter();
-    lpf.type = 'lowpass';
-    lpf.frequency.value = 700;
-    lpf.Q.value = 0.5;
-
-    osc8.connect(env8);
-    osc4.connect(env4);
-    env8.connect(lpf);
-    env4.connect(lpf);
-    lpf.connect(textureGain);
-
-    const stopAt = time + dur + 1;
-    osc8.start(time); osc8.stop(stopAt);
-    osc4.start(time); osc4.stop(stopAt);
-    trem.start(time); trem.stop(stopAt);
+      osc.start(time);
+      osc.stop(time + dur + 1.5);
+    }
   }
 }
 
@@ -794,7 +777,7 @@ function scheduleBar(time, barIndex) {
   scheduleDrums(time, barIndex);
   scheduleBass(time, barIndex);
   scheduleHorns(time, barIndex);
-  scheduleOrganPad(time, barIndex);
+  scheduleHarmonicBed(time, barIndex);
   scheduleReverseSwell(time, barIndex);
   scheduleVinylPops(time);
 }
