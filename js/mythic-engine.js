@@ -153,6 +153,8 @@ export class MythicEngine {
     this._updateLayerGains();
   }
 
+  get overlayLevel() { return this._overlayLevel; }
+
   getBeatPhase() {
     if (!this._playing) return 0;
     const beatLen = 60 / this._bpm;
