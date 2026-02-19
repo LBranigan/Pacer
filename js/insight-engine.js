@@ -143,6 +143,11 @@ export function buildInsightPayload(alignment, wcpm, accuracy, diagnostics, refe
 const SYSTEM_PROMPT = `You are summarizing a 60-second oral reading fluency assessment for a teacher.
 Write 3-4 sentences describing how the student read. Be specific — cite actual words.
 
+Data notes:
+- "Forgiven" words are NOT errors. A secondary ASR engine confirmed the student read them correctly, even though the primary engine misheard. Do NOT mention forgiven words as mistakes.
+- "Self-corrected" words are a STRENGTH — the student caught and fixed their own error.
+- Only words in the "Errors" table are actual mistakes. Words in "Forgiven" table were read correctly.
+
 Rules:
 - ONLY describe patterns that appear in the data below. Do NOT invent or infer anything not explicitly listed.
 - If the data does not mention the student stopped reading early, do NOT claim they did.
@@ -200,20 +205,30 @@ function buildUserPrompt(payload, studentName, passageSnippet, readabilityInfo) 
     lines.push(`- Stalled on: ${payload.stalledWords.join(', ')}`);
   }
 
-  // Interesting words table
-  const tableWords = payload.interestingWords.filter(w => !w.notAttempted);
-  if (tableWords.length > 0) {
+  // Split interesting words into errors vs forgiven
+  const activeWords = payload.interestingWords.filter(w => !w.notAttempted);
+  const errorWords = activeWords.filter(w => !w.forgiven);
+  const forgivenWords = activeWords.filter(w => w.forgiven && !w.selfCorrected);
+
+  if (errorWords.length > 0) {
     lines.push('');
-    lines.push('Words of interest:');
+    lines.push('Errors (actual mistakes):');
     lines.push('ref | heard | type | pace | notes');
     lines.push('--- | ----- | ---- | ---- | -----');
-    for (const w of tableWords.slice(0, 25)) {
+    for (const w of errorWords.slice(0, 20)) {
       const notes = [];
       if (w.struggle) notes.push('struggle');
       if (w.selfCorrected) notes.push('self-corrected');
-      if (w.forgiven) notes.push('forgiven: ' + (w.forgivenReason || 'yes'));
       if (w.evidence) notes.push('attempts: ' + w.evidence.join('+'));
       lines.push(`${w.ref} | ${w.heard || '—'} | ${w.type} | ${w.tier || '—'} | ${notes.join('; ') || '—'}`);
+    }
+  }
+
+  if (forgivenWords.length > 0) {
+    lines.push('');
+    lines.push('Forgiven (student read correctly — ASR initially misheard):');
+    for (const w of forgivenWords) {
+      lines.push(`- "${w.ref}" — ${w.forgivenReason || 'confirmed correct by secondary engine'}`);
     }
   }
 
