@@ -232,9 +232,26 @@ function updateSpring(dt) {
 
 // ── WPM to BPM mapping ──────────────────────────────────────────────────────
 
-function wcpmToBpm(wcpm) {
-  // BPM ≈ WPM, clamped to musically reasonable range
-  return Math.max(55, Math.min(160, wcpm));
+// Per-style BPM ranges — each genre has a natural tempo sweet spot.
+// WCPM is sqrt-compressed into the style's range so slow readers get the low end
+// and fast readers get the high end, but nobody leaves the genre's comfort zone.
+const STYLE_BPM_RANGE = {
+  classical:  { min: 50, max: 78 },   // Satie-like, contemplative
+  zelda:      { min: 76, max: 114 },   // Heroic march, needs energy
+  chiptune:   { min: 80, max: 118 },   // 8-bit game feel, upbeat
+  bossa:      { min: 62, max: 88 },    // Traditional bossa groove
+  lounge:     { min: 60, max: 86 },    // Coffee shop, laid-back
+  lofi:       { min: 58, max: 86 },    // Lo-fi hip-hop, chill
+  jazzhop:    { min: 60, max: 90 },    // Jazz hop, relaxed swing
+  ambient:    { min: 50, max: 72 },    // Atmospheric, slow drift
+  trap:       { min: 65, max: 90 },    // Half-time trap, heavy
+};
+
+function wcpmToBpm(wcpm, style) {
+  const range = STYLE_BPM_RANGE[style] || STYLE_BPM_RANGE.lofi;
+  // sqrt compression: normalize WCPM 20–200 to 0–1, then sqrt to compress top end
+  const t = Math.min(1, Math.max(0, Math.sqrt((wcpm - 20) / 180)));
+  return Math.round(range.min + t * (range.max - range.min));
 }
 
 // ── Overlay streak — correct words build richer beat ─────────────────────────
@@ -634,9 +651,9 @@ function setupAudio() {
     if (sel) sel.value = savedStyle;
   }
 
-  // Set tempo from assessment WCPM
+  // Set tempo from assessment WCPM, mapped to the style's natural BPM range
   if (assessment && assessment.wcpm) {
-    lofi.setTempo(wcpmToBpm(assessment.wcpm));
+    lofi.setTempo(wcpmToBpm(assessment.wcpm, lofi._style));
   } else {
     lofi.setTempo(72);
   }
@@ -1333,7 +1350,12 @@ function wireControls() {
   if (styleSelect) {
     styleSelect.addEventListener('change', () => {
       const val = styleSelect.value;
-      if (lofi) lofi.setStyle(val);
+      if (lofi) {
+        lofi.setStyle(val);
+        // Re-set tempo for the new style's natural BPM range
+        const wcpm = (assessment && assessment.wcpm) || 80;
+        lofi.setTempo(wcpmToBpm(wcpm, lofi._style) * playbackRate);
+      }
       localStorage.setItem('orf_remix_style', val);
     });
   }
@@ -1346,7 +1368,7 @@ function wireControls() {
       playbackRate = rate;
       if (audioEl) audioEl.playbackRate = rate;
       if (lofi && assessment) {
-        lofi.setTempo(wcpmToBpm(assessment.wcpm || 80) * rate);
+        lofi.setTempo(wcpmToBpm(assessment.wcpm || 80, lofi._style) * rate);
       }
     });
   }
