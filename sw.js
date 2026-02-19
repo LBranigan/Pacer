@@ -1,4 +1,4 @@
-const CACHE_NAME = 'orf-v72';
+const CACHE_NAME = 'orf-v73';
 
 const SHELL = [
   // --- HTML pages ---
@@ -107,8 +107,8 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Always fetch backend-config.json from network (tunnel URL changes on every restart)
-  if (event.request.url.includes('backend-config.json')) {
+  // Always fetch backend config gist from network (tunnel URL changes on every restart)
+  if (event.request.url.includes('gist.githubusercontent.com')) {
     return;
   }
 

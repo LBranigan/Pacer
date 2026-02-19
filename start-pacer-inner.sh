@@ -51,17 +51,19 @@ fi
 echo "      Tunnel: $TUNNEL_URL"
 echo ""
 
-# 4. Update config + push
-echo "[4/4] Updating config and pushing..."
-cat > backend-config.json << EOF
+# 4. Update config gist (no secrets in repo)
+GIST_ID="a3dc9467795d9db196588224d1e64a91"
+echo "[4/4] Updating config gist..."
+cat > /tmp/pacer-backend-config.json << EOF
 {
   "backendUrl": "$TUNNEL_URL",
-  "backendToken": "775b25bab047811191840f643b2d987202898971859541d4"
+  "backendToken": "$ORF_AUTH_TOKEN"
 }
 EOF
-git add backend-config.json
-git commit -m "chore: update tunnel URL" --no-verify 2>/dev/null
-git push 2>/dev/null && echo "      Pushed to GitHub!" || echo "      (already up to date)"
+gh gist edit "$GIST_ID" -f backend-config.json /tmp/pacer-backend-config.json 2>/dev/null \
+  && echo "      Gist updated!" \
+  || echo "      WARNING: Could not update gist (gh CLI issue?)"
+rm -f /tmp/pacer-backend-config.json
 echo ""
 
 echo "======================================"
@@ -69,7 +71,7 @@ echo "  READY!"
 echo ""
 echo "  Tunnel: $TUNNEL_URL"
 echo "  Just go to: https://lbranigan.github.io/Pacer/"
-echo "  Settings will auto-populate."
+echo "  Settings will auto-populate from gist."
 echo "======================================"
 echo ""
 echo "Tunnel running (PID $TUNNEL_PID). Close this window to stop."

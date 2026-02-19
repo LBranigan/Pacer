@@ -4,6 +4,7 @@ services/reverb/.env
 .env
 .env.local
 env.js
+backend-config.json
 
 # Audio test files (large, user-specific)
 audio files/

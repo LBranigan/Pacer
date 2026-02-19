@@ -3,11 +3,13 @@
  *
  * Priority order:
  * 1. localStorage (set by user or URL params)
- * 2. backend-config.json (auto-updated by start_services.bat)
+ * 2. GitHub Gist (auto-updated by start-pacer-inner.sh, never committed to repo)
  * 3. localhost fallback (for local development)
  *
  * Changing the URL or token requires a page reload.
  */
+
+const CONFIG_GIST_URL = 'https://gist.githubusercontent.com/LBranigan/a3dc9467795d9db196588224d1e64a91/raw/backend-config.json';
 
 function getDefaultBackendUrl() {
   const saved = localStorage.getItem('orf_backend_url');
@@ -26,12 +28,12 @@ export let BACKEND_URL = getDefaultBackendUrl();
 export let BACKEND_TOKEN = getDefaultBackendToken();
 
 /**
- * Fetch backend config from backend-config.json if no settings exist.
+ * Fetch backend config from GitHub Gist if not running locally.
  * Returns a promise that resolves when config is ready.
  */
 export const backendReady = (['localhost', '127.0.0.1'].includes(location.hostname))
   ? Promise.resolve()
-  : fetch('backend-config.json?t=' + Date.now())
+  : fetch(CONFIG_GIST_URL + '?t=' + Date.now())
       .then(r => r.json())
       .then(cfg => {
         if (cfg.backendUrl) {

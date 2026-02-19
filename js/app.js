@@ -4082,9 +4082,10 @@ if (backendUrlInput) {
   if (!backendUrlInput.value && savedUrl) backendUrlInput.value = savedUrl;
   if (!backendTokenInput.value && savedToken) backendTokenInput.value = savedToken;
 
-  // Auto-fetch backend config from GitHub Pages — always check for tunnel URL updates
+  // Auto-fetch backend config from gist — always check for tunnel URL updates
   if (!['localhost', '127.0.0.1'].includes(location.hostname)) {
-    fetch('backend-config.json?t=' + Date.now()).then(r => r.json()).then(cfg => {
+    const GIST_URL = 'https://gist.githubusercontent.com/LBranigan/a3dc9467795d9db196588224d1e64a91/raw/backend-config.json';
+    fetch(GIST_URL + '?t=' + Date.now()).then(r => r.json()).then(cfg => {
       if (cfg.backendUrl) {
         backendUrlInput.value = cfg.backendUrl;
         localStorage.setItem('orf_backend_url', cfg.backendUrl);
