@@ -2628,6 +2628,9 @@ async function runAnalysis() {
       const isCorrectish = entry.type === 'correct' ||
         (entry.type === 'substitution' && entry.forgiven);
       if (!isCorrectish) continue;
+      // Skip proper nouns — ASR fragments on unfamiliar names look like
+      // self-correction attempts but are really decoder artifacts
+      if (entry.nl?.isProperNoun) continue;
 
       let evidence = null;
       let reason = null;
