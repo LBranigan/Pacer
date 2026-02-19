@@ -494,7 +494,7 @@ export class KickItEngine {
     bp.Q.value = 0.8;
 
     const env = ctx.createGain();
-    const g = accent ? 0.08 : 0.04;
+    const g = accent ? 0.064 : 0.032;
     env.gain.setValueAtTime(g, time);
     env.gain.setTargetAtTime(0, time + 0.01, 0.015);
 
