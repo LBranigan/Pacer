@@ -154,7 +154,7 @@ export class KickItEngine {
     this._gains.bass.connect(bassReverb);
     bassReverb.connect(this._convolver);
 
-    // Horns -> master + 18% room
+    // Congas -> master + 18% room
     this._gains.horns = ctx.createGain();
     this._gains.horns.gain.value = 0;
     this._gains.horns.connect(this._master);
@@ -218,7 +218,7 @@ export class KickItEngine {
     dubFb.connect(this._dubDelay);
     dubLP.connect(this._dubDelaySend);
     this._dubDelaySend.connect(this._gains.texture);
-    // Horns and drums feed the dub delay
+    // Congas and drums feed the dub delay
     this._gains.horns.connect(this._dubDelay);
     const drumDubSend = ctx.createGain();
     drumDubSend.gain.value = 0.12;
