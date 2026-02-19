@@ -9,6 +9,7 @@
 
 import { LofiEngine } from './lofi-engine.js?v=20260219a2';
 import { MegaManEngine } from './megaman-engine.js?v=20260219a2';
+import { LofiV2Engine } from './lofi-v2-engine.js?v=20260219a2';
 import { MountainRange } from './mountain-range.js?v=20260219a2';
 import { getAudioBlob } from './audio-store.js';
 import { getAssessment, getStudents } from './storage.js';
@@ -62,8 +63,9 @@ let lineGroups = [];     // array of arrays: lineGroups[lineIdx] = [wordIdx, ...
 let currentLinePair = 0; // which pair of lines is visible (0 = lines 0-1, 1 = lines 2-3, ...)
 
 let audioCtx = null;
-let lofi = null;          // active engine (LofiEngine or MegaManEngine)
+let lofi = null;          // active engine (LofiEngine, LofiV2Engine, or MegaManEngine)
 let lofiEngine = null;    // cached LofiEngine instance
+let lofi2Engine = null;   // cached LofiV2Engine instance
 let megaEngine = null;    // cached MegaManEngine instance
 let audioEl = null;
 let audioUrl = null;     // ObjectURL — revoked on cleanup
@@ -245,6 +247,7 @@ const STYLE_BPM_RANGE = {
   ambient:    { min: 50, max: 72 },    // Atmospheric, slow drift
   trap:       { min: 65, max: 90 },    // Half-time trap, heavy
   mega:       { min: 76, max: 118 },   // NES Mega Man, energetic but tamed for reading
+  lofi2:      { min: 55, max: 84 },    // Lo-Fi V2, warm and chill
 };
 
 function wcpmToBpm(wcpm, style) {
@@ -259,19 +262,25 @@ function wcpmToBpm(wcpm, style) {
 // ── Engine switching (LoFi ↔ Mega Man) ───────────────────────────────────────
 
 function switchEngine(style) {
-  const isMega = style === 'mega';
   const wasPlaying = lofi && lofi.isPlaying;
 
   // Stop current engine if switching
   if (lofi && wasPlaying) lofi.stop();
 
-  if (isMega) {
+  if (style === 'mega') {
     if (!megaEngine) {
       megaEngine = new MegaManEngine(audioCtx);
       megaEngine.output.connect(beatGain);
     }
     megaEngine._style = 'mega';
     lofi = megaEngine;
+  } else if (style === 'lofi2') {
+    if (!lofi2Engine) {
+      lofi2Engine = new LofiV2Engine(audioCtx);
+      lofi2Engine.output.connect(beatGain);
+    }
+    lofi2Engine._style = 'lofi2';
+    lofi = lofi2Engine;
   } else {
     lofiEngine.setStyle(style);
     lofiEngine._style = style;
@@ -658,7 +667,7 @@ function setupAudio() {
   // megaEngine created in switchEngine() when needed
 
   // Set style from localStorage preference
-  const validStyles = ['lofi', 'jazzhop', 'ambient', 'bossa', 'lounge', 'chiptune', 'classical', 'trap', 'zelda', 'bossa-piano', 'lounge-piano', 'jazzhop-piano', 'chiptune-piano', 'mega'];
+  const validStyles = ['lofi', 'jazzhop', 'ambient', 'bossa', 'lounge', 'chiptune', 'classical', 'trap', 'zelda', 'bossa-piano', 'lounge-piano', 'jazzhop-piano', 'chiptune-piano', 'mega', 'lofi2'];
   const savedStyle = localStorage.getItem('orf_remix_style');
   const initialStyle = (savedStyle && validStyles.includes(savedStyle)) ? savedStyle : 'lofi';
 
@@ -1533,6 +1542,10 @@ function cleanup() {
   if (lofiEngine) {
     lofiEngine.dispose();
     lofiEngine = null;
+  }
+  if (lofi2Engine) {
+    lofi2Engine.dispose();
+    lofi2Engine = null;
   }
   if (megaEngine) {
     megaEngine.dispose();
