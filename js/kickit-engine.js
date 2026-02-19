@@ -11,7 +11,7 @@
  *   Layer 1 (Base):  Rhodes EP + vinyl crackle
  *   Layer 2 (+3):    Drums (kick, snare, swung hats)
  *   Layer 3 (+6):    Bass (root + sub + passing tones)
- *   Layer 4 (+9):    Congas / bongos (syncopated hand percussion)
+ *   Layer 4 (+9):    Shaker (steady swung 8ths)
  *   Layer 5 (+12):   Texture (guitar bed, dub delay, vinyl pops, reverse swell)
  */
 
@@ -22,29 +22,7 @@ const CHORDS = [
   { name: 'Cm7', notes: [60, 63, 67, 70], bass: 48, passing: null },
 ];
 
-// Conga/bongo — swung off-beats (beat + 0.6) to lock with hats & fill gaps
-// 4-bar cycle over the 2-bar drum loop
-const PERC_PATTERN = [
-  // Bar 0 (Gm7 — kick on 1, ghost on 1+swing)
-  [0, 0.6,  340, 0.7, 0.20],   // low — after kick
-  [0, 1.6,  490, 0.5, 0.12],   // slap — after snare
-  [0, 2.6,  340, 0.55, 0.18],  // low
-  [0, 3.6,  490, 0.45, 0.12],  // slap — after snare
-  // Bar 1 (Cm7 — kick on 1, kick on 3)
-  [1, 0.6,  340, 0.7, 0.20],   // low — after kick
-  [1, 2.6,  490, 0.55, 0.12],  // slap — after kick
-  [1, 3.6,  380, 0.5, 0.18],   // mid — after snare
-  // Bar 2 (repeat bar 0)
-  [2, 0.6,  340, 0.7, 0.20],   // low
-  [2, 1.6,  490, 0.5, 0.12],   // slap
-  [2, 2.6,  340, 0.55, 0.18],  // low
-  [2, 3.6,  490, 0.45, 0.12],  // slap
-  // Bar 3 (variation — bongo accent)
-  [3, 0.6,  340, 0.7, 0.20],   // low
-  [3, 1.6,  580, 0.4, 0.10],   // bongo pop
-  [3, 2.6,  490, 0.55, 0.12],  // slap
-  [3, 3.6,  380, 0.5, 0.18],   // mid
-];
+// (shaker pattern generated in _scheduleHorns — no pattern table needed)
 
 const SWING = 0.6;
 const BASS_LEAN = 0.020;
@@ -488,60 +466,43 @@ export class KickItEngine {
     tri.start(t); tri.stop(t + duration + 0.4);
   }
 
-  // ── CONGAS / BONGOS ──────────────────────────────────────────────────────────
+  // ── SHAKER ───────────────────────────────────────────────────────────────────
 
   _scheduleHorns(time, barIndex) {
     const beat = 60 / this._bpm;
-    const barInCycle = barIndex % 4;
 
-    for (const [bar, beatOffset, freq, vel, decay] of PERC_PATTERN) {
-      if (barInCycle === bar) {
-        this._playPercHit(time + beat * beatOffset, freq, vel, decay);
-      }
+    // Steady swung 8ths — soft on beat, accent on off-beat
+    for (let i = 0; i < 4; i++) {
+      this._playShaker(time + beat * i, false);
+      this._playShaker(time + beat * (i + SWING), true);
     }
   }
 
-  _playPercHit(time, freq, vel, decay) {
+  _playShaker(time, accent) {
     const ctx = this._ctx;
-    const t = time + (Math.random() - 0.5) * 0.004;
-    const G = 0.14 * vel;
+    const noiseLen = Math.ceil(ctx.sampleRate * 0.04);
+    const buf = ctx.createBuffer(1, noiseLen, ctx.sampleRate);
+    const d = buf.getChannelData(0);
+    for (let i = 0; i < noiseLen; i++) d[i] = Math.random() * 2 - 1;
 
-    // Pitched body — sine with downward pitch sweep (conga resonance)
-    const osc = ctx.createOscillator();
-    osc.type = 'sine';
-    osc.frequency.setValueAtTime(freq * 1.8, t);
-    osc.frequency.exponentialRampToValueAtTime(freq, t + 0.012);
+    const src = ctx.createBufferSource();
+    src.buffer = buf;
+
+    const bp = ctx.createBiquadFilter();
+    bp.type = 'bandpass';
+    bp.frequency.value = 8500;
+    bp.Q.value = 0.8;
 
     const env = ctx.createGain();
-    env.gain.setValueAtTime(G, t);
-    env.gain.setTargetAtTime(0, t + 0.015, decay * 0.4);
+    const g = accent ? 0.08 : 0.04;
+    env.gain.setValueAtTime(g, time);
+    env.gain.setTargetAtTime(0, time + 0.01, 0.015);
 
-    osc.connect(env);
+    src.connect(bp);
+    bp.connect(env);
     env.connect(this._gains.horns);
-    osc.start(t);
-    osc.stop(t + decay + 0.3);
-
-    // Attack transient — short noise burst for the "slap"
-    const noiseLen = Math.ceil(ctx.sampleRate * 0.006);
-    const nBuf = ctx.createBuffer(1, noiseLen, ctx.sampleRate);
-    const nd = nBuf.getChannelData(0);
-    for (let i = 0; i < noiseLen; i++) nd[i] = Math.random() * 2 - 1;
-
-    const noise = ctx.createBufferSource();
-    noise.buffer = nBuf;
-    const nBP = ctx.createBiquadFilter();
-    nBP.type = 'bandpass';
-    nBP.frequency.value = freq * 2.5;
-    nBP.Q.value = 1.2;
-    const nEnv = ctx.createGain();
-    nEnv.gain.setValueAtTime(G * 0.6, t);
-    nEnv.gain.setTargetAtTime(0, t + 0.003, 0.003);
-
-    noise.connect(nBP);
-    nBP.connect(nEnv);
-    nEnv.connect(this._gains.horns);
-    noise.start(t);
-    noise.stop(t + 0.015);
+    src.start(time);
+    src.stop(time + 0.06);
   }
 
   // ── TEXTURE — Harmonic bed (Perfect Day feel), reverse swell, vinyl pops ────
