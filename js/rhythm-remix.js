@@ -283,7 +283,6 @@ function switchEngine(style) {
     lofi = lofi2Engine;
   } else {
     lofiEngine.setStyle(style);
-    lofiEngine._style = style;
     lofi = lofiEngine;
   }
 
