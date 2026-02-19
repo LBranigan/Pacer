@@ -308,6 +308,7 @@ export class Zelda3Engine {
     this._bar = 0;
     this._p2EchoQueue = [];
     this._nextStepTime = this._ctx.currentTime + 0.05;
+    this._startDrone();
     this._startScheduler();
   }
 
@@ -317,6 +318,7 @@ export class Zelda3Engine {
     this._playing = false;
     this._paused = false;
     this._stopScheduler();
+    this._stopDrone();
     this._releaseAllSources();
     this._silenceBuses();
   }
@@ -326,6 +328,7 @@ export class Zelda3Engine {
     if (!this._playing || this._paused) return;
     this._paused = true;
     this._stopScheduler();
+    this._stopDrone();
     this._releaseAllSources();
   }
 
@@ -334,6 +337,7 @@ export class Zelda3Engine {
     if (!this._playing || !this._paused) return;
     this._paused = false;
     this._nextStepTime = this._ctx.currentTime + 0.05;
+    this._startDrone();
     this._startScheduler();
   }
 
@@ -426,8 +430,7 @@ export class Zelda3Engine {
     n.arpBus.gain.value = 0;
     n.arpBus.connect(n.airFilter);
 
-    // Level 0 drone (triangle sine pad, always on when playing)
-    this._startDrone();
+    // Level 0 drone: started/stopped with start()/stop(), NOT in constructor
   }
 
   // ─── Drone (Level 0) ────────────────────────────────────────────────────
@@ -450,6 +453,16 @@ export class Zelda3Engine {
       osc.start(0);
       return { osc, gain: g };
     });
+  }
+
+  _stopDrone() {
+    const n = this._nodes;
+    if (n.droneOscs) {
+      for (const { osc } of n.droneOscs) {
+        try { osc.stop(); } catch (_) {}
+      }
+      n.droneOscs = null;
+    }
   }
 
   // ─── Overlay gain control ────────────────────────────────────────────────
@@ -866,7 +879,7 @@ export class Zelda3Engine {
   _silenceBuses() {
     const n = this._nodes;
     const now = this._ctx ? this._ctx.currentTime : 0;
-    const buses = ['p1Bus','p2Bus','noiseBus','arpBus'];
+    const buses = ['p1Bus','p2Bus','triBus','noiseBus','arpBus'];
     for (const key of buses) {
       if (n[key]) {
         n[key].gain.setTargetAtTime(0, now, 0.05);

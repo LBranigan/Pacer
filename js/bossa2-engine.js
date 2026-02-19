@@ -183,7 +183,7 @@ export class Bossa2Engine {
   // ── Playback Control ─────────────────────────────────────────────────────────
 
   start() {
-    if (this._playing) return;
+    if (this._playing) this.stop();
     if (this._ctx.state === 'suspended') this._ctx.resume();
     this._playing = true;
     this._paused  = false;
