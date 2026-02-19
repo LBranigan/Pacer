@@ -31,11 +31,16 @@
     <option value="classical">Classical Piano</option>
     <option value="trap">Trap</option>
     <option value="zelda">Zelda</option>
+    <option value="megaman">Mega Man 2</option>
+    <option value="zelda2">Zelda II Palace</option>
     <option value="bossa-piano">Bossa + Piano</option>
     <option value="jazzhop-piano">Jazz Hop + Piano</option>
     <option value="chiptune-piano">Chiptune + Piano</option>
     <option value="lounge-piano">Lounge + Piano</option>
     <option value="zelda-piano">Zelda + Piano</option>
+    <option value="bossa2">Bossa + Piano 2</option>
+    <option value="lofi3">Lo-Fi 3</option>
+    <option value="zelda3">Zelda 3</option>
   </select>
   <button id="playBtn">Play</button>
   <button id="stopBtn">Stop</button>
@@ -45,68 +50,161 @@
   <label>BPM: <span id="bpmLabel">75</span> <input type="range" id="bpmSlider" min="50" max="140" value="75"></label>
 </div>
 <div class="controls">
-  <span style="color:#888;font-size:0.85rem">Overlay:</span>
-  <button class="level-btn active" data-level="0">Base</button>
-  <button class="level-btn" data-level="0.35">+3</button>
-  <button class="level-btn" data-level="0.65">+6</button>
-  <button class="level-btn" data-level="1">+9</button>
-  <button class="level-btn" data-level="1.5">+12</button>
+  <span style="color:#888;font-size:0.85rem" id="overlayLabel">Overlay:</span>
+  <button class="level-btn active" data-level="0" data-lofi="Base" data-mm="Drums" data-dt="Pad">Base</button>
+  <button class="level-btn" data-level="0.35" data-lofi="+3" data-mm="+ Bass" data-dt="+ Drums">+3</button>
+  <button class="level-btn" data-level="0.65" data-lofi="+6" data-mm="+ Echo" data-dt="+ Bass/Piano">+6</button>
+  <button class="level-btn" data-level="1" data-lofi="+9" data-mm="+ Lead" data-dt="+ 2x Hats">+9</button>
+  <button class="level-btn" data-level="1.5" data-lofi="+12" data-mm="+ Boost" data-dt="+ Fills">+12</button>
 </div>
 <div class="status" id="status">Ready</div>
 
 <script type="module">
-import { LofiEngine } from './js/lofi-engine.js?v=20260218a1';
+import { LofiEngine } from './js/lofi-engine.js?v=20260219b1';
+import { MegaManEngine } from './js/megaman-engine.js?v=20260219b1';
+import { ZeldaIIEngine } from './js/zelda2-engine.js?v=20260219b1';
+import { Bossa2Engine } from './js/bossa2-engine.js?v=20260219b1';
+import { Lofi3Engine } from './js/lofi3-engine.js?v=20260219b1';
+import { Zelda3Engine } from './js/zelda3-engine.js?v=20260219b1';
 
 let ctx = null;
-let engine = null;
+let lofiEngine = null;
+let mmEngine = null;
+let z2Engine = null;
+let bossa2Engine = null;
+let lofi3Engine = null;
+let zelda3Engine = null;
+let activeEngine = null;
 
-function getEngine() {
-  if (!engine) {
-    ctx = new (window.AudioContext || window.webkitAudioContext)();
-    engine = new LofiEngine(ctx);
-    engine.output.connect(ctx.destination);
+function getCtx() {
+  if (!ctx) ctx = new (window.AudioContext || window.webkitAudioContext)();
+  return ctx;
+}
+
+const STANDALONE_ENGINES = new Set(['megaman', 'zelda2', 'bossa2', 'lofi3', 'zelda3']);
+function isStandaloneEngine(style) { return STANDALONE_ENGINES.has(style); }
+// Keep old name for overlay button labels
+function isNesEngine(style) { return style === 'megaman' || style === 'zelda2' || style === 'zelda3'; }
+
+function getEngine(style) {
+  if (style === 'megaman') {
+    if (!mmEngine) { mmEngine = new MegaManEngine(getCtx()); mmEngine.output.connect(getCtx().destination); }
+    return mmEngine;
   }
-  return engine;
+  if (style === 'zelda2') {
+    if (!z2Engine) { z2Engine = new ZeldaIIEngine(getCtx()); z2Engine.output.connect(getCtx().destination); }
+    return z2Engine;
+  }
+  if (style === 'bossa2') {
+    if (!bossa2Engine) { bossa2Engine = new Bossa2Engine(getCtx()); bossa2Engine.output.connect(getCtx().destination); }
+    return bossa2Engine;
+  }
+  if (style === 'lofi3') {
+    if (!lofi3Engine) { lofi3Engine = new Lofi3Engine(getCtx()); lofi3Engine.output.connect(getCtx().destination); }
+    return lofi3Engine;
+  }
+  if (style === 'zelda3') {
+    if (!zelda3Engine) { zelda3Engine = new Zelda3Engine(getCtx()); zelda3Engine.output.connect(getCtx().destination); }
+    return zelda3Engine;
+  }
+  if (!lofiEngine) { lofiEngine = new LofiEngine(getCtx()); lofiEngine.output.connect(getCtx().destination); }
+  return lofiEngine;
+}
+
+function switchEngine(style) {
+  const wanted = getEngine(style);
+  if (activeEngine && activeEngine !== wanted && activeEngine._playing) {
+    activeEngine.stop();
+  }
+  activeEngine = wanted;
+  if (!isStandaloneEngine(style)) activeEngine.setStyle(style);
+  return activeEngine;
+}
+
+// BPM slider defaults per engine type
+const BPM_LOFI = { min: 50, max: 140, value: 75 };
+const BPM_STANDALONE = {
+  megaman: { min: 100, max: 200, value: 150 },
+  zelda2:  { min: 110, max: 210, value: 160 },
+  bossa2:  { min: 55, max: 90, value: 70 },
+  lofi3:   { min: 55, max: 90, value: 72 },
+  zelda3:  { min: 55, max: 90, value: 70 },
+};
+
+function updateBpmRange(style) {
+  const cfg = BPM_STANDALONE[style] || BPM_LOFI;
+  const slider = document.getElementById('bpmSlider');
+  slider.min = cfg.min;
+  slider.max = cfg.max;
+  slider.value = cfg.value;
+  document.getElementById('bpmLabel').textContent = cfg.value;
+}
+
+function updateOverlayButtons(style) {
+  const nes = isNesEngine(style);
+  const dt  = style === 'bossa2' || style === 'lofi3' || style === 'zelda3';
+  const key = dt ? 'dt' : nes ? 'mm' : 'lofi';
+  document.getElementById('overlayLabel').textContent = dt ? 'Layers:' : nes ? 'Channels:' : 'Overlay:';
+  document.querySelectorAll('.level-btn').forEach(btn => {
+    btn.textContent = btn.dataset[key];
+  });
+  selectOverlayLevel(nes ? 1.5 : 0);
+}
+
+function selectOverlayLevel(level) {
+  document.querySelectorAll('.level-btn').forEach(b => {
+    const l = parseFloat(b.dataset.level);
+    b.classList.toggle('active', l === level);
+  });
+  if (activeEngine && activeEngine.setOverlayLevel) activeEngine.setOverlayLevel(level);
 }
 
 document.getElementById('playBtn').addEventListener('click', () => {
-  const e = getEngine();
   const style = document.getElementById('style').value;
-  e.setStyle(style);
+  updateOverlayButtons(style);
+  const e = switchEngine(style);
   e.output.gain.value = document.getElementById('beatVol').value / 100;
+  e.setTempo(Number(document.getElementById('bpmSlider').value));
+  // Apply current overlay level
+  const activeBtn = document.querySelector('.level-btn.active');
+  if (activeBtn) e.setOverlayLevel(parseFloat(activeBtn.dataset.level));
   e.start();
   document.getElementById('status').textContent = 'Playing: ' + style;
 });
 
 document.getElementById('stopBtn').addEventListener('click', () => {
-  if (engine) { engine.stop(); }
+  if (activeEngine) { activeEngine.stop(); }
   document.getElementById('status').textContent = 'Stopped';
 });
 
 document.getElementById('style').addEventListener('change', () => {
-  if (engine && engine._playing) {
-    const style = document.getElementById('style').value;
-    engine.setStyle(style);
+  const style = document.getElementById('style').value;
+  updateBpmRange(style);
+  updateOverlayButtons(style);
+  if (activeEngine && activeEngine._playing) {
+    const e = switchEngine(style);
+    e.output.gain.value = document.getElementById('beatVol').value / 100;
+    e.setTempo(Number(document.getElementById('bpmSlider').value));
+    const activeBtn = document.querySelector('.level-btn.active');
+    if (activeBtn) e.setOverlayLevel(parseFloat(activeBtn.dataset.level));
+    e.start();
     document.getElementById('status').textContent = 'Playing: ' + style;
   }
 });
 
 document.getElementById('beatVol').addEventListener('input', (e) => {
-  if (engine) engine.output.gain.value = e.target.value / 100;
+  if (activeEngine) activeEngine.output.gain.value = e.target.value / 100;
 });
 
 document.getElementById('bpmSlider').addEventListener('input', (e) => {
   document.getElementById('bpmLabel').textContent = e.target.value;
-  if (engine) engine.setTempo(Number(e.target.value));
+  if (activeEngine) activeEngine.setTempo(Number(e.target.value));
 });
 
 // Level buttons
 document.querySelectorAll('.level-btn').forEach(btn => {
   btn.addEventListener('click', () => {
-    document.querySelectorAll('.level-btn').forEach(b => b.classList.remove('active'));
-    btn.classList.add('active');
-    const level = parseFloat(btn.dataset.level);
-    if (engine) engine.setOverlayLevel(level);
+    selectOverlayLevel(parseFloat(btn.dataset.level));
   });
 });
 </script>
