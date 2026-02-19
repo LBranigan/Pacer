@@ -154,9 +154,9 @@ Rules:
 - Every claim must reference specific words from the data.
 - Quantify: "4 of 6 multisyllabic words" not "many words."
 - Note strengths (self-corrections, steady pace on some words) alongside difficulties.
-- Do NOT write generic advice like "the student needs more practice."
 - Do NOT restate numbers the teacher can already see (WCPM, accuracy %).
 - Focus on PATTERNS: what types of words caused trouble? What did the student do when stuck?
+- End with a brief takeaway: "Overall, strong at [specific skill] — [specific area] is the growth edge." Be specific (e.g. "strong at single-syllable decoding — multisyllabic words are the growth edge"), not generic.
 - Write like a reading specialist's brief note — direct, warm, specific.
 - Use the student's name naturally if provided.`;
 
