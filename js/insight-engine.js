@@ -16,7 +16,7 @@ const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/${GE
 /**
  * Filters alignment down to "interesting" words and detects mechanical patterns.
  */
-export function buildInsightPayload(alignment, wcpm, accuracy, diagnostics, referenceText) {
+export function buildInsightPayload(alignment, wcpm, accuracy, diagnostics, referenceText, benchmark) {
   const wordSpeed = diagnostics?.wordSpeed;
   const prosody = diagnostics?.prosody;
 
@@ -134,6 +134,15 @@ export function buildInsightPayload(alignment, wcpm, accuracy, diagnostics, refe
       examples: abandonExamples.slice(0, 4)
     } : null,
 
+    // Grade-level benchmark (Hasbrouck-Tindal norms)
+    benchmark: benchmark ? {
+      grade: benchmark.grade,
+      season: benchmark.season,
+      status: benchmark.status,        // 'on-track', 'some-risk', 'at-risk'
+      p50: benchmark.norms?.p50,       // 50th percentile WCPM for this grade/season
+      p25: benchmark.norms?.p25,
+    } : null,
+
     interestingWords
   };
 }
@@ -147,6 +156,7 @@ Data notes:
 - "Forgiven" words are NOT errors. A secondary ASR engine confirmed the student read them correctly, even though the primary engine misheard. Do NOT mention forgiven words as mistakes.
 - "Self-corrected" words are a STRENGTH — the student caught and fixed their own error.
 - Only words in the "Errors" table are actual mistakes. Words in "Forgiven" table were read correctly.
+- "Stalled" and "struggling" pace tiers are RELATIVE to the student's own median pace — they do NOT mean the student read slowly in absolute terms. A student can be "on track" for their grade level while still having relative stalls on specific hard words. Always check the grade-level benchmark line (if provided) before characterizing overall pace.
 
 Rules:
 - ONLY describe patterns that appear in the data below. Do NOT invent or infer anything not explicitly listed.
@@ -155,8 +165,9 @@ Rules:
 - Quantify: "4 of 6 multisyllabic words" not "many words."
 - Note strengths (self-corrections, steady pace) alongside difficulties. Do NOT list examples of words read correctly — only cite words that were problematic.
 - Do NOT restate numbers the teacher can already see (WCPM, accuracy %).
+- If a grade-level benchmark is provided and the student is ON TRACK or above, do NOT describe their reading as "slow" or "choppy" overall. Relative stalls on individual words are fine to mention, but frame the overall pace positively.
 - Focus on PATTERNS: what types of words caused trouble? What did the student do when stuck?
-- End with a brief takeaway: "Overall, strong at [specific skill] — [specific area] is the growth edge." Be specific (e.g. "strong at single-syllable decoding — multisyllabic words are the growth edge"), not generic.
+- End with an "Overall" sentence that contextualizes performance. If a grade-level benchmark is provided, reference it (e.g. "Overall, reading on track for grade 4 with strong single-syllable decoding — multisyllabic words are the growth edge." or "Overall, reading below grade-level pace with frequent stalls on longer words — building decoding strategies for multisyllabic words would help."). If no benchmark, use accuracy and error count to frame it (e.g. "Overall, 95% accuracy with only minor stumbles shows solid fluency — unfamiliar proper nouns are the one gap."). Be specific, not generic.
 - Write like a reading specialist's brief note — direct, warm, specific.
 - Use the student's name naturally if provided.`;
 
@@ -170,6 +181,15 @@ function buildUserPrompt(payload, studentName, passageSnippet, readabilityInfo) 
     lines.push(passageDesc);
   }
   lines.push(`WCPM: ${payload.wcpm ?? '?'} | Accuracy: ${payload.accuracy}% | Self-corrections: ${payload.selfCorrections.count}`);
+
+  // Grade-level benchmark context
+  if (payload.benchmark) {
+    const b = payload.benchmark;
+    const statusLabel = b.status === 'on-track' ? 'ON TRACK (≥50th %ile)' :
+                        b.status === 'some-risk' ? 'SOME RISK (25th-49th %ile)' :
+                        'AT RISK (<25th %ile)';
+    lines.push(`Grade ${b.grade} ${b.season} benchmark: ${statusLabel} — grade-level 50th %ile is ${b.p50} WCPM`);
+  }
   lines.push('');
 
   // Patterns

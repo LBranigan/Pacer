@@ -2985,7 +2985,7 @@ async function runAnalysis() {
   // AI Insight (non-blocking — don't delay results display)
   const insightKey = localStorage.getItem('orf_gemini_key') || document.getElementById('geminiKey')?.value?.trim();
   if (insightKey) {
-    const insightPayload = buildInsightPayload(alignment, wcpm, accuracy, diagnostics, referenceText);
+    const insightPayload = buildInsightPayload(alignment, wcpm, accuracy, diagnostics, referenceText, benchmark);
     const insightContainer = document.getElementById('insightContainer');
     renderInsightPanel(insightContainer, null, true); // loading state
     const insightStudent = getStudents().find(s => s.id === appState.selectedStudentId);

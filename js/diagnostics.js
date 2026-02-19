@@ -1420,9 +1420,25 @@ export function computeWordDurationOutliers(transcriptWords, alignment) {
     if (durationMs <= 0) { hypIndex = effectiveHyp + partsCount; continue; }
 
     const wordText = entry.compound ? (entry.hyp || entry.ref || word.word) : word.word;
-    const phonemeInfo = getPhonemeCountWithFallback(wordText);
-    const phonemes = phonemeInfo.count;
-    const syllables = countSyllables(wordText);
+    // For compound words with parts, sum phonemes individually for accuracy
+    let phonemes, syllables, phSource;
+    if (entry.compound && entry.parts && entry.parts.length > 1) {
+      let totalPh = 0, totalSyl = 0, anyFallback = false;
+      for (const part of entry.parts) {
+        const pi = getPhonemeCountWithFallback(part);
+        totalPh += pi.count;
+        totalSyl += countSyllables(part);
+        if (pi.source === 'fallback') anyFallback = true;
+      }
+      phonemes = totalPh;
+      syllables = totalSyl;
+      phSource = anyFallback ? 'fallback' : 'cmudict';
+    } else {
+      const phonemeInfo = getPhonemeCountWithFallback(wordText);
+      phonemes = phonemeInfo.count;
+      syllables = countSyllables(wordText);
+      phSource = phonemeInfo.source;
+    }
     const normalizedDurationMs = durationMs / Math.max(phonemes, PHONEME_FLOOR);
 
     allWords.push({
@@ -1432,7 +1448,7 @@ export function computeWordDurationOutliers(transcriptWords, alignment) {
       refIndex: null, // filled below
       durationMs: Math.round(durationMs),
       phonemes,
-      phonemeSource: phonemeInfo.source,
+      phonemeSource: phSource,
       syllables,
       normalizedDurationMs: Math.round(normalizedDurationMs),
       alignmentType: entry.type,
@@ -1680,11 +1696,29 @@ export function computeWordSpeedTiers(wordOutliers, alignment, xvalRawWords, tra
     }
 
     if (durationMs != null && durationMs > 0) {
-      // Use ref word for phoneme/syllable count (what the student was trying to read)
-      const refText = entry.ref || entry.hyp || '';
-      const phonemeInfo = getPhonemeCountWithFallback(refText);
-      const phonemes = phonemeInfo.count;
-      const syllables = countSyllables(refText);
+      // For compound words (number expansions, multi-word merges), sum phonemes
+      // of individual spoken parts — e.g. "1961" ref has 3 est. phonemes but
+      // "nineteen sixty one" (the spoken form) has ~12.
+      let phonemes, syllables, phonemeSource;
+      if (entry.compound && entry.parts && entry.parts.length > 1) {
+        let totalPh = 0, totalSyl = 0;
+        let anyFallback = false;
+        for (const part of entry.parts) {
+          const pi = getPhonemeCountWithFallback(part);
+          totalPh += pi.count;
+          totalSyl += countSyllables(part);
+          if (pi.source === 'fallback') anyFallback = true;
+        }
+        phonemes = totalPh;
+        syllables = totalSyl;
+        phonemeSource = anyFallback ? 'fallback' : 'cmudict';
+      } else {
+        const refText = entry.ref || entry.hyp || '';
+        const phonemeInfo = getPhonemeCountWithFallback(refText);
+        phonemes = phonemeInfo.count;
+        syllables = countSyllables(refText);
+        phonemeSource = phonemeInfo.source;
+      }
       const normalizedMs = Math.round(durationMs / Math.max(phonemes, PHONEME_FLOOR));
 
       xvalDurations.push({ phonemes, syllables, normalizedMs, durationMs });
@@ -1693,7 +1727,7 @@ export function computeWordSpeedTiers(wordOutliers, alignment, xvalRawWords, tra
       words.push({
         refIndex, refWord: entry.ref,
         hypIndex: effectiveHyp, word: entry.hyp || m4Word?.word || '',
-        durationMs, phonemes, phonemeSource: phonemeInfo.source, syllables, normalizedMs,
+        durationMs, phonemes, phonemeSource, syllables, normalizedMs,
         ratio: null, // filled after baseline computation
         tier: null,  // filled after baseline computation
         alignmentType: entry.type,
