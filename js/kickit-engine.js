@@ -552,6 +552,7 @@ export class KickItEngine {
   }
 
   // Perfect Day guitar bed — strummed Karplus-Strong chords (G→Cm→Cm→F)
+  // Pitch bends up into each chord so transitions feel like one note morphing.
   _scheduleHarmonicBed(time, barIndex) {
     const ctx = this._ctx;
     const chord = BED_CHORDS[barIndex % 4];
@@ -562,15 +563,21 @@ export class KickItEngine {
     for (let i = 0; i < chord.length; i++) {
       const freq = mtof(chord[i]);
       const t = time + i * strumGap;
-      const dur = bar + 0.4 - (i * strumGap); // ring until next bar
+      const dur = bar + 0.8 - (i * strumGap); // longer ring — overlap into next chord
 
       const buf = this._createPluckBuffer(freq, dur + 1);
       const src = ctx.createBufferSource();
       src.buffer = buf;
 
+      // Bend up into pitch — start flat, slide to true pitch
+      src.detune.setValueAtTime(-70, t);
+      src.detune.linearRampToValueAtTime(0, t + 0.22);
+
+      // Soft attack + subtle volume
       const env = ctx.createGain();
-      env.gain.setValueAtTime(0.11, t);
-      env.gain.setTargetAtTime(0, t + dur - 0.3, 0.25);
+      env.gain.setValueAtTime(0, t);
+      env.gain.linearRampToValueAtTime(0.065, t + 0.08);
+      env.gain.setTargetAtTime(0, t + dur - 0.4, 0.35);
 
       src.connect(env);
       env.connect(this._bedFilter);

@@ -12,7 +12,7 @@ import { LofiV2Engine } from './lofi-v2-engine.js?v=20260220a';
 import { StickerbrushEngine } from './stickerbrush-engine.js?v=20260220a';
 import { StickerbrushV2Engine } from './stickerbrush-v2-engine.js?v=20260220a';
 import { MythicEngine } from './mythic-engine.js?v=20260220a';
-import { KickItEngine } from './kickit-engine.js?v=20260220d';
+import { KickItEngine } from './kickit-engine.js?v=20260220e';
 import { MountainRange } from './mountain-range.js?v=20260220a';
 import { getAudioBlob } from './audio-store.js';
 import { getAssessment, getStudents } from './storage.js';
