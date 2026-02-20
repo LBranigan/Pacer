@@ -9,7 +9,7 @@
  * Changing the URL or token requires a page reload.
  */
 
-const CONFIG_GIST_URL = 'https://gist.githubusercontent.com/LBranigan/a3dc9467795d9db196588224d1e64a91/raw/backend-config.json';
+const CONFIG_GIST_API = 'https://api.github.com/gists/a3dc9467795d9db196588224d1e64a91';
 
 function getDefaultBackendUrl() {
   const saved = localStorage.getItem('orf_backend_url');
@@ -28,14 +28,17 @@ export let BACKEND_URL = getDefaultBackendUrl();
 export let BACKEND_TOKEN = getDefaultBackendToken();
 
 /**
- * Fetch backend config from GitHub Gist if not running locally.
+ * Fetch backend config from GitHub Gist API (not raw URL — CDN caches raw aggressively).
  * Returns a promise that resolves when config is ready.
  */
 export const backendReady = (['localhost', '127.0.0.1'].includes(location.hostname))
   ? Promise.resolve()
-  : fetch(CONFIG_GIST_URL + '?t=' + Date.now())
+  : fetch(CONFIG_GIST_API)
       .then(r => r.json())
-      .then(cfg => {
+      .then(gist => {
+        const content = gist.files?.['backend-config.json']?.content;
+        if (!content) return;
+        const cfg = JSON.parse(content);
         if (cfg.backendUrl) {
           BACKEND_URL = cfg.backendUrl;
           localStorage.setItem('orf_backend_url', cfg.backendUrl);

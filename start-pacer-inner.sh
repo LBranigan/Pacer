@@ -60,7 +60,7 @@ cat > /tmp/pacer-backend-config.json << EOF
   "backendToken": "$ORF_AUTH_TOKEN"
 }
 EOF
-gh gist edit "$GIST_ID" -f backend-config.json /tmp/pacer-backend-config.json 2>/dev/null \
+/home/brani/miniconda3/bin/gh gist edit "$GIST_ID" -f backend-config.json /tmp/pacer-backend-config.json 2>/dev/null \
   && echo "      Gist updated!" \
   || echo "      WARNING: Could not update gist (gh CLI issue?)"
 rm -f /tmp/pacer-backend-config.json
