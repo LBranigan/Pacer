@@ -2815,7 +2815,11 @@ async function runAnalysis() {
       _selfCorrected: a._selfCorrected || false,
       _selfCorrectionEvidence: a._selfCorrectionEvidence || null,
       _selfCorrectionReason: a._selfCorrectionReason || null,
-      _notAttempted: a._notAttempted || false
+      _notAttempted: a._notAttempted || false,
+      _recovered: a._recovered || false,
+      _pkPromoted: a._pkPromoted || false,
+      _v1RawAttempt: a._v1RawAttempt || null,
+      nl: a.nl || null
     }))
   });
 
@@ -2919,6 +2923,7 @@ async function runAnalysis() {
       words: wordSpeedTiers.words.map(w => ({
         refIndex: w.refIndex,
         refWord: w.refWord,
+        hypIndex: w.hypIndex,
         hyp: w.word,
         tier: w.tier,
         alignmentType: w.alignmentType,
