@@ -570,14 +570,14 @@ function extractVisionParagraphLines(annotation) {
 /**
  * Align Gemini's clean passage text to Vision's physical line structure.
  *
- * Strategy: match at PARAGRAPH level (20+ word sequences are virtually unique),
- * then inherit line breaks within each matched paragraph. This avoids the
- * common-word ambiguity problem of word-by-word greedy matching.
+ * Strategy: split Gemini text into paragraphs (blank-line separated), match
+ * each to a Vision paragraph using word-overlap ratio, then inherit Vision's
+ * line breaks within each matched pair.
  *
- * Steps:
- *   1. Find each Vision paragraph's position in the passage (longest-common-substring on normalized text)
- *   2. For matched paragraphs, walk word-by-word within the paragraph to assign line breaks
- *   3. Unmatched passage words get assigned to adjacent matched lines
+ * Why this direction (Gemini → Vision, not Vision → Gemini):
+ * - Gemini paragraphs are clean (no junk, no line numbers)
+ * - Vision paragraphs have junk but preserve physical line structure
+ * - Matching clean → noisy is more reliable than noisy → clean
  *
  * Returns string[][] — passage words grouped by their physical printed line.
  */
@@ -588,109 +588,96 @@ function alignPassageToVisionLines(passageText, visionParas) {
   if (passageWords.length === 0) return [];
 
   const norm = s => s.toLowerCase().replace(/[^a-z0-9]/g, '');
-  const passageNorm = passageWords.map(w => norm(w));
-  const passageNormStr = passageNorm.join(' ');
 
-  // Assign a global line index to each Vision paragraph's lines
+  // Assign global line indices to Vision paragraphs
   let globalLineIdx = 0;
-  const paraLineInfo = []; // per-paragraph: { startLine, lines: string[][], normWords: string[] }
-  for (const vp of visionParas) {
-    const normWords = vp.lines.flat().map(w => norm(w));
-    paraLineInfo.push({ startLine: globalLineIdx, lines: vp.lines, normWords });
+  const vParas = visionParas.map(vp => {
+    const info = {
+      lines: vp.lines,
+      startLine: globalLineIdx,
+      normWords: vp.lines.flat().map(w => norm(w)),
+      matched: false
+    };
     globalLineIdx += vp.lines.length;
-  }
+    return info;
+  });
 
-  // For each passage word, store which global line it belongs to (-1 = unassigned)
+  // Split Gemini text into paragraphs (blank-line separated)
+  const geminiParas = passageText.split(/\n\s*\n/).filter(Boolean);
+  // Track word offset of each Gemini paragraph in the flat passageWords array
+  let wordOffset = 0;
+  const gParas = geminiParas.map(gp => {
+    const words = gp.split(/\s+/).filter(Boolean);
+    const normWords = words.map(w => norm(w));
+    const info = { words, normWords, offset: wordOffset };
+    wordOffset += words.length;
+    return info;
+  });
+
+  // For each passage word, store global line index (-1 = unassigned)
   const wordLineMap = new Int16Array(passageWords.length).fill(-1);
 
-  // Match each Vision paragraph to a position in the passage text.
-  // Use normalized substring search. Paragraphs are long enough to be unique.
-  const usedParas = new Set();
-
-  for (const pi of paraLineInfo) {
-    if (pi.normWords.length === 0) continue;
-    const paraNormStr = pi.normWords.join(' ');
-
-    // Find this paragraph's normalized text within the passage's normalized text
-    const pos = passageNormStr.indexOf(paraNormStr);
-    if (pos < 0) continue;
-
-    // Convert character position to word index:
-    // count spaces before pos to get the starting word index
-    let wordIdx = 0;
-    if (pos > 0) {
-      wordIdx = passageNormStr.substring(0, pos).split(' ').length - 1;
+  // Word-overlap ratio between two normalized word arrays.
+  // Uses multiset intersection: how many words appear in both (counting duplicates).
+  function overlapRatio(a, b) {
+    if (a.length === 0 || b.length === 0) return 0;
+    const bagB = new Map();
+    for (const w of b) bagB.set(w, (bagB.get(w) || 0) + 1);
+    let shared = 0;
+    for (const w of a) {
+      const c = bagB.get(w) || 0;
+      if (c > 0) { shared++; bagB.set(w, c - 1); }
     }
-
-    // Verify we haven't already assigned these words (overlapping match)
-    let overlap = false;
-    for (let i = wordIdx; i < wordIdx + pi.normWords.length && i < passageWords.length; i++) {
-      if (wordLineMap[i] >= 0) { overlap = true; break; }
-    }
-    if (overlap) continue;
-
-    // Assign line indices within this paragraph
-    let wi = wordIdx; // passage word pointer
-    for (let li = 0; li < pi.lines.length; li++) {
-      const lineWordCount = pi.lines[li].length;
-      for (let lw = 0; lw < lineWordCount && wi < passageWords.length; lw++) {
-        wordLineMap[wi] = pi.startLine + li;
-        wi++;
-      }
-    }
-    usedParas.add(pi);
+    return shared / Math.max(a.length, b.length);
   }
 
-  // Handle unmatched paragraphs: try fuzzy substring matching
-  for (const pi of paraLineInfo) {
-    if (usedParas.has(pi) || pi.normWords.length < 3) continue;
+  // Match each Gemini paragraph → best Vision paragraph by word overlap
+  for (const gp of gParas) {
+    if (gp.normWords.length === 0) continue;
 
-    // Try matching a shorter anchor from the middle of the paragraph (5 words)
-    const anchorLen = Math.min(5, pi.normWords.length);
-    const anchorStart = Math.floor((pi.normWords.length - anchorLen) / 2);
-    const anchor = pi.normWords.slice(anchorStart, anchorStart + anchorLen).join(' ');
-    const anchorPos = passageNormStr.indexOf(anchor);
-    if (anchorPos < 0) continue;
-
-    // Found anchor — expand to full paragraph boundaries
-    let wordIdx = 0;
-    if (anchorPos > 0) {
-      wordIdx = passageNormStr.substring(0, anchorPos).split(' ').length - 1;
+    let bestVP = null, bestScore = 0;
+    for (const vp of vParas) {
+      if (vp.matched || vp.normWords.length === 0) continue;
+      const score = overlapRatio(gp.normWords, vp.normWords);
+      if (score > bestScore) { bestScore = score; bestVP = vp; }
     }
-    // Back up to account for words before the anchor
-    wordIdx = Math.max(0, wordIdx - anchorStart);
 
-    let overlap = false;
-    for (let i = wordIdx; i < wordIdx + pi.normWords.length && i < passageWords.length; i++) {
-      if (wordLineMap[i] >= 0) { overlap = true; break; }
-    }
-    if (overlap) continue;
+    // Require >=50% word overlap to count as a match
+    if (!bestVP || bestScore < 0.5) continue;
+    bestVP.matched = true;
 
-    let wi = wordIdx;
-    for (let li = 0; li < pi.lines.length; li++) {
-      const lineWordCount = pi.lines[li].length;
-      for (let lw = 0; lw < lineWordCount && wi < passageWords.length; lw++) {
-        wordLineMap[wi] = pi.startLine + li;
+    // Inherit Vision's line breaks: walk Gemini's words, assign line index
+    // based on word counts per Vision line
+    let wi = gp.offset;
+    let geminiWordIdx = 0;
+    for (let li = 0; li < bestVP.lines.length; li++) {
+      const vLineWordCount = bestVP.lines[li].length;
+      for (let lw = 0; lw < vLineWordCount && geminiWordIdx < gp.words.length; lw++) {
+        wordLineMap[wi] = bestVP.startLine + li;
         wi++;
+        geminiWordIdx++;
       }
     }
-    usedParas.add(pi);
+    // If Gemini paragraph has more words than Vision paragraph (corrections added words),
+    // assign remaining to last Vision line
+    while (geminiWordIdx < gp.words.length) {
+      wordLineMap[wi] = bestVP.startLine + bestVP.lines.length - 1;
+      wi++;
+      geminiWordIdx++;
+    }
   }
 
   // Fill unassigned words: inherit from nearest assigned neighbor
   for (let i = 0; i < wordLineMap.length; i++) {
     if (wordLineMap[i] >= 0) continue;
-    // Look left
     for (let j = i - 1; j >= 0; j--) {
       if (wordLineMap[j] >= 0) { wordLineMap[i] = wordLineMap[j]; break; }
     }
-    // Still unassigned? Look right
     if (wordLineMap[i] < 0) {
       for (let j = i + 1; j < wordLineMap.length; j++) {
         if (wordLineMap[j] >= 0) { wordLineMap[i] = wordLineMap[j]; break; }
       }
     }
-    // Absolute fallback
     if (wordLineMap[i] < 0) wordLineMap[i] = 0;
   }
 
@@ -708,8 +695,15 @@ function alignPassageToVisionLines(passageText, visionParas) {
   }
   if (currentLine.length > 0) result.push(currentLine);
 
-  const matched = wordLineMap.filter(v => v >= 0).length;
-  console.log(`[OCR Lines] Paragraph-level alignment: ${usedParas.size}/${paraLineInfo.length} paragraphs matched, ${matched}/${passageWords.length} words assigned`);
+  // Sanity check: if any line has >25 words, alignment desynced somewhere
+  const maxLineWords = Math.max(...result.map(l => l.length));
+  if (maxLineWords > 25) {
+    console.warn(`[OCR Lines] Sanity check failed: line with ${maxLineWords} words. Returning empty.`);
+    return [];
+  }
+
+  const matchedCount = vParas.filter(v => v.matched).length;
+  console.log(`[OCR Lines] Paragraph alignment: ${matchedCount}/${vParas.length} Vision paras matched, ${result.length} lines`);
 
   return result;
 }
