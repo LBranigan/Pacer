@@ -524,25 +524,27 @@ function extractAllWords(annotation) {
 }
 
 /**
- * Extract lines from Cloud Vision's annotation using detectedBreak on symbols.
- * Each line is an array of word strings, reflecting the physical printed lines on the page.
- * Returns { visionLines: string[][], wordToLine: number[] } where wordToLine[i] = line index for word i.
+ * Extract paragraphs with internal line structure from Cloud Vision's annotation.
+ * Uses detectedBreak on symbols for line endings. Paragraph boundaries from hierarchy.
+ * Returns array of { lines: string[][], norm: string } — each paragraph has its lines
+ * and a normalized full-text string for paragraph-level matching.
  */
-function extractVisionLines(annotation) {
-  const lines = [];
-  const wordToLine = [];
-  if (!annotation || !annotation.pages) return { visionLines: lines, wordToLine };
+function extractVisionParagraphLines(annotation) {
+  const paragraphs = []; // { lines: string[][], norm: string }
+  if (!annotation || !annotation.pages) return paragraphs;
 
-  let currentLine = [];
+  const norm = s => s.toLowerCase().replace(/[^a-z0-9]/g, '');
+
   for (const page of annotation.pages) {
     for (const block of (page.blocks || [])) {
       if (block.blockType && block.blockType !== 'TEXT') continue;
       for (const para of (block.paragraphs || [])) {
+        const lines = [];
+        let currentLine = [];
         for (const word of (para.words || [])) {
           const text = normalizeUnicode((word.symbols || []).map(s => s.text).join(''));
           if (!text) continue;
           currentLine.push(text);
-          wordToLine.push(lines.length);
 
           const lastSym = word.symbols?.[word.symbols.length - 1];
           const breakType = lastSym?.property?.detectedBreak?.type;
@@ -551,123 +553,163 @@ function extractVisionLines(annotation) {
             currentLine = [];
           }
         }
-        // Paragraph boundary = line break even without explicit detectedBreak
-        if (currentLine.length > 0) {
-          lines.push(currentLine);
-          currentLine = [];
+        if (currentLine.length > 0) lines.push(currentLine);
+        if (lines.length > 0) {
+          const allWords = lines.flat();
+          paragraphs.push({
+            lines,
+            norm: allWords.map(w => norm(w)).join(' ')
+          });
         }
       }
     }
   }
-  if (currentLine.length > 0) lines.push(currentLine);
-  return { visionLines: lines, wordToLine };
+  return paragraphs;
 }
 
 /**
- * Align Gemini's clean passage words back to Vision's line structure.
- * Uses consumed-word tracking: for each passage word, search forward from pointer,
- * then globally if forward fails (handles Gemini reordering of multi-column/multi-page).
+ * Align Gemini's clean passage text to Vision's physical line structure.
+ *
+ * Strategy: match at PARAGRAPH level (20+ word sequences are virtually unique),
+ * then inherit line breaks within each matched paragraph. This avoids the
+ * common-word ambiguity problem of word-by-word greedy matching.
+ *
+ * Steps:
+ *   1. Find each Vision paragraph's position in the passage (longest-common-substring on normalized text)
+ *   2. For matched paragraphs, walk word-by-word within the paragraph to assign line breaks
+ *   3. Unmatched passage words get assigned to adjacent matched lines
+ *
  * Returns string[][] — passage words grouped by their physical printed line.
  */
-function alignPassageToVisionLines(passageText, visionLines, wordToLine) {
-  if (!passageText || visionLines.length === 0) return [];
-
-  // Flatten Vision words with their line indices
-  const visionFlat = [];
-  for (let li = 0; li < visionLines.length; li++) {
-    for (const w of visionLines[li]) {
-      visionFlat.push({ word: w, line: li });
-    }
-  }
+function alignPassageToVisionLines(passageText, visionParas) {
+  if (!passageText || visionParas.length === 0) return [];
 
   const passageWords = passageText.split(/\s+/).filter(Boolean);
   if (passageWords.length === 0) return [];
 
-  // Normalize for matching: lowercase, strip punctuation
   const norm = s => s.toLowerCase().replace(/[^a-z0-9]/g, '');
+  const passageNorm = passageWords.map(w => norm(w));
+  const passageNormStr = passageNorm.join(' ');
 
-  // Pre-normalize Vision words
-  const visionNorm = visionFlat.map(v => norm(v.word));
-  const consumed = new Uint8Array(visionFlat.length); // track used Vision words
+  // Assign a global line index to each Vision paragraph's lines
+  let globalLineIdx = 0;
+  const paraLineInfo = []; // per-paragraph: { startLine, lines: string[][], normWords: string[] }
+  for (const vp of visionParas) {
+    const normWords = vp.lines.flat().map(w => norm(w));
+    paraLineInfo.push({ startLine: globalLineIdx, lines: vp.lines, normWords });
+    globalLineIdx += vp.lines.length;
+  }
 
-  let vi = 0; // forward pointer (preferred search start)
-  const passageLineMap = []; // line index per passage word
+  // For each passage word, store which global line it belongs to (-1 = unassigned)
+  const wordLineMap = new Int16Array(passageWords.length).fill(-1);
 
-  for (const pw of passageWords) {
-    const pwNorm = norm(pw);
-    let matchIdx = -1;
+  // Match each Vision paragraph to a position in the passage text.
+  // Use normalized substring search. Paragraphs are long enough to be unique.
+  const usedParas = new Set();
 
-    // Pass 1: exact match forward from pointer
-    for (let scan = vi; scan < visionFlat.length; scan++) {
-      if (!consumed[scan] && visionNorm[scan] === pwNorm) {
-        matchIdx = scan;
-        break;
+  for (const pi of paraLineInfo) {
+    if (pi.normWords.length === 0) continue;
+    const paraNormStr = pi.normWords.join(' ');
+
+    // Find this paragraph's normalized text within the passage's normalized text
+    const pos = passageNormStr.indexOf(paraNormStr);
+    if (pos < 0) continue;
+
+    // Convert character position to word index:
+    // count spaces before pos to get the starting word index
+    let wordIdx = 0;
+    if (pos > 0) {
+      wordIdx = passageNormStr.substring(0, pos).split(' ').length - 1;
+    }
+
+    // Verify we haven't already assigned these words (overlapping match)
+    let overlap = false;
+    for (let i = wordIdx; i < wordIdx + pi.normWords.length && i < passageWords.length; i++) {
+      if (wordLineMap[i] >= 0) { overlap = true; break; }
+    }
+    if (overlap) continue;
+
+    // Assign line indices within this paragraph
+    let wi = wordIdx; // passage word pointer
+    for (let li = 0; li < pi.lines.length; li++) {
+      const lineWordCount = pi.lines[li].length;
+      for (let lw = 0; lw < lineWordCount && wi < passageWords.length; lw++) {
+        wordLineMap[wi] = pi.startLine + li;
+        wi++;
       }
     }
+    usedParas.add(pi);
+  }
 
-    // Pass 2: exact match globally (behind pointer — Gemini reordered)
-    if (matchIdx < 0) {
-      for (let scan = 0; scan < vi; scan++) {
-        if (!consumed[scan] && visionNorm[scan] === pwNorm) {
-          matchIdx = scan;
-          break;
-        }
+  // Handle unmatched paragraphs: try fuzzy substring matching
+  for (const pi of paraLineInfo) {
+    if (usedParas.has(pi) || pi.normWords.length < 3) continue;
+
+    // Try matching a shorter anchor from the middle of the paragraph (5 words)
+    const anchorLen = Math.min(5, pi.normWords.length);
+    const anchorStart = Math.floor((pi.normWords.length - anchorLen) / 2);
+    const anchor = pi.normWords.slice(anchorStart, anchorStart + anchorLen).join(' ');
+    const anchorPos = passageNormStr.indexOf(anchor);
+    if (anchorPos < 0) continue;
+
+    // Found anchor — expand to full paragraph boundaries
+    let wordIdx = 0;
+    if (anchorPos > 0) {
+      wordIdx = passageNormStr.substring(0, anchorPos).split(' ').length - 1;
+    }
+    // Back up to account for words before the anchor
+    wordIdx = Math.max(0, wordIdx - anchorStart);
+
+    let overlap = false;
+    for (let i = wordIdx; i < wordIdx + pi.normWords.length && i < passageWords.length; i++) {
+      if (wordLineMap[i] >= 0) { overlap = true; break; }
+    }
+    if (overlap) continue;
+
+    let wi = wordIdx;
+    for (let li = 0; li < pi.lines.length; li++) {
+      const lineWordCount = pi.lines[li].length;
+      for (let lw = 0; lw < lineWordCount && wi < passageWords.length; lw++) {
+        wordLineMap[wi] = pi.startLine + li;
+        wi++;
       }
     }
+    usedParas.add(pi);
+  }
 
-    // Pass 3: fuzzy match forward (OCR correction changed spelling)
-    if (matchIdx < 0) {
-      let bestScan = -1, bestSim = 0;
-      const searchEnd = Math.min(vi + 20, visionFlat.length);
-      for (let scan = vi; scan < searchEnd; scan++) {
-        if (consumed[scan]) continue;
-        const sim = levenshteinSimilarity(pwNorm, visionNorm[scan]);
-        if (sim > bestSim && sim >= 0.6) {
-          bestSim = sim;
-          bestScan = scan;
-        }
+  // Fill unassigned words: inherit from nearest assigned neighbor
+  for (let i = 0; i < wordLineMap.length; i++) {
+    if (wordLineMap[i] >= 0) continue;
+    // Look left
+    for (let j = i - 1; j >= 0; j--) {
+      if (wordLineMap[j] >= 0) { wordLineMap[i] = wordLineMap[j]; break; }
+    }
+    // Still unassigned? Look right
+    if (wordLineMap[i] < 0) {
+      for (let j = i + 1; j < wordLineMap.length; j++) {
+        if (wordLineMap[j] >= 0) { wordLineMap[i] = wordLineMap[j]; break; }
       }
-      matchIdx = bestScan;
     }
-
-    // Pass 4: fuzzy match globally
-    if (matchIdx < 0) {
-      let bestScan = -1, bestSim = 0;
-      for (let scan = 0; scan < vi; scan++) {
-        if (consumed[scan]) continue;
-        const sim = levenshteinSimilarity(pwNorm, visionNorm[scan]);
-        if (sim > bestSim && sim >= 0.6) {
-          bestSim = sim;
-          bestScan = scan;
-        }
-      }
-      matchIdx = bestScan;
-    }
-
-    if (matchIdx >= 0) {
-      passageLineMap.push(visionFlat[matchIdx].line);
-      consumed[matchIdx] = 1;
-      // Advance forward pointer past this match if it's ahead
-      if (matchIdx >= vi) vi = matchIdx + 1;
-    } else {
-      // Last resort: assign to same line as previous word
-      passageLineMap.push(passageLineMap.length > 0 ? passageLineMap[passageLineMap.length - 1] : 0);
-    }
+    // Absolute fallback
+    if (wordLineMap[i] < 0) wordLineMap[i] = 0;
   }
 
   // Group passage words by line index
   const result = [];
   let currentLine = [];
-  let currentLineIdx = passageLineMap[0];
+  let currentLineIdx = wordLineMap[0];
   for (let i = 0; i < passageWords.length; i++) {
-    if (passageLineMap[i] !== currentLineIdx) {
+    if (wordLineMap[i] !== currentLineIdx) {
       result.push(currentLine);
       currentLine = [];
-      currentLineIdx = passageLineMap[i];
+      currentLineIdx = wordLineMap[i];
     }
     currentLine.push(passageWords[i]);
   }
   if (currentLine.length > 0) result.push(currentLine);
+
+  const matched = wordLineMap.filter(v => v >= 0).length;
+  console.log(`[OCR Lines] Paragraph-level alignment: ${usedParas.size}/${paraLineInfo.length} paragraphs matched, ${matched}/${passageWords.length} words assigned`);
 
   return result;
 }
@@ -703,9 +745,10 @@ export async function extractTextHybrid(file, visionKey, geminiKey) {
   const pageWidth = annotation?.pages?.[0]?.width;
   const pageHeight = annotation?.pages?.[0]?.height;
 
-  // Extract physical line structure from Vision's detectedBreak symbols
-  const { visionLines, wordToLine } = extractVisionLines(annotation);
-  console.log(`[OCR Hybrid] Vision detected ${visionLines.length} physical lines`);
+  // Extract paragraph-level line structure from Vision's detectedBreak symbols
+  const visionParas = extractVisionParagraphLines(annotation);
+  const totalLines = visionParas.reduce((sum, p) => sum + p.lines.length, 0);
+  console.log(`[OCR Hybrid] Vision detected ${visionParas.length} paragraphs, ${totalLines} physical lines`);
 
   if (!flatText) {
     return { text: '', engine: 'vision (empty)', lowConfidenceWords: [], allWords: [], flatText: '', assembled: '', passageLines: [], imageBase64: base64, imageMimeType: mimeType, pageWidth, pageHeight };
@@ -715,7 +758,7 @@ export async function extractTextHybrid(file, visionKey, geminiKey) {
   const paragraphs = extractParagraphs(annotation);
 
   if (paragraphs.length <= 1) {
-    const passageLines = alignPassageToVisionLines(flatText, visionLines, wordToLine);
+    const passageLines = alignPassageToVisionLines(flatText, visionParas);
     return { text: flatText, engine: 'vision (single paragraph)', lowConfidenceWords, allWords: extractAllWords(annotation), flatText, assembled: flatText, passageLines, imageBase64: base64, imageMimeType: mimeType, pageWidth, pageHeight };
   }
 
@@ -725,7 +768,7 @@ export async function extractTextHybrid(file, visionKey, geminiKey) {
     assembled = await assembleWithGemini(base64, mimeType, paragraphs, geminiKey);
   } catch (err) {
     console.warn('[OCR Hybrid] Gemini assembly failed, using Cloud Vision ordering:', err.message);
-    const passageLines = alignPassageToVisionLines(flatText, visionLines, wordToLine);
+    const passageLines = alignPassageToVisionLines(flatText, visionParas);
     return { text: flatText, engine: `vision fallback (${err.message})`, lowConfidenceWords, allWords: extractAllWords(annotation), flatText, assembled: flatText, passageLines, imageBase64: base64, imageMimeType: mimeType, pageWidth, pageHeight };
   }
 
@@ -741,7 +784,7 @@ export async function extractTextHybrid(file, visionKey, geminiKey) {
   }
 
   // Align clean passage words to Vision's physical line structure
-  const passageLines = alignPassageToVisionLines(finalText, visionLines, wordToLine);
+  const passageLines = alignPassageToVisionLines(finalText, visionParas);
   console.log(`[OCR Hybrid] Passage mapped to ${passageLines.length} lines: [${passageLines.map(l => l.length).join(', ')}] words/line`);
 
   return {
