@@ -523,6 +523,121 @@ function extractAllWords(annotation) {
   return words;
 }
 
+/**
+ * Extract lines from Cloud Vision's annotation using detectedBreak on symbols.
+ * Each line is an array of word strings, reflecting the physical printed lines on the page.
+ * Returns { visionLines: string[][], wordToLine: number[] } where wordToLine[i] = line index for word i.
+ */
+function extractVisionLines(annotation) {
+  const lines = [];
+  const wordToLine = [];
+  if (!annotation || !annotation.pages) return { visionLines: lines, wordToLine };
+
+  let currentLine = [];
+  for (const page of annotation.pages) {
+    for (const block of (page.blocks || [])) {
+      if (block.blockType && block.blockType !== 'TEXT') continue;
+      for (const para of (block.paragraphs || [])) {
+        for (const word of (para.words || [])) {
+          const text = normalizeUnicode((word.symbols || []).map(s => s.text).join(''));
+          if (!text) continue;
+          currentLine.push(text);
+          wordToLine.push(lines.length);
+
+          const lastSym = word.symbols?.[word.symbols.length - 1];
+          const breakType = lastSym?.property?.detectedBreak?.type;
+          if (breakType === 'EOL_SURE_SPACE' || breakType === 'LINE_BREAK') {
+            lines.push(currentLine);
+            currentLine = [];
+          }
+        }
+        // Paragraph boundary = line break even without explicit detectedBreak
+        if (currentLine.length > 0) {
+          lines.push(currentLine);
+          currentLine = [];
+        }
+      }
+    }
+  }
+  if (currentLine.length > 0) lines.push(currentLine);
+  return { visionLines: lines, wordToLine };
+}
+
+/**
+ * Align Gemini's clean passage words back to Vision's line structure.
+ * Greedy forward walk: for each passage word, find matching Vision word.
+ * Returns string[][] — passage words grouped by their physical printed line.
+ */
+function alignPassageToVisionLines(passageText, visionLines, wordToLine) {
+  if (!passageText || visionLines.length === 0) return [];
+
+  // Flatten Vision words with their line indices
+  const visionFlat = [];
+  for (let li = 0; li < visionLines.length; li++) {
+    for (const w of visionLines[li]) {
+      visionFlat.push({ word: w, line: li });
+    }
+  }
+
+  const passageWords = passageText.split(/\s+/).filter(Boolean);
+  if (passageWords.length === 0) return [];
+
+  // Normalize for matching: lowercase, strip punctuation
+  const norm = s => s.toLowerCase().replace(/[^a-z0-9]/g, '');
+
+  let vi = 0; // Vision pointer
+  const passageLineMap = []; // line index per passage word
+
+  for (const pw of passageWords) {
+    const pwNorm = norm(pw);
+    // Search forward in Vision for a match (skip junk words Gemini dropped)
+    let found = false;
+    for (let scan = vi; scan < visionFlat.length; scan++) {
+      if (norm(visionFlat[scan].word) === pwNorm) {
+        passageLineMap.push(visionFlat[scan].line);
+        vi = scan + 1;
+        found = true;
+        break;
+      }
+    }
+    if (!found) {
+      // Fuzzy fallback: check nearby Vision words for near-match
+      let bestScan = -1, bestSim = 0;
+      const searchEnd = Math.min(vi + 15, visionFlat.length);
+      for (let scan = vi; scan < searchEnd; scan++) {
+        const sim = levenshteinSimilarity(pwNorm, norm(visionFlat[scan].word));
+        if (sim > bestSim && sim >= 0.6) {
+          bestSim = sim;
+          bestScan = scan;
+        }
+      }
+      if (bestScan >= 0) {
+        passageLineMap.push(visionFlat[bestScan].line);
+        vi = bestScan + 1;
+      } else {
+        // Last resort: assign to same line as previous word
+        passageLineMap.push(passageLineMap.length > 0 ? passageLineMap[passageLineMap.length - 1] : 0);
+      }
+    }
+  }
+
+  // Group passage words by line index
+  const result = [];
+  let currentLine = [];
+  let currentLineIdx = passageLineMap[0];
+  for (let i = 0; i < passageWords.length; i++) {
+    if (passageLineMap[i] !== currentLineIdx) {
+      result.push(currentLine);
+      currentLine = [];
+      currentLineIdx = passageLineMap[i];
+    }
+    currentLine.push(passageWords[i]);
+  }
+  if (currentLine.length > 0) result.push(currentLine);
+
+  return result;
+}
+
 // ─── Main hybrid entry point ───
 
 /**
@@ -554,15 +669,20 @@ export async function extractTextHybrid(file, visionKey, geminiKey) {
   const pageWidth = annotation?.pages?.[0]?.width;
   const pageHeight = annotation?.pages?.[0]?.height;
 
+  // Extract physical line structure from Vision's detectedBreak symbols
+  const { visionLines, wordToLine } = extractVisionLines(annotation);
+  console.log(`[OCR Hybrid] Vision detected ${visionLines.length} physical lines`);
+
   if (!flatText) {
-    return { text: '', engine: 'vision (empty)', lowConfidenceWords: [], allWords: [], flatText: '', assembled: '', imageBase64: base64, imageMimeType: mimeType, pageWidth, pageHeight };
+    return { text: '', engine: 'vision (empty)', lowConfidenceWords: [], allWords: [], flatText: '', assembled: '', passageLines: [], imageBase64: base64, imageMimeType: mimeType, pageWidth, pageHeight };
   }
 
   // Step 2: Extract all fragments from hierarchy
   const paragraphs = extractParagraphs(annotation);
 
   if (paragraphs.length <= 1) {
-    return { text: flatText, engine: 'vision (single paragraph)', lowConfidenceWords, allWords: extractAllWords(annotation), flatText, assembled: flatText, imageBase64: base64, imageMimeType: mimeType, pageWidth, pageHeight };
+    const passageLines = alignPassageToVisionLines(flatText, visionLines, wordToLine);
+    return { text: flatText, engine: 'vision (single paragraph)', lowConfidenceWords, allWords: extractAllWords(annotation), flatText, assembled: flatText, passageLines, imageBase64: base64, imageMimeType: mimeType, pageWidth, pageHeight };
   }
 
   // Step 3: Gemini assembles fragments into correct reading order
@@ -571,7 +691,8 @@ export async function extractTextHybrid(file, visionKey, geminiKey) {
     assembled = await assembleWithGemini(base64, mimeType, paragraphs, geminiKey);
   } catch (err) {
     console.warn('[OCR Hybrid] Gemini assembly failed, using Cloud Vision ordering:', err.message);
-    return { text: flatText, engine: `vision fallback (${err.message})`, lowConfidenceWords, allWords: extractAllWords(annotation), flatText, assembled: flatText, imageBase64: base64, imageMimeType: mimeType, pageWidth, pageHeight };
+    const passageLines = alignPassageToVisionLines(flatText, visionLines, wordToLine);
+    return { text: flatText, engine: `vision fallback (${err.message})`, lowConfidenceWords, allWords: extractAllWords(annotation), flatText, assembled: flatText, passageLines, imageBase64: base64, imageMimeType: mimeType, pageWidth, pageHeight };
   }
 
   // Step 4: Gemini corrects OCR artifacts by comparing assembled text against the image
@@ -585,6 +706,10 @@ export async function extractTextHybrid(file, visionKey, geminiKey) {
     console.warn('[OCR Hybrid] Gemini correction skipped:', err.message);
   }
 
+  // Align clean passage words to Vision's physical line structure
+  const passageLines = alignPassageToVisionLines(finalText, visionLines, wordToLine);
+  console.log(`[OCR Hybrid] Passage mapped to ${passageLines.length} lines: [${passageLines.map(l => l.length).join(', ')}] words/line`);
+
   return {
     text: finalText,
     engine: `hybrid (${paragraphs.length} fragments${finalText !== assembled ? ' + corrected' : ''})`,
@@ -592,6 +717,7 @@ export async function extractTextHybrid(file, visionKey, geminiKey) {
     allWords: extractAllWords(annotation),
     flatText,
     assembled,
+    passageLines,
     imageBase64: base64,
     imageMimeType: mimeType,
     pageWidth,

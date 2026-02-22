@@ -16,8 +16,8 @@ import { saveAudioBlob } from './audio-store.js';
 import { initDashboard } from './dashboard.js';
 import { initDebugLog, addStage, addWarning, addError, finalizeDebugLog, saveDebugLog } from './debug-logger.js';
 import { vadProcessor } from './vad-processor.js';
-import { runKitchenSinkPipeline, isKitchenSinkEnabled, computeKitchenSinkStats } from './kitchen-sink-merger.js';
-import { getCrossValidatorEngine, setCrossValidatorEngine, getCrossValidatorName } from './cross-validator.js';
+import { runKitchenSinkPipeline, computeKitchenSinkStats } from './kitchen-sink-merger.js';
+import { getCrossValidatorName } from './cross-validator.js';
 import { padAudioWithSilence } from './audio-padding.js';
 import { enrichDiagnosticsWithVAD, computeVADGapSummary, adjustGapsWithVADOverhang } from './vad-gap-analyzer.js';
 import { canRunMaze } from './maze-generator.js';
@@ -29,7 +29,7 @@ import { getSeason, getBenchmarkStatus } from './benchmarks.js';
 import { buildInsightPayload, generateInsight, renderInsightPanel } from './insight-engine.js';
 
 // Code version for cache verification
-const CODE_VERSION = 'v40-2026-02-20';
+const CODE_VERSION = 'v39-2026-02-07';
 console.log('[ORF] Code version:', CODE_VERSION);
 
 // Pre-load CMUdict phoneme data (used by word speed normalization)
@@ -322,8 +322,8 @@ async function runAnalysis() {
   // } else {
 
   {
-    // Run Kitchen Sink pipeline (Reverb + Deepgram + disfluency detection)
-    // Falls back to Deepgram-only automatically when Reverb unavailable
+    // Run Kitchen Sink pipeline (Reverb + Parakeet + disfluency detection)
+    // Falls back to Parakeet-only automatically when Reverb unavailable
     setStatus('Running Kitchen Sink ensemble analysis...');
     const kitchenSinkResult = await runKitchenSinkPipeline(paddedAudioBlob, effectiveEncoding, sampleRateHertz);
 
@@ -345,7 +345,7 @@ async function runAnalysis() {
     // Extract words for downstream processing
     const mergedWords = kitchenSinkResult.words;
 
-    // Compute stats (works for both kitchen_sink and deepgram_fallback sources)
+    // Compute stats (works for both kitchen_sink and xval_fallback sources)
     const ensembleStats = computeKitchenSinkStats(kitchenSinkResult);
 
     // Log to debug stages
@@ -394,7 +394,7 @@ async function runAnalysis() {
         start: w.startTime, end: w.endTime
       });
       addStage('reverb_raw', {
-        description: 'Raw Reverb word lists before alignment/cross-validation (v1.0=verbatim, v0.0=clean)',
+        description: 'Raw Reverb word lists before alignment/cross-validation (v1.0=verbatim)',
         verbatim: {
           wordCount: rev.verbatim?.words?.length || 0,
           transcript: rev.verbatim?.transcript || '',
@@ -408,10 +408,10 @@ async function runAnalysis() {
       });
     }
 
-    // Per-word timestamp comparison: all three sources
+    // Per-word timestamp comparison: both sources
     const _parseTs = t => parseFloat(String(t).replace('s', '')) || 0;
     addStage('timestamp_sources', {
-      description: 'All timestamp sources per word (cross-validator=primary, Reverb v1.0=verbatim, Reverb v0.0=clean)',
+      description: 'All timestamp sources per word (cross-validator=primary, Reverb v1.0=verbatim)',
       words: mergedWords.map(w => {
         const entry = { word: w.word, crossValidation: w.crossValidation };
         // Phoneme count (for duration normalization)
@@ -434,14 +434,6 @@ async function runAnalysis() {
           const re = _parseTs(w._reverbEndTime);
           entry.reverbV1 = { start: w._reverbStartTime, end: w._reverbEndTime, durMs: Math.round((re - rs) * 1000) };
         }
-        // Reverb v=0.0 (clean)
-        if (w._reverbCleanStartTime != null) {
-          const cs = _parseTs(w._reverbCleanStartTime);
-          const ce = _parseTs(w._reverbCleanEndTime);
-          entry.reverbV0 = { start: w._reverbCleanStartTime, end: w._reverbCleanEndTime, durMs: Math.round((ce - cs) * 1000) };
-        } else {
-          entry.reverbV0 = null;
-        }
         return entry;
       })
     });
@@ -453,7 +445,7 @@ async function runAnalysis() {
     // ensemble and are REDUNDANT with the Kitchen Sink architecture:
     //
     // - Ghost Detection (Phase 12): Caught hallucinated words from Google STT.
-    //   Kitchen Sink uses Deepgram cross-validation instead (crossValidation
+    //   Kitchen Sink uses Parakeet cross-validation instead (crossValidation
     //   property on each word: "confirmed"/"unconfirmed"/"unavailable").
     //
     // =========================================================================
@@ -493,8 +485,7 @@ async function runAnalysis() {
       },
       _kitchenSink: {
         xvalRawWords: kitchenSinkResult.xvalRaw?.words || [],
-        reverbVerbatimWords: kitchenSinkResult.reverb?.verbatim?.words || [],
-        reverbCleanWords: kitchenSinkResult.reverb?.clean?.words || []
+        reverbVerbatimWords: kitchenSinkResult.reverb?.verbatim?.words || []
       }
     };
   }
@@ -668,7 +659,8 @@ async function runAnalysis() {
   addStage('reference_text', {
     text: referenceText,
     wordCount: referenceText.split(/\s+/).length,
-    isFromOCR: appState.referenceIsFromOCR
+    isFromOCR: appState.referenceIsFromOCR,
+    passageLines: ocrDiagnosticData?.passageLines || null
   });
 
   // Trim OCR passage to attempted range
@@ -728,10 +720,9 @@ async function runAnalysis() {
     sttLookup.get(norm).push(w);
   }
 
-  // ── Three independent reference alignments (Plan 6) ──────────────
-  // V1 (Reverb verbatim), V0 (Reverb clean), and Parakeet are each
-  // independently NW-aligned to the reference text. Per-ref-word comparison
-  // determines final verdicts without the fragile V0→V1→V2→V3 chain.
+  // ── Two independent reference alignments ──────────────
+  // V1 (Reverb verbatim) and Parakeet are each independently NW-aligned
+  // to the reference text. Per-ref-word comparison determines final verdicts.
 
   // 4a. V1 alignment (primary — drives display, tooltips, audio)
   const alignment = alignWords(referenceText, transcriptWords);
@@ -748,11 +739,7 @@ async function runAnalysis() {
     }
   });
 
-  // 4b. V0 alignment (Reverb clean)
-  const v0Words = data._kitchenSink?.reverbCleanWords || [];
-  const v0Alignment = v0Words.length > 0 ? alignWords(referenceText, v0Words) : null;
-
-  // 4c. Parakeet alignment
+  // 4b. Parakeet alignment
   // Pre-split hyphenated Parakeet words so each part gets its own index and
   // proportional timestamps.  Mirrors the hyphen-splitting in normalizeText():
   //   "in-person" → [{word:"in",…}, {word:"person",…}]
@@ -787,13 +774,12 @@ async function runAnalysis() {
     ? alignWords(referenceText, parakeetWords)
     : null;
 
-  // 4d. Spillover fragment consolidation (each engine independently)
+  // 4c. Spillover fragment consolidation (each engine independently)
   // Fixes NW greedily assigning struggle fragments to wrong ref slots.
   const v1Spillover = consolidateSpilloverFragments(alignment, isNearMiss);
-  const v0Spillover = v0Alignment ? consolidateSpilloverFragments(v0Alignment, isNearMiss) : [];
   const pkSpillover = parakeetAlignment ? consolidateSpilloverFragments(parakeetAlignment, isNearMiss) : [];
-  if (v1Spillover.length || v0Spillover.length || pkSpillover.length) {
-    addStage('spillover_consolidation', { v1: v1Spillover, v0: v0Spillover, pk: pkSpillover });
+  if (v1Spillover.length || pkSpillover.length) {
+    addStage('spillover_consolidation', { v1: v1Spillover, pk: pkSpillover });
   }
 
   addStage('v1_alignment', {
@@ -805,19 +791,10 @@ async function runAnalysis() {
     compoundWords: alignment.filter(a => a.compound).length,
     compoundDetails: alignment.filter(a => a.compound).map(a => ({ ref: a.ref, parts: a.parts }))
   });
-  if (v0Alignment) {
-    addStage('v0_alignment', {
-      totalEntries: v0Alignment.length,
-      correct: v0Alignment.filter(a => a.type === 'correct').length,
-      substitutions: v0Alignment.filter(a => a.type === 'substitution').length,
-      omissions: v0Alignment.filter(a => a.type === 'omission').length,
-      insertions: v0Alignment.filter(a => a.type === 'insertion').length
-    });
-  }
 
-  // ── Compound struggle reclassification (BEFORE 3-way) ──────────────
+  // ── Compound struggle reclassification (BEFORE cross-val) ──────────────
   // V1 compound merges = student produced fragments, not a fluent read.
-  // Reclassify before 3-way so the verdict sees V1 as non-correct.
+  // Reclassify before cross-val so the verdict sees V1 as non-correct.
   // Exception: abbreviation expansions (e.g., "et cetera" for "etc.") are correct reads,
   // not struggles — the student read the full form of an abbreviated reference word.
   {
@@ -901,7 +878,7 @@ async function runAnalysis() {
     }
   }
 
-  // Group insertions per ref-word slot for all three engines
+  // Group insertions per ref-word slot for both engines
   // groups[i] = insertions before the i-th ref entry; groups[N] = trailing insertions
   const _groupInsertions = (fullAlign) => {
     const groups = [];
@@ -914,50 +891,32 @@ async function runAnalysis() {
     return groups;
   };
   const v1InsGroups = _groupInsertions(alignment);
-  const v0InsGroups = v0Alignment ? _groupInsertions(v0Alignment) : [];
   const pkInsGroups = parakeetAlignment ? _groupInsertions(parakeetAlignment) : [];
 
   // Filter insertions to get ref-entry arrays (same length = ref word count)
   const v1Ref = alignment.filter(e => e.type !== 'insertion');
-  const v0Ref = v0Alignment ? v0Alignment.filter(e => e.type !== 'insertion') : [];
   const pkRef = parakeetAlignment ? parakeetAlignment.filter(e => e.type !== 'insertion') : [];
 
   // Validate ref-entry count invariant
-  const hasV0 = v0Ref.length === v1Ref.length;
   const hasPk = pkRef.length === v1Ref.length;
-  if (v0Alignment && !hasV0) {
-    console.warn(`[3-way] V0 ref count mismatch: V1=${v1Ref.length}, V0=${v0Ref.length}. Ignoring V0.`);
-  }
   if (parakeetAlignment && !hasPk) {
-    console.warn(`[3-way] Parakeet ref count mismatch: V1=${v1Ref.length}, Pk=${pkRef.length}. Ignoring Parakeet.`);
+    console.warn(`[cross-val] Parakeet ref count mismatch: V1=${v1Ref.length}, Pk=${pkRef.length}. Ignoring Parakeet.`);
   }
 
   const xvalRecoveredOmissions = [];
   const xvalPromotedSubstitutions = [];
-  const threeWayTable = [];
+  const verdictTable = [];
 
   for (let ri = 0; ri < v1Ref.length; ri++) {
     const v1Entry = v1Ref[ri];
-    const v0Entry = hasV0 ? v0Ref[ri] : null;
     const pkEntry = hasPk ? pkRef[ri] : null;
 
-    // Track what each engine produced for this ref word
-    const v0Type = v0Entry?.type || null;
+    // Track what Parakeet produced for this ref word
     const pkType = pkEntry?.type || null;
 
     const parakeetTs = hasPk ? _getEngineTimestamp(pkEntry, parakeetWords) : null;
-    const v0Ts = hasV0 ? _getEngineTimestamp(v0Entry, v0Words) : null;
 
-    // Store V0 and Parakeet info on the V1 alignment entry
-    if (v0Entry) {
-      v1Entry._v0Word = v0Entry.hyp;
-      v1Entry._v0Type = v0Type;
-      if (v0Entry.compound) v1Entry._v0Compound = true;
-      if (v0Ts) {
-        v1Entry._v0StartTime = v0Ts.startTime;
-        v1Entry._v0EndTime = v0Ts.endTime;
-      }
-    }
+    // Store Parakeet info on the V1 alignment entry
     if (pkEntry) {
       if (pkEntry.hyp) v1Entry._xvalWord = pkEntry.hyp;
       v1Entry._pkType = pkType;
@@ -978,13 +937,6 @@ async function runAnalysis() {
       }
       if (v1Parts.length > 1) v1Entry._v1RawAttempt = v1Parts;
     }
-    if (hasV0 && v0Entry) {
-      const v0Ins = v0InsGroups[ri] || [];
-      const v0Parts = [...v0Ins.map(e => e.hyp)];
-      if (v0Entry.compound && v0Entry.parts) v0Parts.push(...v0Entry.parts);
-      else if (v0Entry.hyp) v0Parts.push(v0Entry.hyp);
-      if (v0Parts.length > 1) v1Entry._v0Attempt = v0Parts;
-    }
     if (hasPk && pkEntry) {
       const pkIns = pkInsGroups[ri] || [];
       const pkParts = [...pkIns.map(e => e.hyp)];
@@ -993,7 +945,7 @@ async function runAnalysis() {
       if (pkParts.length > 1) v1Entry._xvalAttempt = pkParts;
     }
 
-    // Count how many engines got this word correct (V0 demoted to display-only)
+    // Determine verdict: V1 vs Parakeet
     // V1 compound = student fragmented the word — don't count as clean correct
     const v1Compound = v1Entry._isStruggle && v1Entry.compound;
     const v1Correct = v1Entry.type === 'correct' && !v1Compound;
@@ -1004,8 +956,8 @@ async function runAnalysis() {
     let status;
 
     if (v1Omitted && pkOmitted) {
-      // Both scoring engines omitted — confirmed omission, skip
-      threeWayTable.push({ ref: v1Entry.ref, v1: '—', v0: v0Entry ? '—' : 'n/a', pk: pkEntry ? '—' : 'n/a', status: 'confirmed_omission' });
+      // Both engines omitted — confirmed omission, skip
+      verdictTable.push({ ref: v1Entry.ref, v1: '—', pk: pkEntry ? '—' : 'n/a', status: 'confirmed_omission' });
       continue;
     } else if (v1Omitted && pkCorrect) {
       // V1 omitted but Parakeet heard it → recovery
@@ -1017,7 +969,7 @@ async function runAnalysis() {
       status = 'disagreed';
       xvalPromotedSubstitutions.push({ refIndex: ri, entry: v1Entry, timestamps: parakeetTs, pkHyp: pkEntry.hyp });
     } else if (v1Correct && pkCorrect) {
-      // Both scoring engines correct → confirmed
+      // Both engines correct → confirmed
       status = 'confirmed';
     } else if (v1Compound && pkCorrect) {
       // V1 fragmented but matched + Parakeet confirms → confirmed (struggle preserved on entry)
@@ -1032,7 +984,7 @@ async function runAnalysis() {
       // V1 wrong but Parakeet correct → disagreed (Pk is strong)
       status = 'disagreed';
     } else if (v1Entry.type === 'substitution') {
-      // V1 has substitution — check if others agree on the wrong word
+      // V1 has substitution — check if Parakeet agrees on the wrong word
       const v1Hyp = (v1Entry.hyp || '').toLowerCase().replace(/[^a-z'-]/g, '');
       const pkHyp = (pkEntry?.hyp || '').toLowerCase().replace(/[^a-z'-]/g, '');
       if (hasPk && v1Hyp === pkHyp) {
@@ -1052,29 +1004,28 @@ async function runAnalysis() {
       if (tw) tw._xvalWord = pkEntry.hyp;
     }
 
-    threeWayTable.push({
+    verdictTable.push({
       ref: v1Entry.ref,
       v1: v1Compound ? `⚠(${v1Entry.parts.join('+')})` : v1Entry.type === 'correct' ? '✓' : v1Entry.type === 'omission' ? '—' : `✗(${v1Entry.hyp})`,
-      v0: v0Entry ? (v0Type === 'correct' ? '✓' : v0Type === 'omission' ? '—' : `✗(${v0Entry.hyp})`) : 'n/a',
       pk: pkEntry ? (pkType === 'correct' ? '✓' : pkType === 'omission' ? '—' : `✗(${pkEntry.hyp})`) : 'n/a',
       status
     });
   }
 
   // Store alignments on data for UI rendering
-  data._threeWay = { v1Ref, v0Ref: hasV0 ? v0Ref : null, pkRef: hasPk ? pkRef : null, table: threeWayTable };
+  data._crossVal = { v1Ref, pkRef: hasPk ? pkRef : null, table: verdictTable };
 
-  console.table(threeWayTable);
-  const agreed3 = threeWayTable.filter(t => t.v1 === t.pk || t.v1 === t.v0).length;
-  console.log(`[3-way] Agreement: ${agreed3}/${threeWayTable.length}`);
-  addStage('three_way_verdict', {
+  console.table(verdictTable);
+  const agreed = verdictTable.filter(t => t.v1 === t.pk).length;
+  console.log(`[cross-val] Agreement: ${agreed}/${verdictTable.length}`);
+  addStage('cross_val_verdict', {
     refWords: v1Ref.length,
-    confirmed: threeWayTable.filter(t => t.status === 'confirmed').length,
-    disagreed: threeWayTable.filter(t => t.status === 'disagreed').length,
-    recovered: threeWayTable.filter(t => t.status === 'recovered').length,
-    unconfirmed: threeWayTable.filter(t => t.status === 'unconfirmed').length,
-    confirmedOmissions: threeWayTable.filter(t => t.status === 'confirmed_omission').length,
-    hasV0, hasPk
+    confirmed: verdictTable.filter(t => t.status === 'confirmed').length,
+    disagreed: verdictTable.filter(t => t.status === 'disagreed').length,
+    recovered: verdictTable.filter(t => t.status === 'recovered').length,
+    unconfirmed: verdictTable.filter(t => t.status === 'unconfirmed').length,
+    confirmedOmissions: verdictTable.filter(t => t.status === 'confirmed_omission').length,
+    hasPk
   });
 
   // ── Filler classification ────────────────────────────────────────────
@@ -1105,13 +1056,13 @@ async function runAnalysis() {
     }
   }
 
-  // ── Cross-validate insertions (3-way) ─────────────────────────────
-  // Check each V1 insertion against V0 and Parakeet at the same ref-word boundary.
-  // When all available engines agree, flag as _confirmedInsertion (counts as error).
+  // ── Cross-validate insertions ─────────────────────────────
+  // Check each V1 insertion against Parakeet at the same ref-word boundary.
+  // When both engines agree, flag as _confirmedInsertion (counts as error).
   {
     const _insNorm = s => (s || '').toLowerCase().replace(/[^a-z'-]/g, '');
 
-    // Build per-position norm lists for Pk insertions (V0 excluded from scoring)
+    // Build per-position norm lists for Pk insertions
     const _buildInsNormGroups = (groups) =>
       groups.map(g => g.map(e => _insNorm(e.hyp)));
 
@@ -1160,7 +1111,7 @@ async function runAnalysis() {
           }
         }
 
-        // Check Pk at same ref-word position (V0 excluded from scoring)
+        // Check Pk at same ref-word position
         const pkPosIdx = pkNorms.indexOf(norm);
         const pkPosHeard = pkPosIdx >= 0;
         if (pkPosHeard) pkNorms[pkPosIdx] = ''; // consume
@@ -1176,7 +1127,7 @@ async function runAnalysis() {
         }
 
         // Confirmed insertion: V1 + Parakeet heard it at this position.
-        // V0 excluded from scoring — only V1 + Pk required.
+        // V1 + Pk required.
         // Boundary groups (pos 0 / N) are pre/post-reading speech — never confirm.
         if (!isBoundary && hasPk && pkPosHeard) {
           entry._confirmedInsertion = true;
@@ -1529,7 +1480,7 @@ async function runAnalysis() {
         const refN = _norm(entry.ref);
         const hypN = _norm(entry.hyp);
         const pkN = entry._xvalWord ? _norm(entry._xvalWord) : null;
-        const anyCorrect = pkN === refN;  // V0 excluded from scoring
+        const anyCorrect = pkN === refN;
         const enginesAgree = !pkN || pkN === hypN;
         if (!anyCorrect && enginesAgree && !isNearMiss(entry.hyp, entry.ref)) {
           continue; // Confirmed substitution — clean error, not a struggle
@@ -2092,7 +2043,7 @@ async function runAnalysis() {
       const hearings = [];
       if (entry._v1RawAttempt) hearings.push(entry._v1RawAttempt.join(''));
       else if (entry.hyp) hearings.push(entry.hyp);
-      // V0 excluded from scoring — do not include V0 hearings
+      // Collect cross-validator hearings
       if (entry._xvalAttempt) hearings.push(entry._xvalAttempt.join(''));
       else if (entry._xvalWord) hearings.push(entry._xvalWord);
 
@@ -2171,9 +2122,9 @@ async function runAnalysis() {
         if (candidate.type === 'insertion') continue;
         if (candidate.type === 'correct') continue; // already resolved as correct — don't undo
         // If another engine heard this word correctly, the <unknown> is V1's CTC confusion,
-        // not the OOV word's vocalization. The 3-way verdict sets crossValidation='disagreed'
+        // not the OOV word's vocalization. The cross-val verdict sets crossValidation='disagreed'
         // but does NOT change V1's type — so we must check engine types directly.
-        if (candidate._pkType === 'correct') continue;  // V0 excluded from scoring
+        if (candidate._pkType === 'correct') continue;
         if (candidate._isOOV) continue;             // don't steal from another OOV word
         if (candidate.forgiven) continue;            // don't steal from already-resolved entries
         if (candidate.hyp !== 'unknown') continue;
@@ -2206,8 +2157,6 @@ async function runAnalysis() {
         candidate.type = 'omission';
         candidate.hypIndex = -1;
         // Clear cross-validation metadata that no longer applies
-        delete candidate._v0Word;
-        delete candidate._v0Type;
         delete candidate._xvalWord;
         delete candidate._pkType;
         delete candidate.crossValidation;
@@ -2403,13 +2352,13 @@ async function runAnalysis() {
   // struggling with an adjacent word. Forgive if scoring engines missed it.
   {
     const FUNCTION_LETTERS = new Set(['a', 'i']);
-    const pkRefEntries = data._threeWay?.pkRef;
+    const pkRefEntries = data._crossVal?.pkRef;
 
     let refIdx = 0;
     for (let i = 0; i < alignment.length; i++) {
       const entry = alignment[i];
       if (!entry.ref) continue; // skip insertions — no ref word
-      // Track refIdx for _threeWay lookup (same pattern as post-struggle leniency)
+      // Track refIdx for _crossVal lookup (same pattern as post-struggle leniency)
       const currentRefIdx = refIdx;
       refIdx++;
 
@@ -2432,7 +2381,7 @@ async function runAnalysis() {
 
       if (!adjacentStruggle) continue;
 
-      // Verify scoring engines missed it (V0 excluded from scoring)
+      // Verify scoring engines missed it
       const pkEntry = pkRefEntries?.[currentRefIdx];
       const v1Omission = entry.type === 'omission';
       const pkOmission = !pkEntry || pkEntry.type === 'omission';
@@ -2541,7 +2490,7 @@ async function runAnalysis() {
   // for the next word. If Parakeet independently heard it correctly,
   // trust Parakeet and give credit (one word of leniency only).
   {
-    const pkRefEntries = data._threeWay?.pkRef;
+    const pkRefEntries = data._crossVal?.pkRef;
     if (pkRefEntries) {
       let prevRefWasError = false;
       let refIdx = 0;
@@ -2597,7 +2546,7 @@ async function runAnalysis() {
 
       if (entry.type === 'substitution') {
         const ref = (entry.ref || '').toLowerCase().replace(/[^a-z'-]/g, '');
-        const engines = [entry.hyp, entry._xvalWord].filter(Boolean);  // V0 excluded from scoring
+        const engines = [entry.hyp, entry._xvalWord].filter(Boolean);
         const anyNearMiss = engines.some(w => isNearMiss(w, ref));
         if (anyNearMiss) break;
         entry._notAttempted = true;
@@ -2798,8 +2747,6 @@ async function runAnalysis() {
       partOfForgiven: a.partOfForgiven,
       _isStruggle: a._isStruggle || false,
       _possibleStruggle: a._possibleStruggle || false,
-      _v0Word: a._v0Word || null,
-      _v0Type: a._v0Type || null,
       _nearMissEvidence: a._nearMissEvidence || null,
       _abandonedAttempt: a._abandonedAttempt || false,
       _partOfStruggle: a._partOfStruggle || false,
@@ -2991,13 +2938,11 @@ async function runAnalysis() {
     tierBreakdown,
     referenceText,                         // Raw reference text for cosmetic punctuation
     appState.audioBlob || null,            // Audio blob for click-to-play word audio
-    {                                       // Raw STT word lists + 3-way alignment data
+    {                                       // Raw STT word lists + cross-val alignment data
       reverbVerbatim: data._kitchenSink?.reverbVerbatimWords || [],
-      reverbClean: data._kitchenSink?.reverbCleanWords || [],
       xvalRaw: data._kitchenSink?.xvalRawWords || [],
       parakeetAlignment: parakeetAlignment || [],
-      v0Alignment: v0Alignment || [],
-      threeWayTable: threeWayTable || []
+      verdictTable: verdictTable || []
     },
     readability,                            // Passage readability / grade-level estimate
     benchmark                               // Hasbrouck-Tindal benchmark status
@@ -3401,6 +3346,7 @@ if (imageInput) {
           allWords: result.allWords || [],
           flatText: result.flatText || '',
           assembled: result.assembled || '',
+          passageLines: result.passageLines || [],
           pageWidth: result.pageWidth,
           pageHeight: result.pageHeight,
           finalText: text
@@ -4187,7 +4133,7 @@ if (backendUrlInput) {
         const services = [];
         if (data.status === 'ok' || data.status === 'ready') services.push('Reverb');
         if (data.parakeet_configured) services.push('Parakeet');
-        if (data.deepgram_configured) services.push('Deepgram');
+
         backendStatusText.textContent = services.length
           ? `Connected: ${services.join(', ')}`
           : 'Connected (no services detected)';
@@ -4218,7 +4164,7 @@ if (backendUrlInput) {
         const services = [];
         if (data.status === 'ok' || data.status === 'ready') services.push('Reverb');
         if (data.parakeet_configured) services.push('Parakeet');
-        if (data.deepgram_configured) services.push('Deepgram');
+
         backendStatusText.textContent = services.length
           ? `Connected: ${services.join(', ')}`
           : 'Connected';
@@ -4245,25 +4191,10 @@ if (devModeToggle) {
   });
 }
 
-// --- Cross-validator engine toggle (Phase C) ---
-function updateSubtitle() {
+// --- Subtitle ---
+{
   const subtitle = document.querySelector('.subtitle');
   if (subtitle) {
     subtitle.innerHTML = `Reverb + ${getCrossValidatorName()} &mdash; Kitchen Sink Pipeline`;
   }
-}
-
-const xvalRadios = document.querySelectorAll('input[name="xvalEngine"]');
-if (xvalRadios.length > 0) {
-  // Restore saved selection
-  const savedEngine = getCrossValidatorEngine();
-  xvalRadios.forEach(radio => {
-    if (radio.value === savedEngine) radio.checked = true;
-    radio.addEventListener('change', () => {
-      setCrossValidatorEngine(radio.value);
-      updateSubtitle();
-    });
-  });
-  // Set initial subtitle to reflect saved engine
-  updateSubtitle();
 }
