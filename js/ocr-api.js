@@ -565,7 +565,8 @@ function extractVisionLines(annotation) {
 
 /**
  * Align Gemini's clean passage words back to Vision's line structure.
- * Greedy forward walk: for each passage word, find matching Vision word.
+ * Uses consumed-word tracking: for each passage word, search forward from pointer,
+ * then globally if forward fails (handles Gemini reordering of multi-column/multi-page).
  * Returns string[][] — passage words grouped by their physical printed line.
  */
 function alignPassageToVisionLines(passageText, visionLines, wordToLine) {
@@ -585,39 +586,72 @@ function alignPassageToVisionLines(passageText, visionLines, wordToLine) {
   // Normalize for matching: lowercase, strip punctuation
   const norm = s => s.toLowerCase().replace(/[^a-z0-9]/g, '');
 
-  let vi = 0; // Vision pointer
+  // Pre-normalize Vision words
+  const visionNorm = visionFlat.map(v => norm(v.word));
+  const consumed = new Uint8Array(visionFlat.length); // track used Vision words
+
+  let vi = 0; // forward pointer (preferred search start)
   const passageLineMap = []; // line index per passage word
 
   for (const pw of passageWords) {
     const pwNorm = norm(pw);
-    // Search forward in Vision for a match (skip junk words Gemini dropped)
-    let found = false;
+    let matchIdx = -1;
+
+    // Pass 1: exact match forward from pointer
     for (let scan = vi; scan < visionFlat.length; scan++) {
-      if (norm(visionFlat[scan].word) === pwNorm) {
-        passageLineMap.push(visionFlat[scan].line);
-        vi = scan + 1;
-        found = true;
+      if (!consumed[scan] && visionNorm[scan] === pwNorm) {
+        matchIdx = scan;
         break;
       }
     }
-    if (!found) {
-      // Fuzzy fallback: check nearby Vision words for near-match
+
+    // Pass 2: exact match globally (behind pointer — Gemini reordered)
+    if (matchIdx < 0) {
+      for (let scan = 0; scan < vi; scan++) {
+        if (!consumed[scan] && visionNorm[scan] === pwNorm) {
+          matchIdx = scan;
+          break;
+        }
+      }
+    }
+
+    // Pass 3: fuzzy match forward (OCR correction changed spelling)
+    if (matchIdx < 0) {
       let bestScan = -1, bestSim = 0;
-      const searchEnd = Math.min(vi + 15, visionFlat.length);
+      const searchEnd = Math.min(vi + 20, visionFlat.length);
       for (let scan = vi; scan < searchEnd; scan++) {
-        const sim = levenshteinSimilarity(pwNorm, norm(visionFlat[scan].word));
+        if (consumed[scan]) continue;
+        const sim = levenshteinSimilarity(pwNorm, visionNorm[scan]);
         if (sim > bestSim && sim >= 0.6) {
           bestSim = sim;
           bestScan = scan;
         }
       }
-      if (bestScan >= 0) {
-        passageLineMap.push(visionFlat[bestScan].line);
-        vi = bestScan + 1;
-      } else {
-        // Last resort: assign to same line as previous word
-        passageLineMap.push(passageLineMap.length > 0 ? passageLineMap[passageLineMap.length - 1] : 0);
+      matchIdx = bestScan;
+    }
+
+    // Pass 4: fuzzy match globally
+    if (matchIdx < 0) {
+      let bestScan = -1, bestSim = 0;
+      for (let scan = 0; scan < vi; scan++) {
+        if (consumed[scan]) continue;
+        const sim = levenshteinSimilarity(pwNorm, visionNorm[scan]);
+        if (sim > bestSim && sim >= 0.6) {
+          bestSim = sim;
+          bestScan = scan;
+        }
       }
+      matchIdx = bestScan;
+    }
+
+    if (matchIdx >= 0) {
+      passageLineMap.push(visionFlat[matchIdx].line);
+      consumed[matchIdx] = 1;
+      // Advance forward pointer past this match if it's ahead
+      if (matchIdx >= vi) vi = matchIdx + 1;
+    } else {
+      // Last resort: assign to same line as previous word
+      passageLineMap.push(passageLineMap.length > 0 ? passageLineMap[passageLineMap.length - 1] : 0);
     }
   }
 
