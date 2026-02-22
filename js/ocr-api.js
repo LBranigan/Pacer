@@ -570,14 +570,15 @@ function extractVisionParagraphLines(annotation) {
 /**
  * Align Gemini's clean passage text to Vision's physical line structure.
  *
- * Strategy: split Gemini text into paragraphs (blank-line separated), match
- * each to a Vision paragraph using word-overlap ratio, then inherit Vision's
- * line breaks within each matched pair.
+ * Strategy: match each Vision paragraph → best Gemini paragraph (many-to-one),
+ * then anchor each Vision paragraph's position within its Gemini paragraph
+ * to assign line breaks.
  *
- * Why this direction (Gemini → Vision, not Vision → Gemini):
- * - Gemini paragraphs are clean (no junk, no line numbers)
- * - Vision paragraphs have junk but preserve physical line structure
- * - Matching clean → noisy is more reliable than noisy → clean
+ * Why Vision → Gemini (not the reverse):
+ * - Vision often splits one logical paragraph across pages/columns
+ * - A 48-word Vision paragraph is a clear subset of a 144-word Gemini paragraph
+ *   (overlap 48/48 = 100%), while matching the other way gives 48/144 = 33%
+ * - Many-to-one: multiple Vision paragraphs can map to the same Gemini paragraph
  *
  * Returns string[][] — passage words grouped by their physical printed line.
  */
@@ -592,24 +593,20 @@ function alignPassageToVisionLines(passageText, visionParas) {
   // Assign global line indices to Vision paragraphs
   let globalLineIdx = 0;
   const vParas = visionParas.map(vp => {
-    const info = {
-      lines: vp.lines,
-      startLine: globalLineIdx,
-      normWords: vp.lines.flat().map(w => norm(w)),
-      matched: false
-    };
+    const normWords = vp.lines.flat().map(w => norm(w));
+    const info = { lines: vp.lines, startLine: globalLineIdx, normWords };
     globalLineIdx += vp.lines.length;
     return info;
   });
 
   // Split Gemini text into paragraphs (blank-line separated)
   const geminiParas = passageText.split(/\n\s*\n/).filter(Boolean);
-  // Track word offset of each Gemini paragraph in the flat passageWords array
   let wordOffset = 0;
   const gParas = geminiParas.map(gp => {
     const words = gp.split(/\s+/).filter(Boolean);
     const normWords = words.map(w => norm(w));
-    const info = { words, normWords, offset: wordOffset };
+    const normStr = normWords.join(' ');
+    const info = { words, normWords, normStr, offset: wordOffset };
     wordOffset += words.length;
     return info;
   });
@@ -617,53 +614,62 @@ function alignPassageToVisionLines(passageText, visionParas) {
   // For each passage word, store global line index (-1 = unassigned)
   const wordLineMap = new Int16Array(passageWords.length).fill(-1);
 
-  // Word-overlap ratio between two normalized word arrays.
-  // Uses multiset intersection: how many words appear in both (counting duplicates).
-  function overlapRatio(a, b) {
-    if (a.length === 0 || b.length === 0) return 0;
-    const bagB = new Map();
-    for (const w of b) bagB.set(w, (bagB.get(w) || 0) + 1);
+  // Overlap ratio: shared / visionLength (not max). A Vision paragraph that is
+  // a subset of a larger Gemini paragraph should score high.
+  function subsetOverlap(vNorm, gNorm) {
+    if (vNorm.length === 0 || gNorm.length === 0) return 0;
+    const bag = new Map();
+    for (const w of gNorm) bag.set(w, (bag.get(w) || 0) + 1);
     let shared = 0;
-    for (const w of a) {
-      const c = bagB.get(w) || 0;
-      if (c > 0) { shared++; bagB.set(w, c - 1); }
+    for (const w of vNorm) {
+      const c = bag.get(w) || 0;
+      if (c > 0) { shared++; bag.set(w, c - 1); }
     }
-    return shared / Math.max(a.length, b.length);
+    return shared / vNorm.length;
   }
 
-  // Match each Gemini paragraph → best Vision paragraph by word overlap
-  for (const gp of gParas) {
-    if (gp.normWords.length === 0) continue;
+  // Match each Vision paragraph → best Gemini paragraph (many-to-one allowed)
+  // Then anchor its position within the Gemini paragraph using a word sequence search
+  for (const vp of vParas) {
+    if (vp.normWords.length === 0) continue;
 
-    let bestVP = null, bestScore = 0;
-    for (const vp of vParas) {
-      if (vp.matched || vp.normWords.length === 0) continue;
-      const score = overlapRatio(gp.normWords, vp.normWords);
-      if (score > bestScore) { bestScore = score; bestVP = vp; }
+    // Find best Gemini paragraph by subset overlap
+    let bestGP = null, bestScore = 0;
+    for (const gp of gParas) {
+      if (gp.normWords.length === 0) continue;
+      const score = subsetOverlap(vp.normWords, gp.normWords);
+      if (score > bestScore) { bestScore = score; bestGP = gp; }
     }
+    if (!bestGP || bestScore < 0.5) continue;
 
-    // Require >=50% word overlap to count as a match
-    if (!bestVP || bestScore < 0.5) continue;
-    bestVP.matched = true;
+    // Anchor: find where this Vision paragraph starts within the Gemini paragraph.
+    // Use a sliding 4-word window from the Vision paragraph to find position.
+    const anchorLen = Math.min(4, vp.normWords.length);
+    let anchorWordIdx = -1; // word index within Gemini paragraph
 
-    // Inherit Vision's line breaks: walk Gemini's words, assign line index
-    // based on word counts per Vision line
-    let wi = gp.offset;
-    let geminiWordIdx = 0;
-    for (let li = 0; li < bestVP.lines.length; li++) {
-      const vLineWordCount = bestVP.lines[li].length;
-      for (let lw = 0; lw < vLineWordCount && geminiWordIdx < gp.words.length; lw++) {
-        wordLineMap[wi] = bestVP.startLine + li;
-        wi++;
-        geminiWordIdx++;
+    for (let start = 0; start <= vp.normWords.length - anchorLen; start++) {
+      const anchor = vp.normWords.slice(start, start + anchorLen).join(' ');
+      const pos = bestGP.normStr.indexOf(anchor);
+      if (pos >= 0) {
+        // Convert char position to word index within Gemini paragraph
+        const gpWordIdx = pos === 0 ? 0 : bestGP.normStr.substring(0, pos).split(' ').length - 1;
+        anchorWordIdx = gpWordIdx - start; // back up to start of Vision paragraph
+        break;
       }
     }
-    // If Gemini paragraph has more words than Vision paragraph (corrections added words),
-    // assign remaining to last Vision line
-    while (geminiWordIdx < gp.words.length) {
-      wordLineMap[wi] = bestVP.startLine + bestVP.lines.length - 1;
-      wi++;
-      geminiWordIdx++;
+    if (anchorWordIdx < 0) continue;
+    anchorWordIdx = Math.max(0, anchorWordIdx);
+
+    // Assign line indices: walk Vision's lines, map to passage word positions
+    let wi = bestGP.offset + anchorWordIdx; // absolute passage word index
+    for (let li = 0; li < vp.lines.length; li++) {
+      const vLineWordCount = vp.lines[li].length;
+      for (let lw = 0; lw < vLineWordCount && wi < passageWords.length; lw++) {
+        if (wordLineMap[wi] < 0) { // don't overwrite already-assigned words
+          wordLineMap[wi] = vp.startLine + li;
+        }
+        wi++;
+      }
     }
   }
 
@@ -702,8 +708,8 @@ function alignPassageToVisionLines(passageText, visionParas) {
     return [];
   }
 
-  const matchedCount = vParas.filter(v => v.matched).length;
-  console.log(`[OCR Lines] Paragraph alignment: ${matchedCount}/${vParas.length} Vision paras matched, ${result.length} lines`);
+  const assigned = Array.from(wordLineMap).filter(v => v >= 0).length;
+  console.log(`[OCR Lines] Vision→Gemini alignment: ${assigned}/${passageWords.length} words assigned, ${result.length} lines`);
 
   return result;
 }
