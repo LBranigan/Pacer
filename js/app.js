@@ -29,7 +29,7 @@ import { getSeason, getBenchmarkStatus } from './benchmarks.js';
 import { buildInsightPayload, generateInsight, renderInsightPanel } from './insight-engine.js';
 
 // Code version for cache verification
-const CODE_VERSION = 'v39-2026-02-07';
+const CODE_VERSION = 'v41-2026-02-21';
 console.log('[ORF] Code version:', CODE_VERSION);
 
 // Pre-load CMUdict phoneme data (used by word speed normalization)
